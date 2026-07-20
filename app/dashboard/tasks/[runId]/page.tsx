@@ -32,20 +32,28 @@ export default async function TaskDetailPage({
   const copy =
     displayLocale === "zh"
       ? {
-          eyebrow: "Task Detail",
-          title: "任务详情",
-          back: "返回任务中心",
+          eyebrow: "Execution Detail",
+          title: "任务执行详情",
+          back: "返回任务视图",
           workflowRun: "查看工作流结果页",
-          events: "事件时间线",
+          summary: "执行摘要",
+          executionNote: "此页面展示的是单次执行记录，不是聚合后的任务本身。",
+          latestRun: "最新执行 ID",
+          taskKey: "任务标识",
+          events: "执行事件",
           artifacts: "输出与素材",
           works: "作品提升记录",
         }
       : {
-          eyebrow: "Task Detail",
-          title: "Task detail",
-          back: "Back to task center",
+          eyebrow: "Execution Detail",
+          title: "Task execution detail",
+          back: "Back to task overview",
           workflowRun: "View workflow results",
-          events: "Event timeline",
+          summary: "Execution summary",
+          executionNote: "This page shows one execution record, not the grouped task itself.",
+          latestRun: "Latest run ID",
+          taskKey: "Task key",
+          events: "Execution events",
           artifacts: "Outputs and artifacts",
           works: "Promoted works",
         }
@@ -64,6 +72,9 @@ export default async function TaskDetailPage({
                 <p className="mt-4 text-sm leading-7 text-muted-foreground lg:text-base">
                   {run.itemSlug} · {run.status} · #{run.id}
                 </p>
+                <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
+                  {copy.executionNote}
+                </p>
               </div>
               <Link
                 href="/dashboard/tasks"
@@ -80,6 +91,27 @@ export default async function TaskDetailPage({
                 </Link>
               ) : null}
             </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
+              <div className="dashboard-kicker text-muted-foreground">{copy.summary}</div>
+              <div className="mt-4 text-sm text-foreground/85">
+                {run.kind} · {run.itemType}
+              </div>
+            </article>
+            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
+              <div className="dashboard-kicker text-muted-foreground">{copy.latestRun}</div>
+              <div className="mt-4 font-mono text-sm text-foreground/85">
+                {run.externalRunId || `RUN-${String(run.id).padStart(5, "0")}`}
+              </div>
+            </article>
+            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
+              <div className="dashboard-kicker text-muted-foreground">{copy.taskKey}</div>
+              <div className="mt-4 text-sm text-foreground/85">
+                {run.kind}:{run.itemType}:{run.itemSlug}
+              </div>
+            </article>
           </div>
 
           {firstArtifact ? (

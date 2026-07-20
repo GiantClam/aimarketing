@@ -25,44 +25,28 @@ import {
 } from "lucide-react"
 
 import { DashboardFilterToolbar } from "@/components/ui/dashboard-filter-toolbar"
-
-type TaskSource = "tool" | "workflow" | "agent" | "media"
-type TaskStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled"
-type StatusFilter = "all" | "running" | "succeeded" | "failed" | "queued"
-type SourceFilter = "all" | TaskSource
-type DateRangeFilter = "today" | "7d" | "30d" | "custom"
-type SortFilter = "newest" | "duration" | "status" | "source"
-
-type WorkspaceTaskCenterItem = {
-  id: number
-  kind: string
-  itemType: string
-  itemSlug: string
-  status: string
-  externalSystem: string | null
-  externalRunId: string | null
-  startedAt: string | null
-  finishedAt: string | null
-  createdAt: string | null
-  updatedAt: string | null
-}
-
-type NormalizedTaskRun = WorkspaceTaskCenterItem & {
-  source: TaskSource
-  normalizedStatus: TaskStatus
-  displayName: string
-  durationMs: number | null
-}
+import {
+  buildNormalizedRuns,
+  buildTaskCenterTasks,
+  filterTaskCenterTasks,
+  formatDuration,
+  formatTaskTimestamp,
+  getAverageDuration,
+  getLatestTimestamp,
+  getRunId,
+  sourceLabels,
+  statusLabels,
+  type DateRangeFilter,
+  type SortFilter,
+  type SourceFilter,
+  type StatusFilter,
+  type TaskCenterTask,
+  type TaskSource,
+  type TaskStatus,
+  type WorkspaceTaskCenterItem,
+} from "@/lib/platform/task-center-view"
 
 const PAGE_SIZE = 10
-
-const statusOrder: Record<TaskStatus, number> = {
-  running: 0,
-  queued: 1,
-  failed: 2,
-  cancelled: 3,
-  succeeded: 4,
-}
 
 const sourceStyles: Record<TaskSource, string> = {
   tool: "border-[#efe6a8] bg-[#fff7d6] text-[#8a7500]",
@@ -86,84 +70,6 @@ const statusStyles: Record<TaskStatus, string> = {
   queued: "border-[#e6e6de] bg-[#f2f2ee] text-[#666]",
 }
 
-const statusLabels: Record<TaskStatus, string> = {
-  queued: "Queued",
-  running: "Running",
-  succeeded: "Succeeded",
-  failed: "Failed",
-  cancelled: "Cancelled",
-}
-
-const sourceLabels: Record<TaskSource, string> = {
-  tool: "Tool",
-  workflow: "Workflow",
-  agent: "Agent",
-  media: "Media",
-}
-
-function normalizeSource(kind: string): TaskSource {
-  if (kind === "workflow" || kind === "media" || kind === "tool" || kind === "agent") return kind
-  return "tool"
-}
-
-function normalizeStatus(status: string): TaskStatus {
-  if (status === "queued" || status === "running" || status === "succeeded" || status === "failed" || status === "cancelled") return status
-  return "queued"
-}
-
-function toDate(value: string | null) {
-  if (!value) return null
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
-}
-
-function formatTaskTimestamp(value: string | null, locale: "zh" | "en") {
-  const date = toDate(value)
-  if (!date) return locale === "zh" ? "未记录" : "Not recorded"
-  return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date)
-}
-
-function formatDuration(value: number | null) {
-  if (value == null || value < 0) return "00:00:00"
-  const totalSeconds = Math.max(0, Math.round(value / 1000))
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-
-  return [hours, minutes, seconds].map((part) => String(part).padStart(2, "0")).join(":")
-}
-
-function getTaskDurationMs(run: WorkspaceTaskCenterItem) {
-  const started = toDate(run.startedAt) ?? toDate(run.createdAt)
-  const finished = toDate(run.finishedAt) ?? toDate(run.updatedAt)
-  if (!started || !finished) return null
-  return finished.getTime() - started.getTime()
-}
-
-function getDisplayName(run: WorkspaceTaskCenterItem) {
-  return run.itemSlug
-    .replace(/[-_]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (value) => value.toUpperCase())
-}
-
-function getRunId(run: WorkspaceTaskCenterItem) {
-  return run.externalRunId || `RUN-${String(run.id).padStart(5, "0")}`
-}
-
-function getLatestTimestamp(runs: NormalizedTaskRun[]) {
-  return runs
-    .map((run) => toDate(run.updatedAt) ?? toDate(run.createdAt))
-    .filter((date): date is Date => Boolean(date))
-    .sort((left, right) => right.getTime() - left.getTime())[0]
-}
-
 function escapeCsvCell(value: string) {
   return `"${value.replace(/"/g, '""')}"`
 }
@@ -175,89 +81,18 @@ function getTaskIcon(source: TaskSource) {
   return Wrench
 }
 
-function getAverageDuration(runs: NormalizedTaskRun[]) {
-  const durations = runs
-    .map((run) => run.durationMs)
-    .filter((duration): duration is number => duration != null && duration >= 0)
-  if (durations.length === 0) return null
-  return durations.reduce((total, value) => total + value, 0) / durations.length
-}
-
-function buildNormalizedRuns(runs: WorkspaceTaskCenterItem[]): NormalizedTaskRun[] {
-  return runs.map((run) => {
-    const source = normalizeSource(run.kind)
-
-    return {
-      ...run,
-      source,
-      normalizedStatus: normalizeStatus(run.status),
-      displayName: getDisplayName(run),
-      durationMs: getTaskDurationMs(run),
-    }
-  })
-}
-
-function useFilteredRuns(runs: NormalizedTaskRun[], filters: {
+function useFilteredTasks(tasks: TaskCenterTask[], filters: {
   query: string
   status: StatusFilter
   source: SourceFilter
   dateRange: DateRangeFilter
   sort: SortFilter
 }) {
-  return useMemo(() => {
-    const query = filters.query.trim().toLowerCase()
-    const latest = getLatestTimestamp(runs)
-    const dayStart = latest ? new Date(latest) : null
-
-    if (dayStart) {
-      dayStart.setHours(0, 0, 0, 0)
-    }
-
-    const rangeStart =
-      filters.dateRange === "today" && dayStart
-        ? dayStart
-        : filters.dateRange === "7d" && latest
-          ? new Date(latest.getTime() - 7 * 24 * 60 * 60 * 1000)
-          : filters.dateRange === "30d" && latest
-            ? new Date(latest.getTime() - 30 * 24 * 60 * 60 * 1000)
-            : null
-
-    const filtered = runs.filter((run) => {
-      const runDate = toDate(run.createdAt)
-      const statusMatches =
-        filters.status === "all" ||
-        run.normalizedStatus === filters.status ||
-        (filters.status === "failed" && run.normalizedStatus === "cancelled")
-      const sourceMatches = filters.source === "all" || run.source === filters.source
-      const rangeMatches = !rangeStart || !runDate || runDate.getTime() >= rangeStart.getTime()
-      const queryMatches =
-        !query ||
-        run.displayName.toLowerCase().includes(query) ||
-        run.itemSlug.toLowerCase().includes(query) ||
-        getRunId(run).toLowerCase().includes(query) ||
-        String(run.id).includes(query)
-
-      return statusMatches && sourceMatches && rangeMatches && queryMatches
-    })
-
-    return filtered.sort((left, right) => {
-      if (filters.sort === "duration") {
-        return (right.durationMs ?? -1) - (left.durationMs ?? -1)
-      }
-
-      if (filters.sort === "status") {
-        return statusOrder[left.normalizedStatus] - statusOrder[right.normalizedStatus]
-      }
-
-      if (filters.sort === "source") {
-        return sourceLabels[left.source].localeCompare(sourceLabels[right.source])
-      }
-
-      const leftDate = toDate(left.createdAt)?.getTime() ?? 0
-      const rightDate = toDate(right.createdAt)?.getTime() ?? 0
-      return rightDate - leftDate || right.id - left.id
-    })
-  }, [filters.dateRange, filters.query, filters.sort, filters.source, filters.status, runs])
+  const { query, status, source, dateRange, sort } = filters
+  return useMemo(
+    () => filterTaskCenterTasks(tasks, { query, status, source, dateRange, sort }),
+    [dateRange, query, sort, source, status, tasks],
+  )
 }
 
 function TaskSourceBadge({ source }: { source: TaskSource }) {
@@ -294,8 +129,8 @@ function TaskCenterHeader({
         </h1>
         <p className="mt-5 max-w-[720px] text-[15px] leading-7 text-[#666] sm:text-base">
           {locale === "zh"
-            ? "统一查看 workflow、media、tool 和 agent runs，快速判断运行状态、来源、耗时与失败情况。"
-            : "Review workflow, media, tool, and agent runs in one place with status, source, duration, and failure visibility."}
+            ? "按任务聚合查看 workflow、media、tool 和 agent 的执行情况，不再把单次运行事件当成任务本身。"
+            : "Review workflow, media, tool, and agent activity as grouped tasks instead of treating each execution event as a task."}
         </p>
       </div>
 
@@ -306,7 +141,7 @@ function TaskCenterHeader({
           className="inline-flex h-11 items-center gap-2 rounded-[9px] border border-[#deded6] bg-white px-[18px] text-sm font-extrabold text-[#111] shadow-[0_10px_24px_rgba(0,0,0,0.045)] transition hover:-translate-y-0.5 hover:border-[#cfcfc7]"
         >
           <Download className="h-4 w-4" />
-          Export logs
+          Export tasks
         </button>
         <button
           type="button"
@@ -353,25 +188,28 @@ function TaskMetricCard({
 }
 
 function TaskMetricGrid({
-  runs,
+  tasks,
+  totalRuns,
   locale,
 }: {
-  runs: NormalizedTaskRun[]
+  tasks: TaskCenterTask[]
+  totalRuns: number
   locale: "zh" | "en"
 }) {
-  const running = runs.filter((run) => run.normalizedStatus === "running").length
-  const succeeded = runs.filter((run) => run.normalizedStatus === "succeeded").length
-  const failed = runs.filter((run) => run.normalizedStatus === "failed" || run.normalizedStatus === "cancelled").length
-  const latest = getLatestTimestamp(runs)
+  const running = tasks.filter((task) => task.normalizedStatus === "running").length
+  const queued = tasks.filter((task) => task.normalizedStatus === "queued").length
+  const succeeded = tasks.filter((task) => task.normalizedStatus === "succeeded").length
+  const failed = tasks.filter((task) => task.normalizedStatus === "failed" || task.normalizedStatus === "cancelled").length
+  const latest = getLatestTimestamp(tasks)
   const latestLabel = latest ? formatTaskTimestamp(latest.toISOString(), locale) : "No sync"
 
   return (
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-      <TaskMetricCard icon={ListChecks} label="Total tasks" value={runs.length.toLocaleString()} detail={`${runs.length} indexed runs`} />
-      <TaskMetricCard icon={Loader2} label="Running" value={running.toLocaleString()} detail={`${runs.filter((run) => run.normalizedStatus === "queued").length} queued`} />
-      <TaskMetricCard icon={CheckCircle2} label="Succeeded" value={succeeded.toLocaleString()} detail="Healthy completions" tone="good" />
-      <TaskMetricCard icon={XCircle} label="Failed" value={failed.toLocaleString()} detail="Needs review" tone={failed > 0 ? "risk" : "neutral"} />
-      <TaskMetricCard icon={Clock3} label="Last updated" value={latestLabel} detail="Enterprise task sync" />
+      <TaskMetricCard icon={ListChecks} label="Total tasks" value={tasks.length.toLocaleString()} detail={`${totalRuns.toLocaleString()} execution records`} />
+      <TaskMetricCard icon={Loader2} label="Active" value={running.toLocaleString()} detail={`${queued.toLocaleString()} queued tasks`} />
+      <TaskMetricCard icon={CheckCircle2} label="Healthy" value={succeeded.toLocaleString()} detail="Latest execution succeeded" tone="good" />
+      <TaskMetricCard icon={XCircle} label="Needs review" value={failed.toLocaleString()} detail="Latest execution failed or cancelled" tone={failed > 0 ? "risk" : "neutral"} />
+      <TaskMetricCard icon={Clock3} label="Last updated" value={latestLabel} detail="Grouped task snapshot" />
     </section>
   )
 }
@@ -408,11 +246,11 @@ function TaskFilterToolbar({
         search={
           <label className="relative block min-w-0">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#777]" />
-            <span className="sr-only">Search task name or run ID</span>
+            <span className="sr-only">Search task name or latest run ID</span>
             <input
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
-              placeholder="Search task name, run ID..."
+              placeholder="Search task name, slug, latest run ID..."
               className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white pl-10 pr-3 text-sm outline-none transition focus:border-[#b89100] focus:ring-4 focus:ring-[#ffd000]/25"
             />
           </label>
@@ -440,9 +278,9 @@ function TaskFilterToolbar({
               <option value="custom">Custom</option>
             </select>
             <select value={sort} onChange={(event) => onSortChange(event.target.value as SortFilter)} className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white px-3 text-sm font-bold text-[#111] outline-none sm:min-w-[170px] sm:w-auto">
-              <option value="newest">Created: Newest</option>
-              <option value="duration">Duration</option>
-              <option value="status">Status</option>
+              <option value="newest">Latest activity</option>
+              <option value="duration">Avg duration</option>
+              <option value="status">Latest status</option>
               <option value="source">Source</option>
             </select>
           </>
@@ -452,16 +290,16 @@ function TaskFilterToolbar({
   )
 }
 
-function TaskActions({ run }: { run: NormalizedTaskRun }) {
-  const isFailed = run.normalizedStatus === "failed" || run.normalizedStatus === "cancelled"
+function TaskActions({ task }: { task: TaskCenterTask }) {
+  const isFailed = task.normalizedStatus === "failed" || task.normalizedStatus === "cancelled"
 
   return (
     <div className="flex items-center gap-2">
       <Link
-        href={`/dashboard/tasks/${run.id}`}
+        href={`/dashboard/tasks/${task.latestRun.id}`}
         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e1e1da] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
-        title="View details"
-        aria-label="View details"
+        title="View latest execution"
+        aria-label="View latest execution"
       >
         <Eye className="h-4 w-4" />
       </Link>
@@ -486,10 +324,10 @@ function TaskActions({ run }: { run: NormalizedTaskRun }) {
 }
 
 function RecentTasksTable({
-  runs,
+  tasks,
   locale,
 }: {
-  runs: NormalizedTaskRun[]
+  tasks: TaskCenterTask[]
   locale: "zh" | "en"
 }) {
   return (
@@ -497,7 +335,7 @@ function RecentTasksTable({
       <table className="w-full min-w-[980px] border-separate border-spacing-0 bg-white">
         <thead className="bg-[#fafaf7] text-[11px] font-black uppercase tracking-[0.08em] text-[#555]">
           <tr>
-            {["Task Name", "Source", "Run ID", "Created", "Updated", "Duration", "Status", "Actions"].map((heading) => (
+            {["Task", "Source", "Latest Run", "Last Updated", "Runs", "Avg Duration", "Status", "Actions"].map((heading) => (
               <th key={heading} className="px-4 py-3 text-left">
                 {heading}
               </th>
@@ -505,38 +343,46 @@ function RecentTasksTable({
           </tr>
         </thead>
         <tbody>
-          {runs.length > 0 ? (
-            runs.map((run) => {
-              const TaskIcon = getTaskIcon(run.source)
+          {tasks.length > 0 ? (
+            tasks.map((task) => {
+              const TaskIcon = getTaskIcon(task.source)
 
               return (
-                <tr key={run.id} className="transition hover:bg-[#fffef0]">
+                <tr key={task.key} className="transition hover:bg-[#fffef0]">
                   <td className="border-t border-[#edede7] px-4 py-3 text-sm text-[#222]">
                     <div className="flex min-w-[220px] items-center gap-3">
-                      <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${sourceDotStyles[run.source]} text-[#111]`}>
+                      <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${sourceDotStyles[task.source]} text-[#111]`}>
                         <TaskIcon className="h-4 w-4" />
                       </span>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          {run.normalizedStatus === "running" ? <span className="h-2 w-2 rounded-full bg-[#23a55a]" /> : null}
-                          <span className="truncate font-black uppercase tracking-[0.01em] text-[#111]">{run.displayName}</span>
+                          {task.normalizedStatus === "running" ? <span className="h-2 w-2 rounded-full bg-[#23a55a]" /> : null}
+                          <span className="truncate font-black uppercase tracking-[0.01em] text-[#111]">{task.displayName}</span>
                         </div>
-                        <div className="mt-1 truncate text-xs text-[#777]">{run.externalSystem || run.itemType || "Local platform run"}</div>
+                        <div className="mt-1 truncate text-xs text-[#777]">
+                          {[
+                            task.externalSystem || task.itemType || "Local platform task",
+                            `${task.runCount} run${task.runCount === 1 ? "" : "s"}`,
+                            task.failedRunCount > 0 ? `${task.failedRunCount} failed` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </div>
                       </div>
                     </div>
                   </td>
                   <td className="border-t border-[#edede7] px-4 py-3 text-sm">
-                    <TaskSourceBadge source={run.source} />
+                    <TaskSourceBadge source={task.source} />
                   </td>
-                  <td className="border-t border-[#edede7] px-4 py-3 font-mono text-xs text-[#333]">{getRunId(run)}</td>
-                  <td className="border-t border-[#edede7] px-4 py-3 text-sm text-[#333]">{formatTaskTimestamp(run.createdAt, locale)}</td>
-                  <td className="border-t border-[#edede7] px-4 py-3 text-sm text-[#333]">{formatTaskTimestamp(run.updatedAt, locale)}</td>
-                  <td className="border-t border-[#edede7] px-4 py-3 font-mono text-xs text-[#333]">{formatDuration(run.durationMs)}</td>
+                  <td className="border-t border-[#edede7] px-4 py-3 font-mono text-xs text-[#333]">{getRunId(task.latestRun)}</td>
+                  <td className="border-t border-[#edede7] px-4 py-3 text-sm text-[#333]">{formatTaskTimestamp(task.updatedAt, locale)}</td>
+                  <td className="border-t border-[#edede7] px-4 py-3 text-sm text-[#333]">{task.runCount.toLocaleString()}</td>
+                  <td className="border-t border-[#edede7] px-4 py-3 font-mono text-xs text-[#333]">{formatDuration(task.averageDurationMs)}</td>
                   <td className="border-t border-[#edede7] px-4 py-3">
-                    <TaskStatusBadge status={run.normalizedStatus} />
+                    <TaskStatusBadge status={task.normalizedStatus} />
                   </td>
                   <td className="border-t border-[#edede7] px-4 py-3">
-                    <TaskActions run={run} />
+                    <TaskActions task={task} />
                   </td>
                 </tr>
               )
@@ -544,7 +390,7 @@ function RecentTasksTable({
           ) : (
             <tr>
               <td colSpan={8} className="border-t border-[#edede7] px-4 py-12 text-center text-sm font-bold text-[#777]">
-                {locale === "zh" ? "当前筛选条件下没有任务运行记录。" : "No task runs match the current filters."}
+                {locale === "zh" ? "当前筛选条件下没有聚合后的任务记录。" : "No grouped tasks match the current filters."}
               </td>
             </tr>
           )}
@@ -597,13 +443,13 @@ function TaskPagination({
 }
 
 function RecentTasksPanel({
-  runs,
+  tasks,
   total,
   page,
   locale,
   onPageChange,
 }: {
-  runs: NormalizedTaskRun[]
+  tasks: TaskCenterTask[]
   total: number
   page: number
   locale: "zh" | "en"
@@ -613,15 +459,15 @@ function RecentTasksPanel({
     <section className="rounded-[18px] border border-[#e7e7df] bg-white p-5 shadow-[0_14px_34px_rgba(0,0,0,0.06)] lg:p-6">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="font-display text-2xl font-black uppercase leading-none text-[#111]">Recent Tasks</h2>
-          <p className="mt-2 text-sm text-[#777]">Workflow, media, tool, and agent runs ordered for triage.</p>
+          <h2 className="font-display text-2xl font-black uppercase leading-none text-[#111]">Task Overview</h2>
+          <p className="mt-2 text-sm text-[#777]">Grouped by task identity. Each row points to the latest execution record.</p>
         </div>
         <span className="rounded-lg border border-[#e7e7df] bg-[#fafaf7] px-3 py-2 text-xs font-black uppercase tracking-[0.1em] text-[#555]">
-          {total.toLocaleString()} records
+          {total.toLocaleString()} tasks
         </span>
       </div>
 
-      <RecentTasksTable runs={runs} locale={locale} />
+      <RecentTasksTable tasks={tasks} locale={locale} />
       <TaskPagination page={page} total={total} onPageChange={onPageChange} />
     </section>
   )
@@ -646,15 +492,15 @@ function Sparkline() {
   )
 }
 
-function TasksOverTime({ runs }: { runs: NormalizedTaskRun[] }) {
-  const latest = getLatestTimestamp(runs)
+function TasksOverTime({ tasks }: { tasks: TaskCenterTask[] }) {
+  const latest = getLatestTimestamp(tasks)
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = latest ? new Date(latest.getTime() - (6 - index) * 24 * 60 * 60 * 1000) : null
     const key = date?.toISOString().slice(0, 10) ?? `day-${index}`
-    const dayRuns = runs.filter((run) => toDate(run.createdAt)?.toISOString().slice(0, 10) === key)
-    const succeeded = dayRuns.filter((run) => run.normalizedStatus === "succeeded").length
-    const failed = dayRuns.filter((run) => run.normalizedStatus === "failed" || run.normalizedStatus === "cancelled").length
-    const running = dayRuns.filter((run) => run.normalizedStatus === "running" || run.normalizedStatus === "queued").length
+    const dayTasks = tasks.filter((task) => task.updatedAt?.slice(0, 10) === key)
+    const succeeded = dayTasks.filter((task) => task.normalizedStatus === "succeeded").length
+    const failed = dayTasks.filter((task) => task.normalizedStatus === "failed" || task.normalizedStatus === "cancelled").length
+    const running = dayTasks.filter((task) => task.normalizedStatus === "running" || task.normalizedStatus === "queued").length
     const total = Math.max(1, succeeded + failed + running)
 
     return {
@@ -685,10 +531,10 @@ function TasksOverTime({ runs }: { runs: NormalizedTaskRun[] }) {
   )
 }
 
-function SourceBreakdown({ runs }: { runs: NormalizedTaskRun[] }) {
-  const total = Math.max(1, runs.length)
+function SourceBreakdown({ tasks }: { tasks: TaskCenterTask[] }) {
+  const total = Math.max(1, tasks.length)
   const sourceCounts = (Object.keys(sourceLabels) as TaskSource[]).map((source) => {
-    const count = runs.filter((run) => run.source === source).length
+    const count = tasks.filter((task) => task.source === source).length
     return { source, count, percent: (count / total) * 100 }
   })
 
@@ -712,29 +558,29 @@ function SourceBreakdown({ runs }: { runs: NormalizedTaskRun[] }) {
   )
 }
 
-function QueueInsightsPanel({ runs }: { runs: NormalizedTaskRun[] }) {
-  const succeeded = runs.filter((run) => run.normalizedStatus === "succeeded").length
-  const failed = runs.filter((run) => run.normalizedStatus === "failed" || run.normalizedStatus === "cancelled").length
+function QueueInsightsPanel({ tasks }: { tasks: TaskCenterTask[] }) {
+  const succeeded = tasks.filter((task) => task.normalizedStatus === "succeeded").length
+  const failed = tasks.filter((task) => task.normalizedStatus === "failed" || task.normalizedStatus === "cancelled").length
   const terminal = succeeded + failed
   const successRate = terminal > 0 ? (succeeded / terminal) * 100 : 0
-  const avgDuration = getAverageDuration(runs)
+  const avgDuration = getAverageDuration(tasks)
 
   return (
     <aside className="rounded-[18px] border border-[#e7e7df] bg-white p-5 shadow-[0_14px_34px_rgba(0,0,0,0.06)] lg:p-6">
       <div className="mb-5">
-        <h2 className="font-display text-2xl font-black uppercase leading-none text-[#111]">Queue Insights</h2>
-        <p className="mt-2 text-sm text-[#777]">Operational health for the visible run queue.</p>
+        <h2 className="font-display text-2xl font-black uppercase leading-none text-[#111]">Task Insights</h2>
+        <p className="mt-2 text-sm text-[#777]">Operational health for the visible grouped task list.</p>
       </div>
 
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-5 rounded-xl border border-[#edede7] bg-[#fafaf7] p-4">
-          <div>
-            <div className="font-display text-[11px] font-black uppercase tracking-[0.12em] text-[#666]">Success rate</div>
-            <div className="mt-2 font-display text-4xl font-black leading-none text-[#111]">{successRate.toFixed(1)}%</div>
-            <div className="mt-3 text-xs font-bold text-[#23a55a]">Terminal task health</div>
+            <div>
+              <div className="font-display text-[11px] font-black uppercase tracking-[0.12em] text-[#666]">Success rate</div>
+              <div className="mt-2 font-display text-4xl font-black leading-none text-[#111]">{successRate.toFixed(1)}%</div>
+              <div className="mt-3 text-xs font-bold text-[#23a55a]">Latest task outcome health</div>
+            </div>
+            <DonutChart rate={successRate} />
           </div>
-          <DonutChart rate={successRate} />
-        </div>
 
         <div className="rounded-xl border border-[#edede7] bg-white p-4">
           <div className="flex items-start justify-between gap-3">
@@ -743,14 +589,14 @@ function QueueInsightsPanel({ runs }: { runs: NormalizedTaskRun[] }) {
               <div className="mt-2 font-mono text-2xl font-black text-[#111]">{formatDuration(avgDuration)}</div>
             </div>
             <span className="rounded-full border border-[#efe6a8] bg-[#fffbe5] px-2.5 py-1 text-[11px] font-black uppercase text-[#8a7500]">
-              Runtime
+              Task
             </span>
           </div>
           <Sparkline />
         </div>
 
-        <TasksOverTime runs={runs} />
-        <SourceBreakdown runs={runs} />
+        <TasksOverTime tasks={tasks} />
+        <SourceBreakdown tasks={tasks} />
 
         <Link
           href="/dashboard/tasks"
@@ -784,39 +630,40 @@ export function WorkspaceTaskCenter({
   runs: WorkspaceTaskCenterItem[]
 }) {
   const normalizedRuns = useMemo(() => buildNormalizedRuns(runs), [runs])
+  const groupedTasks = useMemo(() => buildTaskCenterTasks(normalizedRuns), [normalizedRuns])
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState<StatusFilter>("all")
   const [source, setSource] = useState<SourceFilter>("all")
   const [dateRange, setDateRange] = useState<DateRangeFilter>("7d")
   const [sort, setSort] = useState<SortFilter>("newest")
   const [page, setPage] = useState(1)
-  const filteredRuns = useFilteredRuns(normalizedRuns, { query, status, source, dateRange, sort })
-  const pageCount = Math.max(1, Math.ceil(filteredRuns.length / PAGE_SIZE))
+  const filteredTasks = useFilteredTasks(groupedTasks, { query, status, source, dateRange, sort })
+  const pageCount = Math.max(1, Math.ceil(filteredTasks.length / PAGE_SIZE))
   const normalizedPage = Math.min(page, pageCount)
-  const pageRuns = filteredRuns.slice((normalizedPage - 1) * PAGE_SIZE, normalizedPage * PAGE_SIZE)
+  const pageTasks = filteredTasks.slice((normalizedPage - 1) * PAGE_SIZE, normalizedPage * PAGE_SIZE)
 
   function resetPage(next: () => void) {
     next()
     setPage(1)
   }
 
-  function exportLogs() {
-    const header = ["Task Name", "Source", "Run ID", "Created", "Updated", "Duration", "Status"]
-    const rows = filteredRuns.map((run) => [
-      run.displayName,
-      sourceLabels[run.source],
-      getRunId(run),
-      formatTaskTimestamp(run.createdAt, locale),
-      formatTaskTimestamp(run.updatedAt, locale),
-      formatDuration(run.durationMs),
-      statusLabels[run.normalizedStatus],
+  function exportTasks() {
+    const header = ["Task Name", "Source", "Latest Run ID", "Last Updated", "Runs", "Avg Duration", "Status"]
+    const rows = filteredTasks.map((task) => [
+      task.displayName,
+      sourceLabels[task.source],
+      getRunId(task.latestRun),
+      formatTaskTimestamp(task.updatedAt, locale),
+      String(task.runCount),
+      formatDuration(task.averageDurationMs),
+      statusLabels[task.normalizedStatus],
     ])
     const csv = [header, ...rows].map((row) => row.map(escapeCsvCell).join(",")).join("\n")
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement("a")
     anchor.href = url
-    anchor.download = "task-center-logs.csv"
+    anchor.download = "task-center.csv"
     anchor.click()
     URL.revokeObjectURL(url)
   }
@@ -824,8 +671,8 @@ export function WorkspaceTaskCenter({
   return (
     <div className="h-full overflow-auto bg-[#fafaf6] bg-[linear-gradient(rgba(0,0,0,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.035)_1px,transparent_1px)] bg-[length:48px_48px]">
       <section className="mx-auto flex max-w-[1480px] flex-col gap-6 px-4 py-6 lg:px-6 xl:px-8">
-        <TaskCenterHeader locale={locale} onExport={exportLogs} />
-        <TaskMetricGrid runs={normalizedRuns} locale={locale} />
+        <TaskCenterHeader locale={locale} onExport={exportTasks} />
+        <TaskMetricGrid tasks={groupedTasks} totalRuns={normalizedRuns.length} locale={locale} />
 
         <main className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]">
           <div className="space-y-5">
@@ -842,15 +689,15 @@ export function WorkspaceTaskCenter({
               onSortChange={(value) => resetPage(() => setSort(value))}
             />
             <RecentTasksPanel
-              runs={pageRuns}
-              total={filteredRuns.length}
+              tasks={pageTasks}
+              total={filteredTasks.length}
               page={normalizedPage}
               locale={locale}
               onPageChange={setPage}
             />
           </div>
 
-          <QueueInsightsPanel runs={filteredRuns} />
+          <QueueInsightsPanel tasks={filteredTasks} />
         </main>
       </section>
 
