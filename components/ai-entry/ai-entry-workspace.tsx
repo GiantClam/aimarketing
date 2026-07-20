@@ -855,8 +855,6 @@ function attachTaskRunsToMessages(messages: ChatMessage[], taskRuns: MessageApiT
   const latestSuccessfulTask = taskRuns
     .filter((taskRun) => taskRun.task_type === "opencode_agent_run" && taskRun.status === "success")
     .sort((left, right) => right.updated_at - left.updated_at)[0] || null
-  const artifactPartsForTask = (taskRun: MessageApiTaskRun) =>
-    latestSuccessfulTask?.task_id === taskRun.task_id ? conversationArtifacts : []
   const attachedTaskRunIds = new Set<string>()
   const mappedMessages = messages.map((message) => {
     if (message.role !== "assistant") return message
@@ -879,7 +877,6 @@ function attachTaskRunsToMessages(messages: ChatMessage[], taskRuns: MessageApiT
           id: `task-run:${taskRun.task_id}`,
           taskRun,
         } satisfies MessagePart,
-        ...artifactPartsForTask(taskRun),
       ],
     }
   })
@@ -897,9 +894,22 @@ function attachTaskRunsToMessages(messages: ChatMessage[], taskRuns: MessageApiT
           id: `task-run:${taskRun.task_id}`,
           taskRun,
         } satisfies MessagePart,
-        ...artifactPartsForTask(taskRun),
       ],
     }))
+
+  if (latestSuccessfulTask && conversationArtifacts.length > 0) {
+    const latestAssistantIndex = [...mappedMessages]
+      .map((message, index) => ({ message, index }))
+      .reverse()
+      .find(({ message }) => message.role === "assistant" && Boolean(message.content.trim()))?.index
+    if (latestAssistantIndex !== undefined) {
+      const message = mappedMessages[latestAssistantIndex]
+      mappedMessages[latestAssistantIndex] = {
+        ...message,
+        parts: [...(message.parts || []), ...conversationArtifacts],
+      }
+    }
+  }
 
   const nextMessages = normalizeConversationMessageOrder(
     [...mappedMessages, ...syntheticTaskRunMessages],

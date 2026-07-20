@@ -187,3 +187,23 @@ test("runtime PPTX publication marks the conversation as exported", () => {
     phase: "exported",
   })
 })
+
+test("runtime artifact context deduplicates files by basename", () => {
+  const next = appendAiEntryRuntimeArtifactContext({
+    previousState: {
+      ppt: { latestPreview: null, latestExport: null, phase: "idle" },
+      artifacts: [
+        { artifactId: 1, title: "workspace/deck/index.html", kind: "html", summary: "index.html (text/html)" },
+        { artifactId: 2, title: "old/deck.pptx", kind: "pptx", summary: "deck.pptx (application/vnd.openxmlformats-officedocument.presentationml.presentation)" },
+      ],
+    },
+    artifact: {
+      artifactId: 3,
+      title: "workspace/final/deck.pptx",
+      kind: "pptx",
+      summary: "deck.pptx (application/vnd.openxmlformats-officedocument.presentationml.presentation)",
+    },
+  })
+
+  assert.deepEqual(next.artifacts?.map((item) => item.artifactId), [1, 3])
+})

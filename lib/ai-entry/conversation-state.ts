@@ -18,6 +18,18 @@ export type AiEntryRuntimeArtifactContext = {
   summary: string
 }
 
+function artifactFileName(value: Pick<AiEntryRuntimeArtifactContext, "title" | "summary">) {
+  const summaryFileName = value.summary.match(/^(.+?)\s+\([^)]*\)$/u)?.[1]?.trim()
+  const source = (summaryFileName || value.title).replaceAll("\\", "/")
+  return source.split("/").at(-1)?.trim().toLowerCase() || source.trim().toLowerCase()
+}
+
+function dedupeArtifacts(items: AiEntryRuntimeArtifactContext[]) {
+  const byFileName = new Map<string, AiEntryRuntimeArtifactContext>()
+  for (const item of items) byFileName.set(artifactFileName(item), item)
+  return [...byFileName.values()]
+}
+
 function withArtifacts(state: { ppt: PptConversationState; projectSnapshot?: RuntimeProjectSnapshot }, artifacts: AiEntryRuntimeArtifactContext[] | undefined): AiEntryConversationState {
   const baseState: AiEntryConversationState = state.projectSnapshot
     ? { ppt: state.ppt, projectSnapshot: state.projectSnapshot }
@@ -48,7 +60,7 @@ export function normalizeAiEntryConversationState(value: unknown): AiEntryConver
   }
 
   const normalizedArtifacts = Array.isArray(raw?.artifacts)
-    ? raw.artifacts.reduce<AiEntryRuntimeArtifactContext[]>((items, item) => {
+    ? dedupeArtifacts(raw.artifacts.reduce<AiEntryRuntimeArtifactContext[]>((items, item) => {
         if (!item || typeof item !== "object") return items
         const record = item as Record<string, unknown>
         const artifactId = typeof record.artifactId === "number" && Number.isInteger(record.artifactId) && record.artifactId > 0 ? record.artifactId : null
@@ -58,7 +70,7 @@ export function normalizeAiEntryConversationState(value: unknown): AiEntryConver
         if (!artifactId || !title || !kind) return items
         items.push({ artifactId, title, kind, summary })
         return items
-      }, []).slice(-10)
+      }, []).slice(-10))
     : []
 
   const state = withArtifacts({
@@ -181,7 +193,10 @@ export function appendAiEntryRuntimeArtifactContext(input: {
   }
 }) {
   const previousState = normalizeAiEntryConversationState(input.previousState)
-  const merged = [...(previousState.artifacts || []).filter((item) => item.artifactId !== input.artifact.artifactId), input.artifact]
+  const merged = dedupeArtifacts([
+    ...(previousState.artifacts || []).filter((item) => item.artifactId !== input.artifact.artifactId),
+    input.artifact,
+  ])
   const primaryArtifacts = merged
     .filter((item) => ["pptx", "html", "pdf"].includes(item.kind.toLowerCase()))
     .slice(-4)
