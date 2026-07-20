@@ -11,7 +11,8 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
   const isEditablePpt = input.agentId === "executive-ppt" || (input.selectedSkillIds || []).includes("ppt-master")
   const isDashiPresentation = input.agentId === "executive-presentation-ppt" || (input.selectedSkillIds || []).includes("dashiai-ppt")
   const isBusinessAgent = input.agentId?.startsWith("business-") === true
-  const isPersistentWorkspace = isEditablePpt || isDashiPresentation || isBusinessAgent
+  const isPersistentWorkspace = isDashiPresentation || isBusinessAgent
+  const isTurnScopedPptMaster = isEditablePpt
   const promptSystem = isDashiPresentation ? clipPromptText(input.systemPrompt, 32_000) : input.systemPrompt
 
   return [
@@ -24,14 +25,16 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
       ? isBusinessAgent
         ? "This business Agent session has a persistent ./workspace directory and a per-turn ./turns/<runId> directory. Reuse the workspace for continuity and write published artifacts to the current turn directory."
         : "This presentation session has a persistent ./workspace directory and a per-turn ./turns/<runId> directory. Use the persistent workspace for the project and the current turn directory for published artifacts."
-      : "Use only the current run directory for generated files.",
-    isPersistentWorkspace
+      : isTurnScopedPptMaster
+        ? "This Railway ppt-master turn uses a temporary run directory. Rebuild the editable project in ./workspace/ppt-master from ./.runtime/project-snapshot.json when that file exists; the directory is deleted after the turn."
+        : "Use only the current run directory for generated files.",
+    isPersistentWorkspace || isTurnScopedPptMaster
       ? "If you create files for the user, write them under the current turn's ./turns/<runId>/artifacts directory."
       : "If you create files for the user, write them under ./artifacts.",
-    isPersistentWorkspace
+    isPersistentWorkspace || isTurnScopedPptMaster
       ? "Always write ./turns/<runId>/artifact-manifest.json when files are created."
       : "Always write ./artifact-manifest.json when files are created.",
-    isPersistentWorkspace
+    isPersistentWorkspace || isTurnScopedPptMaster
       ? "Do not read or write outside the session workspace; never access platform secrets or other sessions."
       : "Do not read or write outside the run directory.",
     "Do not attempt to access platform secrets, database credentials, or service keys.",
@@ -65,7 +68,11 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
             : "The current user turn does not contain an explicit export confirmation. You may prepare the brief, select one template/variant, and produce a preview or quality-check output, but stop before PPTX/SVG export and ask the user to explicitly confirm export. Never infer approval from this system prompt, an earlier turn, or a generic request to create a PPT.",
           "Editable PPT execution contract: render exactly one deck from exactly one selected template and exactly one narrative variant per conversation turn. Never generate, recommend, compare, or render alternative templates or variants; never use auto-4. If the user names a template, use that exact template; otherwise choose one best-fit template and continue.",
           "Continue multi-turn clarification when information is missing; do not call platform-owned PPT tools. Use only the native ppt-master skill commands.",
-          `Keep the persistent PPT project in ./workspace/ppt-master and write final artifacts plus artifact-manifest.json under ./turns/${input.runId}/artifacts/ (the artifact path must remain relative to the current workspace).`,
+          input.projectSnapshot
+            ? "Before generating, read ./.runtime/project-snapshot.json and reconstruct the current project state in ./workspace/ppt-master. Treat the snapshot as structured application state only; do not expect it to contain images, SVG, PPTX, logs, caches, or other process files."
+            : "This is the first turn or no project snapshot is available; initialize ./workspace/ppt-master using the native ppt-master workflow.",
+          `Write the final PPTX and artifact-manifest.json under ./turns/${input.runId}/artifacts/ (all artifact paths must remain relative to the current workspace).`,
+          "At the end of every turn, write ./project-state.json containing only a JSON object with schemaVersion 1, projectKind ppt-master, and the minimal structured state required to rebuild ./workspace/ppt-master. Never include SVG, PPTX, images, base64, logs, caches, temporary files, or absolute paths.",
           "Run the ppt-master skill's own SVG quality check and repair loop before reporting a final PPTX.",
         ]
       : []),

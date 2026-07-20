@@ -116,6 +116,30 @@ test("editable PPT prompt only enables export after current-turn confirmation", 
   assert.match(prompt, /continue the serial pipeline through SVG export/u)
 })
 
+test("Railway ppt-master prompt restores and writes only a lightweight project snapshot", () => {
+  const prompt = buildOpenCodeSystemPrompt({
+    runId: "00000000-0000-4000-8000-000000000007",
+    conversationId: "conversation-snapshot",
+    enterpriseId: 1,
+    userId: 42,
+    agentId: "executive-ppt",
+    selectedSkillIds: ["ppt-master"],
+    projectSnapshot: { schemaVersion: 1, projectKind: "ppt-master", state: { title: "Plan" } },
+    systemPrompt: "Use the editable PPT assistant.",
+    messages: [{ role: "user", content: "继续完善" }],
+    attachments: [],
+    artifactContext: [],
+    workflowContext: null,
+    artifactContract: { manifestPath: "artifact-manifest.json", artifactDir: "artifacts", maxArtifacts: 8, maxArtifactBytes: 2_000_000, maxArtifactTotalBytes: 4_000_000, allowedExtensions: [".pptx"] },
+    policy: { allowPlatformTools: false, allowTools: false, allowMcp: false, allowSkillInstall: false, allowNetwork: true },
+  })
+
+  assert.match(prompt, /temporary run directory/u)
+  assert.match(prompt, /\.runtime\/project-snapshot\.json/u)
+  assert.match(prompt, /write \.\/project-state\.json/u)
+  assert.match(prompt, /Never include SVG, PPTX, images, base64, logs, caches/u)
+})
+
 test("speaker PPT prompt delegates the complete conversation to native Dashi", () => {
   const prompt = buildOpenCodeSystemPrompt({
     runId: "00000000-0000-4000-8000-000000000002",

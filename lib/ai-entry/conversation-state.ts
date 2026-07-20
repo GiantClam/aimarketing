@@ -3,10 +3,12 @@ import {
   type PptConversationState,
   resolveLatestPptConversationState,
 } from "@/lib/ai-entry/ppt-tool-result-message"
+import { isValidRuntimeProjectSnapshot, type RuntimeProjectSnapshot } from "@/lib/ai-runtime/contracts"
 
 export type AiEntryConversationState = {
   ppt: PptConversationState
   artifacts?: AiEntryRuntimeArtifactContext[]
+  projectSnapshot?: RuntimeProjectSnapshot
 }
 
 export type AiEntryRuntimeArtifactContext = {
@@ -16,8 +18,15 @@ export type AiEntryRuntimeArtifactContext = {
   summary: string
 }
 
-function withArtifacts(state: { ppt: PptConversationState }, artifacts: AiEntryRuntimeArtifactContext[] | undefined): AiEntryConversationState {
-  return artifacts && artifacts.length > 0 ? { ...state, artifacts } : state
+function withArtifacts(state: { ppt: PptConversationState; projectSnapshot?: RuntimeProjectSnapshot }, artifacts: AiEntryRuntimeArtifactContext[] | undefined): AiEntryConversationState {
+  const baseState: AiEntryConversationState = state.projectSnapshot
+    ? { ppt: state.ppt, projectSnapshot: state.projectSnapshot }
+    : { ppt: state.ppt }
+  return artifacts && artifacts.length > 0 ? { ...baseState, artifacts } : baseState
+}
+
+function normalizeProjectSnapshot(value: unknown): RuntimeProjectSnapshot | undefined {
+  return isValidRuntimeProjectSnapshot(value) ? value : undefined
 }
 
 export function createEmptyAiEntryConversationState(): AiEntryConversationState {
@@ -31,7 +40,7 @@ export function createEmptyAiEntryConversationState(): AiEntryConversationState 
 }
 
 export function normalizeAiEntryConversationState(value: unknown): AiEntryConversationState {
-  const raw = value as { ppt?: PptConversationState | null; artifacts?: unknown } | null | undefined
+  const raw = value as { ppt?: PptConversationState | null; artifacts?: unknown; projectSnapshot?: unknown } | null | undefined
   const fallback = createEmptyAiEntryConversationState()
   const ppt = raw?.ppt
   if (!ppt || typeof ppt !== "object") {
@@ -52,7 +61,7 @@ export function normalizeAiEntryConversationState(value: unknown): AiEntryConver
       }, []).slice(-10)
     : []
 
-  return withArtifacts({
+  const state = withArtifacts({
     ppt: {
       latestPreview: ppt.latestPreview ?? null,
       latestExport: ppt.latestExport ?? null,
@@ -65,6 +74,8 @@ export function normalizeAiEntryConversationState(value: unknown): AiEntryConver
           : "idle",
     },
   }, normalizedArtifacts)
+  const projectSnapshot = normalizeProjectSnapshot(raw?.projectSnapshot)
+  return projectSnapshot ? { ...state, projectSnapshot } : state
 }
 
 export function resolveAiEntryConversationStateFromContents(messageContents: string[] | undefined): AiEntryConversationState {
@@ -96,7 +107,7 @@ export function mergeAiEntryConversationState(input: {
   }
 
   if (derivedState.ppt.phase !== "idle") {
-    return withArtifacts(derivedState, storedState.artifacts)
+    return withArtifacts({ ...derivedState, projectSnapshot: storedState.projectSnapshot }, storedState.artifacts)
   }
 
   return storedState
@@ -126,6 +137,7 @@ export function applyAiEntryConversationStateDelta(input: {
             : previousState.ppt.latestExport,
         phase: "preview-invalidated",
       },
+      projectSnapshot: previousState.projectSnapshot,
     }, previousState.artifacts)
   }
 
@@ -137,11 +149,12 @@ export function applyAiEntryConversationStateDelta(input: {
             latestExport: exported,
             phase: "exported",
           }
-        : {
+          : {
             latestPreview: preview,
             latestExport: null,
             phase: "preview-ready",
           },
+      projectSnapshot: previousState.projectSnapshot,
     }, previousState.artifacts)
   }
 
@@ -152,6 +165,7 @@ export function applyAiEntryConversationStateDelta(input: {
         latestExport: exported,
         phase: previousState.ppt.latestPreview ? "exported" : previousState.ppt.phase,
       },
+      projectSnapshot: previousState.projectSnapshot,
     }, previousState.artifacts)
   }
 
@@ -164,5 +178,13 @@ export function appendAiEntryRuntimeArtifactContext(input: {
 }) {
   const previousState = normalizeAiEntryConversationState(input.previousState)
   const artifacts = [...(previousState.artifacts || []).filter((item) => item.artifactId !== input.artifact.artifactId), input.artifact].slice(-10)
-  return withArtifacts({ ppt: previousState.ppt }, artifacts)
+  return withArtifacts({ ppt: previousState.ppt, projectSnapshot: previousState.projectSnapshot }, artifacts)
+}
+
+export function setAiEntryRuntimeProjectSnapshot(input: {
+  previousState?: unknown
+  projectSnapshot: RuntimeProjectSnapshot
+}) {
+  const previousState = normalizeAiEntryConversationState(input.previousState)
+  return { ...previousState, projectSnapshot: input.projectSnapshot }
 }

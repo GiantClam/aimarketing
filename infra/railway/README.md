@@ -79,11 +79,11 @@ If the preview planning stage itself is unstable, set `LEAD_TOOLS_PPT_PREVIEW_PR
   they are never sent with the GPT key.
 - The service exposes `GET /health`, `POST /runs`, and `POST /runs/:runId/cancel` with a bearer token.
 - `POST /sessions/prepare` verifies the resident service and bundle, then returns `sessionReady=true`; it does not allocate a native session or persist conversation state.
-- Each run creates one transient native session under `/data/sessions/runs/<runId>`, sends `prompt_async` to it, consumes the resident `/global/event` SSE stream, and deletes the session/workspace in `finally`.
+- Each run creates one transient native session under `/data/sessions/runs/<runId>`, sends `prompt_async` to it, consumes the resident `/global/event` SSE stream, and deletes the session/workspace in `finally`. For editable `ppt-master`, continuity comes from the final PPTX plus a validated lightweight `project-state.json` snapshot (maximum 128 KB) persisted in the platform conversation metadata; SVG, images, logs, caches, and other process files are never used as cross-turn state.
 - Supabase remains the canonical conversation context. The app attaches the last bounded context window and immutable Skill bundle on every turn. Production Provider credentials are resolved just-in-time through `OPENCODE_PROVIDER_PROXY_URL`; direct credentials are disabled unless `OPENCODE_ALLOW_DIRECT_PROVIDER=true`.
 - `<canonical-app-domain>` must be the final HTTPS hostname (currently `https://www.aimarketingsite.com`) and must not redirect to another host. Railway's `fetch` follows a cross-host `307` without forwarding the bearer authorization header, which causes `provider_proxy_route_failed:401`.
 - Attachments are intentionally implemented with the OpenCode HTTP session API; the interactive `opencode attach <url>` terminal command is not suitable for the backend SSE path.
-- Session workspaces are stored under `/data/sessions`; attach a Railway volume for durable session continuity.
+- Session workspaces are temporary under `/data/sessions`; a Railway volume is optional for runtime scratch space and is not the source of truth for editable PPT continuity. The next PPT turn rebuilds `./workspace/ppt-master` from the conversation snapshot.
 - The app selects this service for `executive-ppt`/`ppt-master` when `AI_ENTRY_PPT_RAILWAY_ENABLED=true`, and for every `business-*` Agent when `AI_ENTRY_BUSINESS_AGENT_RAILWAY_ENABLED=true`. Plain AI Chat stays on the direct AI SDK/Provider path. All OpenCode Agent/PPT/Workflow execution is Railway-only; Cloudflare Runner is retired and must not receive new traffic.
 
 ### Business Agent runtime

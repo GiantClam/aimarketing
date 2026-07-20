@@ -98,6 +98,7 @@ export type AgentRuntimeInput = {
     textSummary: string
   }>
   modelHint?: string | null
+  projectSnapshot?: RuntimeProjectSnapshot | null
   artifactContext: Array<{
     artifactId: number
     title: string
@@ -188,12 +189,33 @@ export type RuntimeArtifactReference = RuntimeObjectRef & {
   checksumSha256: string | null
 }
 
+export type RuntimeProjectSnapshot = {
+  schemaVersion: 1
+  projectKind: "ppt-master"
+  state: Record<string, unknown>
+}
+
+export const MAX_RUNTIME_PROJECT_SNAPSHOT_BYTES = 128 * 1024
+
+export function isValidRuntimeProjectSnapshot(value: unknown): value is RuntimeProjectSnapshot {
+  if (!value || typeof value !== "object") return false
+  const record = value as Record<string, unknown>
+  if (record.schemaVersion !== 1 || record.projectKind !== "ppt-master") return false
+  if (!record.state || typeof record.state !== "object" || Array.isArray(record.state)) return false
+  try {
+    return new TextEncoder().encode(JSON.stringify(record)).byteLength <= MAX_RUNTIME_PROJECT_SNAPSHOT_BYTES
+  } catch {
+    return false
+  }
+}
+
 export type RuntimeCheckpointRef = {
   sequence: number
   stage: string
   backupId: string | null
   backupDir: string | null
   resumePayload: Record<string, unknown>
+  projectSnapshot?: RuntimeProjectSnapshot | null
 }
 
 export type AgentRuntimeInputV2 = AgentRuntimeInput & {

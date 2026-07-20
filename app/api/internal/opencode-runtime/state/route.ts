@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import { recordAiEntryRuntimeProjectSnapshot } from "@/lib/ai-entry/repository"
+import { isValidRuntimeProjectSnapshot } from "@/lib/ai-runtime/contracts"
 import {
   appendRailwayOpenCodeRuntimeEvent,
+  getOpenCodeRuntimeRunByRuntimeId,
   getRailwayOpenCodeRuntimeState,
   updateRailwayOpenCodeRuntimeState,
   type OpenCodeRuntimeRunStatus,
 } from "@/lib/platform/opencode-runtime-store"
+import { getPlatformTaskRun } from "@/lib/platform/task-run-store"
 
 function authorized(request: NextRequest) {
   const expected = process.env.RUNTIME_STATE_TOKEN?.trim() || process.env.OPENCODE_RUNTIME_STATE_TOKEN?.trim() || ""
@@ -39,6 +43,29 @@ export async function POST(request: NextRequest) {
       status,
       error: typeof payload.error === "string" ? payload.error : payload.error === null ? null : undefined,
     })
+    const checkpoint = (payload.event as Record<string, unknown>).checkpoint
+    const projectSnapshot = checkpoint && typeof checkpoint === "object" && !Array.isArray(checkpoint)
+      ? (checkpoint as Record<string, unknown>).projectSnapshot
+      : null
+    if (isValidRuntimeProjectSnapshot(projectSnapshot)) {
+      const runtimeRun = await getOpenCodeRuntimeRunByRuntimeId(payload.runId)
+      const platformRun = runtimeRun ? await getPlatformTaskRun(runtimeRun.taskRunId) : null
+      if (runtimeRun?.conversationId && platformRun) {
+        await recordAiEntryRuntimeProjectSnapshot({
+          userId: platformRun.userId,
+          conversationId: runtimeRun.conversationId,
+          projectSnapshot,
+          scope: "chat",
+          agentId: runtimeRun.agentId,
+        }).catch((error) => {
+          console.warn("opencode-runtime.project_snapshot.persist_failed", {
+            runId: payload.runId,
+            conversationId: runtimeRun.conversationId,
+            message: error instanceof Error ? error.message : String(error),
+          })
+        })
+      }
+    }
     return NextResponse.json({ ok: true, state })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "runtime_state_write_failed" }, { status: 500 })

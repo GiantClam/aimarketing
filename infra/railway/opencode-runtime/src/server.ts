@@ -11,10 +11,12 @@ import {
   type AgentRuntimeInputV2,
   type OpenCodeProviderConfig,
   type RuntimeArtifactPayload,
+  type RuntimeProjectSnapshot,
 } from "../../../../lib/ai-runtime/contracts.js"
 import { buildOpenCodeSystemPrompt, buildOpenCodeUserPrompt } from "../../../../lib/ai-runtime/opencode-prompt.js"
 import { isPptxExportAuthorized, shouldRunNativePptxExportFallback } from "../../../../lib/ai-runtime/ppt-export-confirmation.js"
 import { OpenCodeServeManager } from "./opencode-serve-manager.js"
+import { parseRuntimeProjectSnapshot } from "./project-snapshot.js"
 
 const port = Number.parseInt(process.env.PORT || "3000", 10) || 3000
 const runtimeDir = process.env.OPENCODE_RUNTIME_DIR || "/data/sessions"
@@ -153,6 +155,20 @@ function validSessionKey(value: unknown): value is string {
 
 function isPersistentPresentationInput(input: AgentRuntimeInput | AgentRuntimeInputV2) {
   return input.agentId === "executive-ppt" || input.agentId === "executive-presentation-ppt" || (input.selectedSkillIds || []).includes("ppt-master") || (input.selectedSkillIds || []).includes("dashiai-ppt")
+}
+
+function isRailwayPptMasterInput(input: AgentRuntimeInput | AgentRuntimeInputV2) {
+  return input.agentId === "executive-ppt" || (input.selectedSkillIds || []).includes("ppt-master")
+}
+
+async function readProjectSnapshot(runDir: string): Promise<RuntimeProjectSnapshot | null> {
+  const paths = [join(runDir, "project-state.json"), join(runDir, "workspace", "ppt-master", "project-state.json")]
+  for (const path of paths) {
+    const raw = await readFile(path, "utf8").catch(() => null)
+    if (raw === null) continue
+    return parseRuntimeProjectSnapshot(raw)
+  }
+  return null
 }
 
 function eventLine(response: ServerResponse, event: AgentRuntimeEvent) {
@@ -505,6 +521,10 @@ async function prepareRunDirectory(input: AgentRuntimeInput | AgentRuntimeInputV
   await mkdir(join(sessionDir, ".opencode", "skills"), { recursive: true })
   await mkdir(join(sessionDir, ".opencode", "agents"), { recursive: true })
   await mkdir(join(sessionDir, "workspace"), { recursive: true })
+  await mkdir(join(sessionDir, ".runtime"), { recursive: true })
+  if (isPersistentPresentationInput(input)) {
+    await mkdir(join(sessionDir, "turns", input.runId, "artifacts"), { recursive: true })
+  }
   await mkdir(join(sessionDir, "tmp", "home"), { recursive: true })
   // ppt-master's native scripts look for a project-local .venv. Reuse the
   // image-baked dependency environment without persisting the project itself.
@@ -523,6 +543,9 @@ async function prepareRunDirectory(input: AgentRuntimeInput | AgentRuntimeInputV
   await symlink(join(bundleDir, "agents"), join(sessionDir, ".opencode", "agents"), "dir")
     .catch(() => cp(join(bundleDir, "agents"), join(sessionDir, ".opencode", "agents"), { recursive: true, force: true }))
   await writeFile(join(runDir, "input.json"), JSON.stringify(input), "utf8")
+  if (isRailwayPptMasterInput(input) && input.projectSnapshot) {
+    await writeFile(join(sessionDir, ".runtime", "project-snapshot.json"), JSON.stringify(input.projectSnapshot), "utf8")
+  }
   await writeFile(join(runDir, "system.md"), buildOpenCodeSystemPrompt(input), "utf8")
   await writeFile(join(runDir, "prompt.md"), buildOpenCodeUserPrompt(input), "utf8")
   return { sessionDir, runDir, workingDir }
@@ -613,6 +636,31 @@ async function executeRun(
       discoveredArtifacts = await readPublishableArtifacts()
     }
     for (const artifact of discoveredArtifacts) emit({ event: "artifact_payload", artifact, runId: input.runId })
+    if (isRailwayPptMasterInput(input)) {
+      const projectSnapshot = await readProjectSnapshot(completedRunDir)
+      if (projectSnapshot) {
+        const previousSequence = "checkpoint" in input && input.checkpoint ? input.checkpoint.sequence : 0
+        emit({
+          event: "checkpoint_saved",
+          checkpoint: {
+            sequence: previousSequence + 1,
+            stage: "turn-complete",
+            backupId: null,
+            backupDir: null,
+            resumePayload: { source: "platform-conversation" },
+            projectSnapshot,
+          },
+          runId: input.runId,
+        })
+      } else {
+        emit({
+          event: "runtime_warning",
+          code: "ppt_master_project_snapshot_missing",
+          message: "The editable PPT project state was not saved; the generated PPTX is still available, but the next turn cannot restore this state.",
+          runId: input.runId,
+        })
+      }
+    }
     emit({ event: "done", runId: input.runId })
   } catch (error) {
     emit({ event: "runtime_error", code: "opencode_runtime_failed", message: error instanceof Error ? error.message.slice(0, 1024) : "OpenCode runtime failed.", retryable: true, runId: input.runId })

@@ -5,8 +5,10 @@ import {
   appendAiEntryRuntimeArtifactContext,
   createEmptyAiEntryConversationState,
   mergeAiEntryConversationState,
+  setAiEntryRuntimeProjectSnapshot,
   type AiEntryConversationState,
 } from "@/lib/ai-entry/conversation-state"
+import type { RuntimeProjectSnapshot } from "@/lib/ai-runtime/contracts"
 import { db } from "@/lib/db"
 import { createRetryableDbErrorMatcher, withDbRetry } from "@/lib/db/retry"
 import { conversations, messages } from "@/lib/db/schema"
@@ -1280,6 +1282,28 @@ export async function recordAiEntryRuntimeArtifactContext(input: {
         ...metadata,
         aiEntryConversationState: nextState,
       },
+    }).where(eq(conversations.id, conversation.id)),
+  )
+  return nextState
+}
+
+export async function recordAiEntryRuntimeProjectSnapshot(input: {
+  userId: number
+  conversationId: string
+  projectSnapshot: RuntimeProjectSnapshot
+  scope?: AiEntryConversationScope
+  agentId?: string | null
+}) {
+  const conversation = await getAiEntryConversation(input.userId, input.conversationId, input.scope || "chat", input.agentId)
+  if (!conversation) return null
+  const metadata = normalizeConversationMetadata(conversation.metadata) || {}
+  const nextState = setAiEntryRuntimeProjectSnapshot({
+    previousState: normalizeConversationMetadata(metadata.aiEntryConversationState),
+    projectSnapshot: input.projectSnapshot,
+  })
+  await withAiEntryDbRetry("update-ai-entry-runtime-project-snapshot", () =>
+    db.update(conversations).set({
+      metadata: { ...metadata, aiEntryConversationState: nextState },
     }).where(eq(conversations.id, conversation.id)),
   )
   return nextState

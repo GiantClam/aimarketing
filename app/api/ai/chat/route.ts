@@ -11,6 +11,7 @@ import {
   appendAiEntryMessage,
   ensureAiEntryConversation,
   listAiEntryMessages,
+  recordAiEntryRuntimeProjectSnapshot,
   type AiEntryConversationScope,
 } from "@/lib/ai-entry/repository"
 import { resolveAiEntryConversationStateFromContents } from "@/lib/ai-entry/conversation-state"
@@ -109,7 +110,7 @@ import { publishRuntimeArtifact, publishRuntimeArtifactReference } from "@/lib/a
 import { resolveOpenCodeModelHint } from "@/lib/ai-runtime/opencode-model"
 import { buildAgentRuntimeSessionKey } from "@/lib/ai-runtime/session-key"
 import { isExplicitPptExportConfirmation } from "@/lib/ai-runtime/ppt-export-confirmation"
-import type { OpenCodeProviderConfig } from "@/lib/ai-runtime/contracts"
+import type { OpenCodeProviderConfig, RuntimeProjectSnapshot } from "@/lib/ai-runtime/contracts"
 
 export const runtime = "nodejs"
 export const maxDuration = 1800
@@ -1215,6 +1216,7 @@ export async function POST(request: NextRequest) {
           : resolveEditablePptRailwayRuntimeProfile()
       : defaultRuntimeProfile
     let persistedRuntimeArtifacts: Array<{ artifactId: number; title: string; kind: string; summary: string }> = []
+    let projectSnapshot: RuntimeProjectSnapshot | null = null
     let canonicalConversationRevision: number | null = null
     let canonicalRuntimeMessages = normalizedMessages.map((message) => ({
       role: message.role === "assistant" ? "assistant" as const : "user" as const,
@@ -1224,6 +1226,9 @@ export async function POST(request: NextRequest) {
       try {
         const conversationPage = await listAiEntryMessages(currentUser.id, conversationId, 200, conversationScope, agentConfig.agentId)
         persistedRuntimeArtifacts = conversationPage?.conversation_state.artifacts || []
+        if (runtimeProfile.backend === "railway-opencode" && (effectiveAgentId === "executive-ppt" || selectedSkillIds.includes("ppt-master"))) {
+          projectSnapshot = conversationPage?.conversation_state.projectSnapshot || null
+        }
         if (conversationPage?.data?.length) {
           const lastMessageId = Number(conversationPage.data.at(-1)?.id)
           canonicalConversationRevision = Number.isSafeInteger(lastMessageId) && lastMessageId > 0 ? lastMessageId : conversationPage.data.length
@@ -1454,6 +1459,7 @@ export async function POST(request: NextRequest) {
         textSummary: attachment.text,
       })),
       artifactContext: persistedRuntimeArtifacts,
+      projectSnapshot,
       workflowContext: null,
       modelHint:
         isDashiPresentationAgent || isEditablePptAgent
@@ -1469,6 +1475,23 @@ export async function POST(request: NextRequest) {
         maxArtifactTotalBytes: runtimeProfile.maxArtifactTotalBytes,
       },
     })
+
+    const persistRuntimeProjectSnapshot = async (snapshot: RuntimeProjectSnapshot) => {
+      if (runtimeProfile.backend !== "railway-opencode" || !isEditablePptAgent || !conversationId || !persistenceEnabled) return
+      projectSnapshot = snapshot
+      await recordAiEntryRuntimeProjectSnapshot({
+        userId: currentUser.id,
+        conversationId,
+        projectSnapshot: snapshot,
+        scope: conversationScope,
+        agentId: agentConfig.agentId,
+      }).catch((error) => {
+        console.warn("ai-entry.opencode.project_snapshot.persist_failed", {
+          conversationId,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      })
+    }
 
     console.info("ai-entry.chat.request.start", {
       traceId,
@@ -1591,6 +1614,8 @@ export async function POST(request: NextRequest) {
           })) {
             if (event.event === "text_delta") {
               openCodeAnswer += event.delta
+            } else if (event.event === "checkpoint_saved" && event.checkpoint.projectSnapshot) {
+              await persistRuntimeProjectSnapshot(event.checkpoint.projectSnapshot)
             } else if (event.event === "artifact_payload") {
               const published = await publishRuntimeArtifact({
                 currentUser,
@@ -2207,6 +2232,8 @@ export async function POST(request: NextRequest) {
                   }
                   lastTextDeltaAtMs = now
                   sendEvent({ event: "message", conversation_id: conversationId, answer: event.delta })
+                } else if (event.event === "checkpoint_saved" && event.checkpoint.projectSnapshot) {
+                  await persistRuntimeProjectSnapshot(event.checkpoint.projectSnapshot)
                 } else if (event.event === "runtime_warning") {
                   sendEvent({
                     event: "runtime_warning",

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import type { AgentRuntimeInput, SharedSkillSetSelection, WorkflowContext } from "@/lib/ai-runtime/contracts"
+import type { AgentRuntimeInput, RuntimeProjectSnapshot, SharedSkillSetSelection, WorkflowContext } from "@/lib/ai-runtime/contracts"
 import { isAiEntryOpenCodeArtifactContextEnabled } from "./profile-store"
 
 export const DEFAULT_MAX_CONTEXT_CHARS = 60_000
@@ -26,7 +26,7 @@ function envPositiveInt(name: string, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
-function serializeLength(input: Pick<AgentRuntimeInput, "systemPrompt" | "messages" | "attachments" | "artifactContext" | "workflowContext">) {
+function serializeLength(input: Pick<AgentRuntimeInput, "systemPrompt" | "messages" | "attachments" | "artifactContext" | "workflowContext" | "projectSnapshot">) {
   return JSON.stringify(input).length
 }
 
@@ -90,6 +90,7 @@ export function buildAgentRuntimeInput(input: {
   artifactContext?: AgentRuntimeInput["artifactContext"]
   workflowContext?: WorkflowContext | null
   conversationSummary?: string | null
+  projectSnapshot?: RuntimeProjectSnapshot | null
   modelHint?: string | null
   allowNetwork?: boolean
   maxContextChars?: number
@@ -132,6 +133,7 @@ export function buildAgentRuntimeInput(input: {
       : {}),
     ...(input.sharedSkillSetSelection ? { sharedSkillSetSelection: input.sharedSkillSetSelection } : {}),
     modelHint: text(input.modelHint) || null,
+    ...(input.projectSnapshot ? { projectSnapshot: input.projectSnapshot } : {}),
     systemPrompt: normalizedSystemPrompt,
     messages: [currentUserMessage],
     attachments,

@@ -52,6 +52,23 @@ test("keeps editable PPT turns in a stable session and carries the native skill"
   assert.deepEqual(input.selectedSkillIds, ["ppt-master"])
 })
 
+test("passes the lightweight ppt-master project snapshot to the runtime", () => {
+  const snapshot = { schemaVersion: 1 as const, projectKind: "ppt-master" as const, state: { title: "Plan", slideCount: 4 } }
+  const input = buildAgentRuntimeInput({
+    runId: "run-ppt-snapshot",
+    conversationId: "conversation-7",
+    enterpriseId: 1,
+    userId: 42,
+    agentId: "executive-ppt",
+    selectedSkillIds: ["ppt-master"],
+    systemPrompt: "Use the editable PPT assistant.",
+    messages: [{ role: "user", content: "继续完善" }],
+    projectSnapshot: snapshot,
+  })
+
+  assert.deepEqual(input.projectSnapshot, snapshot)
+})
+
 test("bounds context and keeps the newest artifact summaries first", () => {
   const input = buildAgentRuntimeInput({
     runId: "run-2",

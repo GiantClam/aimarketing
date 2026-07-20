@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   applyAiEntryConversationStateDelta,
   mergeAiEntryConversationState,
+  normalizeAiEntryConversationState,
   resolveAiEntryConversationStateFromContents,
 } from "./conversation-state"
 
@@ -121,4 +122,24 @@ test("conversation state delta clears stale ppt preview state after invalidation
       },
     },
   )
+})
+
+test("conversation state preserves a valid ppt-master snapshot and rejects oversized or malformed state", () => {
+  const snapshot = {
+    schemaVersion: 1 as const,
+    projectKind: "ppt-master" as const,
+    state: { title: "Quarterly plan", slideCount: 6, selectedTemplateId: "boardroom" },
+  }
+  assert.deepEqual(normalizeAiEntryConversationState({
+    ppt: { latestPreview: null, latestExport: null, phase: "idle" },
+    projectSnapshot: snapshot,
+  }).projectSnapshot, snapshot)
+  assert.equal(normalizeAiEntryConversationState({
+    ppt: { latestPreview: null, latestExport: null, phase: "idle" },
+    projectSnapshot: { schemaVersion: 2, projectKind: "ppt-master", state: {} },
+  }).projectSnapshot, undefined)
+  assert.equal(normalizeAiEntryConversationState({
+    ppt: { latestPreview: null, latestExport: null, phase: "idle" },
+    projectSnapshot: { schemaVersion: 1, projectKind: "ppt-master", state: { content: "x".repeat(128 * 1024) } },
+  }).projectSnapshot, undefined)
 })
