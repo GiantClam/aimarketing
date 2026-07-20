@@ -47,7 +47,7 @@ RUN git init /tmp/dashi-ppt-skill \
   && git -C /tmp/dashi-ppt-skill fetch --depth 1 origin "$DASHI_PPT_SKILL_REF" \
   && git -C /tmp/dashi-ppt-skill checkout --detach FETCH_HEAD \
   && test "$(git -C /tmp/dashi-ppt-skill rev-parse HEAD)" = "$DASHI_PPT_SKILL_REF" \
-  && mv /tmp/dashi-ppt-skill/skills/dashiai-ppt /opt/dashiai-ppt \
+  && mv /tmp/dashi-ppt-skill/skills/dashi-ppt /opt/dashiai-ppt \
   && rm -rf /tmp/dashi-ppt-skill \
   && npm --prefix /opt/dashiai-ppt/project ci --ignore-scripts --no-audit --no-fund \
   && cd /opt/dashiai-ppt/project \

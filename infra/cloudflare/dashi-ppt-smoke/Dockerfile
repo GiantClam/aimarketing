@@ -16,7 +16,7 @@ RUN git init /tmp/dashi-ppt-skill \
   && git -C /tmp/dashi-ppt-skill remote add origin https://github.com/chuspeeism/dashi-ppt-skill.git \
   && git -C /tmp/dashi-ppt-skill fetch --depth 1 origin "$DASHI_PPT_SKILL_REF" \
   && git -C /tmp/dashi-ppt-skill checkout --detach FETCH_HEAD \
-  && mv /tmp/dashi-ppt-skill/skills/dashiai-ppt /opt/dashiai-ppt \
+  && mv /tmp/dashi-ppt-skill/skills/dashi-ppt /opt/dashiai-ppt \
   && rm -rf /tmp/dashi-ppt-skill \
   && npm --prefix /opt/dashiai-ppt/project ci --ignore-scripts --no-audit --no-fund
 
