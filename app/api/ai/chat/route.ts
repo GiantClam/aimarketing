@@ -1577,6 +1577,7 @@ export async function POST(request: NextRequest) {
           traceId,
           billingReservation: aiEntryCreditReservation,
           provider: openCodeProvider,
+          backend: runtimeProfile.backend === "cloudflare-opencode-session" ? "cloudflare-opencode-session" : "railway-opencode",
         })
         aiEntryCreditFinalized = true
         const queueMessage = isZh ? "任务已提交，关闭页面后仍会继续执行。" : "Task queued; execution continues after you leave this page."
@@ -1944,6 +1945,7 @@ export async function POST(request: NextRequest) {
               traceId,
               billingReservation: aiEntryCreditReservation,
               provider: openCodeProvider,
+              backend: runtimeProfile.backend === "cloudflare-opencode-session" ? "cloudflare-opencode-session" : "railway-opencode",
             })
             aiEntryCreditFinalized = true
             const queueMessage = isZh ? "任务已提交，关闭页面后仍会继续执行。" : "Task queued; execution continues after you leave this page."

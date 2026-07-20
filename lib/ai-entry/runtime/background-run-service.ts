@@ -3,6 +3,7 @@ import type { AgentRuntimeInput, AgentRuntimeInputV2, OpenCodeProviderConfig } f
 import { buildAgentRuntimeSessionKey } from "@/lib/ai-runtime/session-key"
 import { createPlatformTaskRun, updatePlatformTaskRun } from "@/lib/platform/task-run-store"
 import { createOpenCodeRuntimeRun, updateOpenCodeRuntimeRun } from "@/lib/platform/opencode-runtime-store"
+import { enqueueCloudflareSessionRun, prepareCloudflareSession } from "./cloudflare-session-client"
 import { enqueueRailwaySessionRun } from "./railway-session-client"
 import type { BillingReservation } from "@/lib/billing/runtime"
 
@@ -15,6 +16,7 @@ export async function createBackgroundOpenCodeRun(input: {
   traceId: string
   billingReservation: BillingReservation | null
   provider: OpenCodeProviderConfig
+  backend?: "cloudflare-opencode-session" | "railway-opencode"
 }) {
   if (!input.currentUser.enterpriseId) throw new Error("opencode_runtime_enterprise_required")
   const sessionKey = await buildAgentRuntimeSessionKey({ enterpriseId: input.currentUser.enterpriseId, userId: input.currentUser.id, conversationId: input.runtimeInput.conversationId, agentId: input.runtimeInput.agentId })
@@ -31,7 +33,8 @@ export async function createBackgroundOpenCodeRun(input: {
   const runtimeProvider = process.env.OPENCODE_PROVIDER_PROXY_URL?.trim() && process.env.RUNTIME_PROXY_TOKEN?.trim()
     ? { ...input.provider, apiKey: `proxy:${input.provider.providerId}` }
     : input.provider
-  const request = { runId: input.runtimeInput.runId, sessionKey, input: v2Input, provider: runtimeProvider }
+  const request = { runId: input.runtimeInput.runId, sessionKey, input: v2Input, deadlineMs: 3_600_000 as const, provider: runtimeProvider }
+  const backend = input.backend || "railway-opencode"
   const taskRun = await createPlatformTaskRun({
     enterpriseId: input.currentUser.enterpriseId,
     userId: input.currentUser.id,
@@ -50,9 +53,16 @@ export async function createBackgroundOpenCodeRun(input: {
       billingReservation: input.billingReservation,
     },
   })
-  await createOpenCodeRuntimeRun({ backend: "railway-opencode", taskRunId: taskRun.id, runtimeRunId: request.runId, sessionKey, conversationId: request.input.conversationId, agentId: request.input.agentId, functionId: request.input.functionId, deadlineAt: new Date(Date.now() + 3_600_000), billingPayload: input.billingReservation })
+  await createOpenCodeRuntimeRun({ backend, taskRunId: taskRun.id, runtimeRunId: request.runId, sessionKey, conversationId: request.input.conversationId, agentId: request.input.agentId, functionId: request.input.functionId, deadlineAt: new Date(Date.now() + 3_600_000), billingPayload: input.billingReservation })
   try {
-    await enqueueRailwaySessionRun(request)
+    if (backend === "cloudflare-opencode-session") {
+      const prepared = await prepareCloudflareSession(request)
+      if (!prepared.prepared) throw new Error("cloudflare_opencode_session_not_ready")
+      const accepted = await enqueueCloudflareSessionRun(request)
+      if (!accepted.accepted || accepted.runId !== request.runId) throw new Error("cloudflare_opencode_async_accept_invalid")
+    } else {
+      await enqueueRailwaySessionRun(request)
+    }
   } catch (error) {
     await updateOpenCodeRuntimeRun(request.runId, { status: "failed", lastErrorCode: "dispatch_failed", lastErrorMessage: error instanceof Error ? error.message : String(error), finishedAt: new Date(), clearLease: true })
     await updatePlatformTaskRun(taskRun.id, { status: "failed", normalizedResult: { error: "dispatch_failed" }, finishedAt: new Date() })

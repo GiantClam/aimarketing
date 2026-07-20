@@ -829,6 +829,7 @@ test("presentation PPT queues Cloudflare OpenCode and never enters the legacy PP
     assert.match(text, /"event":"background_task_queued"/u)
     assert.match(text, /"taskType":"opencode_agent_run"/u)
     assert.equal(backgroundRunCalls.length, 1)
+    assert.equal(backgroundRunCalls[0]?.backend, "cloudflare-opencode-session")
     assert.equal(
       (backgroundRunCalls[0]?.runtimeInput as { agentId?: string } | undefined)?.agentId,
       "executive-presentation-ppt",
