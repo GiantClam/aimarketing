@@ -1,12 +1,14 @@
 name: OpenCode runner CI
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "infra/cloudflare/opencode-runner/**"
       - "lib/ai-runtime/**"
       - "lib/ai-entry/runtime/**"
       - "app/api/ai/chat/route.ts"
+      - "app/api/platform/artifacts/**"
   push:
     branches: [main]
     paths:
@@ -14,6 +16,7 @@ on:
       - "lib/ai-runtime/**"
       - "lib/ai-entry/runtime/**"
       - "app/api/ai/chat/route.ts"
+      - "app/api/platform/artifacts/**"
 
 jobs:
   verify:
