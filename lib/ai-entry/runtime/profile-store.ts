@@ -136,10 +136,10 @@ export function resolveBusinessAgentRailwayRuntimeProfile(
 export function resolveDashiPptCloudflareRuntimeProfile(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): RuntimeProfile {
-  const runtimeMode = env.AI_ENTRY_RUNTIME_MODE?.trim() || ""
   const enabled =
     readBoolean(env.AI_ENTRY_SAAS_OPENCODE_ENABLED, false) &&
-    (runtimeMode === "" || runtimeMode === "opencode-cloudflare-sandbox")
+    Boolean(env.CLOUDFLARE_OPENCODE_RUNNER_URL?.trim()) &&
+    Boolean(env.CLOUDFLARE_OPENCODE_RUNNER_HMAC_SECRET?.trim())
   const profile = buildProfile({
     env,
     backend: "cloudflare-opencode-session",

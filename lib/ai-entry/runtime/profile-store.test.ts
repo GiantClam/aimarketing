@@ -6,7 +6,7 @@ import { isAiEntryOpenCodeContextEnabled, isAiEntryOpenCodePrewarmEnabled, isAiE
 test("resolves the Dashi PPT Cloudflare session runtime", () => {
   const profile = resolveDashiPptCloudflareRuntimeProfile({
     AI_ENTRY_SAAS_OPENCODE_ENABLED: "true",
-    AI_ENTRY_RUNTIME_MODE: "opencode-cloudflare-sandbox",
+    AI_ENTRY_RUNTIME_MODE: "opencode-railway",
     AI_ENTRY_OPENCODE_BACKEND: "cloudflare-sandbox-exec",
     CLOUDFLARE_OPENCODE_RUNNER_URL: "https://runner.example.com/",
     CLOUDFLARE_OPENCODE_RUNNER_HMAC_SECRET: "secret",
