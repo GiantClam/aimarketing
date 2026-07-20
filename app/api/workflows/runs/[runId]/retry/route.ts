@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { after as nextAfter, NextRequest, NextResponse } from "next/server"
 
 import { getSessionUser } from "@/lib/auth/session"
 import { serializePlatformWorkflowRun } from "@/lib/platform/workflow-runner"
@@ -15,6 +15,36 @@ import {
 } from "@/lib/workflows/workflow-attempts"
 
 export const runtime = "nodejs"
+export const maxDuration = 600
+
+function scheduleWorkflowRecovery(input: {
+  runId: number
+  requestOrigin: string
+  workflowId: number
+  mode: string
+  nodeKey: string
+}) {
+  const recovery = async () => {
+    try {
+      await runWorkflowTaskRecoveryPass({
+        runId: input.runId,
+        requestOrigin: input.requestOrigin,
+        waitForCompletion: true,
+      })
+    } catch (error) {
+      console.error("workflow.retry.recovery.failed", {
+        runId: input.runId,
+        workflowId: input.workflowId,
+        mode: input.mode,
+        nodeKey: input.nodeKey,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  if (typeof nextAfter === "function") nextAfter(recovery)
+  else void recovery()
+}
 
 type RetryRequest = {
   mode: "node" | "branch" | "iteration"
@@ -165,18 +195,12 @@ export async function POST(
       return NextResponse.json({ error: "workflow_run_not_found" }, { status: 500 })
     }
 
-    void runWorkflowTaskRecoveryPass({
+    scheduleWorkflowRecovery({
       runId: numericRunId,
       requestOrigin: new URL(request.url).origin,
-      waitForCompletion: false,
-    }).catch((error) => {
-      console.error("workflow.retry.recovery-kick.failed", {
-        runId: numericRunId,
-        workflowId: detail.workflow.id,
-        mode: body.mode,
-        nodeKey,
-        message: error instanceof Error ? error.message : String(error),
-      })
+      workflowId: detail.workflow.id,
+      mode: body.mode,
+      nodeKey,
     })
 
     return NextResponse.json({

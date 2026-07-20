@@ -4,7 +4,6 @@ import { getSessionUser } from "@/lib/auth/session"
 import {
   serializePlatformWorkflowRunStatus,
 } from "@/lib/platform/workflow-runner"
-import { runWorkflowTaskRecoveryPass } from "@/lib/workflows/task-runner"
 import { serializeWorkflowRunDetail } from "@/lib/workflows/run-detail-serialization"
 import {
   getWorkflowRunDetail,
@@ -67,23 +66,6 @@ export async function GET(
         return NextResponse.json({ error: "workflow_run_not_found" }, { status: 404 })
       }
 
-      if (
-        statusDetail.run.status === "queued" ||
-        statusDetail.run.status === "running" ||
-        statusDetail.run.status === "cancel_requested"
-      ) {
-        void runWorkflowTaskRecoveryPass({
-          runId: numericRunId,
-          requestOrigin: new URL(request.url).origin,
-          waitForCompletion: false,
-        }).catch((error) => {
-          console.error("workflow.run.status-kick.failed", {
-            runId: numericRunId,
-            message: error instanceof Error ? error.message : String(error),
-          })
-        })
-      }
-
       return NextResponse.json({
         data: {
           mode,
@@ -98,26 +80,6 @@ export async function GET(
     const detail = await getWorkflowRunDetail(numericRunId, currentUser.enterpriseId)
     if (!detail) {
       return NextResponse.json({ error: "workflow_run_not_found" }, { status: 404 })
-    }
-
-    // Full detail polling is the primary browser path. Kick the durable
-    // runner here as well as on the lightweight status path so a process
-    // restart cannot leave a run permanently `running` with queued nodes.
-    if (
-      detail.run.status === "queued" ||
-      detail.run.status === "running" ||
-      detail.run.status === "cancel_requested"
-    ) {
-      void runWorkflowTaskRecoveryPass({
-        runId: numericRunId,
-        requestOrigin: new URL(request.url).origin,
-        waitForCompletion: false,
-      }).catch((error) => {
-        console.error("workflow.run.detail-kick.failed", {
-          runId: numericRunId,
-          message: error instanceof Error ? error.message : String(error),
-        })
-      })
     }
 
     const serialized = serializeWorkflowRunDetail(detail)

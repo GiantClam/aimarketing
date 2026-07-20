@@ -8,6 +8,10 @@
     {
       "path": "/api/internal/platform-task-sync",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/internal/workflow-task-runner",
+      "schedule": "* * * * *"
     }
   ]
 }

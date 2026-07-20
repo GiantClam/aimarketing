@@ -1,4 +1,6 @@
-import { and, desc, eq, inArray } from "drizzle-orm"
+import { randomUUID } from "node:crypto"
+
+import { and, desc, eq, inArray, sql } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import { platformTaskRuns } from "@/lib/db/schema"
@@ -9,15 +11,12 @@ import type { WorkflowNodeInputBundle } from "@/lib/workflows/node-executors"
 import { executeWorkflowRetryJob, executeWorkflowRunJob } from "@/lib/workflows/run-job"
 import {
   cloneNormalizedResult,
-  isWorkflowRunStale,
   parseWorkflowRetryRequest,
   shouldEvictActiveWorkflowRunTracker,
   stripWorkflowRetryRequest,
   type RecoverableWorkflowRun,
 } from "@/lib/workflows/task-runner-helpers"
 import {
-  cancelQueuedWorkflowNodeExecutions,
-  failRunningWorkflowNodeExecutions,
   getWorkflowRunDetail,
   type WorkflowRunDetail,
 } from "@/lib/workflows/store"
@@ -55,6 +54,18 @@ const WORKFLOW_STALE_RUNNING_MS = Math.max(
       Math.max(configuredCapabilityTimeoutMs || 0, configuredVideoTimeoutMs || 0, DEFAULT_WORKFLOW_STALE_RUNNING_MS),
   ),
 )
+const WORKFLOW_RUN_LEASE_MS = Math.max(
+  WORKFLOW_RUN_HEARTBEAT_MS * 3,
+  Math.min(
+    10 * 60_000,
+    Number.parseInt(process.env.WORKFLOW_RUN_LEASE_MS || "", 10) || 90_000,
+  ),
+)
+
+type WorkflowRunnerLease = {
+  token: string
+  expiresAt: string
+}
 
 function buildSeedInputFromRunInputPayload(inputPayload: Record<string, unknown> | null | undefined): Partial<WorkflowNodeInputBundle> | undefined {
   const prompt = typeof inputPayload?.prompt === "string" ? inputPayload.prompt.trim() : ""
@@ -86,13 +97,27 @@ function buildExistingNodeStates(detail: WorkflowRunDetail) {
   )
 }
 
-async function touchWorkflowRun(runId: number) {
-  await db
-    .update(platformTaskRuns)
-    .set({
-      updatedAt: new Date(),
-    })
-    .where(and(eq(platformTaskRuns.id, runId), eq(platformTaskRuns.status, "running")))
+async function touchWorkflowRun(runId: number, leaseToken: string) {
+  const now = new Date()
+  const lease: WorkflowRunnerLease = {
+    token: leaseToken,
+    expiresAt: new Date(now.getTime() + WORKFLOW_RUN_LEASE_MS).toISOString(),
+  }
+
+  await db.execute(sql`
+    UPDATE "AI_MARKETING_platform_task_runs"
+    SET
+      updated_at = ${now},
+      normalized_result = jsonb_set(
+        COALESCE(normalized_result, '{}'::jsonb),
+        '{workflowRunnerLease}',
+        ${JSON.stringify(lease)}::jsonb,
+        true
+      )
+    WHERE id = ${runId}
+      AND status = 'running'
+      AND normalized_result->'workflowRunnerLease'->>'token' = ${leaseToken}
+  `)
 }
 
 async function listRecoverableWorkflowRuns(limit: number) {
@@ -118,59 +143,56 @@ async function listRecoverableWorkflowRuns(limit: number) {
     .limit(limit)
 }
 
-async function claimQueuedWorkflowRun(runId: number, normalizedResult: Record<string, unknown> | null) {
-  const [row] = await db
-    .update(platformTaskRuns)
-    .set({
-      status: "running",
-      startedAt: new Date(),
-      finishedAt: null,
-      normalizedResult,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(platformTaskRuns.id, runId), eq(platformTaskRuns.status, "queued")))
-    .returning({
-      id: platformTaskRuns.id,
-    })
+async function claimWorkflowRunExecution(runId: number): Promise<WorkflowRunnerLease | null> {
+  const now = new Date()
+  const lease: WorkflowRunnerLease = {
+    token: randomUUID(),
+    expiresAt: new Date(now.getTime() + WORKFLOW_RUN_LEASE_MS).toISOString(),
+  }
 
-  if (!row) return false
+  const result = await db.execute(sql`
+    WITH candidate AS (
+      SELECT id
+      FROM "AI_MARKETING_platform_task_runs"
+      WHERE id = ${runId}
+        AND kind = 'workflow'
+        AND item_type = 'workflow'
+        AND status IN ('queued', 'running')
+        AND (
+          normalized_result IS NULL
+          OR normalized_result->'workflowRunnerLease' IS NULL
+          OR NULLIF(normalized_result->'workflowRunnerLease'->>'expiresAt', '') IS NULL
+          OR (normalized_result->'workflowRunnerLease'->>'expiresAt')::timestamptz <= ${now}
+        )
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE "AI_MARKETING_platform_task_runs" AS runs
+    SET
+      status = 'running',
+      started_at = COALESCE(runs.started_at, ${now}),
+      finished_at = CASE WHEN runs.status = 'queued' THEN NULL ELSE runs.finished_at END,
+      normalized_result = jsonb_set(
+        COALESCE(runs.normalized_result, '{}'::jsonb),
+        '{workflowRunnerLease}',
+        ${JSON.stringify(lease)}::jsonb,
+        true
+      ),
+      updated_at = ${now}
+    FROM candidate
+    WHERE runs.id = candidate.id
+    RETURNING runs.id
+  `)
+
+  if (result.rows.length === 0) return null
 
   await appendPlatformRunEvent(runId, {
     level: "info",
     message: "workflow_runner_claimed",
   })
-  return true
+  return lease
 }
 
-async function markWorkflowRunStaleFailed(run: RecoverableWorkflowRun) {
-  const normalizedResult = cloneNormalizedResult(run.normalizedResult) ?? {}
-  normalizedResult.workflowStatus = "failed"
-  normalizedResult.staleFailure = {
-    reason: "workflow_run_stale",
-    failedAt: new Date().toISOString(),
-  }
-
-  await failRunningWorkflowNodeExecutions(run.id)
-  await cancelQueuedWorkflowNodeExecutions(run.id)
-  await updatePlatformWorkflowRun({
-    runId: run.id,
-    patch: {
-      status: "failed",
-      expectedStatus: ["running"],
-      finishedAt: new Date(),
-      normalizedResult,
-    },
-    event: {
-      level: "error",
-      message: "workflow_run_stale_failed",
-      payload: {
-        staleAfterMs: WORKFLOW_STALE_RUNNING_MS,
-      },
-    },
-  })
-}
-
-function executeTrackedWorkflowRun(runId: number, requestOrigin: string) {
+function executeTrackedWorkflowRun(runId: number, requestOrigin: string, leaseToken: string) {
   const existing = activeWorkflowRuns.get(runId)
   if (existing) {
     return existing
@@ -222,7 +244,7 @@ function executeTrackedWorkflowRun(runId: number, requestOrigin: string) {
     const previousNormalizedResult = stripWorkflowRetryRequest(hydratedRun.normalizedResult)
     const seedInput = buildSeedInputFromRunInputPayload(hydratedRun.inputPayload)
     const heartbeatTimer = setInterval(() => {
-      void touchWorkflowRun(runId).catch(() => {})
+      void touchWorkflowRun(runId, leaseToken).catch(() => {})
     }, WORKFLOW_RUN_HEARTBEAT_MS)
 
     try {
@@ -308,27 +330,23 @@ async function handleWorkflowRun(runId: number, requestOrigin: string, waitForCo
     activeWorkflowRuns.delete(runId)
   }
 
-  if (run.status === "running" || run.status === "cancel_requested") {
+  if (run.status === "cancel_requested") {
     if (activeWorkflowRuns.has(runId)) {
       return { considered: 1, started: 0, alreadyRunning: 1, staleFailed: 0, skipped: 0 }
     }
-    if (isWorkflowRunStale(run, WORKFLOW_STALE_RUNNING_MS)) {
-      await markWorkflowRunStaleFailed(run)
-      return { considered: 1, started: 0, alreadyRunning: 0, staleFailed: 1, skipped: 0 }
-    }
-    const job = executeTrackedWorkflowRun(runId, requestOrigin)
-    if (waitForCompletion && job) {
-      await job
-    }
-    return { considered: 1, started: 1, alreadyRunning: 0, staleFailed: 0, skipped: 0 }
-  }
-
-  const claimed = await claimQueuedWorkflowRun(runId, cloneNormalizedResult(run.normalizedResult))
-  if (!claimed) {
     return { considered: 1, started: 0, alreadyRunning: 0, staleFailed: 0, skipped: 1 }
   }
 
-  const job = executeTrackedWorkflowRun(runId, requestOrigin)
+  if (activeWorkflowRuns.has(runId)) {
+    return { considered: 1, started: 0, alreadyRunning: 1, staleFailed: 0, skipped: 0 }
+  }
+
+  const lease = await claimWorkflowRunExecution(runId)
+  if (!lease) {
+    return { considered: 1, started: 0, alreadyRunning: 1, staleFailed: 0, skipped: 0 }
+  }
+
+  const job = executeTrackedWorkflowRun(runId, requestOrigin, lease.token)
   if (waitForCompletion && job) {
     await job
   }

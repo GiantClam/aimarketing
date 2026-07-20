@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { after as nextAfter, NextRequest, NextResponse } from "next/server"
 
 import { getSessionUser } from "@/lib/auth/session"
 import { listRecentWorkflowTaskRunsForEnterprise } from "@/lib/platform/task-run-store"
@@ -29,6 +29,35 @@ import {
 } from "@/lib/workflows/iteration-runtime"
 
 export const runtime = "nodejs"
+export const maxDuration = 600
+
+function scheduleWorkflowRecovery(input: {
+  runId: number
+  requestOrigin: string
+  context: string
+  workflowId: number
+}) {
+  const recovery = async () => {
+    try {
+      await runWorkflowTaskRecoveryPass({
+        runId: input.runId,
+        requestOrigin: input.requestOrigin,
+        waitForCompletion: true,
+      })
+    } catch (error) {
+      console.error(input.context, {
+        runId: input.runId,
+        workflowId: input.workflowId,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  // `after` keeps the execution alive after the 202 response on Vercel.
+  // The fallback keeps isolated route tests and local runtimes functional.
+  if (typeof nextAfter === "function") nextAfter(recovery)
+  else void recovery()
+}
 
 function parseWorkflowId(value: string) {
   const numeric = Number(value)
@@ -340,16 +369,11 @@ export async function POST(
       const detail = await getWorkflowRunDetail(created.run.id, currentUser.enterpriseId)
       if (!detail) return NextResponse.json({ error: "workflow_run_not_found" }, { status: 500 })
 
-      void runWorkflowTaskRecoveryPass({
+      scheduleWorkflowRecovery({
         runId: created.run.id,
         requestOrigin: new URL(request.url).origin,
-        waitForCompletion: false,
-      }).catch((error) => {
-        console.error("workflow.run.iteration-recovery-kick.failed", {
-          runId: created.run.id,
-          workflowId: workflow.id,
-          message: error instanceof Error ? error.message : String(error),
-        })
+        context: "workflow.run.iteration-recovery.failed",
+        workflowId: workflow.id,
       })
 
       return NextResponse.json(
@@ -385,16 +409,11 @@ export async function POST(
     const latestRunStatus = latestRunDetail?.run.status ?? latestRunRecord?.status ?? null
 
     if (latestRunStatus === "running" && latestRunRecord && latestRunDetail && latestRunMatchesWorkflow && latestRunCanResume) {
-      void runWorkflowTaskRecoveryPass({
+      scheduleWorkflowRecovery({
         runId: latestRunRecord.id,
         requestOrigin: new URL(request.url).origin,
-        waitForCompletion: false,
-      }).catch((error) => {
-        console.error("workflow.run.active-kick.failed", {
-          runId: latestRunRecord.id,
-          workflowId: workflow.id,
-          message: error instanceof Error ? error.message : String(error),
-        })
+        context: "workflow.run.active-recovery.failed",
+        workflowId: workflow.id,
       })
 
       return NextResponse.json(
@@ -449,17 +468,11 @@ export async function POST(
           return NextResponse.json({ error: "workflow_run_not_found" }, { status: 500 })
         }
 
-        void runWorkflowTaskRecoveryPass({
+        scheduleWorkflowRecovery({
           runId: latestRunRecord.id,
           requestOrigin: new URL(request.url).origin,
-          waitForCompletion: false,
-        }).catch((error) => {
-          console.error("workflow.run.resume-kick.failed", {
-            runId: latestRunRecord.id,
-            workflowId: workflow.id,
-            nodeKey: retryNodeKey,
-            message: error instanceof Error ? error.message : String(error),
-          })
+          context: "workflow.run.resume-recovery.failed",
+          workflowId: workflow.id,
         })
 
         return NextResponse.json(
@@ -511,16 +524,11 @@ export async function POST(
       return NextResponse.json({ error: "workflow_run_not_found" }, { status: 500 })
     }
 
-    void runWorkflowTaskRecoveryPass({
+    scheduleWorkflowRecovery({
       runId: run.id,
       requestOrigin: new URL(request.url).origin,
-      waitForCompletion: false,
-    }).catch((error) => {
-      console.error("workflow.run.recovery-kick.failed", {
-        runId: run.id,
-        workflowId: workflow.id,
-        message: error instanceof Error ? error.message : String(error),
-      })
+      context: "workflow.run.recovery.failed",
+      workflowId: workflow.id,
     })
 
     return NextResponse.json(
