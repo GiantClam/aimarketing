@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import type { AgentRuntimeInput, RuntimeProjectSnapshot, SharedSkillSetSelection, WorkflowContext } from "@/lib/ai-runtime/contracts"
+import { runtimeArtifactExtensions } from "./artifact-policy"
 import { isAiEntryOpenCodeArtifactContextEnabled } from "./profile-store"
 
 export const DEFAULT_MAX_CONTEXT_CHARS = 60_000
@@ -145,7 +146,7 @@ export function buildAgentRuntimeInput(input: {
       maxArtifacts: input.profileLimits?.maxArtifacts || 8,
       maxArtifactBytes: input.profileLimits?.maxArtifactBytes || 2 * 1024 * 1024,
       maxArtifactTotalBytes: input.profileLimits?.maxArtifactTotalBytes || 4 * 1024 * 1024,
-      allowedExtensions: [".md", ".markdown", ".txt", ".json", ".csv", ".html", ".pdf", ".docx", ".xlsx", ".pptx", ".svg", ".png", ".jpg", ".jpeg", ".webp"],
+      allowedExtensions: runtimeArtifactExtensions(input.agentId, input.selectedSkillIds),
     },
     policy: {
       allowPlatformTools: false as const,

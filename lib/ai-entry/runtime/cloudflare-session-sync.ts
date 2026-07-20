@@ -5,6 +5,7 @@ import { getOpenCodeRuntimeRunByTaskRunId, getRailwayOpenCodeRuntimeState, updat
 import { appendPlatformRunEvent, getPlatformTaskRun, updatePlatformTaskRun } from "@/lib/platform/task-run-store"
 import { savePlatformArtifact } from "@/lib/platform/task-run-store"
 import { validateRuntimeArtifactPayload, validateRuntimeArtifactReference } from "./artifact-detector"
+import { runtimeArtifactExtensions } from "./artifact-policy"
 import type { RuntimeArtifactPayload, RuntimeArtifactReference } from "@/lib/ai-runtime/contracts"
 
 type RuntimeEvent = { event?: string; delta?: string; message?: string; code?: string; artifact?: Record<string, unknown> }
@@ -48,6 +49,7 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
     .join("")
   const previous = (platformRun.normalizedResult || {}) as Record<string, unknown>
   const taskInput = (platformRun.inputPayload || {}) as Record<string, unknown>
+  const allowedArtifactExtensions = runtimeArtifactExtensions(taskInput.agentId, taskInput.selectedSkillIds)
   const conversationId = typeof taskInput.conversationId === "string" ? taskInput.conversationId : null
   const artifacts = events
     .filter((event) => (event.event === "artifact_reference" || event.event === "artifact_payload") && event.artifact)
@@ -63,7 +65,7 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
         maxArtifacts: 24,
         maxArtifactBytes: 4 * 1024 * 1024,
         maxArtifactTotalBytes: 16 * 1024 * 1024,
-        allowedExtensions: [".md", ".markdown", ".txt", ".json", ".csv", ".html", ".pdf", ".docx", ".xlsx", ".pptx", ".svg", ".png", ".jpg", ".jpeg", ".webp"],
+        allowedExtensions: allowedArtifactExtensions,
       })
       const saved = await savePlatformArtifact({
         runId: taskRunId,
@@ -96,7 +98,7 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
         maxArtifacts: 24,
         maxArtifactBytes: 4 * 1024 * 1024,
         maxArtifactTotalBytes: 16 * 1024 * 1024,
-        allowedExtensions: [".md", ".markdown", ".txt", ".json", ".csv", ".html", ".pdf", ".docx", ".xlsx", ".pptx", ".svg", ".png", ".jpg", ".jpeg", ".webp"],
+        allowedExtensions: allowedArtifactExtensions,
       }, totalBytes)
       totalBytes += validated.sizeBytes
       const saved = await savePlatformArtifact({

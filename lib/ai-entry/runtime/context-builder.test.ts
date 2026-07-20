@@ -52,6 +52,21 @@ test("keeps editable PPT turns in a stable session and carries the native skill"
   assert.deepEqual(input.selectedSkillIds, ["ppt-master"])
 })
 
+test("limits native Dashi artifacts to PPTX and HTML", () => {
+  const input = buildAgentRuntimeInput({
+    runId: "run-dashi-artifacts",
+    conversationId: "conversation-dashi",
+    enterpriseId: 1,
+    userId: 42,
+    agentId: "executive-presentation-ppt",
+    selectedSkillIds: ["dashiai-ppt"],
+    systemPrompt: "Use the presentation assistant.",
+    messages: [{ role: "user", content: "生成演讲型 PPT" }],
+  })
+
+  assert.deepEqual(input.artifactContract.allowedExtensions, [".pptx", ".html"])
+})
+
 test("passes the lightweight ppt-master project snapshot to the runtime", () => {
   const snapshot = { schemaVersion: 1 as const, projectKind: "ppt-master" as const, state: { title: "Plan", slideCount: 4 } }
   const input = buildAgentRuntimeInput({
