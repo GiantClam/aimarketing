@@ -9,6 +9,7 @@ on:
       - "lib/ai-entry/runtime/**"
       - "app/api/ai/chat/route.ts"
       - "app/api/platform/artifacts/**"
+      - "Dockerfile"
   push:
     branches: [main]
     paths:
@@ -17,6 +18,7 @@ on:
       - "lib/ai-entry/runtime/**"
       - "app/api/ai/chat/route.ts"
       - "app/api/platform/artifacts/**"
+      - "Dockerfile"
 
 jobs:
   verify:

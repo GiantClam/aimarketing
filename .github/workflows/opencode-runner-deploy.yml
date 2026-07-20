@@ -11,6 +11,7 @@ on:
       - "lib/ai-entry/runtime/**"
       - "app/api/ai/chat/route.ts"
       - "railway.json"
+      - "Dockerfile"
 
 concurrency:
   group: opencode-runtime-production
