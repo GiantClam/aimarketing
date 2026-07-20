@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
 import { mkdir, readFile, writeFile, cp, copyFile, readdir, symlink, rm } from "node:fs/promises"
-import { spawn } from "node:child_process"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { join } from "node:path"
 
@@ -14,7 +13,6 @@ import {
   type RuntimeProjectSnapshot,
 } from "../../../../lib/ai-runtime/contracts.js"
 import { buildOpenCodeSystemPrompt, buildOpenCodeUserPrompt } from "../../../../lib/ai-runtime/opencode-prompt.js"
-import { isPptxExportAuthorized, shouldRunNativePptxExportFallback } from "../../../../lib/ai-runtime/ppt-export-confirmation.js"
 import { OpenCodeServeManager } from "./opencode-serve-manager.js"
 import { parseRuntimeProjectSnapshot } from "./project-snapshot.js"
 
@@ -219,7 +217,7 @@ async function findFiles(root: string, fileName: string, depth = 0): Promise<str
 
 async function publishDiscoveredArtifacts(input: AgentRuntimeInput, sessionDir: string, runDir: string) {
   const roots = [join(sessionDir, "workspace"), join(sessionDir, "turns")]
-  const pptxSources = isPptxExportAuthorized(input) ? roots.map((root) => findFiles(root, ".pptx")) : []
+  const pptxSources = roots.map((root) => findFiles(root, ".pptx"))
   const candidates = (await Promise.all([
     ...pptxSources,
     ...roots.map((root) => findFiles(root, ".svg")),
@@ -241,29 +239,6 @@ async function publishDiscoveredArtifacts(input: AgentRuntimeInput, sessionDir: 
   if (!manifest.length) return []
   await writeFile(join(runDir, "artifact-manifest.json"), JSON.stringify(manifest), "utf8")
   return manifest
-}
-
-async function exportNativePptxIfNeeded(sessionDir: string, runDir: string) {
-  if ((await findFiles(runDir, ".pptx")).length) return false
-  const svgFiles = await findFiles(sessionDir, ".svg")
-  const specLocks = await findFiles(sessionDir, "spec_lock.md")
-  const specLock = specLocks.find((filePath) => filePath.includes("/workspace/")) || specLocks[0]
-  if (!svgFiles.length || !specLock) return false
-  const projectDir = specLock.replace(/\/spec_lock\.md$/u, "")
-  const output = join(runDir, "artifacts", "ppt-master-native-export.pptx")
-  await mkdir(join(runDir, "artifacts"), { recursive: true })
-  const script = join(process.env.PPT_MASTER_REPO_DIR || "/opt/ppt-master", "skills/ppt-master/scripts/svg_to_pptx.py")
-  const child = spawn(process.env.PPT_MASTER_PYTHON_BIN || "python3", [script, projectDir, "--output", output, "--quiet"], {
-    cwd: projectDir,
-    env: process.env,
-    stdio: ["ignore", "pipe", "pipe"],
-  })
-  let stderr = ""
-  child.stderr.on("data", (chunk: Buffer) => { stderr = `${stderr}${chunk.toString("utf8")}`.slice(-1024) })
-  await new Promise<void>((resolve) => child.once("close", () => resolve()))
-  const ok = child.exitCode === 0 && Boolean(await readFile(output).catch(() => null))
-  console.log(JSON.stringify({ event: "ppt_master_native_export_fallback", projectDir, output, ok, stderr }))
-  return ok
 }
 
 async function readArtifacts(input: AgentRuntimeInput, runDir: string, sessionDir = runDir): Promise<RuntimeArtifactPayload[]> {
@@ -342,7 +317,6 @@ function buildCompatibilityRuntimeInput(request: Record<string, unknown>, runId:
     userId: 0,
     agentId: "executive-ppt",
     selectedSkillIds: ["ppt-master"],
-    exportConfirmationGranted: true,
     systemPrompt: "Use the native ppt-master skill to create one editable PowerPoint deck. Complete the SVG quality check and repair loop before finishing.",
     messages: [{
       role: "user",
@@ -547,7 +521,7 @@ async function prepareRunDirectory(input: AgentRuntimeInput | AgentRuntimeInputV
     await writeFile(join(sessionDir, ".runtime", "project-snapshot.json"), JSON.stringify(input.projectSnapshot), "utf8")
   }
   await writeFile(join(runDir, "system.md"), buildOpenCodeSystemPrompt(input), "utf8")
-  await writeFile(join(runDir, "prompt.md"), buildOpenCodeUserPrompt(input), "utf8")
+  await writeFile(join(runDir, "prompt.md"), buildOpenCodeUserPrompt(input, { includeConversationHistory: true }), "utf8")
   return { sessionDir, runDir, workingDir }
 }
 
@@ -619,18 +593,9 @@ async function executeRun(
     if (!completedRunDir) throw new Error("opencode_run_directory_missing")
     const readPublishableArtifacts = async () => {
       const artifacts = await readArtifacts(input as AgentRuntimeInput, completedRunDir, sessionDir)
-      return isPptxExportAuthorized(input)
-        ? artifacts
-        : artifacts.filter((artifact) => artifact.mimeType !== "application/vnd.openxmlformats-officedocument.presentationml.presentation")
+      return artifacts
     }
     let discoveredArtifacts = await readPublishableArtifacts()
-    if (
-      !discoveredArtifacts.some((artifact) => artifact.mimeType === "application/vnd.openxmlformats-officedocument.presentationml.presentation")
-      && shouldRunNativePptxExportFallback(input)
-    ) {
-      await exportNativePptxIfNeeded(sessionDir, completedRunDir)
-      discoveredArtifacts = await readPublishableArtifacts()
-    }
     if (!discoveredArtifacts.length) {
       await publishDiscoveredArtifacts(input as AgentRuntimeInput, sessionDir, completedRunDir)
       discoveredArtifacts = await readPublishableArtifacts()

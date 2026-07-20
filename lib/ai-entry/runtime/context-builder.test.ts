@@ -52,6 +52,25 @@ test("keeps editable PPT turns in a stable session and carries the native skill"
   assert.deepEqual(input.selectedSkillIds, ["ppt-master"])
 })
 
+test("keeps reconstructed conversation history in chronological order", () => {
+  const input = buildAgentRuntimeInput({
+    runId: "run-history-order",
+    conversationId: "conversation-history-order",
+    enterpriseId: 1,
+    userId: 42,
+    agentId: "executive-ppt",
+    selectedSkillIds: ["ppt-master"],
+    systemPrompt: "Use the editable PPT assistant.",
+    messages: [
+      { role: "user", content: "第一步" },
+      { role: "assistant", content: "第二步" },
+      { role: "user", content: "第三步" },
+    ],
+  })
+
+  assert.deepEqual(input.messages.map((message) => message.content), ["第一步", "第二步", "第三步"])
+})
+
 test("limits native Dashi artifacts to PPTX and HTML", () => {
   const input = buildAgentRuntimeInput({
     runId: "run-dashi-artifacts",

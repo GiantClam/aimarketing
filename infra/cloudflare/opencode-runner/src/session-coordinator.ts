@@ -4,7 +4,6 @@ import type { AgentRuntimeEvent, CloudflareSessionRunRequest, RuntimeCheckpointR
 import { verifyRunnerSignature, type NonceStore } from "./auth"
 import { createEventTicket, verifyEventTicket, allowedEventOrigin } from "./event-ticket"
 import { publishRuntimeArtifactsV2 } from "./artifacts-v2"
-import { isPptxExportAuthorized } from "../../../../lib/ai-runtime/ppt-export-confirmation"
 import { OpenCodeServerSession } from "./opencode-server"
 import { parseSessionRunRequest } from "./run-contract"
 import { runtimeDispatchKey, writeRuntimeDispatchEnvelope } from "./runtime-envelope"
@@ -258,7 +257,7 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
     await this.ctx.storage.put(`checkpoint:${input.runId}`, nextCheckpoint)
     await this.ctx.storage.put("latestCheckpoint", nextCheckpoint)
     await this.emit(input.runId, { event: "checkpoint_saved", checkpoint: nextCheckpoint, runId: input.runId })
-    const artifacts = await publishRuntimeArtifactsV2({ bucket: this.env.ARTIFACT_BUCKET, sandbox, sessionKey, runId: input.runId, sessionDir, maxArtifacts: runtimeInput.artifactContract.maxArtifacts, maxArtifactBytes: runtimeInput.artifactContract.maxArtifactBytes, maxArtifactTotalBytes: runtimeInput.artifactContract.maxArtifactTotalBytes, allowedExtensions: runtimeInput.artifactContract.allowedExtensions, allowPptx: isPptxExportAuthorized(runtimeInput) })
+    const artifacts = await publishRuntimeArtifactsV2({ bucket: this.env.ARTIFACT_BUCKET, sandbox, sessionKey, runId: input.runId, sessionDir, maxArtifacts: runtimeInput.artifactContract.maxArtifacts, maxArtifactBytes: runtimeInput.artifactContract.maxArtifactBytes, maxArtifactTotalBytes: runtimeInput.artifactContract.maxArtifactTotalBytes, allowedExtensions: runtimeInput.artifactContract.allowedExtensions })
     for (const warning of artifacts.warnings) await this.emit(input.runId, { event: "runtime_warning", code: warning, message: "An artifact was rejected or could not be published.", runId: input.runId })
     for (const artifact of artifacts.artifacts) await this.emit(input.runId, { event: "artifact_reference", artifact, runId: input.runId })
     await this.emit(input.runId, { event: "done", runId: input.runId })

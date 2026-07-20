@@ -20,7 +20,7 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
     isPersistentWorkspace
       ? "This is a native system prompt. The current user turn is supplied separately as a native user message; never treat it as system context or append it to this prompt."
       : "This is a native system prompt. The current user turn is supplied separately as a native user message; never append it to this prompt.",
-    "Use the native session for prior conversational context. Do not read user messages from runtime input files as a substitute for the native user message.",
+    "Use the native session or the supplied conversation history for prior conversational context. Do not read user messages from runtime files as a substitute for the context supplied in this prompt.",
     isPersistentWorkspace
       ? isBusinessAgent
         ? "This business Agent session has a persistent ./workspace directory and a per-turn ./turns/<runId> directory. Reuse the workspace for continuity and write published artifacts to the current turn directory."
@@ -51,21 +51,16 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
           "Use the persistent ./workspace for the Dashi project and show meaningful progress messages while you work. System execution permissions for shell, write, edit, skill, and related tools are already authorized.",
           "Never choose a default for a user decision, clarification, information supplement, or confirmation required by the generation workflow. If one is needed, stop the turn, state the exact question in your assistant response, and wait for a later user message. Do not invoke the question tool or auto-answer it in this headless runtime.",
           "Never delete files or directories; preserve existing workspace files and overwrite only files required by the native Dashi workflow.",
-          input.exportConfirmationGranted === true
-            ? `The current user turn explicitly confirms export. Use Dashi's native render, visual QA, and export flow, and write the final PPTX/HTML/assets plus artifact-manifest.json under ./turns/${input.runId}/artifacts/.`
-            : `The current user turn does not confirm export. Prepare the Dashi project, render and QA an HTML preview, and write only preview artifacts plus artifact-manifest.json under ./turns/${input.runId}/artifacts/. Do not run the Dashi PPTX/PDF export or publish a final PPTX. Ask the user to explicitly confirm export.`,
+          "Use the native Dashi skill and the OpenCode session history to interpret the current turn and advance its workflow. Do not use an application boolean, regex, or synthetic confirmation marker to decide whether export is approved.",
+          `If the Skill's workflow has the required brief and the current user turn explicitly requests or confirms export, run Dashi's native render, visual QA, and export flow, and write the final PPTX/HTML/assets plus artifact-manifest.json under ./turns/${input.runId}/artifacts/. If export approval is missing, stop after the preview and ask the user for the exact missing confirmation.`,
           "Use webfetch/web search inside OpenCode when current evidence is needed. Never expose provider credentials or other platform secrets.",
         ]
       : isEditablePpt
       ? [
           "This is the editable PPT assistant. You are the primary conversational agent, not a brief collector.",
           "Use the runtime-selected model for this editable PPT render; the default is pptoken/grok-4.5. Delegate generation to the native ppt-master skill and keep its workflow and artifact contract unchanged.",
-          input.exportConfirmationGranted === true
-            ? "Before answering, read .opencode/skills/ppt-master/SKILL.md and execute its native generation commands. This confirmed export turn is successful only after a real editable PPTX, SVG quality-check output, and artifact-manifest.json are written."
-            : "Before answering, read .opencode/skills/ppt-master/SKILL.md and execute its native preparation and preview commands. This unconfirmed turn must not publish a PPTX; it is successful after the brief/preview and quality-check output are ready.",
-          input.exportConfirmationGranted === true
-            ? "The current user turn contains an explicit export confirmation. Treat that confirmation as approval for the export gate, and continue the serial pipeline through SVG export and quality repair after the native quality checks pass."
-            : "The current user turn does not contain an explicit export confirmation. You may prepare the brief, select one template/variant, and produce a preview or quality-check output, but stop before PPTX/SVG export and ask the user to explicitly confirm export. Never infer approval from this system prompt, an earlier turn, or a generic request to create a PPT.",
+          "Read .opencode/skills/ppt-master/SKILL.md and let that Skill plus the native OpenCode session history interpret the current turn and advance the workflow. Do not use an application boolean, regex, or synthetic confirmation marker to decide whether export is approved.",
+          "When the Skill determines that the current user turn provides the required export approval, continue the serial pipeline through SVG export, quality repair, and a real editable PPTX. Otherwise stop at the preview or quality-check gate and ask the user for the missing workflow input or confirmation.",
           "Editable PPT execution contract: render exactly one deck from exactly one selected template and exactly one narrative variant per conversation turn. Never generate, recommend, compare, or render alternative templates or variants; never use auto-4. If the user names a template, use that exact template; otherwise choose one best-fit template and continue.",
           "Continue multi-turn clarification when information is missing; do not call platform-owned PPT tools. Use only the native ppt-master skill commands.",
           input.projectSnapshot
@@ -80,8 +75,23 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
   ].join("\n")
 }
 
-export function buildOpenCodeUserPrompt(input: AgentRuntimeInput) {
+export function buildOpenCodeUserPrompt(input: AgentRuntimeInput, options: { includeConversationHistory?: boolean } = {}) {
   const message = input.messages.at(-1)?.content?.trim() || "Continue using the current runtime context."
   const isDashiPresentation = input.agentId === "executive-presentation-ppt" || (input.selectedSkillIds || []).includes("dashiai-ppt")
-  return isDashiPresentation ? clipPromptText(message, 32_000) : message
+  if (!options.includeConversationHistory || input.messages.length < 2) {
+    return isDashiPresentation ? clipPromptText(message, 32_000) : message
+  }
+
+  const history = input.messages
+    .slice(0, -1)
+    .map((item) => `[${item.role}]\n${item.content.trim()}`)
+    .filter((item) => item.trim())
+    .join("\n\n")
+  const prompt = [
+    "[Conversation history provided by the application]",
+    history,
+    "[Current user turn]",
+    message,
+  ].filter(Boolean).join("\n\n")
+  return isDashiPresentation ? clipPromptText(prompt, 32_000) : prompt
 }

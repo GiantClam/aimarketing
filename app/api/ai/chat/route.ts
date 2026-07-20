@@ -109,7 +109,6 @@ import { createBackgroundOpenCodeRun } from "@/lib/ai-entry/runtime/background-r
 import { publishRuntimeArtifact, publishRuntimeArtifactReference } from "@/lib/ai-entry/runtime/artifact-publisher"
 import { resolveOpenCodeModelHint } from "@/lib/ai-runtime/opencode-model"
 import { buildAgentRuntimeSessionKey } from "@/lib/ai-runtime/session-key"
-import { isExplicitPptExportConfirmation } from "@/lib/ai-runtime/ppt-export-confirmation"
 import type { OpenCodeProviderConfig, RuntimeProjectSnapshot } from "@/lib/ai-runtime/contracts"
 
 export const runtime = "nodejs"
@@ -1453,8 +1452,6 @@ export async function POST(request: NextRequest) {
       userId: currentUser.id,
       agentId: effectiveAgentId,
       selectedSkillIds,
-      exportConfirmationGranted:
-        (isEditablePptAgent || isDashiPresentationAgent) && isExplicitPptExportConfirmation(latestUserPrompt),
       sharedSkillSetSelection: preparedSharedSkillSetSelection,
       systemPrompt,
       messages: canonicalRuntimeMessages,

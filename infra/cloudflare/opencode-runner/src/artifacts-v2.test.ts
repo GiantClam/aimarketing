@@ -34,7 +34,6 @@ test("publishes native Dashi files when the skill omits the platform manifest", 
     maxArtifactBytes: 1024,
     maxArtifactTotalBytes: 4096,
     allowedExtensions: ["pptx"],
-    allowPptx: true,
   })
 
   assert.equal(result.artifacts.length, 1)
@@ -73,7 +72,6 @@ test("falls back when the platform manifest is present but empty", async () => {
     maxArtifactBytes: 1024,
     maxArtifactTotalBytes: 4096,
     allowedExtensions: ["pptx"],
-    allowPptx: true,
   })
 
   assert.equal(result.artifacts.length, 1)
@@ -108,7 +106,6 @@ test("discovers native Dashi exports from the container output root", async () =
     maxArtifactBytes: 1024,
     maxArtifactTotalBytes: 4096,
     allowedExtensions: ["pptx"],
-    allowPptx: true,
   })
 
   assert.equal(result.artifacts.length, 1)
@@ -155,7 +152,6 @@ test("prioritizes final PPTX and HTML over manifest JSON when artifact slots are
     maxArtifactBytes: 1024,
     maxArtifactTotalBytes: 4096,
     allowedExtensions: ["html", "pptx"],
-    allowPptx: true,
   })
 
   assert.deepEqual(result.artifacts.map((artifact) => artifact.mimeType), [
@@ -169,7 +165,7 @@ test("prioritizes final PPTX and HTML over manifest JSON when artifact slots are
   assert.doesNotMatch(findCommand, /-iname '\*\.json'/u)
 })
 
-test("rejects a final PPTX reference until the user confirms export", async () => {
+test("publishes a final PPTX when the native Skill writes it", async () => {
   const sessionDir = "/workspace/sessions/sess-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
   const runId = "55555555-5555-4555-8555-555555555555"
   const pptxPath = `${sessionDir}/turns/${runId}/artifacts/deck.pptx`
@@ -191,9 +187,8 @@ test("rejects a final PPTX reference until the user confirms export", async () =
     maxArtifactBytes: 1024,
     maxArtifactTotalBytes: 4096,
     allowedExtensions: ["pptx"],
-    allowPptx: false,
   })
 
-  assert.equal(result.artifacts.length, 0)
-  assert.ok(result.warnings.includes("runtime_artifact_export_confirmation_required"))
+  assert.equal(result.artifacts.length, 1)
+  assert.equal(result.artifacts[0]?.fileName, "deck.pptx")
 })

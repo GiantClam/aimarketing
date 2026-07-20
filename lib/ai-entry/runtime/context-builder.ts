@@ -83,7 +83,6 @@ export function buildAgentRuntimeInput(input: {
   userId: number
   agentId: string | null
   selectedSkillIds?: string[]
-  exportConfirmationGranted?: boolean
   sharedSkillSetSelection?: SharedSkillSetSelection | null
   systemPrompt: string
   messages: RuntimeMessage[]
@@ -128,7 +127,6 @@ export function buildAgentRuntimeInput(input: {
     enterpriseId: input.enterpriseId,
     userId: input.userId,
     agentId: input.agentId,
-    ...(input.exportConfirmationGranted === true ? { exportConfirmationGranted: true } : {}),
     ...((input.selectedSkillIds || []).filter(Boolean).length > 0
       ? { selectedSkillIds: [...new Set((input.selectedSkillIds || []).filter(Boolean))] }
       : {}),
@@ -174,7 +172,6 @@ export function buildAgentRuntimeInput(input: {
   const historical = normalizedMessages
     .filter((_, index) => index !== currentUserIndex)
     .slice(-(input.recentMessagesLimit || envPositiveInt("AI_ENTRY_OPENCODE_RECENT_MESSAGES_LIMIT", DEFAULT_RECENT_MESSAGES_LIMIT)))
-    .reverse()
   const summary = conversationSummaryMessage(input.conversationSummary || "")
   const contextMessages = [workflow, artifactMessage(artifacts), ...historical, summary].filter((message): message is RuntimeMessage => Boolean(message))
 

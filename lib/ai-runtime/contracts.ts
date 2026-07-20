@@ -83,8 +83,6 @@ export type AgentRuntimeInput = {
   userId: number
   agentId: string | null
   selectedSkillIds?: string[]
-  /** True only when the current turn contains an explicit PPT export approval. */
-  exportConfirmationGranted?: boolean
   sharedSkillSetSelection?: SharedSkillSetSelection | null
   systemPrompt: string
   messages: Array<{

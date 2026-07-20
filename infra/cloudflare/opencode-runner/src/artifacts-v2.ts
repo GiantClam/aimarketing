@@ -69,7 +69,6 @@ export async function publishRuntimeArtifactsV2(input: {
   maxArtifactBytes: number
   maxArtifactTotalBytes: number
   allowedExtensions: string[]
-  allowPptx: boolean
 }) {
   const turnDir = `${input.sessionDir}/turns/${input.runId}`
   const manifestRaw = await input.sandbox.readFile(`${turnDir}/artifact-manifest.json`, { encoding: "utf8" }).catch(() => null)
@@ -141,7 +140,6 @@ export async function publishRuntimeArtifactsV2(input: {
     const relativePath = typeof record.path === "string" ? safeArtifactPath(record.path) : null
     const ext = relativePath?.split(".").at(-1)?.toLowerCase() || ""
     if (!relativePath || !allowed.has(ext)) { warnings.push("runtime_artifact_path_invalid"); continue }
-    if (ext === "pptx" && !input.allowPptx) { warnings.push("runtime_artifact_export_confirmation_required"); continue }
     const fallbackFullPath = typeof record.fullPath === "string" && (record.fullPath.startsWith(`${turnDir}/`) || record.fullPath.startsWith(`${input.sessionDir}/final/`) || record.fullPath.startsWith(`${input.sessionDir}/project/`) || record.fullPath.startsWith(`${input.sessionDir}/workspace/`) || record.fullPath.startsWith("/opt/dashiai-ppt/project/") || record.fullPath.startsWith("/workspace/output/"))
       ? record.fullPath
       : null
