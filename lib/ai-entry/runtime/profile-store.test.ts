@@ -16,6 +16,7 @@ test("resolves the Dashi PPT Cloudflare session runtime", () => {
   assert.equal(profile.deploymentMode, "saas-cloudflare-sandbox")
   assert.equal(profile.enabled, true)
   assert.equal(profile.sessionEnabled, true)
+  assert.equal(profile.asyncEnabled, true)
   assert.equal(profile.timeoutMs, 3_600_000)
 })
 

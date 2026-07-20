@@ -161,9 +161,11 @@ export function resolveDashiPptCloudflareRuntimeProfile(
     maxArtifactBytesEnvKey: "CLOUDFLARE_OPENCODE_MAX_ARTIFACT_BYTES",
     maxArtifactTotalBytesEnvKey: "CLOUDFLARE_OPENCODE_MAX_ARTIFACT_TOTAL_BYTES",
   })
-  // V2 Cloudflare runs always use the durable session protocol. This is
-  // independent of the optional async queue response mode.
-  return { ...profile, sessionEnabled: profile.enabled }
+  // V2 Cloudflare runs always use the durable session protocol and background
+  // queue. Dashi rendering routinely exceeds a web request lifetime, so a
+  // synchronous stream would be terminated by the hosting platform before the
+  // runner can publish its PPTX artifact.
+  return { ...profile, sessionEnabled: profile.enabled, asyncEnabled: profile.enabled }
 }
 
 export function isBusinessAgentId(agentId: string | null | undefined) {
