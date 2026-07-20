@@ -1,6 +1,9 @@
 import type { AgentRuntimeEvent, AgentRuntimeInput } from "./contracts"
 
-const MAX_LINE_BYTES = 256 * 1024
+// Dashi tool events can carry rendered SVG/HTML payloads in a single NDJSON
+// record. Keep the per-record guard below the total 8 MiB stdout budget while
+// allowing normal presentation-sized events to pass through intact.
+const MAX_LINE_BYTES = 2 * 1024 * 1024
 const MAX_DIAGNOSTIC_BYTES = 1024
 const MAX_TOOL_NAME_LENGTH = 80
 

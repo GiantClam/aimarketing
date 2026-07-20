@@ -47,6 +47,17 @@ test("does not expose tool arguments or stderr in normalized events", () => {
   assert.deepEqual(events, [{ event: "tool_event", tool: "bad_tool", phase: "started", runId: "run-2" }])
 })
 
+test("accepts presentation-sized event lines without treating them as incomplete", () => {
+  const parser = createOpenCodeEventParser("run-large-event")
+  const largeText = "x".repeat(512 * 1024)
+  const events = parser.push(`${JSON.stringify({ type: "text", part: { text: largeText } })}\n`)
+
+  assert.equal(events.length, 1)
+  assert.equal(events[0]?.event, "text_delta")
+  assert.equal((events[0] as { delta?: string }).delta?.length, largeText.length)
+  assert.equal(parser.finish().at(-1)?.event, "done")
+})
+
 test("turns the third malformed line into a fatal parse error", () => {
   const parser = createOpenCodeEventParser("run-3")
   const events = parser.push("not-json\nnope\ninvalid\n")
