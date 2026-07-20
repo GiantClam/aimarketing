@@ -61,6 +61,7 @@ export async function publishRuntimeArtifactsV2(input: {
   maxArtifactBytes: number
   maxArtifactTotalBytes: number
   allowedExtensions: string[]
+  allowPptx: boolean
 }) {
   const turnDir = `${input.sessionDir}/turns/${input.runId}`
   const manifestRaw = await input.sandbox.readFile(`${turnDir}/artifact-manifest.json`, { encoding: "utf8" }).catch(() => null)
@@ -93,7 +94,7 @@ export async function publishRuntimeArtifactsV2(input: {
     const sessionRoots = [`${turnDir}/artifacts`, `${turnDir}`, `${input.sessionDir}/final`, `${input.sessionDir}/project`, `${input.sessionDir}/workspace`]
     const findArgs = sessionRoots.map((root) => JSON.stringify(root)).join(" ")
     const marker = `${turnDir}/.dashi-artifact-start`
-    const discovered = await input.sandbox.exec(`{ find ${findArgs} -type f \( -iname '*.pptx' -o -iname '*.html' -o -iname '*.png' -o -iname '*.svg' -o -iname '*.json' -o -iname '*.md' -o -iname '*.txt' \) -print 2>/dev/null; if [ -f ${JSON.stringify(marker)} ]; then find ${JSON.stringify(dashiRoot)} -newer ${JSON.stringify(marker)} -type f \( -iname '*.pptx' -o -iname '*.html' -o -iname '*.png' -o -iname '*.svg' -o -iname '*.json' -o -iname '*.md' -o -iname '*.txt' \) -print 2>/dev/null; find ${JSON.stringify(dashiOutputRoot)} -newer ${JSON.stringify(marker)} -type f \( -iname '*.pptx' -o -iname '*.html' -o -iname '*.png' -o -iname '*.svg' -o -iname '*.json' -o -iname '*.md' -o -iname '*.txt' \) -print 2>/dev/null; else find ${JSON.stringify(dashiRoot)} -mmin -180 -type f \( -iname '*.pptx' -o -iname '*.html' -o -iname '*.png' -o -iname '*.svg' -o -iname '*.json' -o -iname '*.md' -o -iname '*.txt' \) -print 2>/dev/null; find ${JSON.stringify(dashiOutputRoot)} -mmin -180 -type f \( -iname '*.pptx' -o -iname '*.html' -o -iname '*.png' -o -iname '*.svg' -o -iname '*.json' -o -iname '*.md' -o -iname '*.txt' \) -print 2>/dev/null; fi; } | head -200`)
+    const discovered = await input.sandbox.exec(`{ find ${findArgs} -type f \\( -iname '*.pptx' -o -iname '*.html' -o -iname '*.png' -o -iname '*.svg' -o -iname '*.json' -o -iname '*.md' -o -iname '*.txt' \\) -print 2>/dev/null; if [ -f ${JSON.stringify(marker)} ]; then find ${JSON.stringify(dashiRoot)} -newer ${JSON.stringify(marker)} -type f \\( -iname '*.pptx' -o -iname '*.html' -o -iname '*.png' -o -iname '*.svg' -o -iname '*.json' -o -iname '*.md' -o -iname '*.txt' \\) -print 2>/dev/null; find ${JSON.stringify(dashiOutputRoot)} -newer ${JSON.stringify(marker)} -type f \\( -iname '*.pptx' -o -iname '*.html' -o -iname '*.png' -o -iname '*.svg' -o -iname '*.json' -o -iname '*.md' -o -iname '*.txt' \\) -print 2>/dev/null; else find ${JSON.stringify(dashiRoot)} -mmin -180 -type f \\( -iname '*.pptx' -o -iname '*.html' -o -iname '*.png' -o -iname '*.svg' -o -iname '*.json' -o -iname '*.md' -o -iname '*.txt' \\) -print 2>/dev/null; find ${JSON.stringify(dashiOutputRoot)} -mmin -180 -type f \\( -iname '*.pptx' -o -iname '*.html' -o -iname '*.png' -o -iname '*.svg' -o -iname '*.json' -o -iname '*.md' -o -iname '*.txt' \\) -print 2>/dev/null; fi; } | head -200`)
     const seen = new Set<string>()
     const fallbackRecords = (discovered.stdout || "").split(/\r?\n/).map((path) => path.trim()).filter((path) => {
       if (!path || seen.has(path)) return false
@@ -131,6 +132,7 @@ export async function publishRuntimeArtifactsV2(input: {
     const relativePath = typeof record.path === "string" ? safeArtifactPath(record.path) : null
     const ext = relativePath?.split(".").at(-1)?.toLowerCase() || ""
     if (!relativePath || !allowed.has(ext)) { warnings.push("runtime_artifact_path_invalid"); continue }
+    if (ext === "pptx" && !input.allowPptx) { warnings.push("runtime_artifact_export_confirmation_required"); continue }
     const fallbackFullPath = typeof record.fullPath === "string" && (record.fullPath.startsWith(`${turnDir}/`) || record.fullPath.startsWith(`${input.sessionDir}/final/`) || record.fullPath.startsWith(`${input.sessionDir}/project/`) || record.fullPath.startsWith(`${input.sessionDir}/workspace/`) || record.fullPath.startsWith("/opt/dashiai-ppt/project/") || record.fullPath.startsWith("/workspace/output/"))
       ? record.fullPath
       : null

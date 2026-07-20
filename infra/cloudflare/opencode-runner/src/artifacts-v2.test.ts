@@ -34,6 +34,7 @@ test("publishes native Dashi files when the skill omits the platform manifest", 
     maxArtifactBytes: 1024,
     maxArtifactTotalBytes: 4096,
     allowedExtensions: ["pptx"],
+    allowPptx: true,
   })
 
   assert.equal(result.artifacts.length, 1)
@@ -72,6 +73,7 @@ test("falls back when the platform manifest is present but empty", async () => {
     maxArtifactBytes: 1024,
     maxArtifactTotalBytes: 4096,
     allowedExtensions: ["pptx"],
+    allowPptx: true,
   })
 
   assert.equal(result.artifacts.length, 1)
@@ -106,6 +108,7 @@ test("discovers native Dashi exports from the container output root", async () =
     maxArtifactBytes: 1024,
     maxArtifactTotalBytes: 4096,
     allowedExtensions: ["pptx"],
+    allowPptx: true,
   })
 
   assert.equal(result.artifacts.length, 1)
@@ -148,6 +151,7 @@ test("prioritizes final PPTX and HTML over manifest JSON when artifact slots are
     maxArtifactBytes: 1024,
     maxArtifactTotalBytes: 4096,
     allowedExtensions: ["json", "html", "pptx"],
+    allowPptx: true,
   })
 
   assert.deepEqual(result.artifacts.map((artifact) => artifact.mimeType), [
@@ -156,4 +160,33 @@ test("prioritizes final PPTX and HTML over manifest JSON when artifact slots are
   ])
   assert.equal(puts.length, 2)
   assert.ok(result.warnings.includes("runtime_artifact_count_exceeded"))
+})
+
+test("rejects a final PPTX reference until the user confirms export", async () => {
+  const sessionDir = "/workspace/sessions/sess-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  const runId = "55555555-5555-4555-8555-555555555555"
+  const pptxPath = `${sessionDir}/turns/${runId}/artifacts/deck.pptx`
+  const sandbox = {
+    async readFile(path: string) {
+      if (path.endsWith("artifact-manifest.json")) return JSON.stringify([{ path: "artifacts/deck.pptx" }])
+      if (path === pptxPath) return new Uint8Array([80, 75, 3, 4])
+      return null
+    },
+    async exec() { return { success: false } },
+  }
+  const result = await publishRuntimeArtifactsV2({
+    bucket: { async put() {} } as never,
+    sandbox,
+    sessionKey: "sess-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    runId,
+    sessionDir,
+    maxArtifacts: 8,
+    maxArtifactBytes: 1024,
+    maxArtifactTotalBytes: 4096,
+    allowedExtensions: ["pptx"],
+    allowPptx: false,
+  })
+
+  assert.equal(result.artifacts.length, 0)
+  assert.ok(result.warnings.includes("runtime_artifact_export_confirmation_required"))
 })

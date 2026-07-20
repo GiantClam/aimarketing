@@ -105,7 +105,7 @@ import { resolveAiEntryRuntimeDecision } from "@/lib/ai-entry/runtime/gateway"
 import { isAiEntrySharedAgentRuntimeEnabled, isBusinessAgentId, resolveBusinessAgentRailwayRuntimeProfile, resolveDashiPptCloudflareRuntimeProfile, resolveDefaultAgentRuntimeProfile, resolveEditablePptRailwayRuntimeProfile } from "@/lib/ai-entry/runtime/profile-store"
 import { runOpenCodeAgent } from "@/lib/ai-entry/runtime/opencode-adapter"
 import { createBackgroundOpenCodeRun } from "@/lib/ai-entry/runtime/background-run-service"
-import { publishRuntimeArtifact } from "@/lib/ai-entry/runtime/artifact-publisher"
+import { publishRuntimeArtifact, publishRuntimeArtifactReference } from "@/lib/ai-entry/runtime/artifact-publisher"
 import { resolveOpenCodeModelHint } from "@/lib/ai-runtime/opencode-model"
 import { buildAgentRuntimeSessionKey } from "@/lib/ai-runtime/session-key"
 import { isExplicitPptExportConfirmation } from "@/lib/ai-runtime/ppt-export-confirmation"
@@ -1443,7 +1443,7 @@ export async function POST(request: NextRequest) {
       agentId: effectiveAgentId,
       selectedSkillIds,
       exportConfirmationGranted:
-        isEditablePptAgent && isExplicitPptExportConfirmation(latestUserPrompt),
+        (isEditablePptAgent || isDashiPresentationAgent) && isExplicitPptExportConfirmation(latestUserPrompt),
       sharedSkillSetSelection: preparedSharedSkillSetSelection,
       systemPrompt,
       messages: canonicalRuntimeMessages,
@@ -1593,6 +1593,17 @@ export async function POST(request: NextRequest) {
               openCodeAnswer += event.delta
             } else if (event.event === "artifact_payload") {
               const published = await publishRuntimeArtifact({
+                currentUser,
+                conversationId,
+                runId: runtimeInput.runId,
+                artifact: event.artifact,
+                limits: runtimeInput.artifactContract,
+                conversationScope,
+                agentId: agentConfig.agentId,
+              })
+              publishedArtifacts.push(published)
+            } else if (event.event === "artifact_reference") {
+              const published = await publishRuntimeArtifactReference({
                 currentUser,
                 conversationId,
                 runId: runtimeInput.runId,
@@ -2215,6 +2226,19 @@ export async function POST(request: NextRequest) {
                   })
                 } else if (event.event === "artifact_payload") {
                   const published = await publishRuntimeArtifact({
+                    currentUser,
+                    conversationId,
+                    runId: runtimeInput.runId,
+                    artifact: event.artifact,
+                    limits: runtimeInput.artifactContract,
+                    currentTotalBytes: artifactTotalBytes,
+                    conversationScope,
+                    agentId: agentConfig.agentId,
+                  })
+                  artifactTotalBytes += event.artifact.sizeBytes
+                  sendEvent({ event: "artifact_created", conversation_id: conversationId, artifact: published })
+                } else if (event.event === "artifact_reference") {
+                  const published = await publishRuntimeArtifactReference({
                     currentUser,
                     conversationId,
                     runId: runtimeInput.runId,

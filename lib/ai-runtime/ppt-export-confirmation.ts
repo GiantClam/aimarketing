@@ -18,6 +18,12 @@ export function isEditablePptRuntimeInput(input: Pick<AgentRuntimeInput, "agentI
   return input.agentId === "executive-ppt" || (input.selectedSkillIds || []).includes("ppt-master")
 }
 
+export function isConfirmationGatedPptRuntimeInput(input: Pick<AgentRuntimeInput, "agentId" | "selectedSkillIds">) {
+  return isEditablePptRuntimeInput(input)
+    || input.agentId === "executive-presentation-ppt"
+    || (input.selectedSkillIds || []).includes("dashiai-ppt")
+}
+
 export function shouldRunNativePptxExportFallback(
   input: Pick<AgentRuntimeInput, "agentId" | "selectedSkillIds" | "exportConfirmationGranted">,
 ) {
@@ -27,5 +33,5 @@ export function shouldRunNativePptxExportFallback(
 export function isPptxExportAuthorized(
   input: Pick<AgentRuntimeInput, "agentId" | "selectedSkillIds" | "exportConfirmationGranted">,
 ) {
-  return !isEditablePptRuntimeInput(input) || input.exportConfirmationGranted === true
+  return !isConfirmationGatedPptRuntimeInput(input) || input.exportConfirmationGranted === true
 }

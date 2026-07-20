@@ -19,14 +19,16 @@ test("explicit Chinese and English approvals grant export confirmation", () => {
   assert.equal(isExplicitPptExportConfirmation("Yes, go ahead and export it."), true)
 })
 
-test("export fallback and publication require confirmation for editable PPT", () => {
+test("PPTX publication requires confirmation for both PPT assistants", () => {
   const unconfirmed = { agentId: "executive-ppt", selectedSkillIds: ["ppt-master"], exportConfirmationGranted: false }
   const confirmed = { ...unconfirmed, exportConfirmationGranted: true }
-  const dashi = { agentId: "executive-presentation-ppt", selectedSkillIds: ["dashiai-ppt"], exportConfirmationGranted: false }
+  const unconfirmedDashi = { agentId: "executive-presentation-ppt", selectedSkillIds: ["dashiai-ppt"], exportConfirmationGranted: false }
+  const confirmedDashi = { ...unconfirmedDashi, exportConfirmationGranted: true }
 
   assert.equal(shouldRunNativePptxExportFallback(unconfirmed), false)
   assert.equal(shouldRunNativePptxExportFallback(confirmed), true)
   assert.equal(isPptxExportAuthorized(unconfirmed), false)
   assert.equal(isPptxExportAuthorized(confirmed), true)
-  assert.equal(isPptxExportAuthorized(dashi), true)
+  assert.equal(isPptxExportAuthorized(unconfirmedDashi), false)
+  assert.equal(isPptxExportAuthorized(confirmedDashi), true)
 })

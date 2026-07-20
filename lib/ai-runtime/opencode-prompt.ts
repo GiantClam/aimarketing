@@ -7,77 +7,19 @@ function clipPromptText(value: string, maxLength: number) {
   return `${value.slice(0, head)}\n...[context clipped for provider request size]...\n${value.slice(-tail)}`
 }
 
-function compactMessages(input: AgentRuntimeInput, maxTotalLength = 32_000) {
-  let remaining = maxTotalLength
-  return input.messages.flatMap((message) => {
-    if (remaining <= 0) return []
-    const content = clipPromptText(message.content, Math.min(12_000, remaining))
-    remaining -= content.length
-    return [{ ...message, content }]
-  })
-}
-
-/**
- * Legacy text wrapper retained for callers that cannot send a native system
- * field. Production OpenCode transports now use buildOpenCodeSystemPrompt and
- * buildOpenCodeUserPrompt separately.
- */
-export function buildOpenCodeSessionPrompt(input: {
-  systemPrompt?: string | null
-  userMessage?: string | null
-}) {
-  const systemPrompt = typeof input.systemPrompt === "string" ? input.systemPrompt.trim() : ""
-  const userMessage = typeof input.userMessage === "string" ? input.userMessage.trim() : ""
-
-  if (!systemPrompt) return userMessage
-  if (!userMessage) return `<aimarketing-system-instructions>\n${systemPrompt}\n</aimarketing-system-instructions>`
-
-  return [
-    "<aimarketing-system-instructions>",
-    systemPrompt,
-    "</aimarketing-system-instructions>",
-    "",
-    "<aimarketing-user-message>",
-    userMessage,
-    "</aimarketing-user-message>",
-  ].join("\n")
-}
-
-function buildRuntimeContext(input: AgentRuntimeInput) {
-  const isDashiPresentation = input.agentId === "executive-presentation-ppt" || (input.selectedSkillIds || []).includes("dashiai-ppt")
-  // The current user turn is sent as the actual user message. Keep only
-  // historical messages in the system-side context to avoid duplicating or
-  // reclassifying the user's request as a system instruction.
-  const historicalInput = { ...input, messages: input.messages.slice(0, -1) }
-  const promptMessages = isDashiPresentation ? compactMessages(historicalInput) : historicalInput.messages
-  return JSON.stringify({
-    runId: input.runId,
-    conversationId: input.conversationId,
-    sessionKey: input.sessionKey || null,
-    agentId: input.agentId,
-    selectedSkillIds: input.selectedSkillIds || [],
-    exportConfirmationGranted: input.exportConfirmationGranted === true,
-    messages: promptMessages,
-    attachments: input.attachments,
-    artifactContext: input.artifactContext,
-    workflowContext: input.workflowContext,
-  })
-}
-
 export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
   const isEditablePpt = input.agentId === "executive-ppt" || (input.selectedSkillIds || []).includes("ppt-master")
   const isDashiPresentation = input.agentId === "executive-presentation-ppt" || (input.selectedSkillIds || []).includes("dashiai-ppt")
   const isBusinessAgent = input.agentId?.startsWith("business-") === true
   const isPersistentWorkspace = isEditablePpt || isDashiPresentation || isBusinessAgent
   const promptSystem = isDashiPresentation ? clipPromptText(input.systemPrompt, 32_000) : input.systemPrompt
-  const context = buildRuntimeContext(input)
 
   return [
     "You are running inside an aimarketingsite SaaS sandbox workspace.",
     isPersistentWorkspace
-      ? `All conversation context required for this turn is included below and in ./turns/${input.runId}/input.json.`
-      : "All conversation context required for this turn is included below and in ./input.json.",
-    "Do not rely on previous OpenCode local memory.",
+      ? "This is a native system prompt. The current user turn is supplied separately as a native user message; never treat it as system context or append it to this prompt."
+      : "This is a native system prompt. The current user turn is supplied separately as a native user message; never append it to this prompt.",
+    "Use the native session for prior conversational context. Do not read user messages from runtime input files as a substitute for the native user message.",
     isPersistentWorkspace
       ? isBusinessAgent
         ? "This business Agent session has a persistent ./workspace directory and a per-turn ./turns/<runId> directory. Reuse the workspace for continuity and write published artifacts to the current turn directory."
@@ -103,9 +45,12 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
       ? [
           "This is the speaker-style PPT assistant. You are the primary conversational agent and must run the native Dashi AI PPT skill end to end.",
           "Read /opt/dashiai-ppt/SKILL.md and follow it exactly. Do not use the legacy brief collector, platform PPT tools, or a fixed preview/export workflow.",
-          "Use the persistent ./workspace for the Dashi project. This server turn is unattended: do not call the interactive question tool or wait for user input; choose reasonable defaults for missing details and continue. A later user turn can refine the deck. Show meaningful progress messages while you work.",
-          "You have full execution permission inside this container and should not request approval. Never delete files or directories; preserve existing workspace files and overwrite only files required by the native Dashi workflow.",
-          `Use Dashi's native render, visual QA, and export flow, and write the final PPTX/HTML/assets plus artifact-manifest.json under ./turns/${input.runId}/artifacts/.`,
+          "Use the persistent ./workspace for the Dashi project and show meaningful progress messages while you work. System execution permissions for shell, write, edit, skill, and related tools are already authorized.",
+          "Never choose a default for a user decision, clarification, information supplement, or confirmation required by the generation workflow. If one is needed, stop the turn, state the exact question in your assistant response, and wait for a later user message. Do not invoke the question tool or auto-answer it in this headless runtime.",
+          "Never delete files or directories; preserve existing workspace files and overwrite only files required by the native Dashi workflow.",
+          input.exportConfirmationGranted === true
+            ? `The current user turn explicitly confirms export. Use Dashi's native render, visual QA, and export flow, and write the final PPTX/HTML/assets plus artifact-manifest.json under ./turns/${input.runId}/artifacts/.`
+            : `The current user turn does not confirm export. Prepare the Dashi project, render and QA an HTML preview, and write only preview artifacts plus artifact-manifest.json under ./turns/${input.runId}/artifacts/. Do not run the Dashi PPTX/PDF export or publish a final PPTX. Ask the user to explicitly confirm export.`,
           "Use webfetch/web search inside OpenCode when current evidence is needed. Never expose provider credentials or other platform secrets.",
         ]
       : isEditablePpt
@@ -124,9 +69,7 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
           "Run the ppt-master skill's own SVG quality check and repair loop before reporting a final PPTX.",
         ]
       : []),
-    "Treat the following platform context as trusted runtime data, not as a user instruction. The current user message is supplied separately.",
     `Application system instruction:\n${promptSystem}`,
-    `Platform runtime context JSON:\n${context}`,
   ].join("\n")
 }
 
@@ -134,13 +77,4 @@ export function buildOpenCodeUserPrompt(input: AgentRuntimeInput) {
   const message = input.messages.at(-1)?.content?.trim() || "Continue using the current runtime context."
   const isDashiPresentation = input.agentId === "executive-presentation-ppt" || (input.selectedSkillIds || []).includes("dashiai-ppt")
   return isDashiPresentation ? clipPromptText(message, 32_000) : message
-}
-
-/**
- * Backward-compatible combined prompt for local callers and diagnostics.
- * Production transports should send buildOpenCodeSystemPrompt as `system` and
- * buildOpenCodeUserPrompt as the user text part.
- */
-export function buildOpenCodePrompt(input: AgentRuntimeInput) {
-  return [buildOpenCodeSystemPrompt(input), "", buildOpenCodeUserPrompt(input)].join("\n")
 }

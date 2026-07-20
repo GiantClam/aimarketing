@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { validateRuntimeArtifactPayload } from "./artifact-detector"
+import { validateRuntimeArtifactPayload, validateRuntimeArtifactReference } from "./artifact-detector"
 
 const limits = {
   maxArtifacts: 8,
@@ -20,4 +20,22 @@ test("rejects path traversal and size mismatch", () => {
   const base = { title: "Answer", kind: "markdown", mimeType: "text/markdown", sizeBytes: 1, contentBase64: "eA==" }
   assert.throws(() => validateRuntimeArtifactPayload({ ...base, path: "artifacts/../secret.md" }, limits), /path_invalid/)
   assert.throws(() => validateRuntimeArtifactPayload({ ...base, path: "artifacts/answer.md", sizeBytes: 2 }, limits), /size_mismatch/)
+})
+
+test("validates a bounded Cloudflare R2 artifact reference", () => {
+  const artifact = validateRuntimeArtifactReference({
+    provider: "r2",
+    bucket: "ARTIFACT_BUCKET",
+    key: "artifacts/sess-1/run-1/final/deck.pptx",
+    publicUrl: null,
+    fileName: "final/deck.pptx",
+    title: "Deck",
+    kind: "pptx",
+    mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    sizeBytes: 100,
+    checksumSha256: "a".repeat(64),
+  }, { ...limits, allowedExtensions: [".pptx"] })
+
+  assert.equal(artifact.fileName, "deck.pptx")
+  assert.equal(artifact.storageKey, "artifacts/sess-1/run-1/final/deck.pptx")
 })

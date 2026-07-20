@@ -1,30 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { buildOpenCodePrompt, buildOpenCodeSessionPrompt, buildOpenCodeSystemPrompt, buildOpenCodeUserPrompt } from "./opencode-prompt"
-
-test("session prompt embeds system instructions without a provider-specific developer role", () => {
-  const prompt = buildOpenCodeSessionPrompt({
-    systemPrompt: "Use the PPT preview tool.",
-    userMessage: "Create the deck.",
-  })
-
-  assert.match(prompt, /<aimarketing-system-instructions>/)
-  assert.match(prompt, /Use the PPT preview tool\./)
-  assert.match(prompt, /<aimarketing-user-message>/)
-  assert.match(prompt, /Create the deck\./)
-  assert.doesNotMatch(prompt, /role:\s*developer/i)
-})
-
-test("session prompt preserves a system-only turn", () => {
-  assert.equal(
-    buildOpenCodeSessionPrompt({ systemPrompt: "Keep the answer concise.", userMessage: "" }),
-    "<aimarketing-system-instructions>\nKeep the answer concise.\n</aimarketing-system-instructions>",
-  )
-})
+import { buildOpenCodeSystemPrompt, buildOpenCodeUserPrompt } from "./opencode-prompt"
 
 test("editable PPT prompt delegates generation to the native ppt-master skill", () => {
-  const prompt = buildOpenCodePrompt({
+  const prompt = buildOpenCodeSystemPrompt({
     runId: "00000000-0000-4000-8000-000000000001",
     sessionKey: "ppt-42-conversation-7",
     conversationId: "conversation-7",
@@ -94,13 +74,13 @@ test("production prompt separates system instructions from the current user mess
   const systemPrompt = buildOpenCodeSystemPrompt(input)
   const userPrompt = buildOpenCodeUserPrompt(input)
   assert.match(systemPrompt, /Application system instruction:\nSystem policy/u)
-  assert.match(systemPrompt, /Historical answer/u)
+  assert.doesNotMatch(systemPrompt, /Historical answer/u)
   assert.doesNotMatch(systemPrompt, /Current user request/u)
   assert.equal(userPrompt, "Current user request")
 })
 
 test("editable PPT prompt only enables export after current-turn confirmation", () => {
-  const prompt = buildOpenCodePrompt({
+  const prompt = buildOpenCodeSystemPrompt({
     runId: "00000000-0000-4000-8000-000000000004",
     sessionKey: "ppt-42-conversation-9",
     conversationId: "conversation-9",
@@ -137,7 +117,7 @@ test("editable PPT prompt only enables export after current-turn confirmation", 
 })
 
 test("speaker PPT prompt delegates the complete conversation to native Dashi", () => {
-  const prompt = buildOpenCodePrompt({
+  const prompt = buildOpenCodeSystemPrompt({
     runId: "00000000-0000-4000-8000-000000000002",
     sessionKey: "ppt-42-conversation-8",
     conversationId: "conversation-8",
@@ -164,12 +144,48 @@ test("speaker PPT prompt delegates the complete conversation to native Dashi", (
 
   assert.match(prompt, /\/opt\/dashiai-ppt\/SKILL\.md/u)
   assert.match(prompt, /Do not use the legacy brief collector/u)
-  assert.match(prompt, /native render, visual QA, and export/u)
+  assert.match(prompt, /System execution permissions for shell, write, edit, skill/u)
+  assert.match(prompt, /Never choose a default for a user decision/u)
+  assert.match(prompt, /Do not invoke the question tool/u)
+  assert.match(prompt, /Do not run the Dashi PPTX\/PDF export/u)
+  assert.match(prompt, /Ask the user to explicitly confirm export/u)
+  assert.doesNotMatch(prompt, /native render, visual QA, and export/u)
   assert.doesNotMatch(prompt, /frontend-slides/u)
 })
 
-test("speaker PPT prompt bounds oversized provider context", () => {
-  const prompt = buildOpenCodePrompt({
+test("speaker PPT prompt allows Dashi export only after current-turn confirmation", () => {
+  const prompt = buildOpenCodeSystemPrompt({
+    runId: "00000000-0000-4000-8000-000000000006",
+    sessionKey: "ppt-42-conversation-11",
+    conversationId: "conversation-11",
+    enterpriseId: 1,
+    userId: 42,
+    agentId: "executive-presentation-ppt",
+    selectedSkillIds: ["dashiai-ppt"],
+    systemPrompt: "Use the presentation assistant.",
+    exportConfirmationGranted: true,
+    messages: [{ role: "user", content: "确认导出 PPTX" }],
+    attachments: [],
+    modelHint: "pptoken/grok-4.5",
+    artifactContext: [],
+    workflowContext: null,
+    artifactContract: {
+      manifestPath: "artifact-manifest.json",
+      artifactDir: "artifacts",
+      maxArtifacts: 8,
+      maxArtifactBytes: 2_000_000,
+      maxArtifactTotalBytes: 4_000_000,
+      allowedExtensions: [".pptx"],
+    },
+    policy: { allowPlatformTools: false, allowTools: false, allowMcp: false, allowSkillInstall: false, allowNetwork: true },
+  })
+
+  assert.match(prompt, /current user turn explicitly confirms export/u)
+  assert.match(prompt, /native render, visual QA, and export/u)
+})
+
+test("speaker PPT keeps system and oversized user messages separate", () => {
+  const input: Parameters<typeof buildOpenCodeSystemPrompt>[0] = {
     runId: "00000000-0000-4000-8000-000000000003",
     sessionKey: "sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     conversationId: "conversation-large",
@@ -178,15 +194,19 @@ test("speaker PPT prompt bounds oversized provider context", () => {
     agentId: "executive-presentation-ppt",
     selectedSkillIds: ["dashiai-ppt"],
     systemPrompt: "S".repeat(100_000),
-    messages: [{ role: "user", content: "U".repeat(100_000) }],
+    messages: [{ role: "user" as const, content: "U".repeat(100_000) }],
     attachments: [],
     modelHint: "pptoken/grok-4.5",
     artifactContext: [],
     workflowContext: null,
     artifactContract: { manifestPath: "artifact-manifest.json", artifactDir: "artifacts", maxArtifacts: 8, maxArtifactBytes: 2_000_000, maxArtifactTotalBytes: 4_000_000, allowedExtensions: [".pptx"] },
     policy: { allowPlatformTools: false, allowTools: false, allowMcp: false, allowSkillInstall: false, allowNetwork: true },
-  })
+  }
+  const systemPrompt = buildOpenCodeSystemPrompt(input)
+  const userPrompt = buildOpenCodeUserPrompt(input)
 
-  assert.ok(prompt.length < 70_000)
-  assert.match(prompt, /context clipped for provider request size/u)
+  assert.ok(systemPrompt.length < 40_000)
+  assert.doesNotMatch(systemPrompt, /U{100}/u)
+  assert.ok(userPrompt.length < 33_000)
+  assert.match(userPrompt, /context clipped for provider request size/u)
 })

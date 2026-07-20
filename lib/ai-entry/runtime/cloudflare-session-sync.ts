@@ -4,8 +4,8 @@ import { getCloudflareSessionEventTicket, getCloudflareSessionRun, subscribeClou
 import { getOpenCodeRuntimeRunByTaskRunId, getRailwayOpenCodeRuntimeState, updateOpenCodeRuntimeRun } from "@/lib/platform/opencode-runtime-store"
 import { appendPlatformRunEvent, getPlatformTaskRun, updatePlatformTaskRun } from "@/lib/platform/task-run-store"
 import { savePlatformArtifact } from "@/lib/platform/task-run-store"
-import { validateRuntimeArtifactPayload } from "./artifact-detector"
-import type { RuntimeArtifactPayload } from "@/lib/ai-runtime/contracts"
+import { validateRuntimeArtifactPayload, validateRuntimeArtifactReference } from "./artifact-detector"
+import type { RuntimeArtifactPayload, RuntimeArtifactReference } from "@/lib/ai-runtime/contracts"
 
 type RuntimeEvent = { event?: string; delta?: string; message?: string; code?: string; artifact?: Record<string, unknown> }
 
@@ -87,6 +87,40 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
       }
     }
     previous.railwayArtifactPaths = [...seen]
+  } else {
+    const seen = new Set(Array.isArray(previous.cloudflareArtifactKeys) ? previous.cloudflareArtifactKeys.filter((value): value is string => typeof value === "string") : [])
+    let totalBytes = 0
+    for (const artifact of artifacts) {
+      if (typeof artifact.contentBase64 === "string" || typeof artifact.key !== "string" || seen.has(artifact.key)) continue
+      const validated = validateRuntimeArtifactReference(artifact as RuntimeArtifactReference, {
+        maxArtifacts: 24,
+        maxArtifactBytes: 4 * 1024 * 1024,
+        maxArtifactTotalBytes: 16 * 1024 * 1024,
+        allowedExtensions: [".md", ".markdown", ".txt", ".json", ".csv", ".html", ".pdf", ".docx", ".xlsx", ".pptx", ".svg", ".png", ".jpg", ".jpeg", ".webp"],
+      }, totalBytes)
+      totalBytes += validated.sizeBytes
+      const saved = await savePlatformArtifact({
+        runId: taskRunId,
+        enterpriseId: platformRun.enterpriseId,
+        ownerUserId: platformRun.userId,
+        kind: "file",
+        title: validated.title,
+        mimeType: validated.mimeType,
+        storageKey: validated.storageKey,
+        externalUrl: validated.publicUrl,
+        payload: { fileName: validated.fileName, source: "opencode-cloudflare", checksumSha256: validated.checksumSha256 },
+        source: "chat",
+      })
+      seen.add(validated.storageKey)
+      if (conversationId) {
+        await recordAiEntryRuntimeArtifactContext({
+          userId,
+          conversationId,
+          artifact: { artifactId: saved.id, title: saved.title, kind: "file", summary: `${validated.fileName} (${validated.mimeType})` },
+        }).catch(() => undefined)
+      }
+    }
+    previous.cloudflareArtifactKeys = [...seen]
   }
 
   if (remoteStatus === "succeeded" && assistantContent && conversationId && !assistantMessagePersisted) {

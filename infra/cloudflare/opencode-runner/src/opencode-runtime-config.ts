@@ -9,7 +9,7 @@ export function buildRuntimeConfig(input: AgentRuntimeInputV2, provider: OpenCod
   const tools: Record<string, boolean> | undefined = input.agentId === "executive-presentation-ppt"
     ? {
         bash: true, read: true, write: true, edit: true, glob: true, grep: true, list: true, skill: true,
-        question: true, todowrite: true, lsp: true, doom_loop: true,
+        question: false, todowrite: true, lsp: true, doom_loop: true,
         websearch: input.policy.allowNetwork, webfetch: input.policy.allowNetwork,
       }
     : sharedAgent ? { read: true, glob: true, grep: true, list: true, skill: true } : undefined
@@ -30,7 +30,7 @@ export function buildRuntimeConfig(input: AgentRuntimeInputV2, provider: OpenCod
       webfetch: !sharedAgent && input.policy.allowNetwork ? "allow" as const : "deny" as const,
       task: input.agentId === "executive-presentation-ppt" ? "allow" as const : "deny" as const,
       skill: input.agentId === "executive-presentation-ppt" || sharedAgent ? "allow" as const : "deny" as const,
-      question: input.agentId === "executive-presentation-ppt" ? "allow" as const : "deny" as const,
+      question: "deny" as const,
       todowrite: input.agentId === "executive-presentation-ppt" ? "allow" as const : "deny" as const,
       lsp: input.agentId === "executive-presentation-ppt" ? "allow" as const : "deny" as const,
       doom_loop: input.agentId === "executive-presentation-ppt" ? "allow" as const : "deny" as const,

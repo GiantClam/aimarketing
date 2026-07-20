@@ -112,7 +112,7 @@ export async function* runOpenCode(
         webfetch: input.policy.allowNetwork ? "allow" : "deny",
         task: "allow",
         skill: "allow",
-        question: "allow",
+        question: "deny",
         todowrite: "allow",
         lsp: "allow",
         doom_loop: "allow",
@@ -146,7 +146,7 @@ export async function* runOpenCode(
                 prompt: `{file:./turns/${input.runId}/system.md}`,
               },
             },
-            tools: { bash: true, read: true, write: true, edit: true, glob: true, grep: true, list: true, skill: true, question: true, todowrite: true, lsp: true, doom_loop: true, websearch: input.policy.allowNetwork, webfetch: input.policy.allowNetwork },
+            tools: { bash: true, read: true, write: true, edit: true, glob: true, grep: true, list: true, skill: true, question: false, todowrite: true, lsp: true, doom_loop: true, websearch: input.policy.allowNetwork, webfetch: input.policy.allowNetwork },
           }
         : {}),
       permission: dashiPermissions,

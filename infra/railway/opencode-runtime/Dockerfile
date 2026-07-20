@@ -40,9 +40,11 @@ RUN git clone --depth 1 https://github.com/hugohe3/ppt-master.git /opt/ppt-maste
   && cp -R /opt/ppt-master/skills/ppt-master /app/runtime/skills/ppt-master \
   && test -f /app/runtime/skills/ppt-master/SKILL.md
 
-ARG DASHI_PPT_SKILL_REF=214f94452a908ad77103b181c910dafd494a0aed
-RUN git clone --depth 1 https://github.com/chuspeeism/dashi-ppt-skill.git /tmp/dashi-ppt-skill \
-  && test "$(git -C /tmp/dashi-ppt-skill rev-parse HEAD)" = "$DASHI_PPT_SKILL_REF" \
+ARG DASHI_PPT_SKILL_REF=fdbb145517ea0e289000aef9b7906bcb3e0cd19a
+RUN git init /tmp/dashi-ppt-skill \
+  && git -C /tmp/dashi-ppt-skill remote add origin https://github.com/chuspeeism/dashi-ppt-skill.git \
+  && git -C /tmp/dashi-ppt-skill fetch --depth 1 origin "$DASHI_PPT_SKILL_REF" \
+  && git -C /tmp/dashi-ppt-skill checkout --detach FETCH_HEAD \
   && mv /tmp/dashi-ppt-skill/skills/dashiai-ppt /opt/dashiai-ppt \
   && rm -rf /tmp/dashi-ppt-skill \
   && npm --prefix /opt/dashiai-ppt/project ci --ignore-scripts --no-audit --no-fund \

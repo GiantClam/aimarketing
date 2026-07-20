@@ -15,6 +15,7 @@ let toolRegistryToolIds: string[] = []
 let toolRegistryToolChoice: Record<string, unknown> | undefined
 let lastToolRegistryBuildInput: Record<string, unknown> | null = null
 let emitArtifactFlow = false
+let emitArtifactReferenceFlow = false
 let emitToolFailureFlow = false
 let emitPreviewSelectionRequiredFlow = false
 let emitQueuedPreviewFlow = false
@@ -134,7 +135,25 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
             runId: input.runId,
           }
         }
-        yield { event: "text_delta", delta: emitArtifactFlow ? "PPT ready." : "OpenCode reply.", runId: input.runId }
+        if (emitArtifactReferenceFlow) {
+          yield {
+            event: "artifact_reference",
+            artifact: {
+              provider: "r2",
+              bucket: "ARTIFACT_BUCKET",
+              key: "artifacts/session/run/final/deck.pptx",
+              publicUrl: null,
+              fileName: "final/deck.pptx",
+              title: "Cloudflare Deck",
+              kind: "pptx",
+              mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+              sizeBytes: 128,
+              checksumSha256: "a".repeat(64),
+            },
+            runId: input.runId,
+          }
+        }
+        yield { event: "text_delta", delta: emitArtifactFlow || emitArtifactReferenceFlow ? "PPT ready." : "OpenCode reply.", runId: input.runId }
         yield { event: "done", runId: input.runId }
       },
     }
@@ -148,6 +167,13 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
         kind: input.artifact.kind || "pptx",
         fileName: "ai-marketing-workbench.pptx",
         downloadUrl: "/api/platform/artifacts/401/download?download=1",
+      }),
+      publishRuntimeArtifactReference: async (input: { artifact: Record<string, unknown> }) => ({
+        artifactId: 402,
+        title: input.artifact.title || "Cloudflare Deck",
+        kind: input.artifact.kind || "pptx",
+        fileName: "deck.pptx",
+        downloadUrl: "/api/platform/artifacts/402/download?download=1",
       }),
     }
   }
@@ -639,6 +665,7 @@ test.beforeEach(() => {
   toolRegistryToolIds = []
   toolRegistryToolChoice = undefined
   emitArtifactFlow = false
+  emitArtifactReferenceFlow = false
   emitToolFailureFlow = false
   emitPreviewSelectionRequiredFlow = false
   emitQueuedPreviewFlow = false
@@ -943,6 +970,24 @@ test("ai chat route preserves business-agent streaming and emits artifact-create
   assert.match(text, /message_end/)
   assert.equal(finalizeCalls, 1)
   assert.equal(releaseCalls, 0)
+})
+
+test("ai chat route promotes Cloudflare artifact references to downloadable artifacts", async () => {
+  emitArtifactReferenceFlow = true
+
+  const response = await POST({
+    json: async () => ({
+      messages: [{ role: "user", content: "生成一份可下载的演讲型 PPT。" }],
+      stream: true,
+      agentConfig: { agentId: "business-brand-creative" },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  const text = await response.text()
+  assert.match(text, /"event":"artifact_created"/u)
+  assert.match(text, /deck\.pptx/u)
+  assert.match(text, /\/api\/platform\/artifacts\/402\/download/u)
 })
 
 test("ai chat route synthesizes a readable fallback when tools fail without any model text", async () => {

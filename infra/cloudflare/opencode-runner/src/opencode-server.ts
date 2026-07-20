@@ -19,7 +19,7 @@ function promptTools(input: AgentRuntimeInputV2) {
     grep: true,
     list: true,
     skill: true,
-    question: true,
+    question: false,
     todowrite: true,
     lsp: true,
     doom_loop: true,
@@ -91,30 +91,6 @@ function responseDiagnostic(value: unknown) {
     }
   }
   return `${status} error=provider_response_error`
-}
-
-type QuestionPrompt = {
-  question?: unknown
-  header?: unknown
-  options?: unknown
-}
-
-function defaultQuestionAnswers(value: unknown) {
-  const properties = value && typeof value === "object" ? value as { questions?: unknown } : {}
-  const questions = Array.isArray(properties.questions) ? properties.questions : []
-  return questions.map((raw) => {
-    const question = raw && typeof raw === "object" ? raw as QuestionPrompt : {}
-    const options = Array.isArray(question.options)
-      ? question.options.filter((option): option is { label?: unknown } => Boolean(option && typeof option === "object"))
-      : []
-    const labels = options.map((option) => typeof option.label === "string" ? option.label.trim() : "").filter(Boolean)
-    if (labels.length === 0) return ["继续执行"]
-    // Headless Dashi runs are explicitly commissioned to choose reasonable
-    // defaults. Prefer a no-media answer when the skill offers one, otherwise
-    // choose the first declared option so the native skill can continue.
-    const noMedia = labels.find((label) => /无|不需要|无需|不用|none|no\s+(image|media|video)/iu.test(label))
-    return [noMedia || labels[0]]
-  })
 }
 
 export class OpenCodeServerSession {
@@ -252,8 +228,6 @@ export class OpenCodeServerSession {
     let idleSeen = false
     let turnStarted = false
     let sessionErrorSeen = false
-    const answeredQuestions = new Set<string>()
-    const answeredPermissions = new Set<string>()
     const deadline = Date.now() + 3_600_000
     // Subscribe before submitting the prompt. Tool calls can begin immediately
     // after the request starts, so a late subscription can miss Dashi's
@@ -341,29 +315,6 @@ export class OpenCodeServerSession {
           yield { event: "runtime_error", code: "opencode_session_error", message: typeof details.message === "string" ? details.message.slice(0, 1024) : "OpenCode session error.", retryable: true, runId: input.runId }
           sessionErrorSeen = true
           break
-        } else if (payload.type === "permission.asked" && input.agentId === "executive-presentation-ppt") {
-          const request = properties as { requestID?: unknown }
-          if (typeof request.requestID === "string") {
-            await result.client.permission.reply({ requestID: request.requestID, directory, reply: "once" }).catch(() => undefined)
-          }
-        } else if (payload.type === "question.asked" && input.agentId === "executive-presentation-ppt") {
-          const request = properties as { id?: unknown; questions?: unknown }
-          const requestId = typeof request.id === "string" ? request.id : ""
-          const answers = defaultQuestionAnswers(request)
-          const firstQuestion = Array.isArray(request.questions) && request.questions[0] && typeof request.questions[0] === "object"
-            ? request.questions[0] as QuestionPrompt
-            : null
-          const promptText = typeof firstQuestion?.question === "string"
-            ? firstQuestion.question.trim().slice(0, 240)
-            : "Dashi question"
-          yield { event: "tool_event", tool: "question", phase: "started", message: promptText, runId: input.runId }
-          if (requestId && !answeredQuestions.has(requestId)) {
-            answeredQuestions.add(requestId)
-            await result.client.question.reply({ requestID: requestId, directory, answers }).catch(() => undefined)
-            yield { event: "tool_event", tool: "question", phase: "completed", message: "已按委托模式选择默认项并继续。", runId: input.runId }
-          } else {
-            yield { event: "tool_event", tool: "question", phase: "failed", message: "question_request_id_missing", runId: input.runId }
-          }
         } else if (payload.type === "session.status") {
           const status = properties.status && typeof properties.status === "object" ? properties.status as Record<string, unknown> : {}
           if (status.type !== "idle") turnStarted = true
@@ -392,44 +343,6 @@ export class OpenCodeServerSession {
         }
       } catch {
         // A transient container fetch failure is handled by reconnecting.
-      }
-      // RPC containerFetch may buffer a long-lived SSE response. Poll the
-      // question endpoint as well, otherwise a native Dashi question can
-      // remain pending even though the model is waiting for its answer.
-      if (input.agentId === "executive-presentation-ppt") {
-        try {
-          const pendingPermissions = await result.client.permission.list({ directory })
-          const permissionRequests = Array.isArray(pendingPermissions.data) ? pendingPermissions.data : []
-          for (const raw of permissionRequests) {
-            if (!raw || typeof raw !== "object") continue
-            const request = raw as { id?: unknown; sessionID?: unknown; permission?: unknown }
-            const requestId = typeof request.id === "string" ? request.id : ""
-            const requestSessionId = typeof request.sessionID === "string" ? request.sessionID : ""
-            if (!requestId || answeredPermissions.has(requestId) || (requestSessionId && requestSessionId !== sessionId)) continue
-            answeredPermissions.add(requestId)
-            yield { event: "tool_event", tool: "permission", phase: "started", message: typeof request.permission === "string" ? request.permission.slice(0, 240) : "OpenCode permission", runId: input.runId }
-            await result.client.permission.reply({ requestID: requestId, directory, reply: "always" }).catch(() => undefined)
-            yield { event: "tool_event", tool: "permission", phase: "completed", message: "已授予 OpenCode/Dashi 所需权限并继续。", runId: input.runId }
-          }
-          const pending = await result.client.question.list({ directory })
-          const requests = Array.isArray(pending.data) ? pending.data : []
-          for (const raw of requests) {
-            if (!raw || typeof raw !== "object") continue
-            const request = raw as { id?: unknown; questions?: unknown }
-            const requestId = typeof request.id === "string" ? request.id : ""
-            if (!requestId || answeredQuestions.has(requestId)) continue
-            const firstQuestion = Array.isArray(request.questions) && request.questions[0] && typeof request.questions[0] === "object"
-              ? request.questions[0] as QuestionPrompt
-              : null
-            const promptText = typeof firstQuestion?.question === "string" ? firstQuestion.question.trim().slice(0, 240) : "Dashi question"
-            answeredQuestions.add(requestId)
-            yield { event: "tool_event", tool: "question", phase: "started", message: promptText, runId: input.runId }
-            await result.client.question.reply({ requestID: requestId, directory, answers: defaultQuestionAnswers(request) }).catch(() => undefined)
-            yield { event: "tool_event", tool: "question", phase: "completed", message: "已按委托模式选择默认项并继续。", runId: input.runId }
-          }
-        } catch {
-          // A transient container fetch failure is handled by the next poll.
-        }
       }
       if (!idleSeen) {
         try {

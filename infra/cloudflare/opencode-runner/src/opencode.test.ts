@@ -109,7 +109,7 @@ test("uses the signed provider key only for its matching OpenCode provider", asy
     modelId: "deepseek-v4-pro",
     baseUrl: "https://deepseek.example/v1",
     apiKey: "deepseek-test-key",
-  })) { /* consume completion */ }
+  })) { void _event }
   assert.equal(commandEnv?.DEEPSEEK_API_KEY, "deepseek-test-key")
   assert.equal(commandEnv?.PPTOKEN_API_KEY, undefined)
   const config = JSON.parse(String(commandEnv?.OPENCODE_CONFIG_CONTENT)) as { provider: { deepseek: { options: { baseURL: string } } } }
@@ -132,6 +132,42 @@ test("routes Grok through the signed PPToken provider", async () => {
   assert.ok(config.provider?.pptoken?.models?.["grok-4.5"])
 })
 
+test("Dashi auto-authorizes system permissions without answering user questions", async () => {
+  const input = {
+    runId: "11111111-1111-4111-8111-111111111111",
+    conversationId: "42",
+    enterpriseId: 1,
+    userId: 1,
+    agentId: "executive-presentation-ppt",
+    systemPrompt: "system",
+    messages: [{ role: "user" as const, content: "Create a deck" }],
+    attachments: [],
+    artifactContext: [],
+    workflowContext: null,
+    artifactContract: { manifestPath: "artifact-manifest.json" as const, artifactDir: "artifacts" as const, maxArtifacts: 8, maxArtifactBytes: 100, maxArtifactTotalBytes: 100, allowedExtensions: [".pptx"] },
+    policy: { allowPlatformTools: false as const, allowTools: false as const, allowMcp: false as const, allowSkillInstall: false as const, allowNetwork: true },
+  }
+  let scriptContent = ""
+  let configContent = ""
+  const sandbox = {
+    async writeFile(_path: string, content: string) { scriptContent = content },
+    async exec(_command: string, options: Record<string, unknown>) {
+      configContent = String((options.env as Record<string, unknown>).OPENCODE_CONFIG_CONTENT)
+      return { success: true, exitCode: 0 }
+    },
+  }
+  for await (const _event of runOpenCode(sandbox, "/workspace/runs/11111111-1111-4111-8111-111111111111", input, undefined, 1000, {
+    providerId: "pptoken",
+    modelId: "grok-4.5",
+    baseUrl: "https://pptoken.example/v1",
+    apiKey: "pptoken-test-key",
+  }, { agent: "build", skipPermissions: true })) { void _event }
+  const config = JSON.parse(configContent) as { permission: { question: string }; tools: { question: boolean } }
+  assert.equal(config.permission.question, "deny")
+  assert.equal(config.tools.question, false)
+  assert.match(scriptContent, /dangerously-skip-permissions/u)
+})
+
 test("forwards stdout before command completion and keeps stderr out of events", async () => {
   const input = {
     runId: "11111111-1111-4111-8111-111111111111",
@@ -147,7 +183,6 @@ test("forwards stdout before command completion and keeps stderr out of events",
     artifactContract: { manifestPath: "artifact-manifest.json" as const, artifactDir: "artifacts" as const, maxArtifacts: 8, maxArtifactBytes: 100, maxArtifactTotalBytes: 100, allowedExtensions: [".md"] },
     policy: { allowPlatformTools: false as const, allowTools: false as const, allowMcp: false as const, allowSkillInstall: false as const, allowNetwork: true },
   }
-  let completed = false
   let scriptContent = ""
   const sandbox = {
     async writeFile(_path: string, content: string) { scriptContent = content },
@@ -156,7 +191,6 @@ test("forwards stdout before command completion and keeps stderr out of events",
       onOutput("stdout", '{"type":"text","part":{"text":"hello"}}\n')
       onOutput("stderr", "secret stderr")
       await new Promise((resolve) => setTimeout(resolve, 5))
-      completed = true
       return { success: true, exitCode: 0 }
     },
   }

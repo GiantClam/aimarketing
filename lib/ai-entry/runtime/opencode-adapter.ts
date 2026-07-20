@@ -1,5 +1,4 @@
 import type { AgentRuntimeEvent, AgentRuntimeInput, AgentRuntimeInputV2, OpenCodeProviderConfig } from "@/lib/ai-runtime/contracts"
-import { buildOpenCodePrompt } from "@/lib/ai-runtime/opencode-prompt"
 import { enqueueCloudflareSessionRun, getCloudflareSessionEventTicket, prepareCloudflareSession, subscribeCloudflareSessionRun } from "./cloudflare-session-client"
 import { prepareRailwaySession, streamRailwaySessionRun } from "./railway-session-client"
 import { buildAgentRuntimeSessionKey } from "@/lib/ai-runtime/session-key"
@@ -14,10 +13,6 @@ export type RunOpenCodeAgentOptions = {
   signal?: AbortSignal
   provider?: OpenCodeProviderConfig
   session?: boolean
-}
-
-export function buildOpenCodeRuntimePrompt(input: AgentRuntimeInput) {
-  return buildOpenCodePrompt(input)
 }
 
 function providerForRuntimeRequest(provider: NonNullable<RunOpenCodeAgentOptions["provider"]>) {
