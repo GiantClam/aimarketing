@@ -6,13 +6,13 @@ import {
   shouldQueryAiEntryEnterpriseKnowledge,
 } from "./chat-policy"
 
-test("normal AI entry chat without an agent still queries enterprise knowledge when available", () => {
+test("normal AI entry chat without an agent skips enterprise knowledge", () => {
   assert.equal(
     shouldQueryAiEntryEnterpriseKnowledge({
       canQueryEnterpriseKnowledge: true,
       effectiveAgentId: null,
     }),
-    true,
+    false,
   )
 })
 

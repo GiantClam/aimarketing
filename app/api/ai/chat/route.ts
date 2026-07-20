@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { randomUUID } from "node:crypto"
 import {
   stepCountIs,
   type CoreMessage,
@@ -9,18 +10,26 @@ import { isSessionDbUnavailableError } from "@/lib/auth/session"
 import {
   appendAiEntryMessage,
   ensureAiEntryConversation,
+  listAiEntryMessages,
   type AiEntryConversationScope,
 } from "@/lib/ai-entry/repository"
 import { resolveAiEntryConversationStateFromContents } from "@/lib/ai-entry/conversation-state"
-import { type AiEntryProviderId } from "@/lib/ai-entry/provider-routing"
+import { resolveAiEntryMaxStepCount } from "@/lib/ai-entry/agent-runtime-policy"
+import {
+  getConfiguredAiEntryProviderForModel,
+  getConfiguredAiEntryProviders,
+  type AiEntryProviderConfig,
+  type AiEntryProviderId,
+} from "@/lib/ai-entry/provider-routing"
 import {
   isAiEntryAgentId,
 } from "@/lib/ai-entry/agent-catalog"
 import {
   AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT,
+  isConsultingAdvisorEntryMode,
+  pickAgentDefaultModelId,
   pickConsultingModelId,
   resolveConsultingModelMode,
-  shouldLockConsultingAdvisorModel,
   type AiEntryConsultingModelMode,
 } from "@/lib/ai-entry/model-policy"
 import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
@@ -75,6 +84,8 @@ import {
   buildResearchBriefFromWebSearchResult,
 } from "@/lib/ai-entry/research-brief-context"
 import { prepareAiEntryConsultingRuntime } from "@/lib/skills/runtime/ai-entry-consulting"
+import { resolveSharedSkillSetSelection } from "@/lib/ai-entry/shared-agent-skill-resolver"
+import { upsertSharedSkillSetBundle } from "@/lib/ai-entry/shared-agent-skill-bundle-store"
 import {
   type ProviderOptions,
   runAiEntryConsultingBlocking,
@@ -89,9 +100,18 @@ import {
 } from "@/lib/billing/runtime"
 import { getGovernedAiEntryModelCatalogForUser } from "@/lib/platform/model-governance"
 import { getEnterpriseTextRuntimeProviderConfigsForUser } from "@/lib/platform/enterprise-runtime-config"
+import { buildAgentRuntimeInput } from "@/lib/ai-entry/runtime/context-builder"
+import { resolveAiEntryRuntimeDecision } from "@/lib/ai-entry/runtime/gateway"
+import { isAiEntrySharedAgentRuntimeEnabled, isBusinessAgentId, resolveBusinessAgentRailwayRuntimeProfile, resolveDefaultAgentRuntimeProfile, resolveEditablePptRailwayRuntimeProfile } from "@/lib/ai-entry/runtime/profile-store"
+import { runOpenCodeAgent } from "@/lib/ai-entry/runtime/opencode-adapter"
+import { createBackgroundOpenCodeRun } from "@/lib/ai-entry/runtime/background-run-service"
+import { publishRuntimeArtifact } from "@/lib/ai-entry/runtime/artifact-publisher"
+import { resolveOpenCodeModelHint } from "@/lib/ai-runtime/opencode-model"
+import { buildAgentRuntimeSessionKey } from "@/lib/ai-runtime/session-key"
+import type { OpenCodeProviderConfig } from "@/lib/ai-runtime/contracts"
 
 export const runtime = "nodejs"
-export const maxDuration = 1200
+export const maxDuration = 1800
 
 const AUTO_PPT_PREVIEW_TOOL_CALL_ID = "auto-preview-ppt"
 
@@ -153,6 +173,14 @@ function buildSseEvent(payload: Record<string, unknown>) {
 
 function isClosedStreamControllerError(error: unknown) {
   return error instanceof Error && /controller is already closed/i.test(error.message)
+}
+
+function isOpenCodeRuntimeDecision(value: unknown): value is { kind: "opencode-chat"; backend: "railway-opencode" } {
+  return Boolean(value && typeof value === "object" && (value as { kind?: unknown }).kind === "opencode-chat" && (value as { backend?: unknown }).backend === "railway-opencode")
+}
+
+function isRuntimeInputTooLargeError(error: unknown) {
+  return error instanceof Error && error.name === "AgentRuntimeInputTooLargeError"
 }
 
 function isPreviewActionRequiredResult(toolName: string, result: unknown) {
@@ -281,6 +309,7 @@ type KnowledgeQueryProgress = {
     status?: "hit" | "miss" | "failed"
     snippetCount?: number
     datasetCount?: number
+    durationMs?: number
     message?: string
   }
 }
@@ -309,12 +338,14 @@ function buildAiEntrySystemPrompt(
   customSystemPrompt: string,
   latestUserPrompt: string,
   forcedReplyLanguage: "zh" | "en" | null,
+  agentId: string | null,
   webSearch: {
     available?: boolean
     conversationScope?: AiEntryConversationScope
     consultingModelMode?: AiEntryConsultingModelMode
   } = {},
 ) {
+  const hasExplicitAgent = typeof agentId === "string" && agentId.trim().length > 0
   const languageDirectives =
     forcedReplyLanguage === "en"
       ? [
@@ -331,10 +362,14 @@ function buildAiEntrySystemPrompt(
             "Language rule: only switch languages when the user explicitly asks to do so.",
           ]
   const base = [
-    "You are an enterprise AI chat assistant focused on practical strategy, growth, operations, and execution support.",
+    hasExplicitAgent
+      ? "You are an enterprise AI chat assistant focused on practical strategy, growth, operations, and execution support."
+      : "You are a general-purpose AI chat assistant. Answer the user's request directly and adapt to the task without assuming a business-consulting role.",
     "Identity rule: never claim you are Kiro or a software-development-only assistant.",
     "Identity rule: do not proactively introduce your role or capabilities unless the user asks who you are or asks for an introduction.",
-    "Identity rule: if the user explicitly asks who you are, describe yourself as a general consulting advisor assistant for enterprise users.",
+    hasExplicitAgent
+      ? "Identity rule: if the user explicitly asks who you are, describe yourself as the selected enterprise advisor or Agent."
+      : "Identity rule: do not describe yourself as an enterprise consultant or a specific Agent unless the user explicitly selects one.",
     ...languageDirectives,
     "Prioritize a fast first useful response, then add structure, evidence, and caveats only where they improve the answer.",
     "Provide practical, high-signal answers with concrete next steps; avoid generic filler.",
@@ -344,7 +379,9 @@ function buildAiEntrySystemPrompt(
       conversationScope: webSearch.conversationScope,
       consultingModelMode: webSearch.consultingModelMode,
     }),
-    "Ground answers in the user's question and sound consulting practice; do not invent company-specific facts, figures, or policies unless they come from the user or from retrieved enterprise knowledge below.",
+    hasExplicitAgent
+      ? "Ground answers in the user's question and sound consulting practice; do not invent company-specific facts, figures, or policies unless they come from the user or from retrieved enterprise knowledge below."
+      : "Ground answers in the user's question and task context; do not assume a consulting role or invent company-specific facts, figures, or policies unless they come from the user or from retrieved enterprise knowledge below.",
   ].filter(Boolean).join("\n")
   const sections = [base]
   if (agentInstruction.trim()) {
@@ -416,6 +453,7 @@ function parseModelConfig(input: ChatRequestBody["modelConfig"]) {
   if (rawProviderId === "crazyrouter") {
     providerId = "crazyroute"
   } else if (
+    rawProviderId === "deepseek" ||
     rawProviderId === "pptoken" ||
     rawProviderId === "openrouter" ||
     rawProviderId === "aiberm" ||
@@ -442,6 +480,32 @@ function parseModelConfig(input: ChatRequestBody["modelConfig"]) {
   }
 }
 
+function resolveSelectedOpenCodeProvider(input: {
+  providerId?: string | null
+  modelId?: string | null
+  enterpriseProviders?: AiEntryProviderConfig[] | null
+}) {
+  const providerId = input.providerId?.trim().toLowerCase() || ""
+  const modelId = input.modelId?.trim() || ""
+  if (!providerId || !modelId) return null
+
+  const configuredProviders = [
+    ...getConfiguredAiEntryProviders(),
+    ...(input.enterpriseProviders || []),
+  ]
+  const provider = providerId === "pptoken"
+    ? getConfiguredAiEntryProviderForModel(providerId, modelId)
+    : configuredProviders.find((item) => item.id === providerId)
+  if (!provider?.apiKey || !provider.baseURL) return null
+
+  return {
+    providerId,
+    modelId,
+    baseUrl: provider.baseURL,
+    apiKey: provider.apiKey,
+  } satisfies OpenCodeProviderConfig
+}
+
 async function resolveModelConfig(
   input: ReturnType<typeof parseModelConfig>,
   user: {
@@ -452,6 +516,7 @@ async function resolveModelConfig(
   },
   options?: {
     forceConsultingModel?: boolean
+    preferAgentDefaultModel?: boolean
     consultingModelMode?: AiEntryConsultingModelMode
   },
 ) {
@@ -521,7 +586,11 @@ async function resolveModelConfig(
       }) || null
     )
   }
-  const catalogFallbackModelId = catalog.selectedModelId || catalog.models[0]?.id || null
+  const agentDefaultModelId = options?.preferAgentDefaultModel
+    ? pickAgentDefaultModelId(catalog.models)
+    : null
+  const catalogFallbackModelId =
+    agentDefaultModelId || catalog.selectedModelId || catalog.models[0]?.id || null
   const requestedModelId = requestedSelection?.modelId || input?.modelId || null
   if (options?.forceConsultingModel) {
     const lockedModelId =
@@ -568,6 +637,9 @@ async function resolveModelConfig(
   )
   const requestedModelOption =
     findCatalogModelOption(normalizedRequestedModelId || input?.modelId || requestedModelId) || null
+  if (requestedModelId && !requestedModelOption) {
+    throw new Error("ai_entry_model_unavailable_for_provider")
+  }
   const fallbackModelOption = findCatalogModelOption(catalogFallbackModelId) || null
   const resolvedModelId =
     requestedModelOption?.modelId ||
@@ -619,14 +691,7 @@ function parseAgentConfig(input: ChatRequestBody["agentConfig"]) {
     rawAgentId && (isAiEntryAgentId(rawAgentId) || parseCustomAgentRuntimeId(rawAgentId) !== null)
       ? rawAgentId
       : null
-  const consultingAgentId =
-    resolvedAgentId && isAiEntryAgentId(resolvedAgentId)
-      ? resolvedAgentId
-      : null
-  const lockModelToConsultingModel = shouldLockConsultingAdvisorModel({
-    entryMode: input?.entryMode,
-    agentId: consultingAgentId,
-  })
+  const lockModelToConsultingModel = false
   const consultingModelMode = resolveConsultingModelMode()
   const rawAgentName =
     typeof input?.agentName === "string" ? input.agentName.trim() : ""
@@ -642,15 +707,7 @@ function parseAgentConfig(input: ChatRequestBody["agentConfig"]) {
 function parseConversationScope(input: ChatRequestBody) {
   if (input.conversationScope === "consulting") return "consulting" as const
   if (input.conversationScope === "chat") return "chat" as const
-  const rawAgentId =
-    typeof input.agentConfig?.agentId === "string" ? input.agentConfig.agentId.trim() : ""
-  const consultingAgentId = rawAgentId && isAiEntryAgentId(rawAgentId) ? rawAgentId : null
-  if (
-    shouldLockConsultingAdvisorModel({
-      entryMode: input.agentConfig?.entryMode,
-      agentId: consultingAgentId,
-    })
-  ) {
+  if (isConsultingAdvisorEntryMode(input.agentConfig?.entryMode)) {
     return "consulting" as const
   }
   return "chat" as const
@@ -742,6 +799,9 @@ export async function POST(request: NextRequest) {
   let billingEnterpriseId: number | null = null
   const traceId = createChatTraceId()
   const startedAtMs = Date.now()
+  let requestKnowledgeQueryStartedAtMs: number | null = null
+  let requestKnowledgeQueryCompletedAtMs: number | null = null
+  let blockingProviderStartedAtMs: number | null = null
   try {
     const auth = await requireSessionUser(request)
     if ("response" in auth) {
@@ -776,8 +836,11 @@ export async function POST(request: NextRequest) {
     const requestOrigin = request.nextUrl.origin
     const agentConfig = parseAgentConfig(body.agentConfig)
     const conversationScope: AiEntryConversationScope = parseConversationScope(body)
-    const modelConfig = await resolveModelConfig(parseModelConfig(body.modelConfig), currentUser, {
+    const requestedModelConfig = parseModelConfig(body.modelConfig)
+    const modelConfig = await resolveModelConfig(requestedModelConfig, currentUser, {
       forceConsultingModel: agentConfig.lockModelToConsultingModel,
+      preferAgentDefaultModel:
+        conversationScope === "consulting" || Boolean(agentConfig.agentId),
       consultingModelMode: agentConfig.consultingModelMode,
     })
     if (attachments.some((attachment) => attachment.mediaType.startsWith("image/"))) {
@@ -850,6 +913,9 @@ export async function POST(request: NextRequest) {
     ) => {
       if (!shouldQueryEnterpriseKnowledgeForRequest) return null
 
+      const queryStartedAtMs = Date.now()
+      requestKnowledgeQueryStartedAtMs = queryStartedAtMs
+
       notifyProgress?.({
         event: "knowledge_query_start",
       })
@@ -871,6 +937,7 @@ export async function POST(request: NextRequest) {
                 : "miss",
             snippetCount: enterpriseKnowledge?.snippets.length || 0,
             datasetCount: enterpriseKnowledge?.datasetsUsed.length || 0,
+            durationMs: Date.now() - queryStartedAtMs,
           },
         })
         return enterpriseKnowledge
@@ -883,10 +950,23 @@ export async function POST(request: NextRequest) {
           event: "knowledge_query_result",
           data: {
             status: "failed",
+            durationMs: Date.now() - queryStartedAtMs,
             message: extractErrorMessage(error),
           },
         })
         return null
+      } finally {
+        requestKnowledgeQueryCompletedAtMs = Date.now()
+        console.info("ai-entry.chat.knowledge_query", {
+          traceId,
+          conversationId,
+          enterpriseId,
+          knowledge_ms:
+            requestKnowledgeQueryStartedAtMs === null
+              ? null
+              : requestKnowledgeQueryCompletedAtMs - requestKnowledgeQueryStartedAtMs,
+          enabled: shouldQueryEnterpriseKnowledgeForRequest,
+        })
       }
     }
 
@@ -908,6 +988,7 @@ export async function POST(request: NextRequest) {
     } = consultingRuntime
     let { effectiveAgentId, routeDecision, resolvedInstruction } = consultingRuntime
     const customAgentId = parseCustomAgentRuntimeId(agentConfig.agentId)
+    let customSkillBindings: Record<string, unknown> | null = null
     if (customAgentId !== null) {
       if (typeof currentUser.enterpriseId !== "number" || currentUser.enterpriseId <= 0) {
         return NextResponse.json({ error: "custom_agent_not_found" }, { status: 404 })
@@ -930,6 +1011,7 @@ export async function POST(request: NextRequest) {
       if (customAgent.executionMode !== "direct_agent") {
         return NextResponse.json({ error: "custom_agent_workflow_backed_chat_not_supported" }, { status: 409 })
       }
+      customSkillBindings = customAgent.skillBindings
       effectiveAgentId = agentConfig.agentId
       routeDecision = null
       resolvedInstruction = [
@@ -959,13 +1041,19 @@ export async function POST(request: NextRequest) {
     const effectivePptBriefState = latestBriefConfirmationContext
       ? createPptBriefStateFromConfirmationContext(latestBriefConfirmationContext)
       : pptBriefState
-    if (effectivePptBriefState) {
+    // In the migrated mode OpenCode owns the conversation and invokes native
+    // ppt-master directly. The brief/template prompt sections remain only for
+    // the native fallback path, so old persisted brief metadata cannot force
+    // the new assistant back into the fixed workflow.
+    const editablePptOpenCodeEnabled = resolveEditablePptRailwayRuntimeProfile().enabled
+    const useLegacyPptBriefFlow = effectiveAgentId === "executive-ppt" && !editablePptOpenCodeEnabled
+    if (useLegacyPptBriefFlow && effectivePptBriefState) {
       resolvedInstruction = [resolvedInstruction, buildPptBriefPromptSection(effectivePptBriefState)]
         .map((section) => section.trim())
         .filter(Boolean)
         .join("\n\n")
     }
-    if (effectiveAgentId === "executive-ppt" && !effectivePptBriefState) {
+    if (useLegacyPptBriefFlow && !effectivePptBriefState) {
       resolvedInstruction = [resolvedInstruction, buildPptBriefConversationPromptSection()]
         .map((section) => section.trim())
         .filter(Boolean)
@@ -973,7 +1061,7 @@ export async function POST(request: NextRequest) {
     }
     if (
       executionContext !== "workflow" &&
-      effectiveAgentId === "executive-ppt" &&
+      useLegacyPptBriefFlow &&
       latestTemplateRecommendationContext
     ) {
       resolvedInstruction = [
@@ -984,7 +1072,7 @@ export async function POST(request: NextRequest) {
         .filter(Boolean)
         .join("\n\n")
     }
-    if (executionContext !== "workflow" && effectiveAgentId === "executive-ppt") {
+    if (executionContext !== "workflow" && useLegacyPptBriefFlow) {
       resolvedInstruction = [
         resolvedInstruction,
         buildPptTemplateCatalogPromptSection(getPptMasterTemplateCatalog(), isZh),
@@ -994,27 +1082,38 @@ export async function POST(request: NextRequest) {
         .join("\n\n")
     }
 
-    const toolRegistry = await buildAiEntryToolRegistry({
-      currentUser,
-      policy: runtimePolicy,
-      selectedSkills,
-      skillsEnabled,
-      enabledToolNames,
-      executionContext,
-      conversationScope,
-      pptBriefState: effectivePptBriefState,
-      conversationState,
-      latestUserPrompt,
-      messageContents: normalizedMessageContents,
-      selectedPreviewModel:
-        modelConfig?.providerModelId || modelConfig?.modelId || null,
-      selectedPreviewProviderId: modelConfig?.providerId || null,
-      auditContext: {
-        traceId,
-        conversationId,
-        agentId: effectiveAgentId,
-      },
-    })
+    const nativePptMasterOnly = editablePptOpenCodeEnabled && (
+      effectiveAgentId === "executive-ppt" || selectedSkillIds.includes("ppt-master")
+    )
+    const toolRegistry = nativePptMasterOnly
+      ? {
+          selectedTools: {},
+          selectedToolIds: [],
+          closeTools: null,
+          toolLoadWarnings: [],
+          selectedMcpServerIds: [],
+        }
+      : await buildAiEntryToolRegistry({
+          currentUser,
+          policy: runtimePolicy,
+          selectedSkills,
+          skillsEnabled,
+          enabledToolNames,
+          executionContext,
+          conversationScope,
+          pptBriefState: effectivePptBriefState,
+          conversationState,
+          latestUserPrompt,
+          messageContents: normalizedMessageContents,
+          selectedPreviewModel:
+            modelConfig?.providerModelId || modelConfig?.modelId || null,
+          selectedPreviewProviderId: modelConfig?.providerId || null,
+          auditContext: {
+            traceId,
+            conversationId,
+            agentId: effectiveAgentId,
+          },
+        })
     const {
       selectedTools: effectiveSelectedTools,
       selectedToolIds: effectiveSelectedToolIds,
@@ -1029,6 +1128,61 @@ export async function POST(request: NextRequest) {
       console.warn("ai-entry.chat.mcp-tools.load.failed", {
         message: warning,
       })
+    }
+
+    const defaultRuntimeProfile = resolveDefaultAgentRuntimeProfile()
+    const runtimeDecision = resolveAiEntryRuntimeDecision({
+      latestUserPrompt,
+      agentId: effectiveAgentId,
+      selectedSkillIds,
+      selectedToolIds: effectiveSelectedToolIds,
+      selectedMcpServerIds,
+      enabledToolNames,
+      executionContext,
+      requiresNativeAttachment: attachments.some((attachment) => attachment.mediaType.startsWith("image/")),
+    })
+    if (effectiveAgentId === "executive-presentation-ppt" && runtimeDecision.kind === "ai-sdk-native") {
+      throw new Error("dashi_opencode_runtime_not_configured")
+    }
+    const sharedSkillSetSelection = isAiEntrySharedAgentRuntimeEnabled(effectiveAgentId)
+      ? resolveSharedSkillSetSelection({
+          agentId: effectiveAgentId,
+          enterpriseId: currentUser.enterpriseId,
+          selectedSkillIds,
+          allowedSkillIds: runtimePolicy.allowedSkillIds,
+          customSkillBindings,
+        })
+      : null
+    const businessAgentRuntime = isBusinessAgentId(effectiveAgentId)
+    const runtimeProfile = runtimeDecision.kind === "opencode-chat"
+      ? businessAgentRuntime
+        ? resolveBusinessAgentRailwayRuntimeProfile()
+        : resolveEditablePptRailwayRuntimeProfile()
+      : defaultRuntimeProfile
+    let persistedRuntimeArtifacts: Array<{ artifactId: number; title: string; kind: string; summary: string }> = []
+    let canonicalConversationRevision: number | null = null
+    let canonicalRuntimeMessages = normalizedMessages.map((message) => ({
+      role: message.role === "assistant" ? "assistant" as const : "user" as const,
+      content: normalizeCoreMessageContent(message.content),
+    }))
+    if (runtimeDecision.kind === "opencode-chat" && persistenceEnabled && /^\d+$/.test(conversationId)) {
+      try {
+        const conversationPage = await listAiEntryMessages(currentUser.id, conversationId, 200, conversationScope, agentConfig.agentId)
+        persistedRuntimeArtifacts = conversationPage?.conversation_state.artifacts || []
+        if (conversationPage?.data?.length) {
+          const lastMessageId = Number(conversationPage.data.at(-1)?.id)
+          canonicalConversationRevision = Number.isSafeInteger(lastMessageId) && lastMessageId > 0 ? lastMessageId : conversationPage.data.length
+          canonicalRuntimeMessages = conversationPage.data.map((message) => ({
+            role: message.role === "assistant" ? "assistant" as const : "user" as const,
+            content: normalizeCoreMessageContent(message.content),
+          })).filter((message) => message.content.length > 0)
+        }
+      } catch (error) {
+        console.warn("ai-entry.opencode.artifact_context.load_failed", {
+          conversationId,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
     }
 
     if (routeDecision) {
@@ -1051,37 +1205,213 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const maxStepCount = effectiveSelectedToolIds.length > 0 ? Math.max(1, runtimePolicy.maxToolCalls) : 1
+    const maxStepCount = resolveAiEntryMaxStepCount(runtimePolicy, effectiveSelectedToolIds.length > 0)
     const stopWhen = stepCountIs(maxStepCount)
     const enterpriseTextRuntime = await getEnterpriseTextRuntimeProviderConfigsForUser(
       currentUser,
     )
-    const providerOptions: ProviderOptions | undefined =
-      modelConfig || enterpriseTextRuntime
+    const selectedProviderId = modelConfig?.providerId || enterpriseTextRuntime?.selectedProviderId || undefined
+    const preferredExecutionModel =
+      modelConfig?.providerModelId ||
+      modelConfig?.modelId ||
+      enterpriseTextRuntime?.selectedModelId ||
+      ""
+    const configuredProviders = getConfiguredAiEntryProviders()
+    const selectedConfiguredProvider = selectedProviderId && preferredExecutionModel
+      ? selectedProviderId === "pptoken"
+        ? getConfiguredAiEntryProviderForModel(selectedProviderId, preferredExecutionModel)
+        : configuredProviders.find((provider) => provider.id === selectedProviderId) || null
+      : null
+    const executionProviderConfigs = selectedProviderId === "pptoken"
+      ? selectedConfiguredProvider
+        ? [
+            selectedConfiguredProvider,
+            ...configuredProviders.filter((provider) => provider.id !== selectedConfiguredProvider.id),
+          ]
+        : []
+      : configuredProviders
+    const providerOptions: ProviderOptions = {
+      preferredProviderId: selectedProviderId,
+      preferredModel: preferredExecutionModel || undefined,
+      disableProviderFailover: true,
+      disableSameProviderModelFallback: true,
+      directProviderFailoverOnError: false,
+      ...(selectedProviderId === "pptoken"
+        ? { providerConfigs: executionProviderConfigs }
+        : enterpriseTextRuntime?.providerConfigs?.length
         ? {
-            preferredProviderId:
-              modelConfig?.providerId ||
-              enterpriseTextRuntime?.selectedProviderId ||
-              undefined,
-            preferredModel:
-              modelConfig?.providerModelId ||
-              modelConfig?.modelId ||
-              enterpriseTextRuntime?.selectedModelId ||
-              undefined,
-            ...(enterpriseTextRuntime?.providerConfigs?.length
-              ? {
-                  providerConfigs: enterpriseTextRuntime.providerConfigs,
-                }
-              : {}),
-            ...(agentConfig.lockModelToConsultingModel
-              ? {
-                  forceModelAcrossProviders: true,
-                  disableSameProviderModelFallback: true,
-                  directProviderFailoverOnError: true,
-                }
-              : {}),
+            providerConfigs:
+              modelConfig?.providerId && modelConfig.providerId !== "enterprise-openai-compatible"
+                ? [
+                    ...executionProviderConfigs,
+                    ...enterpriseTextRuntime.providerConfigs.filter(
+                      (enterpriseProvider) =>
+                        !executionProviderConfigs.some(
+                          (configuredProvider) => configuredProvider.id === enterpriseProvider.id,
+                        ),
+                    ),
+                  ]
+                : enterpriseTextRuntime.providerConfigs,
           }
-        : undefined
+        : {}),
+      ...(agentConfig.lockModelToConsultingModel
+        ? {
+            forceModelAcrossProviders: true,
+          }
+        : {}),
+      ...(selectedProviderId
+        ? {
+            forcePreferredProvider: true,
+          }
+        : {}),
+    }
+
+    const isDashiPresentationAgent = effectiveAgentId === "executive-presentation-ppt"
+    const isEditablePptAgent = effectiveAgentId === "executive-ppt" || selectedSkillIds.includes("ppt-master")
+    const explicitPptProviderId = requestedModelConfig?.providerId?.trim().toLowerCase()
+    const explicitPptModel = requestedModelConfig?.modelId?.trim()
+    const hasExplicitModelSelection = Boolean(explicitPptProviderId && explicitPptModel)
+    const explicitRuntimeProviderId = hasExplicitModelSelection
+      ? (modelConfig?.providerId || explicitPptProviderId)
+      : null
+    const explicitRuntimeModelId = hasExplicitModelSelection
+      ? (modelConfig?.providerModelId || modelConfig?.modelId || explicitPptModel)
+      : null
+    const useOpenRouterPpt = explicitRuntimeProviderId === "openrouter"
+    const pptProviderId: OpenCodeProviderConfig["providerId"] =
+      (explicitRuntimeProviderId as OpenCodeProviderConfig["providerId"] | null) || "pptoken"
+    const pptModelId = explicitRuntimeModelId
+      ? explicitRuntimeModelId.replace(/^x-ai\//iu, "")
+      : useOpenRouterPpt
+        ? process.env.AI_ENTRY_OPENROUTER_GROK_MODEL?.trim() || process.env.OPENROUTER_GROK_MODEL?.trim() || "x-ai/grok-4.5"
+        : process.env.AI_ENTRY_PPTOKEN_MODEL?.trim() || "grok-4.5"
+    const shouldUseDefaultPptProvider = !hasExplicitModelSelection || pptProviderId === "pptoken" || pptProviderId === "openrouter"
+    const configuredPptProvider = shouldUseDefaultPptProvider
+      ? useOpenRouterPpt
+        ? getConfiguredAiEntryProviders().find((provider) => provider.id === "openrouter") || null
+        : getConfiguredAiEntryProviderForModel("pptoken", pptModelId)
+      : null
+    const pptokenProvider: OpenCodeProviderConfig | undefined = (isDashiPresentationAgent || isEditablePptAgent) && runtimeDecision.kind === "opencode-chat" && shouldUseDefaultPptProvider
+      ? (() => {
+          if (!configuredPptProvider) {
+            throw new Error("ai_entry_model_unavailable_for_provider")
+          }
+          return {
+            providerId: pptProviderId,
+            modelId: pptModelId,
+            baseUrl: configuredPptProvider.baseURL,
+            apiKey: configuredPptProvider.apiKey,
+          }
+        })()
+      : undefined
+    // OpenCode receives the exact provider selected in the application. This
+    // keeps the runtime model hint and signed provider credentials aligned;
+    // otherwise a selected PPToken/Grok model could be executed against a
+    // different provider and fail over to an unrelated gateway.
+    const selectedOpenCodeProvider = resolveSelectedOpenCodeProvider({
+      providerId: modelConfig?.providerId,
+      modelId: modelConfig?.providerModelId || modelConfig?.modelId,
+      enterpriseProviders: enterpriseTextRuntime?.providerConfigs || null,
+    })
+    const openCodeProvider: OpenCodeProviderConfig = pptokenProvider || selectedOpenCodeProvider || {
+      providerId: "deepseek",
+      modelId: modelConfig?.providerId?.trim().toLowerCase() === "deepseek" && modelConfig.providerModelId?.trim()
+        ? modelConfig.providerModelId.trim()
+        : process.env.AI_ENTRY_DEEPSEEK_MODEL?.trim() || process.env.DEEPSEEK_MODEL?.trim() || "deepseek-v4-pro",
+      baseUrl: process.env.AI_ENTRY_DEEPSEEK_BASE_URL || process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1",
+      apiKey: process.env.AI_ENTRY_DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY || "",
+    }
+    const editablePptModelHint = (() => {
+      const model = resolveOpenCodeModelHint({
+        providerId: pptProviderId,
+        modelId: pptModelId,
+      }) || pptModelId
+      return model.includes("/") ? model : `${pptProviderId}/${model}`
+    })()
+    const prepareSharedSkillSet = async () => {
+      if (!sharedSkillSetSelection) return null
+      // Railway images contain the governed business-agent bundle. Keep the
+      // selection in the signed runtime input without requiring a remote bundle
+      // fetch for every request; Railway hydrates the immutable image bundle.
+      if (runtimeProfile.backend === "railway-opencode") return sharedSkillSetSelection
+      try {
+        const result = await upsertSharedSkillSetBundle({
+          selection: sharedSkillSetSelection,
+          agentInstructions: resolvedInstruction,
+        })
+        if (!result.configured) {
+          console.warn("ai-entry.shared-agent.bundle.unconfigured", { agentId: effectiveAgentId, bundleKey: sharedSkillSetSelection.bundleKey })
+          return null
+        }
+        return sharedSkillSetSelection
+      } catch (error) {
+        console.warn("ai-entry.shared-agent.bundle.failed", {
+          agentId: effectiveAgentId,
+          bundleKey: sharedSkillSetSelection.bundleKey,
+          message: extractErrorMessage(error),
+        })
+        return null
+      }
+    }
+    // Bundle publication is part of selecting the shared session runtime. If
+    // R2 is not configured or fails validation, preserve the existing
+    // OpenCode path instead of entering a session without governed Skills.
+    const preparedSharedSkillSetSelection = isOpenCodeRuntimeDecision(runtimeDecision)
+      ? await prepareSharedSkillSet()
+      : null
+    if (sharedSkillSetSelection && !preparedSharedSkillSetSelection && runtimeProfile.backend === "railway-opencode") {
+      throw new Error("shared_agent_bundle_unavailable")
+    }
+    // The resolved shared selection includes the Agent's governed base Skill
+    // as well as request-routed Skills. Surface that exact set to the UI so
+    // “resolved” never understates what OpenCode received.
+    const resolvedSkillIdsForUi = preparedSharedSkillSetSelection
+      ? preparedSharedSkillSetSelection.skills.map((skill) => skill.id)
+      : selectedSkillIds
+    const buildChatRuntimeInput = async (systemPrompt: string) => buildAgentRuntimeInput({
+      runId: randomUUID(),
+      sessionKey:
+        runtimeProfile.backend === "railway-opencode" && conversationId
+          ? await buildAgentRuntimeSessionKey({
+              enterpriseId: currentUser.enterpriseId,
+              userId: currentUser.id,
+              conversationId,
+              agentId: effectiveAgentId,
+            })
+          : (effectiveAgentId === "executive-ppt" || effectiveAgentId === "executive-presentation-ppt") && conversationId
+            ? `ppt-${currentUser.id}-${conversationId}`
+            : null,
+      conversationId,
+      conversationRevision: canonicalConversationRevision,
+      enterpriseId: currentUser.enterpriseId,
+      userId: currentUser.id,
+      agentId: effectiveAgentId,
+      selectedSkillIds,
+      sharedSkillSetSelection: preparedSharedSkillSetSelection,
+      systemPrompt,
+      messages: canonicalRuntimeMessages,
+      attachments: attachments.map((attachment) => ({
+        id: attachment.name,
+        fileName: attachment.name,
+        mimeType: attachment.mediaType,
+        textSummary: attachment.text,
+      })),
+      artifactContext: persistedRuntimeArtifacts,
+      workflowContext: null,
+      modelHint:
+        isDashiPresentationAgent || isEditablePptAgent
+          ? editablePptModelHint
+          : resolveOpenCodeModelHint({
+              providerId: modelConfig?.providerId,
+              modelId: modelConfig?.providerModelId,
+            }),
+      allowNetwork: true,
+      profileLimits: {
+        maxArtifacts: runtimeProfile.maxArtifacts,
+        maxArtifactBytes: runtimeProfile.maxArtifactBytes,
+        maxArtifactTotalBytes: runtimeProfile.maxArtifactTotalBytes,
+      },
+    })
 
     console.info("ai-entry.chat.request.start", {
       traceId,
@@ -1099,6 +1429,8 @@ export async function POST(request: NextRequest) {
       providerModelId: modelConfig?.providerModelId || null,
       attachmentCount: attachments.length,
       selectedToolIds: effectiveSelectedToolIds,
+      runtime: runtimeDecision.kind,
+      knowledge_query_enabled: shouldQueryEnterpriseKnowledgeForRequest,
     })
 
     const shouldReserveAiEntryCredits =
@@ -1144,12 +1476,137 @@ export async function POST(request: NextRequest) {
         customSystemPrompt,
         latestUserPrompt,
         forcedReplyLanguage,
+        effectiveAgentId,
         {
           available: Boolean(effectiveSelectedTools.web_search),
           conversationScope,
           consultingModelMode: agentConfig.consultingModelMode,
         },
       )
+      if (isOpenCodeRuntimeDecision(runtimeDecision) && runtimeProfile.sessionEnabled && runtimeProfile.asyncEnabled) {
+        const runtimeInput = await buildChatRuntimeInput(systemPrompt)
+        const queued = await createBackgroundOpenCodeRun({
+          currentUser,
+          runtimeInput,
+          functionId: effectiveAgentId,
+          selectedSkillIds,
+          selectedMcpServerIds,
+          traceId,
+          billingReservation: aiEntryCreditReservation,
+          provider: openCodeProvider,
+        })
+        aiEntryCreditFinalized = true
+        const queueMessage = isZh ? "任务已提交，关闭页面后仍会继续执行。" : "Task queued; execution continues after you leave this page."
+        return NextResponse.json({
+          message: queueMessage,
+          conversationId,
+          persisted: persistenceEnabled,
+          provider: "opencode",
+          providerModel: runtimeInput.modelHint || "opencode",
+          agentId: effectiveAgentId,
+          agentRoute: routeDecision,
+          providerOrder: ["opencode"],
+          toolCalls: [],
+          pending_task: {
+            task_id: String(queued.taskRunId),
+            status: "pending",
+            task_type: "opencode_agent_run",
+            conversation_id: conversationId,
+            agent_id: effectiveAgentId,
+            stage: "runtime_queued",
+            stage_label: queueMessage,
+            runtime_run_id: queued.runtimeRunId,
+          },
+        })
+      }
+      if (isOpenCodeRuntimeDecision(runtimeDecision)) {
+        const runtimeInput = await buildChatRuntimeInput(systemPrompt)
+        let openCodeAnswer = ""
+        const publishedArtifacts: Array<Record<string, unknown>> = []
+        try {
+          for await (const event of runOpenCodeAgent(runtimeInput, {
+            runnerUrl: runtimeProfile.runnerUrl,
+            railway: runtimeProfile.backend === "railway-opencode",
+            timeoutMs: runtimeProfile.timeoutMs,
+            provider: openCodeProvider,
+            session: runtimeProfile.backend === "railway-opencode",
+          })) {
+            if (event.event === "text_delta") {
+              openCodeAnswer += event.delta
+            } else if (event.event === "artifact_payload") {
+              const published = await publishRuntimeArtifact({
+                currentUser,
+                conversationId,
+                runId: runtimeInput.runId,
+                artifact: event.artifact,
+                limits: runtimeInput.artifactContract,
+                conversationScope,
+                agentId: agentConfig.agentId,
+              })
+              publishedArtifacts.push(published)
+            }
+          }
+          if (!openCodeAnswer.trim()) throw new Error("ai_entry_empty_response")
+          const normalizedAssistantMessage = normalizeAiEntryIdentity(
+            openCodeAnswer,
+            latestUserPrompt,
+            forcedReplyLanguage,
+            effectiveAgentId,
+          )
+          if (persistenceEnabled) {
+            await persistAiEntryTurnSafe({
+              userId: currentUser.id,
+              conversationId,
+              assistantMessage: normalizedAssistantMessage,
+              scope: conversationScope,
+              agentId: agentConfig.agentId,
+            })
+          }
+          const usageTokens = getAiEntryUsageTokens(null, normalizedMessages.map((message) => normalizeCoreMessageContent(message.content)).join("\n"), normalizedAssistantMessage)
+          const actualCost = estimateTextCredits({
+            featureKey: "ai_entry_chat",
+            inputTokens: usageTokens.inputTokens,
+            outputTokens: usageTokens.outputTokens,
+            provider: "opencode",
+            model: runtimeInput.modelHint || "opencode",
+          })
+          await finalizeReservedCredits({
+            reservation: aiEntryCreditReservation,
+            userId: currentUser.id,
+            enterpriseId: currentUser.enterpriseId,
+            actualAmount: actualCost.credits,
+            idempotencyKey: `ai-entry:${conversationId}:${traceId}:debit`,
+            provider: "opencode",
+            model: runtimeInput.modelHint || "opencode",
+            officialCostUsd: actualCost.officialCostUsd,
+            costBasisUsd: actualCost.costBasisUsd,
+            usagePayload: actualCost.metadata,
+            metadata: { conversationId, traceId, runtime: "opencode" },
+          }).catch((error) => {
+            console.warn("ai-entry.billing.finalize.failed", { conversationId, message: extractErrorMessage(error) })
+          })
+          aiEntryCreditFinalized = true
+          return NextResponse.json({
+            message: normalizedAssistantMessage,
+            conversationId,
+            persisted: persistenceEnabled,
+            provider: "opencode",
+            providerModel: runtimeInput.modelHint || "opencode",
+            agentId: effectiveAgentId,
+            agentRoute: routeDecision,
+            providerOrder: [],
+            toolCalls: [],
+            artifacts: publishedArtifacts,
+          })
+        } catch (error) {
+          console.warn("ai-entry.opencode.failed", {
+            traceId,
+            conversationId,
+            message: extractErrorMessage(error),
+          })
+          throw error
+        }
+      }
       const execution = await runAiEntryConsultingBlocking({
         systemPrompt,
         messages: normalizedMessages,
@@ -1158,6 +1615,7 @@ export async function POST(request: NextRequest) {
       stopWhen,
       providerOptions,
         onProviderAttempt: (providerRun) => {
+          if (blockingProviderStartedAtMs === null) blockingProviderStartedAtMs = Date.now()
           console.info("ai-entry.chat.provider.attempt", {
             traceId,
             conversationId,
@@ -1204,6 +1662,7 @@ export async function POST(request: NextRequest) {
         `${execution.result.text || ""}${blockingToolAppendix}`,
         latestUserPrompt,
         forcedReplyLanguage,
+        effectiveAgentId,
       )
       const blockingToolCalls =
         execution.result.toolCalls?.map((call: { toolCallId: string; toolName: string }) => ({
@@ -1284,6 +1743,13 @@ export async function POST(request: NextRequest) {
         model: execution.model,
         persisted: persistenceEnabled,
         elapsedMs: Date.now() - startedAtMs,
+        knowledge_ms:
+          requestKnowledgeQueryStartedAtMs === null || requestKnowledgeQueryCompletedAtMs === null
+            ? null
+            : requestKnowledgeQueryCompletedAtMs - requestKnowledgeQueryStartedAtMs,
+        pre_model_ms:
+          blockingProviderStartedAtMs === null ? null : blockingProviderStartedAtMs - startedAtMs,
+        provider_first_token_ms: null,
       })
 
       return NextResponse.json({
@@ -1332,12 +1798,12 @@ export async function POST(request: NextRequest) {
             conversation_id: conversationId,
             enabled_tools: effectiveSelectedToolIds,
             skills_enabled: skillsEnabled,
-            selected_skills: selectedSkillIds,
+            selected_skills: resolvedSkillIdsForUi,
             persisted: persistenceEnabled,
             agent_id: effectiveAgentId,
             agent_route: routeDecision,
           })
-          for (const skillId of selectedSkillIds) {
+          for (const skillId of resolvedSkillIdsForUi) {
             sendEvent({
               event: "skill_selected",
               conversation_id: conversationId,
@@ -1362,6 +1828,7 @@ export async function POST(request: NextRequest) {
             customSystemPrompt,
             latestUserPrompt,
             forcedReplyLanguage,
+            effectiveAgentId,
             {
               available: Boolean(effectiveSelectedTools.web_search),
               conversationScope,
@@ -1369,7 +1836,53 @@ export async function POST(request: NextRequest) {
             },
           )
 
-          const execution = await runAiEntryConsultingStreaming({
+          if (isOpenCodeRuntimeDecision(runtimeDecision) && runtimeProfile.sessionEnabled && runtimeProfile.asyncEnabled) {
+            const runtimeInput = await buildChatRuntimeInput(systemPrompt)
+            const queued = await createBackgroundOpenCodeRun({
+              currentUser,
+              runtimeInput,
+              functionId: effectiveAgentId,
+              selectedSkillIds,
+              selectedMcpServerIds,
+              traceId,
+              billingReservation: aiEntryCreditReservation,
+              provider: openCodeProvider,
+            })
+            aiEntryCreditFinalized = true
+            const queueMessage = isZh ? "任务已提交，关闭页面后仍会继续执行。" : "Task queued; execution continues after you leave this page."
+            sendEvent({
+              event: "provider_selected",
+              conversation_id: conversationId,
+              provider: "opencode",
+              provider_model: runtimeInput.modelHint || "opencode",
+              provider_order: ["opencode"],
+              provider_attempt: 1,
+            })
+            sendEvent({
+              event: "background_task_queued",
+              conversation_id: conversationId,
+              data: {
+                taskId: String(queued.taskRunId),
+                runtimeRunId: queued.runtimeRunId,
+                taskType: "opencode_agent_run",
+                status: "pending",
+                stage: "runtime_queued",
+              },
+            })
+            sendEvent({ event: "message", conversation_id: conversationId, answer: queueMessage })
+            sendEvent({
+              event: "message_end",
+              conversation_id: conversationId,
+              answer: queueMessage,
+              provider: "opencode",
+              provider_model: runtimeInput.modelHint || "opencode",
+              agent_id: effectiveAgentId,
+              background_task: { task_id: String(queued.taskRunId), task_type: "opencode_agent_run" },
+            })
+            return
+          }
+
+          const executeNative = () => runAiEntryConsultingStreaming({
             systemPrompt,
             messages: normalizedMessages,
             selectedTools: effectiveSelectedTools,
@@ -1388,16 +1901,14 @@ export async function POST(request: NextRequest) {
             onProviderSelected: (providerRun) => {
               providerSelectedAtMs = Date.now()
               sendEvent({
-                event:
-                  providerRun.attempt === 1
-                    ? "provider_selected"
-                    : "provider_fallback",
+                event: "provider_selected",
                 conversation_id: conversationId,
                 provider: providerRun.providerId,
                 provider_model: providerRun.model,
                 provider_order: providerRun.providerOrder,
                 provider_attempt: providerRun.attempt,
                 provider_upgrade_probe: providerRun.upgradeProbe,
+                ...(providerRun.fallbackReason ? { fallback_reason: providerRun.fallbackReason } : {}),
               })
             },
             onProviderSuccess: (providerRun) => {
@@ -1569,10 +2080,121 @@ export async function POST(request: NextRequest) {
             },
           })
 
+          type ChatExecution = {
+            result: { accumulated: string }
+            providerId: string
+            model: string
+            providerOrder: string[]
+          }
+          let execution: ChatExecution
+          if (isOpenCodeRuntimeDecision(runtimeDecision)) {
+            const runtimeInput = await buildChatRuntimeInput(systemPrompt)
+            let openCodeAnswer = ""
+            let artifactTotalBytes = 0
+            try {
+              for await (const event of runOpenCodeAgent(runtimeInput, {
+                runnerUrl: runtimeProfile.runnerUrl,
+                railway: runtimeProfile.backend === "railway-opencode",
+                timeoutMs: runtimeProfile.timeoutMs,
+                signal: request.signal,
+                provider: openCodeProvider,
+                session: runtimeProfile.backend === "railway-opencode",
+              })) {
+                if (event.event === "runtime_selected") {
+                  providerSelectedAtMs = Date.now()
+                  sendEvent({
+                    event: "provider_selected",
+                    conversation_id: conversationId,
+                    provider: "opencode",
+                    provider_model: runtimeInput.modelHint || "opencode",
+                    provider_order: ["opencode"],
+                    provider_attempt: 1,
+                  })
+                } else if (event.event === "agent_resolved") {
+                  sendEvent({
+                    event: "agent_resolved",
+                    conversation_id: conversationId,
+                    agent_id: event.agentId,
+                  })
+                } else if (event.event === "skill_activated" || event.event === "skill_completed" || event.event === "skill_failed") {
+                  sendEvent({
+                    event: event.event,
+                    conversation_id: conversationId,
+                    skill_id: event.skillId,
+                    ...(event.event === "skill_failed" ? { message: event.message } : {}),
+                  })
+                } else if (event.event === "text_delta") {
+                  openCodeAnswer += event.delta
+                  const now = Date.now()
+                  if (firstTextDeltaAtMs === null) {
+                    firstTextDeltaAtMs = now
+                    console.info("ai-entry.chat.first_token", {
+                      traceId,
+                      conversationId,
+                      provider: "opencode",
+                      elapsedMs: now - startedAtMs,
+                    })
+                  }
+                  lastTextDeltaAtMs = now
+                  sendEvent({ event: "message", conversation_id: conversationId, answer: event.delta })
+                } else if (event.event === "runtime_warning") {
+                  sendEvent({
+                    event: "runtime_warning",
+                    conversation_id: conversationId,
+                    code: event.code,
+                    message: event.message,
+                  })
+                } else if (event.event === "tool_event") {
+                  sendEvent({
+                    event: "runtime_stage",
+                    conversation_id: conversationId,
+                    data: {
+                      stage: `opencode_${event.tool}_${event.phase}`,
+                      message: event.message || `${event.tool}: ${event.phase}`,
+                    },
+                  })
+                } else if (event.event === "artifact_payload") {
+                  const published = await publishRuntimeArtifact({
+                    currentUser,
+                    conversationId,
+                    runId: runtimeInput.runId,
+                    artifact: event.artifact,
+                    limits: runtimeInput.artifactContract,
+                    currentTotalBytes: artifactTotalBytes,
+                    conversationScope,
+                    agentId: agentConfig.agentId,
+                  })
+                  artifactTotalBytes += event.artifact.sizeBytes
+                  sendEvent({ event: "artifact_created", conversation_id: conversationId, artifact: published })
+                }
+              }
+              if (!openCodeAnswer.trim()) throw new Error("ai_entry_empty_response")
+              execution = {
+                result: { accumulated: openCodeAnswer },
+                providerId: "opencode",
+                model: runtimeInput.modelHint || "opencode",
+                providerOrder: ["opencode"],
+              }
+            } catch (error) {
+              // OpenCode is the selected runtime for this request. A failed
+              // runtime must surface its error instead of silently switching
+              // to another Provider or execution stack.
+              console.warn("ai-entry.opencode.failed", {
+                traceId,
+                conversationId,
+                message: extractErrorMessage(error),
+              })
+              throw error
+            }
+          } else {
+            execution = await executeNative()
+          }
+
           const normalizedStreamedAnswer = normalizeAiEntryIdentity(
             execution.result.accumulated || "",
             latestUserPrompt,
             forcedReplyLanguage,
+            effectiveAgentId,
           )
           const fallbackToolFailureMessage =
             normalizedStreamedAnswer.trim() || streamedToolAppendix.trim()
@@ -1743,6 +2365,21 @@ export async function POST(request: NextRequest) {
               firstTextDeltaAtMs === null || providerSelectedAtMs === null
                 ? null
                 : firstTextDeltaAtMs - providerSelectedAtMs,
+            knowledge_ms:
+              requestKnowledgeQueryStartedAtMs === null ||
+              requestKnowledgeQueryCompletedAtMs === null
+                ? null
+                : requestKnowledgeQueryCompletedAtMs - requestKnowledgeQueryStartedAtMs,
+            pre_model_ms:
+              providerSelectedAtMs === null ? null : providerSelectedAtMs - startedAtMs,
+            first_token_ms:
+              firstTextDeltaAtMs === null ? null : firstTextDeltaAtMs - startedAtMs,
+            last_token_ms:
+              lastTextDeltaAtMs === null ? null : lastTextDeltaAtMs - startedAtMs,
+            provider_first_token_ms:
+              firstTextDeltaAtMs === null || providerSelectedAtMs === null
+                ? null
+                : firstTextDeltaAtMs - providerSelectedAtMs,
           })
         } catch (error) {
           const closedStream = isClosedStreamControllerError(error)
@@ -1779,7 +2416,7 @@ export async function POST(request: NextRequest) {
             sendEvent({
               event: "error",
               conversation_id: conversationId,
-              error: extractErrorMessage(error),
+              error: isRuntimeInputTooLargeError(error) ? "runtime_input_too_large" : extractErrorMessage(error),
             })
           }
         } finally {
@@ -1832,8 +2469,8 @@ export async function POST(request: NextRequest) {
       elapsedMs: Date.now() - startedAtMs,
     })
     return NextResponse.json(
-      { error: extractErrorMessage(error) },
-      { status: 500 },
+      { error: isRuntimeInputTooLargeError(error) ? "runtime_input_too_large" : extractErrorMessage(error) },
+      { status: isRuntimeInputTooLargeError(error) ? 413 : 500 },
     )
   }
 }
