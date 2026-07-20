@@ -597,14 +597,14 @@ export function WorkflowBuilderPage({
   const [saving, setSaving] = useState(false)
   const [runActionPending, setRunActionPending] = useState(false)
   const [uploadPending, setUploadPending] = useState(false)
-  const [libraryCollapsed, setLibraryCollapsed] = useState(true)
-  const [settingsCollapsed, setSettingsCollapsed] = useState(false)
+  const [libraryCollapsed, setLibraryCollapsed] = useState(false)
+  const [settingsCollapsed, setSettingsCollapsed] = useState(true)
   const [libraryDock, setLibraryDock] = useState<FloatingControlDock>("left")
   const [settingsDock, setSettingsDock] = useState<FloatingControlDock>("right")
   const [libraryControlPosition, setLibraryControlPosition] = useState<FloatingControlPosition | null>(null)
   const [settingsControlPosition, setSettingsControlPosition] = useState<FloatingControlPosition | null>(null)
   const [controlDragState, setControlDragState] = useState<FloatingControlDragState | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  const [, setMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [budgetConfirmation, setBudgetConfirmation] = useState<WorkflowBudgetConfirmation | null>(null)
   const [publishPanelOpen, setPublishPanelOpen] = useState(false)
@@ -1749,7 +1749,11 @@ export function WorkflowBuilderPage({
             </div>
           </div>
 
-          <section className="hidden dashboard-panel rounded-[12px] border border-border bg-card/85 px-4 py-4">
+          <section
+            className="hidden dashboard-panel rounded-[12px] border border-border bg-card/85 px-4 py-4"
+            aria-hidden="true"
+            style={{ display: "none" }}
+          >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="max-w-3xl">
                 <div className="dashboard-kicker text-muted-foreground">{presetCopy.title}</div>
@@ -2036,11 +2040,6 @@ export function WorkflowBuilderPage({
             )}
           </section>
 
-          {message ? (
-            <div className="rounded-[10px] border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-              {message}
-            </div>
-          ) : null}
           {errorMessage ? (
             <div className="rounded-[10px] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
               {errorMessage}
