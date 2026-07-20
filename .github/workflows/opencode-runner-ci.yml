@@ -27,7 +27,7 @@ jobs:
           cache-dependency-path: infra/cloudflare/opencode-runner/package-lock.json
       - name: Verify app runtime
         run: |
-          npm ci
+          npm ci --legacy-peer-deps
           npx tsc --noEmit --pretty false
           npx eslint app/api/ai/chat/route.ts lib/ai-runtime lib/ai-entry/runtime lib/ai-entry/conversation-state.ts lib/ai-entry/repository.ts --max-warnings=0
           npx tsx --test lib/ai-runtime/opencode-protocol.test.ts lib/ai-entry/runtime/*.test.ts app/api/ai/chat/route.test.ts
