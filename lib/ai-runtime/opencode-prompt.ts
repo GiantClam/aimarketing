@@ -78,7 +78,8 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
 export function buildOpenCodeUserPrompt(input: AgentRuntimeInput, options: { includeConversationHistory?: boolean } = {}) {
   const message = input.messages.at(-1)?.content?.trim() || "Continue using the current runtime context."
   const isDashiPresentation = input.agentId === "executive-presentation-ppt" || (input.selectedSkillIds || []).includes("dashiai-ppt")
-  if (!options.includeConversationHistory || input.messages.length < 2) {
+  const includeConversationHistory = options.includeConversationHistory ?? isDashiPresentation
+  if (!includeConversationHistory || input.messages.length < 2) {
     return isDashiPresentation ? clipPromptText(message, 32_000) : message
   }
 

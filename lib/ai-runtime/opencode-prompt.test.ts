@@ -234,6 +234,42 @@ test("speaker PPT prompt delegates export approval to the native Dashi Skill", (
   assert.match(prompt, /If the Skill's workflow has the required brief and the current user turn explicitly requests or confirms export/u)
 })
 
+test("speaker PPT user prompt includes ordered conversation history by default", () => {
+  const input = {
+    runId: "00000000-0000-4000-8000-000000000008",
+    sessionKey: "ppt-42-conversation-12",
+    conversationId: "conversation-12",
+    enterpriseId: 1,
+    userId: 42,
+    agentId: "executive-presentation-ppt",
+    selectedSkillIds: ["dashiai-ppt"],
+    systemPrompt: "Use the presentation assistant.",
+    messages: [
+      { role: "user" as const, content: "帮我做一份发布会演讲 PPT" },
+      { role: "assistant" as const, content: "好的，你希望主题聚焦在哪个方向？" },
+      { role: "user" as const, content: "主题是 AI 营销工作台" },
+    ],
+    attachments: [],
+    artifactContext: [],
+    workflowContext: null,
+    artifactContract: {
+      manifestPath: "artifact-manifest.json" as const,
+      artifactDir: "artifacts" as const,
+      maxArtifacts: 8,
+      maxArtifactBytes: 2_000_000,
+      maxArtifactTotalBytes: 4_000_000,
+      allowedExtensions: [".pptx"],
+    },
+    policy: { allowPlatformTools: false as const, allowTools: false as const, allowMcp: false as const, allowSkillInstall: false as const, allowNetwork: true },
+  }
+
+  const prompt = buildOpenCodeUserPrompt(input)
+  assert.match(prompt, /\[Conversation history provided by the application\]/u)
+  assert.ok(prompt.indexOf("帮我做一份发布会演讲 PPT") < prompt.indexOf("好的，你希望主题聚焦在哪个方向？"))
+  assert.ok(prompt.indexOf("好的，你希望主题聚焦在哪个方向？") < prompt.indexOf("主题是 AI 营销工作台"))
+  assert.match(prompt, /\[Current user turn\]/u)
+})
+
 test("speaker PPT keeps system and oversized user messages separate", () => {
   const input: Parameters<typeof buildOpenCodeSystemPrompt>[0] = {
     runId: "00000000-0000-4000-8000-000000000003",
