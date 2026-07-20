@@ -131,6 +131,7 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
       conversationId,
       role: "assistant",
       content: assistantContent,
+      idempotencyKey: `opencode:${platformRun.externalRunId}:assistant`,
       agentId: typeof taskInput.agentId === "string" ? taskInput.agentId : null,
     })
     assistantMessagePersisted = true

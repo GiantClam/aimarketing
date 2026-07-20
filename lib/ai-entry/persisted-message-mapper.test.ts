@@ -42,6 +42,31 @@ test("mapPersistedAiEntryMessages drops stale failed background messages before 
   )
 })
 
+test("mapPersistedAiEntryMessages collapses duplicate persisted PPT preview replies", () => {
+  const previewMessage = buildPptToolResultMessage({
+    toolName: "preview_ppt_deck",
+    isZh: true,
+    result: {
+      ok: true,
+      previewSessionId: "preview-duplicate",
+      recommendedVariantKey: "v1",
+      variants: [{ key: "v1", name: "Variant 1" }],
+    },
+  })
+
+  const mapped = mapPersistedAiEntryMessages([
+    { id: "user", role: "user", content: "生成 PPT", created_at: 10 },
+    { id: "preview-1", role: "assistant", content: previewMessage || "", created_at: 20 },
+    { id: "preview-2", role: "assistant", content: previewMessage || "", created_at: 21 },
+    { id: "preview-3", role: "assistant", content: previewMessage || "", created_at: 22 },
+  ])
+
+  assert.deepEqual(
+    mapped.map((message) => message.id),
+    ["user", "preview-1"],
+  )
+})
+
 test("mapPersistedAiEntryMessages keeps raw user content for follow-up requests while hiding attachment blocks in display content", () => {
   const mapped = mapPersistedAiEntryMessages([
     {

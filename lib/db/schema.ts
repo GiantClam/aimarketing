@@ -283,6 +283,7 @@ export const messages = pgTable(withPrefix("messages"), {
     .references(() => conversations.id),
   role: varchar("role", { length: 20 }).notNull(), // 'user' or 'assistant'
   content: text("content").notNull(),
+  idempotencyKey: varchar("idempotency_key", { length: 255 }),
   knowledgeSource: varchar("knowledge_source", { length: 50 }), // 'industry_kb' or 'personal_kb'
   createdAt: timestamp("created_at").defaultNow(),
 })

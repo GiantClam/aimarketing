@@ -1489,6 +1489,7 @@ async function handleDurableAiEntryPptPreviewTask(
     conversationId: payload.conversationId,
     role: "assistant",
     content: assistantMessage,
+    idempotencyKey: `ai-entry-task:${taskId}:assistant`,
     scope: payload.conversationScope,
     agentId: payload.agentId,
   })
@@ -1816,6 +1817,7 @@ async function handleAiEntryPptPreviewTask(
         conversationId: payload.conversationId,
         role: "assistant",
         content: assistantMessage,
+        idempotencyKey: `ai-entry-task:${taskId}:assistant`,
         scope: payload.conversationScope,
         agentId: payload.agentId,
       })
