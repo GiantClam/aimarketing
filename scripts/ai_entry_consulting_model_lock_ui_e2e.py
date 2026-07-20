@@ -12,11 +12,11 @@ from playwright.sync_api import sync_playwright
 
 
 BASE_URL = os.environ.get("AI_ENTRY_E2E_BASE_URL", "http://127.0.0.1:3000").strip().rstrip("/")
-SCENARIO = os.environ.get("AI_ENTRY_E2E_SCENARIO", "consulting-model-lock-ui").strip()
+SCENARIO = os.environ.get("AI_ENTRY_E2E_SCENARIO", "consulting-model-default-ui").strip()
 ARTIFACT_DIR = Path("artifacts") / "ai-entry" / SCENARIO
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 
-LOCKED_MODEL_ID = "claude-sonnet-4.6"
+DEFAULT_AGENT_MODEL_ID = "grok-4.5"
 SWITCHABLE_MODEL_ID = "gpt-5.5"
 DEFAULT_NORMAL_MODEL_ID = "gpt-5.4"
 
@@ -89,7 +89,7 @@ def run():
     result: dict[str, object] = {
         "scenario": SCENARIO,
         "base_url": BASE_URL,
-        "locked_model_id": LOCKED_MODEL_ID,
+        "default_agent_model_id": DEFAULT_AGENT_MODEL_ID,
         "switchable_model_id": SWITCHABLE_MODEL_ID,
     }
 
@@ -121,7 +121,12 @@ def run():
                                 "family": "anthropic",
                                 "label": "Anthropic",
                                 "models": [
-                                    {"id": LOCKED_MODEL_ID, "name": "Claude Sonnet 4.6"},
+                                    {
+                                        "id": DEFAULT_AGENT_MODEL_ID,
+                                        "name": "PPToken / Grok 4.5",
+                                        "providerId": "pptoken",
+                                        "modelId": DEFAULT_AGENT_MODEL_ID,
+                                    },
                                 ],
                             },
                             {
@@ -210,7 +215,8 @@ def run():
         try:
             login(context, page)
 
-            # Scenario 1: consulting advisor entry should lock model to claude-sonnet-4.6.
+            # Scenario 1: consulting advisor entry defaults to Grok but keeps
+            # the selector available for an explicit user switch.
             page.goto(
                 f"{BASE_URL}/dashboard/ai?entry=consulting-advisor",
                 timeout=90000,
@@ -221,19 +227,18 @@ def run():
 
             model_combobox_count = page.locator("button[role='combobox']").count()
             expect(
-                model_combobox_count == 0,
-                f"consulting entry should hide model selector combobox, got={model_combobox_count}",
+                model_combobox_count == 1,
+                f"consulting entry should show model selector combobox, got={model_combobox_count}",
             )
+            expect(page.get_by_text(re.compile(r"grok\s*4\.?5", re.IGNORECASE)).count() >= 1, "consulting entry should default to grok-4.5")
 
-            locked_model_label = page.get_by_text(re.compile(r"claude.*sonnet.*4\.?6", re.IGNORECASE))
-            expect(
-                locked_model_label.count() >= 1,
-                "consulting entry should show locked claude-sonnet-4.6 model label",
-            )
+            combobox = page.locator("button[role='combobox']").first
+            combobox.click()
+            page.get_by_role("option", name=re.compile(r"gpt\s*5\.5", re.IGNORECASE)).click()
 
             textarea = wait_for_chat_interactive(page)
             textarea.fill("consulting flow lock test")
-            textarea.press("Enter")
+            page.get_by_role("button", name=re.compile(r"send", re.IGNORECASE)).last.click()
 
             wait_for_chat_request_count(chat_requests, 1)
             save_debug(page, "02-consulting-after-send")
@@ -252,11 +257,12 @@ def run():
                 f"consulting entryMode missing: {first_agent_config}",
             )
             expect(
-                str(first_model_config.get("modelId") or "").strip() == LOCKED_MODEL_ID,
-                f"consulting locked model mismatch: {first_model_config}",
+                str(first_model_config.get("modelId") or "").strip() == SWITCHABLE_MODEL_ID,
+                f"consulting model switch not applied: {first_model_config}",
             )
 
-            # Scenario 2: normal AI page with same agent should allow model switching.
+            # Scenario 2: a business/Agent Platform agent starts from Grok too.
+            page.evaluate("localStorage.clear()")
             page.goto(
                 f"{BASE_URL}/dashboard/ai?agent=general",
                 timeout=90000,
@@ -267,12 +273,11 @@ def run():
 
             combobox = page.locator("button[role='combobox']").first
             expect(combobox.count() == 1, "normal ai page should show model selector combobox")
-            combobox.click()
-            page.get_by_role("option", name=re.compile(r"gpt\s*5\.4", re.IGNORECASE)).click()
+            expect(page.get_by_text(re.compile(r"grok\s*4\.?5", re.IGNORECASE)).count() >= 1, "business agent should default to grok-4.5")
 
             textarea = wait_for_chat_interactive(page)
             textarea.fill("normal flow switch model test")
-            textarea.press("Enter")
+            page.get_by_role("button", name=re.compile(r"send", re.IGNORECASE)).last.click()
 
             wait_for_chat_request_count(chat_requests, 2)
             save_debug(page, "04-normal-after-send")
@@ -292,14 +297,16 @@ def run():
                 f"normal request should not carry consulting entryMode: {second_agent_config}",
             )
             expect(
-                str(second_model_config.get("modelId") or "").strip() == SWITCHABLE_MODEL_ID,
-                f"normal request model switch not applied: {second_model_config}",
+                str(second_model_config.get("modelId") or "").strip() == DEFAULT_AGENT_MODEL_ID,
+                f"business agent default model mismatch: {second_model_config}",
             )
 
             critical_console_errors = [
                 item
                 for item in console_errors
-                if "favicon" not in item.lower() and "failed to load resource" not in item.lower()
+                if "favicon" not in item.lower()
+                and "failed to load resource" not in item.lower()
+                and "_vercel/insights" not in item.lower()
             ]
             expect(
                 not critical_console_errors,

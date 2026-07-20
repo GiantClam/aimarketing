@@ -55,7 +55,7 @@ let appendedAiEntryMessages: Array<{ conversationId: string | number | null | un
 let durablePptQueueEnabled = false
 let remotePptJobByRequestId: { jobId: string } | null = null
 let remotePptSubmitCalls: Array<{ requestId: string; prompt: string; templateMode?: string; templateId?: string }> = []
-let remotePptStatus: Record<string, unknown> = { jobId: "remote-job-1", status: "running" }
+let remotePptStatus: Record<string, unknown> | Error = { jobId: "remote-job-1", status: "running" }
 let persistedRemoteDecks: Array<Record<string, unknown>> = []
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
@@ -197,7 +197,10 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
         remotePptJobByRequestId = { jobId: "remote-job-1" }
         return { jobId: "remote-job-1", status: "queued" }
       },
-      requestPptWorkerPreviewStatus: async () => remotePptStatus,
+      requestPptWorkerPreviewStatus: async () => {
+        if (remotePptStatus instanceof Error) throw remotePptStatus
+        return remotePptStatus
+      },
     }
   }
 
@@ -683,6 +686,72 @@ test("resumes remote ppt-master jobs from Supabase state without Vercel polling"
   const terminal = JSON.parse(tasksById.get(taskId)?.result || "{}") as Record<string, unknown>
   assert.equal(terminal.previewSessionId, "remote-preview-session-1")
   assert.equal(terminal.remoteJobId, "remote-job-1")
+})
+
+test("keeps durable PPT tasks running after transient remote status fetch failures", async () => {
+  const taskId = 1106
+  durablePptQueueEnabled = true
+  tasksById.set(
+    taskId,
+    buildAiEntryPptPreviewTask({
+      id: taskId,
+      status: "pending",
+      updatedAtMsAgo: 1_000,
+    }),
+  )
+  claimResultById.set(taskId, { id: taskId })
+
+  const submitted = await runAssistantTaskRecoveryPass({
+    limit: 1,
+    waitForCompletion: true,
+    completionTimeoutMs: 10_000,
+  })
+
+  assert.equal(submitted.failed, 0)
+  assert.equal(tasksById.get(taskId)?.status, "running")
+  assert.equal(remotePptSubmitCalls.length, 1)
+
+  remotePptStatus = new Error("fetch failed")
+  const retried = await runAssistantTaskRecoveryPass({
+    limit: 1,
+    waitForCompletion: true,
+    completionTimeoutMs: 10_000,
+  })
+
+  assert.equal(retried.failed, 0)
+  assert.equal(tasksById.get(taskId)?.status, "running")
+  assert.equal(appendedAiEntryMessages.length, 0)
+  assert.equal(
+    (JSON.parse(tasksById.get(taskId)?.result || "{}") as { events?: Array<{ type?: string; status?: string }> }).events?.at(-1)?.type,
+    "background_generation_retry",
+  )
+
+  remotePptStatus = {
+    jobId: "remote-job-1",
+    status: "completed",
+    previewSessionId: "remote-preview-session-2",
+    generatedAt: "2026-07-13T00:00:00.000Z",
+    deck: {
+      previewSessionId: "remote-preview-session-2",
+      title: "恢复后的 PPT",
+      scenario: "product-launch",
+      language: "zh-CN",
+      pageCount: 4,
+      resolvedPageCount: 4,
+      variants: [{ key: "variant-a", name: "Variant A", slides: [{ title: "恢复后的 PPT" }] }],
+    },
+  }
+
+  const completed = await runAssistantTaskRecoveryPass({
+    limit: 1,
+    waitForCompletion: true,
+    completionTimeoutMs: 10_000,
+  })
+
+  assert.equal(completed.failed, 0)
+  assert.equal(tasksById.get(taskId)?.status, "success")
+  assert.equal(remotePptSubmitCalls.length, 1)
+  assert.equal(appendedAiEntryMessages.length, 1)
 })
 
 test("resubmits legacy remote jobs when the worker cannot recover their missing request payload", async () => {

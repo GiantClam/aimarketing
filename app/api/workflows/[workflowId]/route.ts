@@ -9,6 +9,9 @@ import {
   type WorkflowDefinitionTriggerType,
 } from "@/lib/workflows/store"
 import type { WorkflowDefinitionEdge, WorkflowDefinitionNode } from "@/lib/workflows/schema"
+import type { WorkflowDefinitionEnvelopeV2 } from "@/lib/workflows/workflow-definition-v2"
+import { workflowNodeRegistry } from "@/lib/workflows/node-definitions/registry"
+import { resolveWorkflowFeatures } from "@/lib/workflows/features"
 
 export const runtime = "nodejs"
 
@@ -20,6 +23,8 @@ type WorkflowUpdateBody = {
   metadata?: Record<string, unknown> | null
   nodes?: WorkflowDefinitionNode[]
   edges?: WorkflowDefinitionEdge[]
+  expectedRevision?: number
+  definition?: Omit<WorkflowDefinitionEnvelopeV2, "revision" | "definitionHash">
 }
 
 function parseWorkflowId(value: string) {
@@ -63,7 +68,18 @@ export async function GET(
       return NextResponse.json({ error: "workflow_definition_not_found" }, { status: 404 })
     }
 
-    return NextResponse.json({ data })
+    // Keep the persisted workflow payload backward compatible while exposing
+    // the same definition projection used by the canvas and editor. Functions
+    // such as `migrate` are intentionally omitted from the JSON contract.
+    const nodeRegistry = workflowNodeRegistry.list().map(({ migrate: _migrate, ...definition }) => definition)
+    return NextResponse.json({
+      data,
+      features: resolveWorkflowFeatures(),
+      nodeRegistry: {
+        version: 2,
+        definitions: nodeRegistry,
+      },
+    })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "workflow_get_failed" },
@@ -97,6 +113,10 @@ export async function PATCH(
     const enterpriseId = currentUser.enterpriseId
 
     const body = (await measureWorkflowRouteStep("patch.request-json", () => request.json().catch(() => ({})))) as WorkflowUpdateBody
+    const features = resolveWorkflowFeatures()
+    if (features.definitionV2Write && (!Number.isInteger(body.expectedRevision) || Number(body.expectedRevision) < 1)) {
+      return NextResponse.json({ error: "invalid_workflow_revision" }, { status: 400 })
+    }
 
     const data = await measureWorkflowRouteStep("patch.update-workflow-definition", () =>
       updateWorkflowDefinition({
@@ -109,6 +129,8 @@ export async function PATCH(
         metadata: body.metadata,
         nodes: Array.isArray(body.nodes) ? body.nodes : undefined,
         edges: Array.isArray(body.edges) ? body.edges : undefined,
+        expectedRevision: Number.isInteger(body.expectedRevision) ? body.expectedRevision : undefined,
+        definition: body.definition,
       }),
     )
 
@@ -120,16 +142,31 @@ export async function PATCH(
       edgeCount: Array.isArray(body.edges) ? body.edges.length : null,
     })
 
-    return NextResponse.json({ data })
+    const response = NextResponse.json({ data })
+    response.headers.set("Server-Timing", `workflow-patch;dur=${Date.now() - requestStartedAt}`)
+    return response
   } catch (error) {
     const message = error instanceof Error ? error.message : "workflow_update_failed"
     const status =
       message === "workflow_definition_not_found"
         ? 404
-        : message.startsWith("invalid_") || message === "duplicate_workflow_node_key"
+        : message === "workflow_revision_conflict"
+          ? 409
+        : message === "unsupported_node_version"
+          ? 422
+        : message.startsWith("invalid_") || message === "duplicate_workflow_node_key" || message === "ambiguous_workflow_definition_payload"
           ? 400
           : 500
 
+    if (message === "workflow_revision_conflict") {
+      return NextResponse.json({
+        error: message,
+        details: {
+          expectedRevision: (error as { expectedRevision?: number }).expectedRevision,
+          currentRevision: (error as { currentRevision?: number }).currentRevision,
+        },
+      }, { status })
+    }
     return NextResponse.json({ error: message }, { status })
   }
 }
@@ -153,8 +190,26 @@ export async function DELETE(
       return NextResponse.json({ error: "invalid_workflow_id" }, { status: 400 })
     }
 
-    await deleteWorkflowDefinition(numericWorkflowId, currentUser.enterpriseId)
-    return NextResponse.json({ data: { id: numericWorkflowId, deleted: true } })
+    const features = resolveWorkflowFeatures()
+    const current = features.definitionV2Write
+      ? await getWorkflowDefinition(numericWorkflowId, currentUser.enterpriseId)
+      : null
+    if (features.definitionV2Write) {
+      const ifMatch = request.headers.get("if-match")?.replace(/^"|"$/g, "")
+      if (!ifMatch || !/^\d+$/.test(ifMatch)) {
+        return NextResponse.json({ error: "invalid_workflow_revision" }, { status: 400 })
+      }
+      if (!current) return NextResponse.json({ error: "workflow_definition_not_found" }, { status: 404 })
+      if (Number(ifMatch) !== (current.revision ?? 1)) {
+        return NextResponse.json({
+          error: "workflow_revision_conflict",
+          details: { expectedRevision: Number(ifMatch), currentRevision: current.revision ?? 1 },
+        }, { status: 409 })
+      }
+    }
+
+    const result = await deleteWorkflowDefinition(numericWorkflowId, currentUser.enterpriseId)
+    return NextResponse.json({ data: { id: numericWorkflowId, deleted: !result.archived, archived: result.archived } })
   } catch (error) {
     const message = error instanceof Error ? error.message : "workflow_delete_failed"
     const status = message === "workflow_definition_not_found" ? 404 : 500

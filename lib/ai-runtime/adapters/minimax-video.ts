@@ -33,6 +33,7 @@ function inferFeatureId(model: ModelDefinition) {
 
 export const minimaxVideoAdapter: ProviderAdapter = {
   provider: "minimax",
+  capabilities: ["video.text_to_video", "video.image_to_video"],
   isConfigured(input: ProviderConfigContext) {
     return isMiniMaxVideoConfigured(input.runtimeContext?.minimaxVideoConfig)
   },

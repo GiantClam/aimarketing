@@ -230,6 +230,7 @@ const TEMPLATE_DEFINITIONS: Record<WorkflowTemplateDefinitionKey, WorkflowTempla
             positionX: 736,
             positionY: 340,
             config: {
+              selectedProviderId: "deepseek",
               model: "deepseek-v4-pro",
               pageCount: 8,
               slideCount: 8,
@@ -724,6 +725,7 @@ const TEMPLATE_DEFINITIONS: Record<WorkflowTemplateDefinitionKey, WorkflowTempla
             positionX: 1056,
             positionY: 90,
             config: {
+              selectedProviderId: "deepseek",
               model: "deepseek-v4-pro",
               pageCount: 10,
               slideCount: 10,
@@ -1358,6 +1360,7 @@ const TEMPLATE_DEFINITIONS: Record<WorkflowTemplateDefinitionKey, WorkflowTempla
             positionX: 1056,
             positionY: 320,
             config: {
+              selectedProviderId: "deepseek",
               model: "deepseek-v4-pro",
               pageCount: 8,
               slideCount: 8,
@@ -1768,6 +1771,7 @@ const TEMPLATE_DEFINITIONS: Record<WorkflowTemplateDefinitionKey, WorkflowTempla
             positionX: 736,
             positionY: 320,
             config: {
+              selectedProviderId: "deepseek",
               model: "deepseek-v4-pro",
               pageCount: 8,
               slideCount: 8,

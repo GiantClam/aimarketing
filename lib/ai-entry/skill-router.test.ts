@@ -25,3 +25,13 @@ test("skill router respects explicit skill selection before heuristics", () => {
   assert.ok(decision.selectedSkillIds.includes("ppt-master"))
   assert.equal(decision.reasons[0]?.reason, "explicit_selection")
 })
+
+test("presentation PPT agent routes to Dashi without legacy brief tools", () => {
+  const decision = routeAiEntrySkills({
+    latestUserPrompt: "请做一份演讲型 PPT 并补充最新行业数据",
+    requestedAgentId: "executive-presentation-ppt",
+  })
+
+  assert.deepEqual(decision.selectedSkillIds, ["dashiai-ppt"])
+  assert.equal(decision.reasons[0]?.reason, "agent_default")
+})

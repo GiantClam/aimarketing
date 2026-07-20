@@ -15,6 +15,7 @@ import type {
 
 const DEFAULT_TOP_K = 5
 const DEFAULT_SCORE_THRESHOLD = 0.35
+const DEFAULT_RETRIEVAL_TIMEOUT_MS = 12_000
 
 type RagflowApiResponse<T> = {
   code?: number
@@ -69,6 +70,26 @@ async function requestRagflow<T>(
 
   const data = payload?.data as T | undefined
   return data as T
+}
+
+async function requestRagflowWithTimeout<T>(source: KnowledgeSource, path: string, timeoutMs: number, init?: RequestInit) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await requestRagflow<T>(source, path, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function retrievalTimeoutMs() {
+  const parsed = Number.parseInt(process.env.RAGFLOW_RETRIEVAL_TIMEOUT_MS || "", 10)
+  return Number.isFinite(parsed) && parsed >= 1_000 ? parsed : DEFAULT_RETRIEVAL_TIMEOUT_MS
+}
+
+function isExpectedDatasetRetrievalFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /aborted|embedding models|provider .* not found for model|model .* not found/iu.test(message)
 }
 
 async function requestRagflowBinary(
@@ -380,30 +401,48 @@ export const ragflowKnowledgeProvider: KnowledgeProvider = {
     )
     if (enabledDatasets.length === 0) return null
 
-    const response = await requestRagflow<RagflowRetrievalResponse | Array<Record<string, unknown>>>(source, "/retrieval", {
-      method: "POST",
-      body: JSON.stringify({
-        question: params.query,
-        dataset_ids: enabledDatasets.map((dataset) => dataset.providerDatasetId),
-        similarity_threshold: params.scoreThreshold ?? DEFAULT_SCORE_THRESHOLD,
-        top_k: params.topK ?? DEFAULT_TOP_K,
-      }),
-    })
+    // RAGFlow rejects a single retrieval request when dataset_ids contain
+    // datasets backed by different embedding models. Query each dataset in
+    // isolation so legacy datasets cannot take down the whole knowledge path.
+    const retrievalResults = await Promise.allSettled(
+      enabledDatasets.map(async (dataset) => ({
+        dataset,
+        response: await requestRagflowWithTimeout<RagflowRetrievalResponse | Array<Record<string, unknown>>>(source, "/retrieval", retrievalTimeoutMs(), {
+          method: "POST",
+          body: JSON.stringify({
+            question: params.query,
+            dataset_ids: [dataset.providerDatasetId],
+            similarity_threshold: params.scoreThreshold ?? DEFAULT_SCORE_THRESHOLD,
+            top_k: params.topK ?? DEFAULT_TOP_K,
+          }),
+        }),
+      })),
+    )
+    const successfulResults = retrievalResults
+      .filter((result): result is PromiseFulfilledResult<{ dataset: KnowledgeDataset; response: RagflowRetrievalResponse | Array<Record<string, unknown>> }> => result.status === "fulfilled")
+      .map((result) => result.value)
+    if (successfulResults.length === 0) {
+      const unexpectedFailure = retrievalResults.find(
+        (result): result is PromiseRejectedResult => result.status === "rejected" && !isExpectedDatasetRetrievalFailure(result.reason),
+      )
+      if (!unexpectedFailure) return null
+      throw unexpectedFailure.reason
+    }
 
-    const hits = Array.isArray(response)
-      ? response
-      : Array.isArray(response?.chunks)
-        ? response.chunks
-        : []
-    const snippets = hits
-      .map((item) => {
+    const snippets = successfulResults.flatMap(({ dataset, response }) => {
+      const hits = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.chunks)
+          ? response.chunks
+          : []
+      return hits.map((item) => {
         const datasetId =
           typeof item.dataset_id === "string"
             ? item.dataset_id
             : typeof item.datasetId === "string"
               ? item.datasetId
               : ""
-        const matchedDataset = enabledDatasets.find((dataset) => dataset.providerDatasetId === datasetId)
+        const matchedDataset = enabledDatasets.find((candidate) => candidate.providerDatasetId === datasetId) || dataset
         const content =
           toSnippetContent(item.content) ||
           toSnippetContent(item.chunk) ||
@@ -428,8 +467,10 @@ export const ragflowKnowledgeProvider: KnowledgeProvider = {
             "Snippet",
           content,
         }
-      })
-      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      }).filter((item): item is NonNullable<typeof item> => Boolean(item))
+    })
+      .sort((left, right) => (right.score ?? -Infinity) - (left.score ?? -Infinity))
+      .slice(0, params.topK ?? DEFAULT_TOP_K)
 
     if (snippets.length === 0) return null
 

@@ -42,12 +42,18 @@ export function routeAiEntrySkills(input: {
     }
   }
 
-  if (isAiEntryPptAgentId(input.requestedAgentId) && !selected.has("ppt-master")) {
-    selected.add("ppt-master")
-    reasons.push({ skillId: "ppt-master", reason: "agent_default" })
+  const defaultPptSkill = input.requestedAgentId === "executive-presentation-ppt" ? "dashiai-ppt" : "ppt-master"
+  if (isAiEntryPptAgentId(input.requestedAgentId) && !selected.has(defaultPptSkill)) {
+    selected.add(defaultPptSkill)
+    reasons.push({ skillId: defaultPptSkill, reason: "agent_default" })
   }
 
-  if (normalizedPrompt && PPT_INTENT_PATTERN.test(normalizedPrompt) && !selected.has("ppt-master")) {
+  if (
+    normalizedPrompt &&
+    input.requestedAgentId !== "executive-presentation-ppt" &&
+    PPT_INTENT_PATTERN.test(normalizedPrompt) &&
+    !selected.has("ppt-master")
+  ) {
     selected.add("ppt-master")
     reasons.push({ skillId: "ppt-master", reason: "ppt_intent" })
   }

@@ -2,6 +2,7 @@ import { DEFAULT_MINIMAX_VIDEO_MODEL, MINIMAX_VIDEO_MODEL_OPTIONS } from "@/lib/
 
 import type { ModelCapability } from "@/lib/ai-runtime/capabilities"
 import type { ModelDefinition, ModelParameterDefinition } from "@/lib/ai-runtime/types"
+import { resolveWorkflowFeatures } from "@/lib/workflows/features"
 
 function selectParameter(
   id: string,
@@ -97,7 +98,7 @@ const models: ModelDefinition[] = [
   },
   {
     id: "openai:image:gpt-image-2",
-    provider: "openai_official",
+    provider: "openai_compatible",
     capability: "image.text_to_image",
     label: "GPT Image 2",
     async: false,
@@ -105,10 +106,43 @@ const models: ModelDefinition[] = [
     parameterSchema: [
       { id: "prompt", label: "Prompt", type: "textarea", required: true },
       selectParameter("size", "Size", "1024x1024", [
+        { label: "auto", value: "auto" },
         { label: "1024x1024", value: "1024x1024" },
         { label: "1536x1024", value: "1536x1024" },
         { label: "1024x1536", value: "1024x1536" },
       ]),
+      selectParameter("provider", "Provider", "pptoken", [
+        { label: "PPTOKEN", value: "pptoken" },
+        { label: "Aiberm", value: "aiberm" },
+        { label: "CrazyRouter", value: "crazyroute" },
+      ]),
+      selectParameter("quality", "Quality", "auto", [
+        { label: "Auto", value: "auto" },
+        { label: "Low", value: "low" },
+        { label: "Medium", value: "medium" },
+        { label: "High", value: "high" },
+      ]),
+      selectParameter("background", "Background", "auto", [
+        { label: "Auto", value: "auto" },
+        { label: "Transparent", value: "transparent" },
+        { label: "Opaque", value: "opaque" },
+      ]),
+      selectParameter("outputFormat", "Output format", "png", [
+        { label: "PNG", value: "png" },
+        { label: "JPEG", value: "jpeg" },
+        { label: "WebP", value: "webp" },
+      ]),
+      { id: "outputCompression", label: "Output compression", type: "number", min: 0, max: 100 },
+      selectParameter("moderation", "Moderation", "auto", [
+        { label: "Auto", value: "auto" },
+        { label: "Low", value: "low" },
+      ]),
+      selectParameter("responseFormat", "Response format", "url", [
+        { label: "URL", value: "url" },
+        { label: "Base64", value: "b64_json" },
+      ]),
+      { id: "candidateCount", label: "Candidates", type: "number", defaultValue: 1, min: 1, max: 9 },
+      { id: "referenceImages", label: "Reference images", type: "image" },
     ],
     providerMetadata: {
       nativeModel: "gpt-image-2",
@@ -513,11 +547,13 @@ const defaultModelsByCapability = new Map<ModelCapability, string>([
 ])
 
 export function listModels(input: { capability?: ModelCapability } = {}) {
-  return input.capability ? models.filter((model) => model.capability === input.capability) : [...models]
+  const available = models.filter((model) => isModelAvailable(model))
+  return input.capability ? available.filter((model) => model.capability === input.capability) : available
 }
 
 export function getModelDefinition(modelId: string) {
-  return modelById.get(modelId) || null
+  const model = modelById.get(modelId) || null
+  return model && isModelAvailable(model) ? model : null
 }
 
 export function getDefaultModelId(capability: ModelCapability) {
@@ -537,6 +573,19 @@ export function findModelByCapabilityAndAlias(input: {
     listModels({ capability: input.capability }).find((model) => model.label === normalized) ||
     null
   )
+}
+
+/**
+ * Experimental OpenAI-compatible image generation is opt-in.  Keeping this
+ * gate in the model registry prevents disabled models from being exposed by
+ * palette/API callers or selected through an alias, even if an old workflow
+ * still contains the model id in its persisted config.
+ */
+function isModelAvailable(model: ModelDefinition) {
+  if (model.id === "openai:image:gpt-image-2") {
+    return resolveWorkflowFeatures().openAiImageAdapterV1
+  }
+  return true
 }
 
 export function validateAndNormalizeModelInput(model: ModelDefinition, input: Record<string, unknown>) {

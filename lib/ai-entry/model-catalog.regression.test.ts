@@ -10,6 +10,12 @@ const PROVIDER_ENV_KEYS = [
   "AI_ENTRY_PPTOKEN_API_KEY",
   "AI_ENTRY_PPTOKEN_BASE_URL",
   "AI_ENTRY_PPTOKEN_MODEL",
+  "AI_ENTRY_PPTOKEN_GROK_API_KEY",
+  "AI_ENTRY_PPTOKEN_GROK_BASE_URL",
+  "AI_ENTRY_OPENROUTER_ENABLED",
+  "AI_ENTRY_OPENROUTER_API_KEY",
+  "AI_ENTRY_OPENROUTER_BASE_URL",
+  "AI_ENTRY_OPENROUTER_MODEL",
   "AI_ENTRY_AIBERM_API_KEY",
   "AI_ENTRY_AIBERM_BASE_URL",
   "AI_ENTRY_AIBERM_MODEL",
@@ -22,6 +28,11 @@ const PROVIDER_ENV_KEYS = [
   "PPTOKEN_API_KEY",
   "PPTOKEN_BASE_URL",
   "PPTOKEN_MODEL",
+  "PPTOKEN_GROK_API_KEY",
+  "PPTOKEN_GROK_BASE_URL",
+  "OPENROUTER_API_KEY",
+  "OPENROUTER_BASE_URL",
+  "OPENROUTER_TEXT_MODEL",
   "DEEPSEEK_API_KEY",
   "DEEPSEEK_BASE_URL",
   "DEEPSEEK_MODEL",
@@ -63,6 +74,59 @@ test("model catalog keeps deepseek-v4-pro visible for the deepseek provider", as
         assert.equal(catalog.selectedProviderId, "deepseek")
         assert.equal(catalog.selectedModelId, "deepseek-v4-pro")
         assert.equal(catalog.models.some((item) => item.id === "deepseek-v4-pro"), true)
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    },
+  )
+})
+
+test("model catalog only advertises PPToken Grok when the Grok account is configured", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_PPTOKEN_API_KEY: "gpt-account-key",
+      AI_ENTRY_PPTOKEN_BASE_URL: "https://gpt.pptoken.example/v1",
+      AI_ENTRY_PPTOKEN_MODEL: "gpt-5.4",
+    },
+    async () => {
+      const originalFetch = globalThis.fetch
+      ;(globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = (async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: [{ id: "gpt-5.4", owned_by: "openai" }] }),
+      })) as unknown as typeof fetch
+
+      try {
+        const catalog = await getAiEntryModelCatalog({ providerId: "pptoken" })
+        assert.equal(catalog.models.some((item) => item.id === "grok-4.5"), false)
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    },
+  )
+
+  await withProviderEnv(
+    {
+      AI_ENTRY_PPTOKEN_API_KEY: "gpt-account-key",
+      AI_ENTRY_PPTOKEN_BASE_URL: "https://gpt.pptoken.example/v1",
+      AI_ENTRY_PPTOKEN_MODEL: "gpt-5.4",
+      AI_ENTRY_PPTOKEN_GROK_API_KEY: "grok-account-key",
+      AI_ENTRY_PPTOKEN_GROK_BASE_URL: "https://grok.pptoken.example/v1",
+    },
+    async () => {
+      const originalFetch = globalThis.fetch
+      ;(globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = (async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: [{ id: "gpt-5.4", owned_by: "openai" }] }),
+      })) as unknown as typeof fetch
+
+      try {
+        const catalog = await getAiEntryModelCatalog({ providerId: "pptoken" })
+        assert.equal(catalog.models.some((item) => item.id === "grok-4.5"), true)
+
+        const unscopedCatalog = await getAiEntryModelCatalog()
+        assert.equal(unscopedCatalog.models.some((item) => item.id === "grok-4.5"), true)
       } finally {
         globalThis.fetch = originalFetch
       }
@@ -579,6 +643,9 @@ test("model catalog can be aggregated across configured providers", async () => 
       AI_ENTRY_PPTOKEN_API_KEY: "pptoken-key",
       AI_ENTRY_PPTOKEN_BASE_URL: "https://pptoken.example/v1",
       AI_ENTRY_PPTOKEN_MODEL: "gpt-5.6-sol",
+      AI_ENTRY_OPENROUTER_API_KEY: "openrouter-key",
+      AI_ENTRY_OPENROUTER_BASE_URL: "https://openrouter.example/v1",
+      AI_ENTRY_OPENROUTER_MODEL: "grok-4.5",
       AI_ENTRY_AIBERM_API_KEY: "aiberm-key",
       AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
       AI_ENTRY_AIBERM_MODEL: "claude-sonnet-4.6",
@@ -634,6 +701,14 @@ test("model catalog can be aggregated across configured providers", async () => 
           } as Response
         }
 
+        if (url.startsWith("https://openrouter.example/v1/models")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ data: [{ id: "x-ai/grok-4.5", owned_by: "x-ai" }] }),
+          } as Response
+        }
+
         return {
           ok: false,
           status: 404,
@@ -643,14 +718,15 @@ test("model catalog can be aggregated across configured providers", async () => 
       }) as typeof fetch
 
       try {
-        const [pptokenCatalog, aibermCatalog, crazyrouteCatalog] = await Promise.all([
+        const [pptokenCatalog, openrouterCatalog, aibermCatalog, crazyrouteCatalog] = await Promise.all([
           getAiEntryModelCatalog({ providerId: "pptoken" }),
+          getAiEntryModelCatalog({ providerId: "openrouter" }),
           getAiEntryModelCatalog({ providerId: "aiberm" }),
           getAiEntryModelCatalog({ providerId: "crazyroute" }),
         ])
 
         const mergedGroups = new Map<string, Set<string>>()
-        for (const catalog of [pptokenCatalog, aibermCatalog, crazyrouteCatalog]) {
+        for (const catalog of [pptokenCatalog, openrouterCatalog, aibermCatalog, crazyrouteCatalog]) {
           for (const group of catalog.modelGroups) {
             const current = mergedGroups.get(group.family) || new Set<string>()
             for (const model of group.models) current.add(model.id)
@@ -658,7 +734,8 @@ test("model catalog can be aggregated across configured providers", async () => 
           }
         }
 
-        assert.deepEqual([...mergedGroups.keys()], ["openai", "anthropic", "gemini", "minimax"])
+        assert.deepEqual([...mergedGroups.keys()], ["openai", "xai", "anthropic", "gemini", "minimax"])
+        assert.equal(mergedGroups.get("xai")?.has("grok-4.5"), true)
         assert.equal(mergedGroups.get("openai")?.has("gpt-5.6-sol"), true)
         assert.equal(mergedGroups.get("anthropic")?.has("claude-sonnet-4.6"), true)
         assert.equal(mergedGroups.get("gemini")?.has("gemini-3.1-pro-preview"), true)

@@ -1,0 +1,24 @@
+{
+  "name": "aimarketing-opencode-runner-ppt-canary",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "containers": [
+    {
+      "class_name": "PptMasterCanaryContainer",
+      "image": "registry.cloudflare.com/9630806d5a588fc350ee64c395005cfa/aimarketing-opencode-runner-pptmastercontainer:ppt-reliability-20260713-r5",
+      "instance_type": "standard-4",
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "class_name": "PptMasterCanaryContainer", "name": "PPT_MASTER_CONTAINER" }
+    ]
+  },
+  "migrations": [
+    { "new_sqlite_classes": ["PptMasterContainer"], "tag": "v1" },
+    { "new_sqlite_classes": ["PptMasterCanaryContainer"], "tag": "v2" }
+  ]
+}

@@ -2,9 +2,17 @@
 !package.json
 !package-lock.json
 !tsconfig.json
+!Dockerfile
 !lib/
 !lib/**
+lib/lead-tools/ppt-master-assets/
 !infra/
 !infra/railway/
 !infra/railway/ppt-master-worker/
 !infra/railway/ppt-master-worker/**
+!infra/railway/opencode-runtime/
+!infra/railway/opencode-runtime/**
+!infra/cloudflare/
+!infra/cloudflare/opencode-runner/
+!infra/cloudflare/opencode-runner/runtime/
+!infra/cloudflare/opencode-runner/runtime/**

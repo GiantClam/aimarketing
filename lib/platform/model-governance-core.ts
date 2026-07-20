@@ -1,6 +1,6 @@
 import type { AiEntryModelCatalog, AiEntryModelGroup, AiEntryModelOption } from "@/lib/ai-entry/model-catalog"
 import { serializeAiEntryModelSelection } from "@/lib/ai-entry/model-selection"
-import type { AiEntryProviderId } from "@/lib/ai-entry/provider-routing"
+import { getConfiguredAiEntryProviderForModel, type AiEntryProviderId } from "@/lib/ai-entry/provider-routing"
 import type { EnterpriseModelRouteAssignment } from "@/lib/platform/model-config"
 
 export type ModelGovernanceUser = {
@@ -168,13 +168,35 @@ export function buildGovernedAiEntryModelCatalog(params: {
   const candidateProviders = params.runtimeProviders
     .filter((provider) => AI_ENTRY_PROVIDER_IDS.has(provider.id as AiEntryProviderId))
     .filter((provider) => provider.scope === "text" && provider.configured)
-    .map((provider) => ({
-      providerId: provider.id as AiEntryProviderId,
-      label: getRuntimeProviderLabel(provider.id),
-      modelId: normalizeText(provider.model),
-      baseUrl: provider.baseURL,
-      active: provider.active,
-    }))
+    .flatMap((provider) => {
+      const providerId = provider.id as AiEntryProviderId
+      const baseProvider = {
+        providerId,
+        label: getRuntimeProviderLabel(provider.id),
+        modelId: normalizeText(provider.model),
+        baseUrl: provider.baseURL,
+        active: provider.active,
+      }
+      const candidates = baseProvider.modelId ? [baseProvider] : []
+
+      // PPToken maintains separate GPT and Grok accounts. The platform
+      // runtime snapshot intentionally exposes only the provider default, so
+      // add Grok here when its dedicated credentials are actually configured.
+      // This is the governed catalog consumed by /api/ai/models.
+      if (providerId === "pptoken") {
+        const grokProvider = getConfiguredAiEntryProviderForModel("pptoken", "grok-4.5")
+        if (grokProvider) {
+          candidates.push({
+            ...baseProvider,
+            modelId: "grok-4.5",
+            baseUrl: grokProvider.baseURL,
+            active: false,
+          })
+        }
+      }
+
+      return candidates
+    })
     .filter((provider) => provider.modelId)
   const accessibleProviders = filterAssignedItems({
     user: params.user,

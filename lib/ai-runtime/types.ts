@@ -93,7 +93,20 @@ export type CapabilityExecutionRequest = {
   input: Record<string, unknown>
   source: CapabilityExecutionSource
   requestId?: string
+  /** Provider-level idempotency key. Adapters must forward it when supported. */
+  idempotencyKey?: string
+  /** Cancels local provider I/O; it does not imply upstream task cancellation. */
+  signal?: AbortSignal
   runtimeContext?: CapabilityRuntimeContext
+}
+
+/**
+ * Incremental runtime contract used by workflow attempts. Kept as an alias so
+ * existing capability callers can continue using CapabilityExecutionRequest.
+ */
+export type CapabilityExecutionRequestV2 = CapabilityExecutionRequest & {
+  idempotencyKey?: string
+  signal?: AbortSignal
 }
 
 export type CapabilityTaskQueryRequest = {
@@ -147,7 +160,24 @@ export type ProviderConfigContext = {
 
 export type ProviderAdapter = {
   provider: ModelProviderId
+  capabilities?: readonly ModelCapability[]
   isConfigured(input: ProviderConfigContext): boolean
   execute(input: CapabilityExecutionRequest, model: ModelDefinition): Promise<CapabilityExecutionResult>
   query?(input: CapabilityTaskQueryRequest, model: ModelDefinition): Promise<CapabilityTaskQueryResult>
+  cancel?(input: CapabilityTaskCancelRequest, model: ModelDefinition): Promise<CapabilityTaskCancelResult>
+  upstreamCancelSupported?: boolean
+}
+
+export type CapabilityTaskCancelRequest = CapabilityTaskQueryRequest & {
+  providerTaskId: string
+  reason: "user_cancelled" | "fail_fast" | "timeout"
+}
+
+export type CapabilityTaskCancelResult = {
+  status: "cancel_requested" | "cancelled" | "already_terminal" | "not_supported"
+  providerRequestId?: string | null
+}
+
+export type ProviderAdapterV2 = ProviderAdapter & {
+  execute(input: CapabilityExecutionRequestV2, model: ModelDefinition): Promise<CapabilityExecutionResult>
 }

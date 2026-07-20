@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   buildExecutableWorkflowPlan,
   collectWorkflowRetryNodeKeys,
+  collectWorkflowNodeInput,
   retryWorkflowNodeExecution,
   runWorkflowDefinition,
   validateWorkflowGraph,
@@ -53,6 +54,35 @@ test("graph validation accepts upload asset connections into typed file inputs",
       edges: [{ sourceNodeKey: "upload-1", targetNodeKey: "image-1", inputName: "images" }],
     }),
   )
+})
+
+test("semantic targetPortId projects only the selected value kind when inputName is absent", () => {
+  const nodes: WorkflowDefinitionNode[] = [
+    { nodeKey: "upload", type: "upload", title: "Upload", positionX: 0, positionY: 0, config: {} },
+    { nodeKey: "foreach", type: "foreach", title: "For Each", positionX: 0, positionY: 0, config: {} },
+  ]
+  const result = collectWorkflowNodeInput({
+    nodeKey: "foreach",
+    nodes,
+    parentMap: new Map([["foreach", ["upload"]]]),
+    edges: [{ sourceNodeKey: "upload", targetNodeKey: "foreach", sourcePortId: "asset", targetPortId: "items.asset" }],
+    nodeStates: {
+      upload: {
+        nodeKey: "upload",
+        status: "succeeded",
+        attemptCount: 1,
+        output: {
+          asset: [{ source: "upload", url: "https://example.com/a.png", fileName: "a", mimeType: "image/png" }],
+          image: [{ url: "https://example.com/b.png", title: "b", mimeType: "image/png" }],
+        },
+        startedAt: null,
+        finishedAt: null,
+        creditsConsumed: 0,
+      },
+    },
+  })
+  assert.equal(result.asset?.length, 1)
+  assert.equal(result.image?.length, 0)
 })
 
 test("runWorkflowDefinition executes serial and parallel branches deterministically", async () => {

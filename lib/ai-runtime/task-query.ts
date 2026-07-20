@@ -7,7 +7,7 @@ export async function queryCapabilityTask(input: CapabilityTaskQueryRequest) {
   if (!model) {
     throw new Error("capability_model_not_found")
   }
-  const adapter = getProviderAdapter(model.provider)
+  const adapter = getProviderAdapter(model.provider, model.capability)
   if (!adapter?.query) {
     throw new Error("capability_provider_query_not_supported")
   }

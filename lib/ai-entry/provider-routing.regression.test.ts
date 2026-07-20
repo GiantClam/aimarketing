@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { executeAiEntryWithProviderFailover } from "./provider-routing"
+import {
+  executeAiEntryWithProviderFailover,
+  getConfiguredAiEntryProviderForModel,
+} from "./provider-routing"
 
 const PROVIDER_ENV_KEYS = [
   "AI_ENTRY_DEEPSEEK_API_KEY",
@@ -10,6 +13,8 @@ const PROVIDER_ENV_KEYS = [
   "AI_ENTRY_PPTOKEN_API_KEY",
   "AI_ENTRY_PPTOKEN_BASE_URL",
   "AI_ENTRY_PPTOKEN_MODEL",
+  "AI_ENTRY_PPTOKEN_GROK_API_KEY",
+  "AI_ENTRY_PPTOKEN_GROK_BASE_URL",
   "AI_ENTRY_OPENROUTER_API_KEY",
   "AI_ENTRY_OPENROUTER_BASE_URL",
   "AI_ENTRY_OPENROUTER_MODEL",
@@ -25,6 +30,8 @@ const PROVIDER_ENV_KEYS = [
   "PPTOKEN_API_KEY",
   "PPTOKEN_BASE_URL",
   "PPTOKEN_MODEL",
+  "PPTOKEN_GROK_API_KEY",
+  "PPTOKEN_GROK_BASE_URL",
   "DEEPSEEK_API_KEY",
   "DEEPSEEK_BASE_URL",
   "DEEPSEEK_MODEL",
@@ -38,6 +45,41 @@ const PROVIDER_ENV_KEYS = [
   "CRAZYROUTE_BASE_URL",
   "CRAZYROUTER_BASE_URL",
 ] as const
+
+test("pptoken resolves separate GPT and Grok credentials by model", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_PPTOKEN_API_KEY: "gpt-account-key",
+      AI_ENTRY_PPTOKEN_BASE_URL: "https://gpt.pptoken.example/v1",
+      AI_ENTRY_PPTOKEN_MODEL: "gpt-5.4",
+      AI_ENTRY_PPTOKEN_GROK_API_KEY: "grok-account-key",
+      AI_ENTRY_PPTOKEN_GROK_BASE_URL: "https://grok.pptoken.example/v1",
+    },
+    async () => {
+      const gpt = getConfiguredAiEntryProviderForModel("pptoken", "gpt-5.4")
+      const grok = getConfiguredAiEntryProviderForModel("pptoken", "grok-4.5")
+
+      assert.equal(gpt?.apiKey, "gpt-account-key")
+      assert.equal(gpt?.baseURL, "https://gpt.pptoken.example/v1")
+      assert.equal(grok?.apiKey, "grok-account-key")
+      assert.equal(grok?.baseURL, "https://grok.pptoken.example/v1")
+    },
+  )
+})
+
+test("pptoken Grok resolution fails closed when its dedicated key is missing", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_PPTOKEN_API_KEY: "gpt-account-key",
+      AI_ENTRY_PPTOKEN_BASE_URL: "https://gpt.pptoken.example/v1",
+      AI_ENTRY_PPTOKEN_MODEL: "grok-4.5",
+    },
+    async () => {
+      assert.equal(getConfiguredAiEntryProviderForModel("pptoken", "grok-4.5"), null)
+      assert.equal(getConfiguredAiEntryProviderForModel("pptoken", "gpt-5.4")?.apiKey, "gpt-account-key")
+    },
+  )
+})
 
 test("provider order: non-openai defaults prefer deepseek when it is configured", async () => {
   await withProviderEnv(
@@ -178,6 +220,39 @@ test("selected model no extra retry when selected model equals configured defaul
 
       assert.equal(result.providerId, "aiberm")
       assert.equal(result.model, "aiberm/default-chat-model")
+      assert.deepEqual(attempts, ["aiberm:aiberm/default-chat-model"])
+    },
+  )
+})
+
+test("provider failover can be explicitly disabled", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_AIBERM_API_KEY: "test-key-a",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "aiberm/default-chat-model",
+      AI_ENTRY_CRAZYROUTE_API_KEY: "test-key-c",
+      AI_ENTRY_CRAZYROUTE_BASE_URL: "https://crazy.example/v1",
+      AI_ENTRY_CRAZYROUTE_MODEL: "crazy/default-chat-model",
+    },
+    async () => {
+      const attempts: string[] = []
+
+      await assert.rejects(
+        executeAiEntryWithProviderFailover(
+          async (params) => {
+            attempts.push(`${params.providerId}:${params.model}`)
+            throw new Error("provider unavailable")
+          },
+          {
+            preferredProviderId: "aiberm",
+            preferredModel: "aiberm/default-chat-model",
+            forcePreferredProvider: true,
+            disableProviderFailover: true,
+          },
+        ),
+        /provider unavailable/,
+      )
       assert.deepEqual(attempts, ["aiberm:aiberm/default-chat-model"])
     },
   )
@@ -346,9 +421,11 @@ test("provider fallback: pptoken degrades to aiberm then crazyroute", async () =
     },
     async () => {
       const attempts: string[] = []
+      const fallbackReasons: string[] = []
 
       const result = await executeAiEntryWithProviderFailover(async (params) => {
         attempts.push(`${params.providerId}:${params.model}`)
+        fallbackReasons.push(params.fallbackReason || "none")
         if (params.providerId === "pptoken" || params.providerId === "aiberm") {
           throw new Error("provider temporarily unavailable")
         }
@@ -362,6 +439,7 @@ test("provider fallback: pptoken degrades to aiberm then crazyroute", async () =
         "aiberm:aiberm/default-chat-model",
         "crazyroute:crazy/default-chat-model",
       ])
+      assert.deepEqual(fallbackReasons, ["none", "provider_error", "provider_error"])
     },
   )
 })

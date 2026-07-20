@@ -48,6 +48,7 @@ function formatElapsedSeconds(elapsedSeconds: number, isZh: boolean) {
 
 export function TaskRunPartView({ part, isZh }: { part: TaskRunPart; isZh: boolean }) {
   const { taskRun } = part
+  const isOpenCodeTask = taskRun.task_type === "opencode_agent_run"
   const [nowMs, setNowMs] = useState(() => Date.now())
   const percent = Math.max(
     0,
@@ -98,7 +99,15 @@ export function TaskRunPartView({ part, isZh }: { part: TaskRunPart; isZh: boole
             ) : (
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
             )}
-            <span className="truncate">{isZh ? "PPT 预览任务" : "PPT preview task"}</span>
+            <span className="truncate">
+              {isOpenCodeTask
+                ? isZh
+                  ? "智能体任务"
+                  : "Agent task"
+                : isZh
+                  ? "PPT 预览任务"
+                  : "PPT preview task"}
+            </span>
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
             {taskRun.stage_label}

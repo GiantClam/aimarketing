@@ -29,6 +29,13 @@ export function normalizePendingTaskEvents(raw: unknown): PendingTaskEvent[] {
     .sort((a, b) => a.at - b.at)
 }
 
+export function settlePendingTaskEvents(
+  events: PendingTaskEvent[],
+  status: Extract<PendingTaskEventStatus, "completed" | "failed"> = "completed",
+) {
+  return events.map((event) => event.status === "running" ? { ...event, status } : event)
+}
+
 export function arePendingTaskEventsEqual(left: PendingTaskEvent[], right: PendingTaskEvent[]) {
   if (left.length !== right.length) return false
   return left.every((item, index) => {

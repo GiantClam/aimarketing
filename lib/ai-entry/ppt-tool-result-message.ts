@@ -69,7 +69,7 @@ const PPT_PREVIEW_INVALIDATION_CONTEXT_PREFIX = "<!-- ai-entry-ppt-preview-inval
 const PPT_TEMPLATE_RECOMMENDATION_CONTEXT_PREFIX = "<!-- ai-entry-ppt-template-recommendations:"
 const PPT_PREVIEW_CONTEXT_SUFFIX = "-->"
 const PPT_TEMPLATE_RECOMMENDATION_BLOCK_PATTERN =
-  /(?:^|\n)(?:已为这次需求推荐 4 个模板：|Recommended 4 templates for this request:)\n[\s\S]*?<!-- ai-entry-ppt-template-recommendations:[\s\S]*?-->(?=\n|$)/gu
+  /(?:^|\n)(?:已为这次需求推荐 \d+ 个模板：|Recommended \d+ templates for this request:)\n[\s\S]*?<!-- ai-entry-ppt-template-recommendations:[\s\S]*?-->(?=\n|$)/gu
 
 type ArtifactDeliverableKind = "html" | "pptx" | "generic"
 
@@ -346,7 +346,9 @@ export function buildPptTemplateRecommendationMessage(input: {
     })),
   })
   const lines = [
-    isZh ? "已为这次需求推荐 4 个模板：" : "Recommended 4 templates for this request:",
+    isZh
+      ? `已为这次需求推荐 ${recommendedTemplates.length} 个模板：`
+      : `Recommended ${recommendedTemplates.length} template${recommendedTemplates.length === 1 ? "" : "s"} for this request:`,
     ...(input.title ? [`- ${isZh ? "标题" : "Title"}: ${input.title}`] : []),
     ...recommendedTemplates.map((item) => {
       const label = item.templateLabel || item.styleName || item.templateId

@@ -6,7 +6,6 @@ import {
   getLeadToolPptRuntimeSlideModel,
   getLeadToolPptPreviewProvider,
   getLeadToolPptRuntimeSlideProvider,
-  getLeadToolPreviewModel,
   resolvePptMasterSlideTimeoutMs,
 } from "@/lib/lead-tools/config"
 import {
@@ -84,22 +83,15 @@ export function buildPreviewProviderMessages(params: {
   systemPrompt: string
   userPrompt: string
 }) {
-  if (params.providerId === "deepseek") {
-    return {
-      system: undefined,
-      prompt: [
-        "System instructions:",
-        params.systemPrompt,
-        "",
-        "User request:",
-        params.userPrompt,
-      ].join("\n"),
-    }
-  }
-
   return {
-    system: params.systemPrompt,
-    prompt: params.userPrompt,
+    system: undefined,
+    prompt: [
+      "System instructions:",
+      params.systemPrompt,
+      "",
+      "User request:",
+      params.userPrompt,
+    ].join("\n"),
   }
 }
 
@@ -182,8 +174,9 @@ export function getLeadToolPreviewProviderTimeoutMs(providerId: Exclude<LeadTool
 export function resolveRuntimeSlideExecutionConfig(
   deck: Pick<PptPreviewDeck, "previewModel" | "provider" | "runtimeSlideModel" | "runtimeSlideProvider">,
 ) {
-  const requestedModel =
-    normalizeText(deck.runtimeSlideModel) || getLeadToolPptRuntimeSlideModel() || deck.previewModel || "MiniMax-M2.7-highspeed"
+  const requestedModel = normalizePptRuntimeSlideModel(
+    normalizeText(deck.runtimeSlideModel) || getLeadToolPptRuntimeSlideModel() || deck.previewModel,
+  )
   const inferredProviderId = inferPreviewProviderId(requestedModel)
   const preferredProviderId = resolveLeadToolPreviewProviderPreference(
     requestedModel,
@@ -889,8 +882,34 @@ function hasLeadToolDeepseekProvider() {
   return getConfiguredAiEntryProviders().some((provider) => provider.id === "deepseek")
 }
 
+const PPT_PREVIEW_RUNTIME_MODELS = new Set([
+  "MiniMax-M2.7-highspeed",
+  "MiniMax-M3",
+  "deepseek-v4-pro",
+  "deepseek-v4-flash",
+  "gpt-5.4",
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+  "step-3.7-flash",
+])
+
+export function normalizePptPreviewModel(value: unknown) {
+  const normalized = typeof value === "string" ? value.trim() : ""
+  if (normalized && PPT_PREVIEW_RUNTIME_MODELS.has(normalized)) return normalized
+  return "deepseek-v4-pro"
+}
+
+export function normalizePptRuntimeSlideModel(value: unknown) {
+  const normalized = normalizeText(value)
+  if (/^(?:openai|openai-compatible)\//iu.test(normalized)) {
+    return "deepseek-v4-pro"
+  }
+  return normalized || "deepseek-v4-pro"
+}
+
 function resolveRequestedPreviewModel(request: PptPreviewRequest) {
-  return request.model ?? getLeadToolPreviewModel("ai-ppt-preview")
+  return normalizePptPreviewModel(request.model)
 }
 
 function buildPptPlanSchema() {
@@ -1082,7 +1101,11 @@ export function normalizePptMasterRuntimeProviderError(
     return `ppt_master_runtime_provider_headers_timeout:${normalizedProvider}:${normalizedModel}`
   }
 
-  if (/(?:fetch failed|connection error|connect timeout|etimedout|econnreset|econnrefused|enotfound)/iu.test(message)) {
+  if (
+    /(?:fetch failed|connection error|connection terminated unexpectedly|cannot connect to api|other side closed|connect timeout|etimedout|econnreset|econnrefused|enotfound)/iu.test(
+      message,
+    )
+  ) {
     return `ppt_master_runtime_provider_connect_failed:${normalizedProvider}:${normalizedModel}`
   }
 
@@ -1095,15 +1118,25 @@ async function generatePreviewTextWithProviderTimeout(params: {
   run: () => Promise<string>
   timeoutMs?: number
 }) {
-  try {
-    return await withTaskTimeout(
-      params.run(),
-      params.timeoutMs ?? getLeadToolPreviewProviderTimeoutMs(params.providerId),
-      `ppt_master_runtime_provider_timeout:${params.providerId}:${params.model}`,
-    )
-  } catch (error) {
-    throw new Error(normalizePptMasterRuntimeProviderError(error, params.providerId, params.model))
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      return await withTaskTimeout(
+        params.run(),
+        params.timeoutMs ?? getLeadToolPreviewProviderTimeoutMs(params.providerId),
+        `ppt_master_runtime_provider_timeout:${params.providerId}:${params.model}`,
+      )
+    } catch (error) {
+      const message = normalizePptMasterRuntimeProviderError(error, params.providerId, params.model)
+      const retryableTransportFailure = message.startsWith("ppt_master_runtime_provider_connect_failed:")
+      if (!retryableTransportFailure || attempt >= 2) {
+        throw new Error(message)
+      }
+
+      await sleep(500 * attempt)
+    }
   }
+
+  throw new Error(`ppt_master_runtime_provider_connect_failed:${params.providerId}:${params.model}`)
 }
 
 async function generateTextWithLeadToolPreviewProvider(params: {
@@ -1134,10 +1167,15 @@ async function generateTextWithLeadToolPreviewProvider(params: {
       model: params.model,
       timeoutMs: params.providerTimeoutMs,
       run: async () => {
+        const messages = buildPreviewProviderMessages({
+          providerId: "minimax",
+          systemPrompt: params.systemPrompt,
+          userPrompt: params.userPrompt,
+        })
         const response = await generateText({
           model: provider.chat(params.model),
-          system: params.systemPrompt,
-          prompt: params.userPrompt,
+          system: messages.system,
+          prompt: messages.prompt,
         })
 
         const text = response.text.trim()
@@ -1245,10 +1283,15 @@ async function generateTextWithLeadToolPreviewProvider(params: {
       model: resolvedModel,
       timeoutMs: params.providerTimeoutMs,
       run: async () => {
+        const messages = buildPreviewProviderMessages({
+          providerId: "stepfun",
+          systemPrompt: params.systemPrompt,
+          userPrompt: params.userPrompt,
+        })
         const response = await generateText({
           model: provider.chat(resolvedModel),
-          system: params.systemPrompt,
-          prompt: params.userPrompt,
+          system: messages.system,
+          prompt: messages.prompt,
         })
 
         const text = response.text.trim()
@@ -1272,34 +1315,55 @@ async function generateTextWithLeadToolPreviewProvider(params: {
       throw new Error(`lead_tool_provider_missing:pptoken:${params.model}`)
     }
 
-    const result = await executeAiEntryWithProviderFailover(
-      async (providerRun) => {
-        return generatePreviewTextWithProviderTimeout({
-          providerId: "pptoken",
-          model: providerRun.model,
-          timeoutMs: params.providerTimeoutMs,
-          run: async () => {
-            const response = await generateText({
-              model: providerRun.provider.chat(providerRun.model),
-              system: params.systemPrompt,
-              prompt: params.userPrompt,
-            })
+    let result: Awaited<ReturnType<typeof executeAiEntryWithProviderFailover<string>>>
+    try {
+      result = await executeAiEntryWithProviderFailover(
+        async (providerRun) => {
+          return generatePreviewTextWithProviderTimeout({
+            providerId: "pptoken",
+            model: providerRun.model,
+            timeoutMs: params.providerTimeoutMs,
+            run: async () => {
+              const messages = buildPreviewProviderMessages({
+                providerId: "pptoken",
+                systemPrompt: params.systemPrompt,
+                userPrompt: params.userPrompt,
+              })
+              const response = await generateText({
+                model: providerRun.provider.chat(providerRun.model),
+                system: messages.system,
+                prompt: messages.prompt,
+              })
 
-            const text = response.text.trim()
-            if (!text) {
-              throw new Error("lead_tool_preview_empty_response")
-            }
+              const text = response.text.trim()
+              if (!text) throw new Error("lead_tool_preview_empty_response")
+              return text
+            },
+          })
+        },
+        {
+          preferredProviderId: "pptoken",
+          preferredModel: params.model,
+          forcePreferredProvider: true,
+        },
+      )
+    } catch (error) {
+      const detail = normalizePptMasterRuntimeProviderError(error, "pptoken", params.model)
+      if (
+        !hasLeadToolMinimaxProvider() ||
+        (!detail.startsWith("ppt_master_runtime_provider_timeout:") &&
+          !detail.startsWith("ppt_master_runtime_provider_connect_failed:"))
+      ) {
+        throw error
+      }
 
-            return text
-          },
-        })
-      },
-      {
-        preferredProviderId: "pptoken",
-        preferredModel: params.model,
-        forcePreferredProvider: true,
-      },
-    )
+      const fallback = getLeadToolMinimaxConfig()
+      return generateTextWithLeadToolPreviewProvider({
+        ...params,
+        model: fallback.model || "MiniMax-M2.7-highspeed",
+        preferredProviderId: "minimax",
+      })
+    }
 
     return {
       text: result.result,
@@ -1382,10 +1446,15 @@ async function generateTextWithLeadToolPreviewProvider(params: {
       model: resolvedModel,
       timeoutMs: params.providerTimeoutMs,
       run: async () => {
+        const messages = buildPreviewProviderMessages({
+          providerId: "minimax",
+          systemPrompt: params.systemPrompt,
+          userPrompt: params.userPrompt,
+        })
         const response = await generateText({
           model: provider.chat(resolvedModel),
-          system: params.systemPrompt,
-          prompt: params.userPrompt,
+          system: messages.system,
+          prompt: messages.prompt,
         })
 
         const text = response.text.trim()
@@ -1417,10 +1486,15 @@ async function generateTextWithLeadToolPreviewProvider(params: {
       model: resolvedModel,
       timeoutMs: params.providerTimeoutMs,
       run: async () => {
+        const messages = buildPreviewProviderMessages({
+          providerId: "stepfun",
+          systemPrompt: params.systemPrompt,
+          userPrompt: params.userPrompt,
+        })
         const response = await generateText({
           model: provider.chat(resolvedModel),
-          system: params.systemPrompt,
-          prompt: params.userPrompt,
+          system: messages.system,
+          prompt: messages.prompt,
         })
 
         const text = response.text.trim()
@@ -1452,10 +1526,15 @@ async function generateTextWithLeadToolPreviewProvider(params: {
       model: resolvedModel,
       timeoutMs: params.providerTimeoutMs,
       run: async () => {
+        const messages = buildPreviewProviderMessages({
+          providerId: "glm",
+          systemPrompt: params.systemPrompt,
+          userPrompt: params.userPrompt,
+        })
         const response = await generateText({
           model: provider.chat(resolvedModel),
-          system: params.systemPrompt,
-          prompt: params.userPrompt,
+          system: messages.system,
+          prompt: messages.prompt,
         })
 
         const text = response.text.trim()
@@ -1481,10 +1560,15 @@ async function generateTextWithLeadToolPreviewProvider(params: {
           providerId: "pptoken",
           model: providerRun.model,
           run: async () => {
+            const messages = buildPreviewProviderMessages({
+              providerId: "pptoken",
+              systemPrompt: params.systemPrompt,
+              userPrompt: params.userPrompt,
+            })
             const response = await generateText({
               model: providerRun.provider.chat(providerRun.model),
-              system: params.systemPrompt,
-              prompt: params.userPrompt,
+              system: messages.system,
+              prompt: messages.prompt,
             })
 
             const text = response.text.trim()
@@ -2304,21 +2388,29 @@ function buildPptMasterVariantStyle(
   descriptor: PptPreviewVariantDescriptor,
   reference: ImportedPptMasterTemplateReference,
 ): PptPreviewVariantStyle {
-  const background = resolveOfficialTemplateColor(reference, ["bg", "background"], ["bg", "background"])
-  const foreground = resolveOfficialTemplateColor(reference, ["text", "primary"], ["text", "primary", "neutral-dark"])
-  const accent = resolveOfficialTemplateColor(reference, ["accent", "secondary_accent"], ["accent", "primary"])
-  const panel = resolveOfficialTemplateColor(
+  const officialBackground = resolveOfficialTemplateColor(reference, ["bg", "background"], ["bg", "background"])
+  const officialForeground = resolveOfficialTemplateColor(reference, ["text", "primary"], ["text", "primary", "neutral-dark"])
+  const officialAccent = resolveOfficialTemplateColor(reference, ["accent", "secondary_accent"], ["accent", "primary"])
+  const officialPanel = resolveOfficialTemplateColor(
     reference,
     ["secondary_bg", "bg_secondary", "bg_paper", "card_bg", "panel", "surface"],
     ["secondary_bg", "bg_secondary", "bg_paper", "card_bg", "panel", "surface"],
   )
-  const border = resolveOfficialTemplateColor(reference, ["border"], ["border"])
+  const officialBorder = resolveOfficialTemplateColor(reference, ["border"], ["border"])
+  const allowsPaletteFallback = reference.kind === "layout" || reference.kind === "brand"
+  const background = officialBackground ?? (allowsPaletteFallback ? descriptor.style.palette.background : null)
+  const foreground = officialForeground ?? (allowsPaletteFallback ? descriptor.style.palette.foreground : null)
+  const accent = officialAccent ?? (allowsPaletteFallback ? descriptor.style.palette.accent : null)
+  const panel = officialPanel ?? (allowsPaletteFallback ? descriptor.style.palette.panel : null)
+  const border = officialBorder ?? (allowsPaletteFallback ? descriptor.style.palette.border : null)
 
   if (!background || !foreground || !accent || !panel || !border) {
     throw new Error(`ppt_master_template_visual_contract_missing:${reference.templateId}`)
   }
 
   const officialContract = [reference.designSpecContent, reference.specLockContent].filter(Boolean).join("\n\n")
+  const contractGuidance = officialContract ||
+    `Use the native SVG roster from ${reference.sourcePathLabel}; keep its page structures and compose content within those layouts.`
   return {
     ...descriptor.style,
     name: reference.designSpecTitle || reference.templateId,
@@ -2326,7 +2418,7 @@ function buildPptMasterVariantStyle(
     stylePrompt: [
       `Use only the official ppt-master template ${reference.templateId}.`,
       "The following files are the source of truth. Do not substitute a local preset, frontend-slides style, Swiss Grid style, or custom palette.",
-      officialContract,
+      contractGuidance,
     ].join("\n\n"),
     palette: { background, foreground, accent, panel, border },
     strengths: [],
@@ -2778,13 +2870,6 @@ export async function generateLeadToolPptPreview(request: PptPreviewRequest): Pr
 }
 
 export async function generateLeadToolPptStoryDeck(request: PptPreviewRequest): Promise<PptPreviewDeck> {
-  if (
-    request.previewRuntime === "ppt-master-agent" &&
-    (resolvePptPreviewTemplateMode(request) !== "single-template" || !request.templateId)
-  ) {
-    throw new Error("ppt_master_template_selection_required")
-  }
-
   const resolvedPageCount = await resolveLeadToolPptPageCount(request)
   const resolvedRequest = {
     ...request,

@@ -1,36 +1,23 @@
-export const WORKFLOW_NODE_TYPES = [
-  "upload",
-  "text_input",
-  "file_create",
-  "writer",
-  "llm_generate",
-  "agent_execute",
-  "image_generate",
-  "video_generate",
-  "digital_human",
-  "music_generate",
-  "voice_synthesis",
-  "audio_generate",
-  "ppt_generate",
-  "knowledge_retrieve",
-  "knowledge_write",
-  "product_store",
-] as const
+import { workflowNodeRegistry } from "@/lib/workflows/node-definitions/registry"
+import {
+  WORKFLOW_NODE_TYPES,
+  WORKFLOW_VALUE_KINDS,
+  type WorkflowLocale,
+  type WorkflowNodeDefinitionV2,
+  type WorkflowNodeType,
+  type WorkflowValueKind,
+} from "@/lib/workflows/node-definitions/types"
 
-export const WORKFLOW_VALUE_KINDS = ["text", "asset", "image", "video", "audio", "ppt"] as const
-
-export type WorkflowNodeType = (typeof WORKFLOW_NODE_TYPES)[number]
-export type WorkflowValueKind = (typeof WORKFLOW_VALUE_KINDS)[number]
-export type WorkflowLocale = "zh" | "en"
+export { WORKFLOW_NODE_TYPES, WORKFLOW_VALUE_KINDS }
+export type { WorkflowLocale, WorkflowNodeType, WorkflowValueKind }
 
 export type WorkflowNodeInputName = "text" | "assets" | "images" | "videos" | "audios" | "presentations"
 
-export type WorkflowNodeDefinition = {
-  type: WorkflowNodeType
-  title: string
-  outputKinds: WorkflowValueKind[]
-  acceptedInputKinds: WorkflowValueKind[]
-}
+/**
+ * Kept as the public node metadata type for existing callers. New metadata is
+ * owned by the Node Definition Registry and exposed through this alias.
+ */
+export type WorkflowNodeDefinition = WorkflowNodeDefinitionV2
 
 export type WorkflowDefinitionNode = {
   nodeKey: string
@@ -42,184 +29,16 @@ export type WorkflowDefinitionNode = {
 }
 
 export type WorkflowDefinitionEdge = {
+  edgeKey?: string
   sourceNodeKey: string
+  sourcePortId?: string | null
   targetNodeKey: string
+  targetPortId?: string | null
   inputName?: string | null
 }
 
-const WORKFLOW_NODE_TITLE_CATALOG: Record<WorkflowNodeType, Record<WorkflowLocale, string>> = {
-  upload: {
-    zh: "上传",
-    en: "Upload",
-  },
-  text_input: {
-    zh: "文本输入",
-    en: "Text Input",
-  },
-  file_create: {
-    zh: "文件",
-    en: "File",
-  },
-  writer: {
-    zh: "文章写作",
-    en: "Writer",
-  },
-  llm_generate: {
-    zh: "模型生成",
-    en: "LLM Generate",
-  },
-  agent_execute: {
-    zh: "智能体",
-    en: "Agent",
-  },
-  image_generate: {
-    zh: "图片生成",
-    en: "Image Generate",
-  },
-  video_generate: {
-    zh: "视频生成",
-    en: "Video Generate",
-  },
-  digital_human: {
-    zh: "口播数字人",
-    en: "Digital Human",
-  },
-  music_generate: {
-    zh: "音乐生成",
-    en: "Music Generate",
-  },
-  voice_synthesis: {
-    zh: "语音合成",
-    en: "Voice Synthesis",
-  },
-  audio_generate: {
-    zh: "音频生成",
-    en: "Audio Generate",
-  },
-  ppt_generate: {
-    zh: "PPT 生成",
-    en: "PPT Generate",
-  },
-  knowledge_retrieve: {
-    zh: "知识检索",
-    en: "Knowledge Retrieve",
-  },
-  knowledge_write: {
-    zh: "知识写入",
-    en: "Knowledge Write",
-  },
-  product_store: {
-    zh: "资产库存储",
-    en: "Asset Library",
-  },
-}
-
-const WORKFLOW_NODE_LEGACY_TITLES: Partial<Record<WorkflowNodeType, string[]>> = {
-  llm_generate: ["文案生成", "大模型"],
-  product_store: ["作品库存储", "素材库存储", "Work Library"],
-}
-
-export const WORKFLOW_NODE_DEFINITIONS: Record<WorkflowNodeType, WorkflowNodeDefinition> = {
-  upload: {
-    type: "upload",
-    title: "Upload",
-    outputKinds: ["asset"],
-    acceptedInputKinds: [],
-  },
-  text_input: {
-    type: "text_input",
-    title: "Text Input",
-    outputKinds: ["text"],
-    acceptedInputKinds: [],
-  },
-  file_create: {
-    type: "file_create",
-    title: "File",
-    outputKinds: ["asset"],
-    acceptedInputKinds: ["text"],
-  },
-  writer: {
-    type: "writer",
-    title: "Writer",
-    outputKinds: ["text"],
-    acceptedInputKinds: ["text"],
-  },
-  llm_generate: {
-    type: "llm_generate",
-    title: "LLM Generate",
-    outputKinds: ["text"],
-    acceptedInputKinds: ["text"],
-  },
-  agent_execute: {
-    type: "agent_execute",
-    title: "Agent",
-    outputKinds: ["text"],
-    acceptedInputKinds: ["text", "asset", "image", "video", "audio", "ppt"],
-  },
-  image_generate: {
-    type: "image_generate",
-    title: "Image Generate",
-    outputKinds: ["image"],
-    acceptedInputKinds: ["text", "image"],
-  },
-  video_generate: {
-    type: "video_generate",
-    title: "Video Generate",
-    outputKinds: ["video"],
-    acceptedInputKinds: ["text", "image", "video"],
-  },
-  digital_human: {
-    type: "digital_human",
-    title: "Digital Human",
-    outputKinds: ["video"],
-    acceptedInputKinds: ["text", "image", "audio"],
-  },
-  music_generate: {
-    type: "music_generate",
-    title: "Music Generate",
-    outputKinds: ["audio"],
-    acceptedInputKinds: ["text", "audio"],
-  },
-  voice_synthesis: {
-    type: "voice_synthesis",
-    title: "Voice Synthesis",
-    outputKinds: ["audio"],
-    acceptedInputKinds: ["text"],
-  },
-  audio_generate: {
-    type: "audio_generate",
-    title: "Audio Generate",
-    outputKinds: ["audio"],
-    acceptedInputKinds: ["text", "audio"],
-  },
-  ppt_generate: {
-    type: "ppt_generate",
-    title: "PPT Generate",
-    outputKinds: ["ppt"],
-    acceptedInputKinds: ["text", "image"],
-  },
-  knowledge_retrieve: {
-    type: "knowledge_retrieve",
-    title: "Knowledge Retrieve",
-    outputKinds: ["text"],
-    acceptedInputKinds: ["text", "asset"],
-  },
-  knowledge_write: {
-    type: "knowledge_write",
-    title: "Knowledge Write",
-    outputKinds: ["text", "asset", "image", "video", "audio", "ppt"],
-    acceptedInputKinds: ["text", "asset", "image", "video", "audio", "ppt"],
-  },
-  product_store: {
-    type: "product_store",
-    title: "Asset Library",
-    outputKinds: [],
-    acceptedInputKinds: ["asset", "image", "video", "audio", "ppt"],
-  },
-}
-
 export function isWorkflowNodeType(value: string): value is WorkflowNodeType {
-  return value in WORKFLOW_NODE_DEFINITIONS
+  return workflowNodeRegistry.get(value) !== null
 }
 
 export function isWorkflowValueKind(value: string): value is WorkflowValueKind {
@@ -227,15 +46,15 @@ export function isWorkflowValueKind(value: string): value is WorkflowValueKind {
 }
 
 export function getWorkflowNodeDefinition(type: WorkflowNodeType): WorkflowNodeDefinition {
-  return WORKFLOW_NODE_DEFINITIONS[type]
+  return workflowNodeRegistry.require(type)
 }
 
 export function getAllowedWorkflowTargetInputKinds(type: WorkflowNodeType): WorkflowValueKind[] {
-  return [...WORKFLOW_NODE_DEFINITIONS[type].acceptedInputKinds]
+  return Array.from(new Set(workflowNodeRegistry.require(type).inputs.map((port) => port.valueKind)))
 }
 
 export function getWorkflowNodeOutputKinds(type: WorkflowNodeType): WorkflowValueKind[] {
-  return [...WORKFLOW_NODE_DEFINITIONS[type].outputKinds]
+  return Array.from(new Set(workflowNodeRegistry.require(type).outputs.map((port) => port.valueKind)))
 }
 
 export function isWorkflowFileKind(kind: WorkflowValueKind) {
@@ -243,17 +62,15 @@ export function isWorkflowFileKind(kind: WorkflowValueKind) {
 }
 
 export function getDefaultWorkflowNodeTitle(type: WorkflowNodeType, locale: WorkflowLocale = "en") {
-  return WORKFLOW_NODE_TITLE_CATALOG[type][locale]
+  return workflowNodeRegistry.require(type).title[locale]
 }
 
 export function isDefaultWorkflowNodeTitle(type: WorkflowNodeType, value: string | null | undefined) {
   if (!value) return true
   const normalized = value.trim()
   if (!normalized) return true
-  return (
-    Object.values(WORKFLOW_NODE_TITLE_CATALOG[type]).includes(normalized) ||
-    (WORKFLOW_NODE_LEGACY_TITLES[type] ?? []).includes(normalized)
-  )
+  const definition = workflowNodeRegistry.require(type)
+  return Object.values(definition.title).includes(normalized) || (definition.legacyTitles ?? []).includes(normalized)
 }
 
 export function resolveWorkflowNodeTitle(
@@ -265,11 +82,11 @@ export function resolveWorkflowNodeTitle(
 }
 
 export function canWorkflowNodeAcceptValueKind(type: WorkflowNodeType, valueKind: WorkflowValueKind) {
-  return WORKFLOW_NODE_DEFINITIONS[type].acceptedInputKinds.includes(valueKind)
+  return getAllowedWorkflowTargetInputKinds(type).includes(valueKind)
 }
 
 export function canWorkflowNodeConnectValueKind(type: WorkflowNodeType, valueKind: WorkflowValueKind) {
   if (canWorkflowNodeAcceptValueKind(type, valueKind)) return true
   if (valueKind !== "asset") return false
-  return WORKFLOW_NODE_DEFINITIONS[type].acceptedInputKinds.some((kind) => isWorkflowFileKind(kind) && kind !== "asset")
+  return getAllowedWorkflowTargetInputKinds(type).some((kind) => isWorkflowFileKind(kind) && kind !== "asset")
 }

@@ -1,4 +1,9 @@
-@import "tailwindcss";
+/* Do not let Tailwind recursively scan generated PPT/cache artifacts at repo root. */
+@import "tailwindcss" source(none);
+@source "../app";
+@source "../components";
+@source "../lib";
+@source "../modules";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
 

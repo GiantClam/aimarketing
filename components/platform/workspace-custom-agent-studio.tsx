@@ -798,11 +798,23 @@ export function WorkspaceCustomAgentStudio({
           throw new Error("custom_agent_workflow_binding_required")
         }
 
+        const workflowResponse = await fetch(`/api/workflows/${selectedAgent.linkedWorkflowId}`, {
+          credentials: "same-origin",
+          cache: "no-store",
+        })
+        const workflowPayload = (await workflowResponse.json().catch(() => null)) as { data?: { revision?: number } } | null
+        const workflowRevision = workflowPayload?.data?.revision
+        if (!workflowResponse.ok || !Number.isInteger(workflowRevision)) {
+          throw new Error("workflow_revision_unavailable")
+        }
         const response = await fetch(`/api/workflows/${selectedAgent.linkedWorkflowId}/run`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
           body: JSON.stringify({
+            requestId: crypto.randomUUID(),
+            revision: workflowRevision,
+            iterationsEnabled: true,
             prompt,
             sourceAgentId: buildCustomAgentRuntimeId(selectedAgent.id),
           }),

@@ -9,6 +9,7 @@ import {
 } from "@/lib/workflows/node-executors"
 import {
   canWorkflowNodeConnectValueKind,
+  getWorkflowNodeDefinition,
   getWorkflowNodeOutputKinds,
   type WorkflowDefinitionEdge,
   type WorkflowDefinitionNode,
@@ -80,6 +81,13 @@ function inputNameToValueKind(inputName: string | null | undefined) {
   if (inputName === "audio" || inputName === "audios") return "audio"
   if (inputName === "presentation" || inputName === "presentations" || inputName === "ppt") return "ppt"
   return null
+}
+
+function edgeValueKind(edge: WorkflowDefinitionEdge, targetNode?: WorkflowDefinitionNode) {
+  const legacyKind = inputNameToValueKind(edge.inputName)
+  if (legacyKind) return legacyKind
+  if (!targetNode || !edge.targetPortId) return null
+  return getWorkflowNodeDefinition(targetNode.type).inputs.find((port) => port.id === edge.targetPortId)?.valueKind ?? null
 }
 
 function normalizeMimeType(value: string | null | undefined) {
@@ -309,6 +317,7 @@ function collectUpstreamInputs(
   edges: WorkflowDefinitionEdge[],
   nodeStates: Record<string, WorkflowNodeRunState>,
   seedInput?: Partial<WorkflowNodeInputBundle>,
+  nodes?: WorkflowDefinitionNode[],
 ) {
   const bundle = createWorkflowNodeInputBundle()
   const parents = parentMap.get(nodeKey) ?? []
@@ -319,10 +328,11 @@ function collectUpstreamInputs(
     const parentState = nodeStates[parentNodeKey]
     if (!parentState || parentState.status !== "succeeded") continue
 
+    const targetNode = nodes?.find((node) => node.nodeKey === nodeKey)
     const edgeKinds = new Set(
       edges
         .filter((edge) => edge.sourceNodeKey === parentNodeKey && edge.targetNodeKey === nodeKey)
-        .map((edge) => inputNameToValueKind(edge.inputName))
+        .map((edge) => edgeValueKind(edge, targetNode))
         .filter((kind): kind is NonNullable<ReturnType<typeof inputNameToValueKind>> => Boolean(kind)),
     )
 
@@ -345,6 +355,22 @@ function collectUpstreamInputs(
     Object.assign(bundle, mergeWorkflowNodeOutputBundles(bundle, scopedOutput))
   }
   return bundle
+}
+
+/**
+ * Resolve one node's upstream bundle using the same typed-port projection as
+ * the legacy DAG runner.  Iteration orchestration uses this exported helper
+ * to seed each isolated body execution without duplicating edge semantics.
+ */
+export function collectWorkflowNodeInput(input: {
+  nodeKey: string
+  parentMap: Map<string, string[]>
+  edges: WorkflowDefinitionEdge[]
+  nodeStates: Record<string, WorkflowNodeRunState>
+  seedInput?: Partial<WorkflowNodeInputBundle>
+  nodes?: WorkflowDefinitionNode[]
+}) {
+  return collectUpstreamInputs(input.nodeKey, input.parentMap, input.edges, input.nodeStates, input.seedInput, input.nodes)
 }
 
 function buildInitialNodeStates(input: {
@@ -442,7 +468,7 @@ export async function runWorkflowDefinition(input: WorkflowRunDefinitionInput): 
           enterpriseId: input.enterpriseId,
           ownerUserId: input.ownerUserId,
           node,
-          input: collectUpstreamInputs(node.nodeKey, plan.parentMap, input.edges, nodeStates, input.seedInput),
+          input: collectUpstreamInputs(node.nodeKey, plan.parentMap, input.edges, nodeStates, input.seedInput, input.nodes),
           ...input.executorContext,
         })
 

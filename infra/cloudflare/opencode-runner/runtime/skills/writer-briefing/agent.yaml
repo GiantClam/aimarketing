@@ -1,0 +1,8 @@
+interface:
+  display_name: Writer Brief Intake
+  description: Collect a usable writing brief before generating the final article.
+  short_description: Multi-turn article brief collection
+  default_prompt: Use this skill to clarify the article topic, audience, objective, tone, and constraints before drafting.
+routing:
+  stage: briefing
+  when_to_use: Use when the writing request is still missing key article details such as topic angle, audience, objective, tone, or publishing constraints.

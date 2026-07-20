@@ -7,6 +7,7 @@ import {
   recoverPreviewJobs,
   setPreviewJobDepsForTests,
   shutdownPreviewJobRecovery,
+  startPreviewJobRecovery,
 } from "./preview-jobs.js"
 import { createInMemoryPptPreviewJobStore } from "./job-store.js"
 
@@ -114,4 +115,125 @@ test("shutdown releases active leases for another worker", async () => {
   await shutdownPreviewJobRecovery(0)
   assert.equal((await store.getJob(submitted.jobId))?.status, "queued")
   resolveExecution()
+})
+
+test("preview jobs time out and only start one render at the default concurrency", async () => {
+  const store = createInMemoryPptPreviewJobStore()
+  const previousTimeout = process.env.PPT_WORKER_PREVIEW_JOB_TIMEOUT_MS
+  const previousConcurrency = process.env.PPT_WORKER_PREVIEW_MAX_CONCURRENCY
+  let executions = 0
+
+  try {
+    process.env.PPT_WORKER_PREVIEW_JOB_TIMEOUT_MS = "20"
+    process.env.PPT_WORKER_PREVIEW_MAX_CONCURRENCY = "1"
+
+    await startPreviewJobRecovery()
+
+    setPreviewJobDepsForTests({
+      previewJobStore: store,
+      runPreviewJob: async () => {
+        executions += 1
+        await new Promise(() => {})
+        throw new Error("unreachable")
+      },
+    })
+
+    const first = await enqueuePreviewJob(request)
+    const second = await enqueuePreviewJob({ ...request, requestId: "req_preview_jobs_second" })
+    await new Promise((resolve) => setTimeout(resolve, 5))
+
+    assert.equal(executions, 1)
+    assert.equal((await getPreviewJobStatus(second.jobId))?.status, "queued")
+
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    assert.equal((await getPreviewJobStatus(first.jobId))?.status, "failed")
+    assert.equal((await getPreviewJobStatus(first.jobId) as { message?: string } | null)?.message, "ppt_worker_preview_job_timeout")
+    assert.equal(executions, 2)
+
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    assert.equal((await getPreviewJobStatus(second.jobId))?.status, "failed")
+  } finally {
+    if (previousTimeout === undefined) delete process.env.PPT_WORKER_PREVIEW_JOB_TIMEOUT_MS
+    else process.env.PPT_WORKER_PREVIEW_JOB_TIMEOUT_MS = previousTimeout
+
+    if (previousConcurrency === undefined) delete process.env.PPT_WORKER_PREVIEW_MAX_CONCURRENCY
+    else process.env.PPT_WORKER_PREVIEW_MAX_CONCURRENCY = previousConcurrency
+  }
+})
+
+test("heartbeat retries transient database termination without losing the lease", async () => {
+  const store = createInMemoryPptPreviewJobStore()
+  const previousLease = process.env.PPT_WORKER_JOB_LEASE_MS
+  const previousInterval = process.env.PPT_WORKER_JOB_HEARTBEAT_INTERVAL_MS
+  const previousAttempts = process.env.PPT_WORKER_JOB_HEARTBEAT_RETRY_ATTEMPTS
+  const previousDelay = process.env.PPT_WORKER_JOB_HEARTBEAT_RETRY_DELAY_MS
+  let heartbeatCalls = 0
+  let resolveExecution: (value: { previewSessionId: string; generatedAt: string; deck: { title: string } }) => void = () => {}
+
+  try {
+    // The production interval is 15s. Use a 2s lease in this test so the
+    // heartbeat timer can exercise the retry path without a long test run.
+    process.env.PPT_WORKER_JOB_LEASE_MS = "2000"
+    process.env.PPT_WORKER_JOB_HEARTBEAT_INTERVAL_MS = "1000"
+    process.env.PPT_WORKER_JOB_HEARTBEAT_RETRY_ATTEMPTS = "2"
+    process.env.PPT_WORKER_JOB_HEARTBEAT_RETRY_DELAY_MS = "1"
+
+    const originalHeartbeat = store.heartbeatJob.bind(store)
+    const resilientStore = {
+      ...store,
+      heartbeatJob: async (jobId: string, workerId: string, leaseMs: number) => {
+        heartbeatCalls += 1
+        if (heartbeatCalls === 1) {
+          throw new Error("terminating connection due to administrator command")
+        }
+        return originalHeartbeat(jobId, workerId, leaseMs)
+      },
+    }
+
+    setPreviewJobDepsForTests({
+      previewJobStore: resilientStore,
+      runPreviewJob: () =>
+        new Promise((resolve) => {
+          resolveExecution = resolve
+        }),
+    })
+    await startPreviewJobRecovery()
+
+    const submitted = await enqueuePreviewJob(request)
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      if ((await getPreviewJobStatus(submitted.jobId))?.status === "running") break
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+
+    for (let attempt = 0; attempt < 150 && heartbeatCalls < 2; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+
+    assert.equal(heartbeatCalls, 2)
+    assert.equal((await getPreviewJobStatus(submitted.jobId))?.status, "running")
+
+    resolveExecution({
+      previewSessionId: "session_heartbeat_retry",
+      generatedAt: "2026-07-10T00:00:00.000Z",
+      deck: { title: "Heartbeat retry deck" },
+    })
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      if ((await getPreviewJobStatus(submitted.jobId))?.status === "completed") break
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    assert.equal((await getPreviewJobStatus(submitted.jobId))?.status, "completed")
+  } finally {
+    if (previousLease === undefined) delete process.env.PPT_WORKER_JOB_LEASE_MS
+    else process.env.PPT_WORKER_JOB_LEASE_MS = previousLease
+
+    if (previousInterval === undefined) delete process.env.PPT_WORKER_JOB_HEARTBEAT_INTERVAL_MS
+    else process.env.PPT_WORKER_JOB_HEARTBEAT_INTERVAL_MS = previousInterval
+
+    if (previousAttempts === undefined) delete process.env.PPT_WORKER_JOB_HEARTBEAT_RETRY_ATTEMPTS
+    else process.env.PPT_WORKER_JOB_HEARTBEAT_RETRY_ATTEMPTS = previousAttempts
+
+    if (previousDelay === undefined) delete process.env.PPT_WORKER_JOB_HEARTBEAT_RETRY_DELAY_MS
+    else process.env.PPT_WORKER_JOB_HEARTBEAT_RETRY_DELAY_MS = previousDelay
+  }
 })

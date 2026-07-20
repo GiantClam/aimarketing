@@ -19,11 +19,24 @@ import { isPptWorkerTemplateSupported } from "@/lib/lead-tools/ppt-worker-capabi
 import { getLeadToolPptEngines } from "@/lib/lead-tools/ppt-engines"
 import type { LeadToolPptDownloadResponse, LeadToolPptFinalizeResponse } from "@/lib/lead-tools/ppt-engines/types"
 import { buildMockSeoMetaPreview } from "@/lib/lead-tools/seo-meta-data"
-import { allowLeadToolMockFallback } from "@/lib/lead-tools/config"
+import {
+  allowLeadToolMockFallback,
+  getLeadToolPptExecutionTransport,
+  getLeadToolPptExportRuntime,
+  getLeadToolPptPreviewRuntime,
+} from "@/lib/lead-tools/config"
 import {
   generateLeadToolSeoPreviewWithFallback,
   getLeadToolResolvedModels,
 } from "@/lib/lead-tools/generation"
+import {
+  requestPptWorkerPreviewSubmit,
+} from "@/lib/lead-tools/ppt-worker-client"
+import {
+  createLeadToolPptPreviewJob,
+  getLeadToolPptPreviewJob,
+} from "@/lib/lead-tools/ppt-preview-job-store"
+import { getPptPreviewSessionDeck } from "@/lib/lead-tools/ppt-preview-session-store"
 
 const pptScenarioSchema = z.enum(["marketing-campaign", "product-launch", "sales-deck", "training"])
 const pptLanguageSchema = z.enum(["zh-CN", "en-US"])
@@ -43,6 +56,7 @@ const pptPreviewInputImageSchema = z.object({
   sourceNodeKey: z.string().trim().nullable().optional(),
   role: z.enum(["cover", "content", "logo", "reference"]).optional(),
 })
+const pptDeckTemplateIdSchema = z.string().trim().min(1)
 
 const pptPreviewResearchBriefSchema = z.object({
   topic: z.string().trim().min(1, "Research brief topic is required"),
@@ -145,7 +159,7 @@ const pptPreviewStyleKeySchema = z.custom<import("@/lib/lead-tools/ppt-preview-d
 const pptPreviewVariantSchema = z.object({
   key: z.string(),
   styleKey: pptPreviewStyleKeySchema,
-  templateId: pptFrontendTemplateIdSchema.optional(),
+  templateId: pptDeckTemplateIdSchema.optional(),
   narrativeAngle: pptPreviewNarrativeAngleSchema.optional(),
   slotLabel: z.enum(["A", "B", "C", "D"]).optional(),
   name: z.string(),
@@ -193,7 +207,7 @@ const pptPreviewDeckSchema: z.ZodType<PptPreviewDeck> = z.object({
   runtimeSlideProvider: z.string().trim().nullable().optional(),
   source: z.enum(["live", "mock"]).optional(),
   templateMode: pptPreviewTemplateModeSchema.optional(),
-  selectedTemplateId: pptFrontendTemplateIdSchema.nullable().optional(),
+  selectedTemplateId: pptDeckTemplateIdSchema.nullable().optional(),
   pageCount: pptPreviewPageCountSchema.nullable().optional(),
   resolvedPageCount: pptPreviewPageCountSchema.optional(),
 })
@@ -267,6 +281,117 @@ export class LeadToolRuntimeError extends Error {
     super(message)
     this.code = code
     this.status = status
+  }
+}
+
+export function shouldUseAsyncPptPreview(slug: string, input?: unknown) {
+  if (slug !== "ai-ppt-preview" || getLeadToolPptExecutionTransport() !== "remote-worker") return false
+  const requestedRuntime = input && typeof input === "object" && "previewRuntime" in input
+    ? (input as { previewRuntime?: unknown }).previewRuntime
+    : null
+  if (typeof requestedRuntime === "string" && requestedRuntime.trim()) {
+    return requestedRuntime === "ppt-master-agent"
+  }
+  return getLeadToolPptPreviewRuntime(slug) === "ppt-master-agent"
+}
+
+export async function submitLeadToolPptPreviewJob(slug: string, input: unknown, user?: AuthUser | null) {
+  assertLiveTool(slug)
+  if (!shouldUseAsyncPptPreview(slug, input)) {
+    throw new LeadToolRuntimeError("not_supported", "Asynchronous PPT preview is not enabled", 409)
+  }
+
+  const payload = pptPreviewRequestSchema.parse(input)
+  const submitted = await requestPptWorkerPreviewSubmit({
+    ...payload,
+    requestId: payload.requestId || crypto.randomUUID(),
+    allowMockFallback: false,
+  })
+
+  const job = await createLeadToolPptPreviewJob({
+    toolSlug: slug,
+    userId: user?.id ?? null,
+    enterpriseId: user?.enterpriseId ?? null,
+    externalJobId: submitted.jobId,
+    inputPayload: payload,
+  })
+
+  return {
+    jobId: submitted.jobId,
+    status: job.status,
+    externalJobId: submitted.jobId,
+  }
+}
+
+export async function getLeadToolPptPreviewJobStatus(
+  slug: string,
+  jobId: string,
+  input: unknown,
+  user?: AuthUser | null,
+) {
+  assertLiveTool(slug)
+  if (!shouldUseAsyncPptPreview(slug, input)) {
+    throw new LeadToolRuntimeError("not_supported", "Asynchronous PPT preview is not enabled", 409)
+  }
+
+  const payload = pptPreviewRequestSchema.parse(input)
+  const normalizedJobId = jobId.trim()
+  if (!normalizedJobId) {
+    throw new LeadToolRuntimeError("bad_request", "Invalid PPT preview job id", 400)
+  }
+
+  const job = await getLeadToolPptPreviewJob(normalizedJobId)
+  if (!job || job.toolSlug !== slug) {
+    throw new LeadToolRuntimeError("not_found", "PPT preview job not found", 404)
+  }
+
+  if (job.userId !== null && (!user || user.id !== job.userId)) {
+    throw new LeadToolRuntimeError("not_found", "PPT preview job not found", 404)
+  }
+
+  if (job.status === "queued" || job.status === "running") {
+    return { jobId: job.externalJobId, status: job.status, async: true }
+  }
+
+  if (job.status === "failed") {
+    throw new LeadToolRuntimeError("service_unavailable", job.errorMessage || "PPT preview failed", 503)
+  }
+
+  const normalizedResult = job.normalizedResult ?? {}
+  const previewSessionId = typeof normalizedResult.previewSessionId === "string" ? normalizedResult.previewSessionId : ""
+  if (!previewSessionId) {
+    throw new LeadToolRuntimeError("service_unavailable", "PPT preview result is not ready", 503)
+  }
+
+  const deck = await getPptPreviewSessionDeck(previewSessionId)
+  const tool = getLeadToolBySlug(slug)
+  if (!tool) {
+    throw new LeadToolRuntimeError("not_found", "Tool not found", 404)
+  }
+
+  const platformMeta = await persistLeadToolPreviewResult({
+    toolSlug: tool!.slug,
+    inputPayload: payload,
+    deck,
+    previewSessionId,
+    currentUser: user,
+  })
+
+  return {
+    previewSessionId,
+    generatedAt: typeof normalizedResult.generatedAt === "string" ? normalizedResult.generatedAt : deck.generatedAt,
+    deck,
+    meta: {
+      previewEngine: "ppt-master",
+      exportEngine: "ppt-master",
+      previewRuntime: "ppt-master-agent",
+      exportRuntime: getLeadToolPptExportRuntime("ai-ppt-preview") as "ppt-master-agent",
+      mode: "ppt-master-svg-preview",
+      mockFallback: deck.source === "mock",
+      tool: tool!.slug,
+      platformJobId: job.externalJobId,
+      ...platformMeta,
+    },
   }
 }
 

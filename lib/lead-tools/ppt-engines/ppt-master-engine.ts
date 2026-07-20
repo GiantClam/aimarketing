@@ -25,6 +25,7 @@ import {
   requestPptWorkerExport,
   requestPptWorkerPreview,
 } from "@/lib/lead-tools/ppt-worker-client"
+import type { PptWorkerPreviewResponse } from "@/lib/lead-tools/ppt-worker-types"
 
 let requestPptWorkerPreviewImpl = requestPptWorkerPreview
 let requestPptWorkerExportImpl = requestPptWorkerExport
@@ -86,6 +87,28 @@ function normalizePptMasterPreviewDeck(deck: LeadToolPptPreviewResponse["deck"])
   return deck
 }
 
+export async function materializeRemotePptWorkerPreview(remote: PptWorkerPreviewResponse): Promise<LeadToolPptPreviewResponse> {
+  const remoteDeck = normalizePptMasterPreviewDeck(remote.deck as LeadToolPptPreviewResponse["deck"])
+  const storedDeck = await storePptPreviewSessionDeckImpl({
+    ...remoteDeck,
+    previewSessionId: remote.previewSessionId,
+  })
+
+  return {
+    previewSessionId: storedDeck.previewSessionId!,
+    generatedAt: remote.generatedAt,
+    deck: storedDeck as LeadToolPptPreviewResponse["deck"],
+    meta: {
+      previewEngine: "ppt-master",
+      exportEngine: "ppt-master",
+      previewRuntime: "ppt-master-agent",
+      exportRuntime: getLeadToolPptExportRuntime("ai-ppt-preview") as "ppt-master-agent",
+      mode: "ppt-master-svg-preview",
+      mockFallback: storedDeck.source === "mock",
+    },
+  } satisfies LeadToolPptPreviewResponse
+}
+
 const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
   async buildPreview(request, options) {
     const runtime = getPreviewRuntimeImpl(request.previewRuntime)
@@ -108,25 +131,7 @@ const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
         images: request.images,
         allowMockFallback: options.allowMockFallback,
       })
-      const remoteDeck = normalizePptMasterPreviewDeck(remote.deck as LeadToolPptPreviewResponse["deck"])
-      const storedDeck = await storePptPreviewSessionDeckImpl({
-        ...remoteDeck,
-        previewSessionId: remote.previewSessionId,
-      })
-
-      return {
-        previewSessionId: storedDeck.previewSessionId!,
-        generatedAt: remote.generatedAt,
-        deck: storedDeck as LeadToolPptPreviewResponse["deck"],
-        meta: {
-          previewEngine: "ppt-master",
-          exportEngine: "ppt-master",
-          previewRuntime: "ppt-master-agent",
-          exportRuntime: getLeadToolPptExportRuntime("ai-ppt-preview") as "ppt-master-agent",
-          mode: "ppt-master-svg-preview",
-          mockFallback: storedDeck.source === "mock",
-        },
-      } satisfies LeadToolPptPreviewResponse
+      return materializeRemotePptWorkerPreview(remote)
     }
 
     let deck

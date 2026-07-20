@@ -118,6 +118,7 @@ let buildLeadToolPreview: typeof import("./runtime").buildLeadToolPreview
 let buildLeadToolFinalize: typeof import("./runtime").buildLeadToolFinalize
 let buildLeadToolDownload: typeof import("./runtime").buildLeadToolDownload
 let LeadToolRuntimeError: typeof import("./runtime").LeadToolRuntimeError
+let shouldUseAsyncPptPreview: typeof import("./runtime").shouldUseAsyncPptPreview
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "@/lib/lead-tools/catalog") {
@@ -227,6 +228,8 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/lead-tools/config") {
     return {
       allowLeadToolMockFallback: () => true,
+      getLeadToolPptExecutionTransport: () => "remote-worker",
+      getLeadToolPptPreviewRuntime: () => "ppt-master-agent",
     }
   }
 
@@ -276,6 +279,7 @@ test.before(async () => {
   buildLeadToolFinalize = runtime.buildLeadToolFinalize
   buildLeadToolDownload = runtime.buildLeadToolDownload
   LeadToolRuntimeError = runtime.LeadToolRuntimeError
+  shouldUseAsyncPptPreview = runtime.shouldUseAsyncPptPreview
 })
 
 test.beforeEach(() => {
@@ -341,6 +345,17 @@ test("ppt preview forwards an explicit preview runtime selection", async () => {
     previewRuntime: "frontend-slides-agent",
     templateMode: "auto-4",
   })
+})
+
+test("async PPT routing honors the request runtime instead of the deployment default", () => {
+  assert.equal(
+    shouldUseAsyncPptPreview("ai-ppt-preview", { previewRuntime: "ppt-master-agent" }),
+    true,
+  )
+  assert.equal(
+    shouldUseAsyncPptPreview("ai-ppt-preview", { previewRuntime: "frontend-slides-agent" }),
+    false,
+  )
 })
 
 test("ppt preview forwards explicit runtime slide configuration to the preview engine", async () => {

@@ -30,25 +30,23 @@ export const PPT_MASTER_TEMPLATE_MANIFEST = [
     ]
   },
   {
-    "id": "ai_ops",
-    "label": "ai_ops",
-    "summary": "Telecom AI operations architecture, IT system overviews, digital transformation proposals, smart infrastructure reports.",
+    "id": "presentation_core",
+    "label": "presentation_core",
+    "summary": "General-purpose presentation layouts for title, section, comparison, content, and closing slides.",
     "tone": "",
     "themeMode": "",
     "keywords": [
-      "telecom",
-      "ai operations",
-      "digital intelligence",
-      "architecture",
-      "platform"
+      "presentation",
+      "general purpose",
+      "comparison",
+      "content",
+      "closing"
     ],
     "categories": [
-      "brand"
+      "general"
     ],
     "quickLookup": [
-      "technology",
-      "general_business",
-      "government"
+      "general_business"
     ]
   },
   {

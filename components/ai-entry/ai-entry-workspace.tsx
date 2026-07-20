@@ -67,6 +67,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { WorkspaceTaskEvents } from "@/components/workspace/workspace-message-primitives"
 import {
   normalizePendingTaskEvents,
+  settlePendingTaskEvents,
   type PendingTaskEvent,
 } from "@/lib/assistant-task-events"
 import {
@@ -83,6 +84,7 @@ import {
   AI_ENTRY_CONSULTING_ENTRY_MODE,
   isAiEntryPptAgentId,
   isConsultingAdvisorEntryMode,
+  pickAgentDefaultModelId,
   pickConsultingModelId,
   pickPptAssistantDefaultModelId,
   resolvePptAssistantModelSelection,
@@ -195,6 +197,8 @@ type ExtractedChatAttachmentResponse = {
     truncated?: boolean
   }
   error?: string
+  code?: string
+  message?: string
 }
 type UploadedAssetLibraryAttachmentResponse = {
   data?: {
@@ -249,7 +253,7 @@ type MessageApiResponse = {
     created_at?: number
     updated_at?: number
     started_at?: number | null
-    stage?: "brief_validating" | "story_planning" | "variant_generating" | "preview_rendering" | "session_persisting"
+    stage?: "brief_validating" | "story_planning" | "variant_generating" | "preview_rendering" | "session_persisting" | "runtime_queued" | "runtime_running" | "runtime_checkpointing" | "runtime_publishing"
     stage_label?: string
     progress_current?: number
     progress_total?: number
@@ -306,8 +310,11 @@ type ChatStreamApiResponse = {
   answer?: string
   provider?: string
   provider_model?: string
+  fallback_reason?: "empty_response" | "timeout" | "connection" | "rate_limit" | "provider_error"
+  runtime_error?: string
   agent_id?: string | null
   skill_id?: string
+  message?: string
   artifact?: {
     kind?: string
     title?: string
@@ -317,6 +324,11 @@ type ChatStreamApiResponse = {
   }
   error?: string
   data?: {
+    taskId?: string
+    runtimeRunId?: string
+    taskType?: string
+    stage?: string
+    runtimeStatus?: "running" | "completed" | "failed"
     toolName?: string
     toolCallId?: string
     status?: "hit" | "miss" | "failed"
@@ -503,7 +515,9 @@ type AgentApiResponse = {
   groups?: Array<{ id?: string; label?: { zh?: string; en?: string } }>
 }
 
-const AI_ENTRY_SELECTED_MODEL_STORAGE_KEY = "ai-entry-selected-model-id-v1"
+// Bump the key when the product default changes so an old Grok/Claude choice
+// does not silently override the DeepSeek V4 Pro default on first load.
+const AI_ENTRY_SELECTED_MODEL_STORAGE_KEY = "ai-entry-selected-model-id-v2"
 const SHOULD_PREFER_CATALOG_MODEL_DEFAULT = process.env.NODE_ENV === "development"
 const AI_ENTRY_PENDING_CONVERSATION_STORAGE_PREFIX = "ai-entry-pending-conversation-v1:"
 const AI_ENTRY_SHARED_PENDING_CONVERSATION_STORAGE_PREFIX = "ai-entry-shared-pending-conversation-v1:"
@@ -682,7 +696,7 @@ function normalizeMessageApiTaskRun(
       taskRun.status === "pending" || taskRun.status === "running" || taskRun.status === "success" || taskRun.status === "failed"
         ? taskRun.status
         : "pending",
-    task_type: "preview_ppt_deck",
+    task_type: taskRun.task_type === "opencode_agent_run" ? "opencode_agent_run" : "preview_ppt_deck",
     conversation_id:
       typeof taskRun.conversation_id === "string" && taskRun.conversation_id.trim()
         ? taskRun.conversation_id.trim()
@@ -710,7 +724,11 @@ function normalizeMessageApiTaskRun(
       taskRun.stage === "story_planning" ||
       taskRun.stage === "variant_generating" ||
       taskRun.stage === "preview_rendering" ||
-      taskRun.stage === "session_persisting"
+      taskRun.stage === "session_persisting" ||
+      taskRun.stage === "runtime_queued" ||
+      taskRun.stage === "runtime_running" ||
+      taskRun.stage === "runtime_checkpointing" ||
+      taskRun.stage === "runtime_publishing"
         ? taskRun.stage
         : taskRun.status === "success"
           ? "session_persisting"
@@ -928,6 +946,40 @@ function resolveDisplayModelIdForProvider(input: {
   }
 
   return resolveDisplayModelId(input.rawModelId, input.models)
+}
+
+function resolveProviderFallbackReasonLabel(input: {
+  reason?: ChatStreamApiResponse["fallback_reason"]
+  error?: string | null
+  locale: "zh" | "en"
+}) {
+  const normalizedError = (input.error || "").toLowerCase()
+  const reason = input.reason ||
+    (normalizedError.includes("empty") || normalizedError.includes("no content")
+      ? "empty_response"
+      : normalizedError.includes("timeout") || normalizedError.includes("timed out") || normalizedError.includes("deadline")
+        ? "timeout"
+        : normalizedError.includes("connect") || normalizedError.includes("network") || normalizedError.includes("econn")
+          ? "connection"
+          : normalizedError.includes("429") || normalizedError.includes("rate limit")
+            ? "rate_limit"
+            : "provider_error")
+  if (input.locale === "zh") {
+    return {
+      empty_response: "空响应",
+      timeout: "Provider 连接超时",
+      connection: "Provider 网络连接失败",
+      rate_limit: "Provider 触发限流",
+      provider_error: "Provider 请求失败",
+    }[reason]
+  }
+  return {
+    empty_response: "empty response",
+    timeout: "Provider connection timeout",
+    connection: "Provider network connection failed",
+    rate_limit: "Provider rate limited",
+    provider_error: "Provider request failed",
+  }[reason]
 }
 
 function dedupeStringList(values: Array<string | null | undefined>) {
@@ -1267,13 +1319,14 @@ export function AiEntryWorkspace({
   const routeAgentId = forcedAgentId || (searchParams.get("agent") || "").trim() || null
   const routeDraft = embedded ? draftSeed.trim() : (searchParams.get("draft") || "").trim()
   const routeEntryMode = (searchParams.get("entry") || "").trim()
+  const isPlainChatRoute = !embedded && !forcedAgentId && !routeAgentId && !routeEntryMode
 
   const copy = useMemo(
     () =>
       isZh
         ? {
             title: "AI 对话",
-            subtitle: "企业 AI 营销对话入口",
+            subtitle: "通用 AI 对话入口",
             placeholder: "输入你的问题...",
             send: "发送",
             loading: "正在生成...",
@@ -1310,7 +1363,7 @@ export function AiEntryWorkspace({
           }
         : {
             title: "AI Chat",
-            subtitle: "Enterprise AI marketing chat entry",
+            subtitle: "General-purpose AI chat",
             placeholder: "Ask anything...",
             send: "Send",
             loading: "Generating...",
@@ -1354,12 +1407,10 @@ export function AiEntryWorkspace({
       routeAgentId,
     })
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId)
-  const [messages, setMessages] = useState<ChatMessage[]>(() =>
-    resolveAiEntryBootstrapMessages({
-      conversationId: initialConversationId,
-      pendingMessages: readPendingConversationMessages(initialConversationId),
-    }),
-  )
+  // Browser storage is read after hydration. Reading it in the initial state
+  // makes the server render an empty/loading conversation while the browser
+  // renders cached messages, which causes a React hydration mismatch.
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   // Only an active chat response locks this composer. PPT rendering is durable
@@ -1387,11 +1438,14 @@ export function AiEntryWorkspace({
   const [modelGroups, setModelGroups] = useState<ModelGroupOption[]>([])
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
   const [modelSelectOpen, setModelSelectOpen] = useState(false)
+  const [restoredConversationModelId, setRestoredConversationModelId] = useState<string | null>(null)
 
   const [agents, setAgents] = useState<AgentOption[]>([])
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(initialResolvedAgentId)
   const [isAgentSelectionExplicit, setIsAgentSelectionExplicit] = useState(Boolean(initialResolvedAgentId))
   const [agentQueryReady, setAgentQueryReady] = useState(false)
+  const [sessionReady, setSessionReady] = useState(!initialResolvedAgentId?.startsWith("business-"))
+  const [sessionReadyError, setSessionReadyError] = useState<string | null>(null)
 
   const scrollAnchorRef = useRef<HTMLDivElement>(null)
   const previousMessageCountRef = useRef(0)
@@ -1402,12 +1456,15 @@ export function AiEntryWorkspace({
   const isLoadingRef = useRef(false)
   const activeRequestAbortControllerRef = useRef<AbortController | null>(null)
   const isStreamRecoveryInFlightRef = useRef(false)
+  const appliedRestoredConversationModelIdRef = useRef<string | null>(null)
+  const prewarmedConversationIdRef = useRef<string | null>(initialConversationId)
+  const prewarmedRuntimeKeyRef = useRef<string | null>(null)
   const onConversationIdChangeRef = useRef<typeof onConversationIdChange>(onConversationIdChange)
   const pendingFirstConversationRouteRef = useRef(false)
   const isPptAssistantRoute = isAiEntryPptAgentId(routeAgentId)
   const resolvedRequestAgentId = resolveAiEntryRequestedAgentId({
     forcedAgentId,
-    selectedAgentId,
+    selectedAgentId: isPlainChatRoute ? null : selectedAgentId,
     routeAgentId,
   })
   const quickPrompts = useMemo(
@@ -1430,6 +1487,10 @@ export function AiEntryWorkspace({
         agentId: routeAgentId,
       }),
     [effectiveEntryMode, routeAgentId],
+  )
+  const shouldPreferAgentDefaultModel = useMemo(
+    () => isConsultingEntry || Boolean(forcedAgentId || routeAgentId || selectedAgentId),
+    [forcedAgentId, isConsultingEntry, routeAgentId, selectedAgentId],
   )
   const workspaceTitle = resolveAiEntryWorkspaceTitle({
     agentId: resolvedRequestAgentId,
@@ -1464,8 +1525,11 @@ export function AiEntryWorkspace({
     if (isPptAssistantRoute) {
       return pickPptAssistantDefaultModelId(models) || models[0]?.id || null
     }
+    if (shouldPreferAgentDefaultModel) {
+      return pickAgentDefaultModelId(models) || models[0]?.id || null
+    }
     return models[0]?.id || null
-  }, [isPptAssistantRoute, models])
+  }, [isPptAssistantRoute, models, shouldPreferAgentDefaultModel])
   const hasMessagePptPreviewContext = useMemo(
     () =>
       messages.some((message) =>
@@ -1803,6 +1867,12 @@ export function AiEntryWorkspace({
   }, [embedded, forcedAgentId])
 
   useEffect(() => {
+    const requiresPersistentSession = Boolean(selectedAgentId?.startsWith("business-"))
+    setSessionReady(!requiresPersistentSession)
+    setSessionReadyError(null)
+  }, [selectedAgentId])
+
+  useEffect(() => {
     if (initialConversationId) return
     if (messages.length > 0) return
     const nextDraft = routeDraft
@@ -1954,7 +2024,6 @@ export function AiEntryWorkspace({
               catalogDefaultModelId
             )
           : null
-
         setSelectedModelId((current) => {
           if (shouldLockModel) {
             return consultingModelFallback
@@ -1965,6 +2034,9 @@ export function AiEntryWorkspace({
           const resolvedCurrent = normalizedCurrent
             ? resolveDisplayModelId(normalizedCurrent, normalizedModels)
             : null
+          const agentDefaultModelId = shouldPreferAgentDefaultModel
+            ? pickAgentDefaultModelId(normalizedModels) || catalogDefaultModelId
+            : null
           const resolvedPptModel = resolvePptAssistantModelSelection({
             currentModelId: resolvedCurrent,
             availableModelIds: normalizedModels.map((item) => item.id),
@@ -1972,9 +2044,7 @@ export function AiEntryWorkspace({
           })
           if (resolvedPptModel) return resolvedPptModel
 
-          if (SHOULD_PREFER_CATALOG_MODEL_DEFAULT && catalogDefaultModelId) {
-            return catalogDefaultModelId
-          }
+          if (agentDefaultModelId) return agentDefaultModelId
 
           if (preferredFromStorage) {
             const resolvedPreferredFromStorage = resolveDisplayModelId(
@@ -1982,6 +2052,10 @@ export function AiEntryWorkspace({
               normalizedModels,
             )
             if (resolvedPreferredFromStorage) return resolvedPreferredFromStorage
+          }
+
+          if (SHOULD_PREFER_CATALOG_MODEL_DEFAULT && catalogDefaultModelId) {
+            return catalogDefaultModelId
           }
 
           if (catalogDefaultModelId) {
@@ -2006,7 +2080,29 @@ export function AiEntryWorkspace({
     return () => {
       cancelled = true
     }
-  }, [isPptAssistantRoute, isZh, shouldLockModel])
+  }, [isPptAssistantRoute, isZh, shouldLockModel, shouldPreferAgentDefaultModel])
+
+  useEffect(() => {
+    if (!isPptAssistantRoute || shouldLockModel) return
+
+    if (!restoredConversationModelId) {
+      appliedRestoredConversationModelIdRef.current = null
+      return
+    }
+
+    if (
+      models.length === 0 ||
+      appliedRestoredConversationModelIdRef.current === restoredConversationModelId
+    ) {
+      return
+    }
+
+    const resolvedModelId = resolveDisplayModelId(restoredConversationModelId, models)
+    if (!resolvedModelId) return
+
+    appliedRestoredConversationModelIdRef.current = restoredConversationModelId
+    setSelectedModelId(resolvedModelId)
+  }, [isPptAssistantRoute, models, restoredConversationModelId, shouldLockModel])
 
   useEffect(() => {
     let cancelled = false
@@ -2060,6 +2156,68 @@ export function AiEntryWorkspace({
   }, [embedded, forcedAgentId, isZh, routeAgentId, shouldLockModel])
 
   useEffect(() => {
+    const prewarmAgentId = selectedAgentId?.startsWith("business-") || selectedAgentId === "executive-ppt"
+      ? selectedAgentId
+      : null
+    const prewarmProviderId = resolvePreferredProviderForModel({
+      selectedModel,
+      selectedProviderId: modelProviderId,
+      fallbackProviderId: modelProviderId,
+    }) || ""
+    const prewarmModelId = selectedModel?.modelId || selectedModel?.runtimeId || selectedModelId || ""
+    if (!prewarmAgentId || modelsLoading || !prewarmModelId) return
+    setSessionReady(false)
+    setSessionReadyError(null)
+
+    // A new-chat reset must not reuse the previous conversation's warm-session
+    // marker. The next request will create a fresh conversation and session.
+    if (!conversationId && prewarmedConversationIdRef.current) {
+      prewarmedConversationIdRef.current = null
+      prewarmedRuntimeKeyRef.current = null
+    }
+    const runtimeKey = `${prewarmAgentId}|${prewarmProviderId}|${prewarmModelId}`
+    if (prewarmedRuntimeKeyRef.current === runtimeKey) return
+    prewarmedRuntimeKeyRef.current = runtimeKey
+    const controller = new AbortController()
+    void fetch("/api/ai/shared-agent-prewarm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      signal: controller.signal,
+      body: JSON.stringify({
+        agentId: prewarmAgentId,
+        conversationId: conversationId || prewarmedConversationIdRef.current,
+        conversationScope: isConsultingEntry ? "consulting" : "chat",
+        providerId: prewarmProviderId || undefined,
+        modelId: prewarmModelId,
+      }),
+    })
+      .then(async (response) => {
+        if (!response.ok || controller.signal.aborted) {
+          if (prewarmedRuntimeKeyRef.current === runtimeKey) prewarmedRuntimeKeyRef.current = null
+          return
+        }
+        const payload = await response.json().catch(() => null) as { prewarmed?: unknown; session_ready?: unknown; conversationId?: unknown } | null
+        if (payload?.prewarmed !== true || payload?.session_ready !== true) {
+          setSessionReadyError(isZh ? "会话预热失败，请稍后重试。" : "Session prewarm failed. Try again shortly.")
+          if (prewarmedRuntimeKeyRef.current === runtimeKey) prewarmedRuntimeKeyRef.current = null
+          return
+        }
+        setSessionReady(true)
+        const preparedConversationId = typeof payload?.conversationId === "string" ? payload.conversationId.trim() : ""
+        if (!preparedConversationId || isLoadingRef.current || latestConversationIdRef.current) return
+        prewarmedConversationIdRef.current = preparedConversationId
+        latestConversationIdRef.current = preparedConversationId
+        setConversationId(preparedConversationId)
+      })
+      .catch(() => {
+        setSessionReadyError(isZh ? "无法连接持久会话运行时。" : "Unable to connect to the persistent session runtime.")
+        if (prewarmedRuntimeKeyRef.current === runtimeKey) prewarmedRuntimeKeyRef.current = null
+      })
+    return () => controller.abort()
+  }, [conversationId, isConsultingEntry, isZh, modelProviderId, modelsLoading, selectedAgentId, selectedModel, selectedModelId])
+
+  useEffect(() => {
     if (shouldLockModel) {
       if (selectedModelId !== lockedConsultingModelId) {
         setSelectedModelId(lockedConsultingModelId)
@@ -2091,17 +2249,12 @@ export function AiEntryWorkspace({
       isLoadingRef.current = false
       setIsResponseLoading(false)
       setConversationId(null)
+      setRestoredConversationModelId(null)
       latestConversationIdRef.current = null
       setMessages([])
       setTaskRuns([])
       setConversationState(null)
       setIsConversationLoading(false)
-      if (!shouldLockModel && models.length > 0) {
-        setSelectedModelId((current) => {
-          if (current && models.some((item) => item.id === current)) return current
-          return preferredUnlockedModelId
-        })
-      }
       return
     }
 
@@ -2122,6 +2275,7 @@ export function AiEntryWorkspace({
 
     pendingFirstConversationRouteRef.current = false
     setConversationId(initialConversationId)
+    setRestoredConversationModelId(null)
     latestConversationIdRef.current = initialConversationId
     let cancelled = false
     const pendingMessages = readPendingConversationMessages(initialConversationId)
@@ -2183,10 +2337,7 @@ export function AiEntryWorkspace({
             ? payload.conversation.current_model_id.trim()
             : null
 
-        if (conversationModelId && !shouldLockModel) {
-          const resolvedModelId = resolveDisplayModelId(conversationModelId, models)
-          setSelectedModelId(resolvedModelId || null)
-        }
+        setRestoredConversationModelId(isPptAssistantRoute ? conversationModelId : null)
       } catch (error) {
         if (cancelled) return
         setMessages((current) => (current.length > 0 ? current : []))
@@ -2206,7 +2357,7 @@ export function AiEntryWorkspace({
     return () => {
       cancelled = true
     }
-  }, [copy, fetchConversationMessages, initialConversationId, isZh, models, preferredUnlockedModelId, resolvedRequestAgentId, routeAgentId, shouldLockModel])
+  }, [copy, fetchConversationMessages, initialConversationId, isPptAssistantRoute, isZh, resolvedRequestAgentId, routeAgentId])
 
   const syncSharedConversationDraft = useCallback(() => {
     if (!conversationId) return
@@ -2752,6 +2903,10 @@ export function AiEntryWorkspace({
   const handleSend = useCallback(async () => {
     const prompt = input.trim()
     if ((!prompt && attachments.length === 0) || isResponseLoading || isConversationLoading || isPreparingAttachments) return
+    if (selectedAgentId?.startsWith("business-") && !sessionReady) {
+      setErrorMessage(sessionReadyError || (isZh ? "正在预热业务 Agent 会话，请稍候。" : "The business Agent session is warming up. Please wait."))
+      return
+    }
     const hasImageAttachments = attachments.some((attachment) => attachment.mediaType.startsWith("image/"))
     if (hasImageAttachments && !modelSupportsImageInput(selectedModel)) {
       setErrorMessage(isZh ? "当前所选模型不支持图片上传或识别，请切换到支持视觉的模型后再发送。" : "The selected model does not support image upload or recognition. Switch to a vision-capable model before sending.")
@@ -2853,7 +3008,7 @@ export function AiEntryWorkspace({
     try {
       const effectiveRequestAgentId = resolveAiEntryRequestedAgentId({
         forcedAgentId: embedded ? forcedAgentId : null,
-        selectedAgentId,
+        selectedAgentId: isPlainChatRoute ? null : selectedAgentId,
         routeAgentId,
       })
       const shouldSendAgentConfig =
@@ -2973,22 +3128,116 @@ export function AiEntryWorkspace({
             return
           }
 
+          if (event.event === "agent_resolved") {
+            upsertTaskEvent({
+              type: "agent_resolved",
+              label: "Agent resolved",
+              detail: typeof event.agent_id === "string" ? event.agent_id : undefined,
+              status: "completed",
+              at: now,
+            })
+            return
+          }
+
+          if (event.event === "skill_activated" || event.event === "skill_completed" || event.event === "skill_failed") {
+            const skillId = typeof event.skill_id === "string" && event.skill_id.trim() ? event.skill_id.trim() : "skill"
+            upsertTaskEvent({
+              type: `skill:${skillId}`,
+              label: skillId,
+              detail: event.event === "skill_failed" && typeof event.message === "string" ? event.message : undefined,
+              status: event.event === "skill_activated" ? "running" : event.event === "skill_completed" ? "completed" : "failed",
+              at: now,
+            })
+            return
+          }
+
           if (event.event === "provider_selected" || event.event === "provider_fallback") {
             const normalizedProviderModel = resolveDisplayModelIdForProvider({
               rawModelId: typeof event.provider_model === "string" ? event.provider_model : null,
               providerId: typeof event.provider === "string" ? event.provider : null,
               models,
             })
-            const detail = [event.provider, normalizedProviderModel || selectedModelId]
+            const reasonLabel = event.event === "provider_fallback"
+              ? resolveProviderFallbackReasonLabel({
+                  reason: event.fallback_reason,
+                  error: event.runtime_error,
+                  locale: isZh ? "zh" : "en",
+                })
+              : null
+            const detail = [event.provider, normalizedProviderModel || selectedModelId, reasonLabel]
               .filter(Boolean)
               .join(" / ")
             upsertTaskEvent({
               type: "provider",
-              label: "Model routing",
+              label: event.event === "provider_fallback"
+                ? (isZh ? "Provider 已切换" : "Provider switched")
+                : (isZh ? "模型路由" : "Model routing"),
               detail: detail || undefined,
               status: event.event === "provider_fallback" ? "info" : "running",
               at: now,
             })
+            return
+          }
+
+          if (event.event === "runtime_stage" || event.event === "runtime_warning") {
+            const stage = typeof event.data?.stage === "string" ? event.data.stage : event.event
+            const detail = typeof event.data?.message === "string" ? event.data.message : event.message || event.error
+            upsertTaskEvent({
+              type: `runtime:${stage}`,
+              label: isZh ? "PPT Agent 过程" : "PPT agent progress",
+              detail: detail || undefined,
+              status: event.event === "runtime_warning" ? "info" : event.data?.runtimeStatus || "running",
+              at: now,
+            })
+            return
+          }
+
+          if (event.event === "background_task_queued") {
+            const taskId = typeof event.data?.taskId === "string" ? event.data.taskId.trim() : ""
+            if (taskId && streamConversationId) {
+              savePendingAssistantTask({
+                taskId,
+                scope: "ai_entry",
+                conversationId: streamConversationId,
+                agentId: routeAgentId || resolvedRequestAgentId || null,
+                prompt: userMessage.content,
+                taskType: "opencode_agent_run",
+                createdAt: Date.now(),
+              })
+              const nowSeconds = Math.floor(Date.now() / 1000)
+              setTaskRuns((current) => mergeAiEntryTaskRuns(current, [{
+                task_id: taskId,
+                status: "pending",
+                task_type: "opencode_agent_run",
+                conversation_id: streamConversationId,
+                agent_id: routeAgentId || resolvedRequestAgentId || null,
+                created_at: nowSeconds,
+                updated_at: nowSeconds,
+                started_at: null,
+                stage: "runtime_queued",
+                stage_label: isZh ? "任务已排队，关闭页面后仍会继续执行" : "Queued; execution continues after you leave",
+                progress_current: 0,
+                progress_total: 4,
+                last_heartbeat_at: nowSeconds,
+                finished_at: null,
+                preview_session_id: null,
+                request_label: userMessage.content.trim() || null,
+                result_summary: null,
+                selected_template_id: null,
+                selected_template_label: null,
+                error_code: null,
+                error_message: null,
+                error: null,
+                events: [],
+              }]))
+              setPendingTaskRefreshKey((current) => current + 1)
+              upsertTaskEvent({
+                type: "background_runtime",
+                label: isZh ? "智能体任务已进入后台" : "Agent task queued in background",
+                status: "running",
+                at: now,
+              })
+            }
             return
           }
 
@@ -3255,6 +3504,7 @@ export function AiEntryWorkspace({
               status: "completed",
               at: now,
             })
+            setPendingTaskEvents((current) => settlePendingTaskEvents(current))
 
             syncAssistantDraft({
               ...assistantDraft,
@@ -3282,6 +3532,7 @@ export function AiEntryWorkspace({
               status: "failed",
               at: now,
             })
+            setPendingTaskEvents((current) => settlePendingTaskEvents(current, "failed"))
           }
         }
 
@@ -3354,7 +3605,7 @@ export function AiEntryWorkspace({
           refreshSidebarForConversation(payload.conversationId, true)
         }
         setPendingTaskEvents((current) => [
-          ...current.filter((event) => event.type !== "request_start"),
+          ...settlePendingTaskEvents(current).filter((event) => event.type !== "request_start"),
           {
             type: "request_start",
             label: "Request sent",
@@ -3417,7 +3668,7 @@ export function AiEntryWorkspace({
               },
             ].slice(-12)
           : [
-              ...current.filter((event) => event.type !== "request_start"),
+              ...settlePendingTaskEvents(current, "failed").filter((event) => event.type !== "request_start"),
               {
                 type: "request_start",
                 label: "Request sent",
@@ -3431,7 +3682,13 @@ export function AiEntryWorkspace({
     } finally {
       if (activeRequestAbortControllerRef.current === abortController) {
         activeRequestAbortControllerRef.current = null
-        pendingFirstConversationRouteRef.current = false
+        // Keep the first-route handoff armed until the conversation id has
+        // been observed by the route-sync effect. Non-stream JSON responses
+        // can set the id and enter finally in the same React batch; clearing
+        // here would otherwise lose the redirect to /dashboard/ai/:id.
+        if (!latestConversationIdRef.current) {
+          pendingFirstConversationRouteRef.current = false
+        }
         isLoadingRef.current = false
         setIsResponseLoading(false)
       }
@@ -3445,6 +3702,10 @@ export function AiEntryWorkspace({
     isPreparingAttachments,
     isResponseLoading,
     isZh,
+    selectedAgentId,
+    sessionReady,
+    sessionReadyError,
+    isPlainChatRoute,
     embedded,
     forcedAgentId,
     knowledgeEnabled,
@@ -3458,7 +3719,6 @@ export function AiEntryWorkspace({
     resolvedRequestAgentName,
     resolvedRequestAgentId,
     routeAgentId,
-    selectedAgentId,
     selectedModel,
     selectedModelId,
   ])
@@ -3645,7 +3905,7 @@ export function AiEntryWorkspace({
         <div className="space-y-1">
           <button
             type="button"
-            className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-sm transition hover:bg-accent"
+            className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-sm transition hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground"
             onClick={() => {
               setAddMenuOpen(false)
               fileInputRef.current?.click()
@@ -3657,7 +3917,7 @@ export function AiEntryWorkspace({
           </button>
           <button
             type="button"
-            className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-sm transition hover:bg-accent"
+            className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-sm transition hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground"
             onClick={() => {
               setAddMenuOpen(false)
               setKnowledgeEnabled(true)
@@ -4039,6 +4299,11 @@ export function AiEntryWorkspace({
               {isAgentSelectionExplicit && selectedAgent ? (
                 <div className="px-1 pb-2 text-xs text-muted-foreground">
                   {copy.selectedAgent}: <span className="font-medium text-foreground">{selectedAgent.name}</span>
+                  {selectedAgentId?.startsWith("business-") && !sessionReady ? (
+                    <span className="ml-2 text-amber-600 dark:text-amber-400">
+                      {sessionReadyError || (isZh ? "正在预热会话…" : "Warming up session…")}
+                    </span>
+                  ) : null}
                 </div>
               ) : null}
               <input
@@ -4059,7 +4324,7 @@ export function AiEntryWorkspace({
                 <div className="flex min-w-0 items-center gap-2">
                   {renderSelectors("h-9")}
                   <PromptInputAction tooltip={copy.send}>
-                    <Button type="button" size="sm" className="send-button shrink-0 px-5" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isResponseLoading || isConversationLoading || isPreparingAttachments || modelsLoading}>
+                    <Button type="button" size="sm" className="send-button shrink-0 px-5" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isResponseLoading || isConversationLoading || isPreparingAttachments || modelsLoading || (selectedAgentId?.startsWith("business-") === true && !sessionReady)}>
                       {isResponseLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
                       {copy.send}
                     </Button>

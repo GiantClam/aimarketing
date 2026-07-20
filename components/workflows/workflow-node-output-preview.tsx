@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { ReactNode } from "react"
-import { Check, Copy, Download, ExternalLink, Link2, Pause, Play } from "lucide-react"
+import { AlertTriangle, Check, Copy, Download, ExternalLink, Link2, Pause, Play } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,7 @@ type WorkflowNodeOutputPreviewProps = {
   status: string
   outputPayload: Record<string, unknown> | null
   errorMessage?: string | null
+  warnings?: string[]
   className?: string
 }
 
@@ -360,6 +361,7 @@ export function WorkflowNodeOutputPreview({
   status,
   outputPayload,
   errorMessage,
+  warnings = [],
   className,
 }: WorkflowNodeOutputPreviewProps) {
   const copy = getCopy(locale)
@@ -413,6 +415,12 @@ export function WorkflowNodeOutputPreview({
   }
 
   const resolvedErrorMessage = humanizeWorkflowErrorMessage(locale, errorMessage)
+  const resolvedWarnings = Array.from(
+    new Set([
+      ...warnings.filter((warning) => typeof warning === "string" && warning.trim()).map((warning) => warning.trim()),
+      ...normalizeTextItems(outputPayload?.warnings),
+    ]),
+  )
 
   const placeholder =
     status === "running"
@@ -433,6 +441,17 @@ export function WorkflowNodeOutputPreview({
           {status}
         </div>
       </div>
+
+      {resolvedWarnings.length > 0 ? (
+        <div className="flex items-start gap-2 rounded-[10px] border border-amber-200/80 bg-amber-50/70 p-2.5 text-xs text-amber-800">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          <div className="min-w-0 space-y-1">
+            {resolvedWarnings.map((warning, index) => (
+              <p key={`${warning}-${index}`}>{warning}</p>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {content.hasAny ? (
         <>

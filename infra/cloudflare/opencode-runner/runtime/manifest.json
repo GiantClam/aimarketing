@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "generatedAt": "2026-07-17T11:41:45.128Z",
+  "skills": [
+    "ads-writing",
+    "canvas-design-execution",
+    "case-study-writing",
+    "content-briefing",
+    "customer-intelligence-risk",
+    "email-writing",
+    "enterprise-ad-image",
+    "executive-consulting-suite",
+    "graphic-design-brief",
+    "longform-writing",
+    "newsletter-writing",
+    "product-writing",
+    "social-writing-cn",
+    "social-writing-global",
+    "speech-writing",
+    "style-analytical",
+    "style-conversion",
+    "style-story-driven",
+    "website-copy",
+    "writer-briefing",
+    "writer-facebook",
+    "writer-wechat",
+    "writer-x",
+    "writer-xiaohongshu"
+  ],
+  "agentBundles": [
+    "agency-agents",
+    "business-agents"
+  ]
+}

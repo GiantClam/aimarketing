@@ -618,6 +618,60 @@ test("editable ppt-master planning uses the official template contract instead o
   assert.doesNotMatch(prompt, /Neo-Grid Bold/u)
 })
 
+test("editable planning accepts identity-only brands and structure-only layouts", () => {
+  const style = pptPreviewStyles.find((item) => item.key === "ppt169_building_effective_agents")
+  assert.ok(style)
+  const descriptor = {
+    key: "ppt169_building_effective_agents-executive-brief",
+    slotLabel: "A" as const,
+    style,
+    templateId: "google",
+    narrativeAngle: "executive-brief" as const,
+  }
+  const request = {
+    prompt: "企业 AI 产品发布会",
+    scenario: "sales-deck" as const,
+    language: "zh-CN" as const,
+    previewRuntime: "ppt-master-agent" as const,
+    templateMode: "single-template" as const,
+    templateId: "google",
+    pageCount: 8,
+  }
+  const googlePrompt = buildStyleAwarePrompt(request, descriptor, {
+    templateId: "google",
+    kind: "brand",
+    sourceDir: "/opt/ppt-master/skills/ppt-master/templates/brands/google",
+    sourcePathLabel: "skills/ppt-master/templates/brands/google/",
+    designSpecTitle: "Google Brand Specification",
+    designSpecExcerpt: "Identity-only preset.",
+    designSpecContent: "| Role | HEX |\n| primary | `#4285F4` |\n| text | `#202124` |\n| bg | `#FFFFFF` |",
+    specLockContent: null,
+    referenceSvgFiles: [],
+    imageFiles: [],
+  })
+  const layoutPrompt = buildStyleAwarePrompt(
+    { ...request, templateId: "ai_ops" },
+    { ...descriptor, templateId: "ai_ops" },
+    {
+      templateId: "ai_ops",
+      kind: "layout",
+      sourceDir: "/opt/ppt-master/skills/ppt-master/templates/layouts/presentation_core",
+      sourcePathLabel: "skills/ppt-master/templates/layouts/presentation_core/",
+      designSpecTitle: null,
+      designSpecExcerpt: null,
+      designSpecContent: null,
+      specLockContent: null,
+      referenceSvgFiles: ["templates/01_title_slide.svg"],
+      imageFiles: [],
+    },
+  )
+
+  assert.match(googlePrompt, /Google Brand Specification/u)
+  assert.match(googlePrompt, /#4285F4/u)
+  assert.match(layoutPrompt, /native SVG roster/u)
+  assert.match(layoutPrompt, /presentation_core/u)
+})
+
 test("every imported ppt-master example plans from its official visual contract", async () => {
   const examples = PPT_MASTER_TEMPLATE_MANIFEST.filter((template) => template.id.startsWith("ppt169_"))
 
@@ -678,6 +732,28 @@ test("runtime provider errors normalize headers timeout for Railway diagnostics"
   )
 })
 
+test("runtime provider errors normalize terminated connections for retry and fallback", () => {
+  assert.equal(
+    normalizePptMasterRuntimeProviderError(
+      new Error("Connection terminated unexpectedly"),
+      "deepseek",
+      "deepseek-v4-pro",
+    ),
+    "ppt_master_runtime_provider_connect_failed:deepseek:deepseek-v4-pro",
+  )
+})
+
+test("runtime provider errors normalize closed upstream connections for MiniMax fallback", () => {
+  assert.equal(
+    normalizePptMasterRuntimeProviderError(
+      new Error("Failed after 3 attempts. Last error: Cannot connect to API: other side closed"),
+      "pptoken",
+      "gpt-5.4",
+    ),
+    "ppt_master_runtime_provider_connect_failed:pptoken:gpt-5.4",
+  )
+})
+
 test("deepseek preview messages avoid developer-role system prompts", () => {
   assert.deepEqual(
     buildPreviewProviderMessages({
@@ -698,8 +774,8 @@ test("deepseek preview messages avoid developer-role system prompts", () => {
       userPrompt: "User ask",
     }),
     {
-      system: "System policy",
-      prompt: "User ask",
+      system: undefined,
+      prompt: "System instructions:\nSystem policy\n\nUser request:\nUser ask",
     },
   )
 })

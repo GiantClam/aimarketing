@@ -9,6 +9,7 @@ import { GET as mediaTaskGet } from "@/app/api/platform/media/tasks/[taskId]/rou
 import { GET as assistantTaskGet } from "@/app/api/tasks/[taskId]/route"
 import { POST as leadToolDownloadPost } from "@/app/api/tools/[slug]/download/route"
 import { POST as leadToolPreviewPost } from "@/app/api/tools/[slug]/preview/route"
+import { POST as leadToolPreviewStatusPost } from "@/app/api/tools/[slug]/preview-status/route"
 import { POST as videoWorkflowPost } from "@/app/api/video-agent/workflow/route"
 import { POST as writerChatStreamPost } from "@/app/api/writer/chat/stream/route"
 import { isAiEntryAgentId } from "@/lib/ai-entry/agent-catalog"
@@ -25,6 +26,7 @@ import {
   getModelDefinition,
   listModels,
 } from "@/lib/ai-runtime/model-registry"
+import { executeCapability } from "@/lib/ai-runtime/execute"
 import type { ModelCapability } from "@/lib/ai-runtime/capabilities"
 import {
   evaluatePlatformExecutionGate,
@@ -51,6 +53,10 @@ import type {
 import { runWorkflowDefinition, type WorkflowNodeRunState } from "@/lib/workflows/execution"
 import { getWorkflowDefinition } from "@/lib/workflows/store"
 import { isWorkflowBuiltinAgentSelectable } from "@/lib/workflows/builtin-agent-policy"
+import {
+  getPptPreviewStyleKeyByTemplateId,
+  isKnownPptFrontendTemplateId,
+} from "@/lib/lead-tools/ppt-preview-data-fixed"
 import { getAllowedWorkflowTargetInputKinds, type WorkflowDefinitionEdge, type WorkflowDefinitionNode, type WorkflowNodeInputName, type WorkflowValueKind } from "@/lib/workflows/schema"
 
 type WorkflowCapabilityInvokerOptions = {
@@ -71,6 +77,7 @@ const DEFAULT_WORKFLOW_CAPABILITY_TIMEOUT_MS = 120_000
 const DEFAULT_WORKFLOW_IMAGE_TIMEOUT_MS = 300_000
 const DEFAULT_WORKFLOW_VIDEO_TIMEOUT_MS = 30 * 60_000
 const DEFAULT_WORKFLOW_PPT_TIMEOUT_MS = 300_000
+const DEFAULT_WORKFLOW_EDITABLE_PPT_TEMPLATE_ID = "ppt169_swiss_grid_systems"
 const DEFAULT_DIGITAL_HUMAN_DURATION_SECONDS = 10
 const DEFAULT_DIGITAL_HUMAN_TIMEOUT_MS_PER_VIDEO_SECOND = 60_000
 const WORKFLOW_TEXT_ASSET_MAX_FILES = 3
@@ -85,6 +92,38 @@ const WORKFLOW_DIRECT_RESPONSE_INSTRUCTION = [
 function normalizeOrigin(value: string | undefined) {
   const trimmed = value?.trim()
   return trimmed || "http://127.0.0.1:3000"
+}
+
+function resolveWorkflowOpenAiImageModel(params: WorkflowCapabilityInvokeParams) {
+  const selectedProviderId = normalizeOptionalText(params.node.config.selectedProviderId)
+  if (!selectedProviderId || !["pptoken", "aiberm", "crazyroute"].includes(selectedProviderId)) {
+    return null
+  }
+
+  const hasReferenceInput = params.input.image.length > 0
+  const capability: ModelCapability = hasReferenceInput ? "image.image_to_image" : "image.text_to_image"
+  const selectedModelId = normalizeOptionalText(params.node.config.selectedModelId)
+  const model =
+    findModelByCapabilityAndAlias({ capability, value: selectedModelId }) ||
+    getModelDefinition("openai:image:gpt-image-2")
+
+  return model?.provider === "openai_compatible" ? model : null
+}
+
+function resolveWorkflowOpenAiInlineReferenceImages(params: WorkflowCapabilityInvokeParams) {
+  return params.input.image.map((image) => {
+    const url = image.url?.trim() || ""
+    const match = /^data:([^;,]+);base64,(.+)$/u.exec(url)
+    if (!match) {
+      throw new Error("workflow_image_reference_requires_inline_asset")
+    }
+    return {
+      kind: "inline" as const,
+      mimeType: image.mimeType?.trim() || match[1],
+      base64Data: match[2],
+      assetId: image.assetId || null,
+    }
+  })
 }
 
 function resolveWorkflowAgentEnabledToolNames(input: {
@@ -111,20 +150,42 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutError: string) {
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise
+export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutError: string, signal?: AbortSignal) {
+  if ((!Number.isFinite(timeoutMs) || timeoutMs <= 0) && !signal) return promise
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(timeoutError))
-    }, timeoutMs)
+    let settled = false
+    const cleanup = () => {
+      if (timer) clearTimeout(timer)
+      signal?.removeEventListener("abort", onAbort)
+    }
+    const finishReject = (error: Error) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(error)
+    }
+    const onAbort = () => finishReject(new Error("cancelled"))
+    const timer = Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? setTimeout(() => finishReject(new Error(timeoutError)), timeoutMs)
+      : null
+
+    if (signal?.aborted) {
+      finishReject(new Error("cancelled"))
+      return
+    }
+    signal?.addEventListener("abort", onAbort, { once: true })
 
     promise.then(
       (value) => {
-        clearTimeout(timer)
+        if (settled) return
+        settled = true
+        cleanup()
         resolve(value)
       },
       (error) => {
-        clearTimeout(timer)
+        if (settled) return
+        settled = true
+        cleanup()
         reject(error)
       },
     )
@@ -136,6 +197,16 @@ function extractUrlLikeItems(input: WorkflowCapabilityInvokeParams["input"]): st
   return refs
     .map((item) => item.url?.trim() || "")
     .filter((url) => isEmbeddableWorkflowImagePromptUrl(url))
+}
+
+function inferWorkflowPptProviderId(model: string) {
+  const normalized = model.trim().toLowerCase()
+  if (normalized.startsWith("deepseek")) return "deepseek"
+  if (normalized.startsWith("step-")) return "stepfun"
+  if (normalized.startsWith("minimax")) return "minimax"
+  if (normalized.startsWith("glm-")) return "glm"
+  if (normalized.startsWith("gpt-")) return "pptoken"
+  return "deepseek"
 }
 
 export function resolveWorkflowCapabilityCallTimeoutMs(
@@ -1065,6 +1136,24 @@ function resolveWorkflowVideoModelId(params: WorkflowCapabilityInvokeParams, fea
   )
 }
 
+function resolveWorkflowVideoResolutionDefault(modelId: string | undefined) {
+  const model = modelId ? getModelDefinition(modelId) : null
+  if (model?.provider === "minimax") {
+    return model.providerMetadata?.resolutionMode === "legacy" ? "720P" : "768P"
+  }
+  return "720p"
+}
+
+function normalizeWorkflowVideoResolution(value: unknown, modelId: string | undefined) {
+  const model = modelId ? getModelDefinition(modelId) : null
+  const configured = normalizeOptionalText(value)
+  if (model?.provider === "minimax") {
+    if (model.providerMetadata?.resolutionMode === "legacy") return "720P"
+    return configured?.toLowerCase() === "1080p" || configured === "1080" ? "1080P" : "768P"
+  }
+  return configured?.toLowerCase() || resolveWorkflowVideoResolutionDefault(modelId)
+}
+
 function resolveWorkflowAudioModelId(params: WorkflowCapabilityInvokeParams, capability: "audio.generate" | "audio.voice_synthesis") {
   const configuredModel = normalizeOptionalText(params.node.config.model)
   const matchingModel = findModelByCapabilityAndAlias({
@@ -1112,7 +1201,7 @@ export function buildVideoGenerateRequestBody(params: WorkflowCapabilityInvokePa
         modelId: selectedModel,
         firstFrameUrl: normalizeOptionalText(params.node.config.firstFrameUrl) || findPrimaryImageUrl(params.input),
         lastFrameUrl: normalizeOptionalText(params.node.config.lastFrameUrl) || findSecondaryImageUrl(params.input) || undefined,
-        resolution: normalizeOptionalText(params.node.config.resolution) || "768p",
+        resolution: normalizeWorkflowVideoResolution(params.node.config.resolution, selectedModel),
         duration: normalizeOptionalText(params.node.config.duration) || "6",
         ratio: normalizeOptionalText(params.node.config.ratio) || "adaptive",
         generateAudio: normalizeBooleanString(params.node.config.generateAudio, true),
@@ -1129,7 +1218,7 @@ export function buildVideoGenerateRequestBody(params: WorkflowCapabilityInvokePa
       prompt,
       model: selectedModel,
       modelId: selectedModel,
-      resolution: normalizeOptionalText(params.node.config.resolution) || "768p",
+      resolution: normalizeWorkflowVideoResolution(params.node.config.resolution, selectedModel),
       duration: normalizeOptionalText(params.node.config.duration) || "6",
       ratio: normalizeOptionalText(params.node.config.ratio) || "adaptive",
       generateAudio: normalizeBooleanString(params.node.config.generateAudio, true),
@@ -1563,6 +1652,7 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
               path: "/api/writer/chat/stream",
               body: {
                 query: prompt,
+                executionContext: "workflow",
                 platform: normalizeOptionalText(params.node.config.platform) || "generic",
                 mode: normalizeOptionalText(params.node.config.mode) || "article",
                 language: normalizeOptionalText(params.node.config.language) || "auto",
@@ -1602,22 +1692,35 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
           const scenario = normalizeWorkflowPptScenario(params.node.config.scenario)
           const language = typeof params.node.config.language === "string" ? params.node.config.language : "zh-CN"
           const pageCount = typeof params.node.config.pageCount === "number" ? params.node.config.pageCount : undefined
+          const configuredProviderId =
+            typeof params.node.config.selectedProviderId === "string" && params.node.config.selectedProviderId.trim()
+              ? params.node.config.selectedProviderId.trim()
+              : undefined
+          const selectedModel =
+            typeof params.node.config.model === "string" && params.node.config.model.trim()
+              ? params.node.config.model.trim()
+              : "deepseek-v4-pro"
+          const selectedProviderId = configuredProviderId || inferWorkflowPptProviderId(selectedModel)
           const selectedTemplateId =
             typeof params.node.config.templateId === "string" && params.node.config.templateId.trim()
               ? params.node.config.templateId.trim()
               : null
-          if (previewRuntime === "ppt-master-agent" && !selectedTemplateId) {
-            throw new Error("workflow_ppt_template_selection_required")
-          }
+          const autoSelectedTemplateId =
+            previewRuntime === "ppt-master-agent" && !selectedTemplateId
+              ? DEFAULT_WORKFLOW_EDITABLE_PPT_TEMPLATE_ID
+              : null
+          const effectiveTemplateId = selectedTemplateId
+            ? isKnownPptFrontendTemplateId(selectedTemplateId)
+              ? getPptPreviewStyleKeyByTemplateId(selectedTemplateId) || selectedTemplateId
+              : selectedTemplateId
+            : autoSelectedTemplateId
 
           const previewBody = {
             prompt,
             scenario,
             language,
-            model:
-              typeof params.node.config.model === "string" && params.node.config.model.trim()
-                ? params.node.config.model
-                : "deepseek-v4-pro",
+            model: selectedModel,
+            preferredProviderId: selectedProviderId,
             previewRuntime,
             templateMode:
               previewRuntime === "ppt-master-agent"
@@ -1625,7 +1728,7 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
                 : typeof params.node.config.templateMode === "string"
                   ? params.node.config.templateMode
                   : "auto-4",
-            templateId: selectedTemplateId ?? undefined,
+            templateId: effectiveTemplateId ?? undefined,
             pageCount,
             images:
               inputImages.length > 0
@@ -1651,7 +1754,44 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
             throw new Error(await parseErrorResponse(previewResponse))
           }
 
-          const previewPayload = await parseJsonResponse(previewResponse)
+          let previewPayload = await parseJsonResponse(previewResponse)
+          if (previewResponse.status === 202 || previewPayload?.async === true) {
+            const jobId = typeof previewPayload?.jobId === "string" ? previewPayload.jobId.trim() : ""
+            if (!jobId) {
+              throw new Error("workflow_ppt_preview_job_missing")
+            }
+
+            const previewDeadline = Date.now() + resolveWorkflowCapabilityCallTimeoutMs(
+              "ai-ppt",
+              options.callTimeoutMs,
+              params,
+            )
+            while (Date.now() < previewDeadline) {
+              await sleep(Math.min(options.pollIntervalMs ?? 3000, 3000))
+              const statusResponse = await leadToolPreviewStatusPost(
+                createJsonRequest({
+                  origin,
+                  path: "/api/tools/ai-ppt-preview/preview-status",
+                  body: { jobId, input: previewBody },
+                  cookieHeader: options.cookieHeader,
+                  requestIp: options.requestIp,
+                  currentUser: options.currentUser,
+                }),
+                { params: Promise.resolve({ slug: "ai-ppt-preview" }) },
+              )
+              const statusPayload = await parseJsonResponse(statusResponse)
+              if (statusResponse.status === 202 || statusPayload?.async === true) continue
+              if (!statusResponse.ok) {
+                throw new Error(await parseErrorResponse(statusResponse))
+              }
+              previewPayload = statusPayload
+              break
+            }
+
+            if (!previewPayload?.deck) {
+              throw new Error("workflow_ppt_preview_timeout")
+            }
+          }
           const deck = previewPayload?.deck
           const previewSessionId =
             typeof previewPayload?.previewSessionId === "string" ? previewPayload.previewSessionId : undefined
@@ -1711,11 +1851,71 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
               selectedVariantKey,
               previewSessionId: previewSessionId || null,
               workItemId: workItemId ?? null,
+              ...(autoSelectedTemplateId
+                ? {
+                    autoSelectedTemplateId,
+                    recommendedTemplates: [{ templateId: autoSelectedTemplateId }],
+                  }
+                : {}),
             },
           }
         }
 
         if (params.capabilitySlug === "ai-image") {
+          const openAiImageModel = resolveWorkflowOpenAiImageModel(params)
+          if (openAiImageModel) {
+            const imageBody = buildWorkflowImageGenerateRequestBody(params, prompt, locale)
+            const idempotencyKey = params.idempotencyKey || `${params.node.nodeKey}:${Date.now()}`
+            const result = await executeCapability({
+              currentUser: options.currentUser,
+              capability: openAiImageModel.capability,
+              modelId: openAiImageModel.id,
+              source: "workflow",
+              requestId: idempotencyKey,
+              idempotencyKey,
+              input: {
+                prompt: imageBody.prompt,
+                provider: params.node.config.selectedProviderId,
+                model: imageBody.model || openAiImageModel.providerMetadata?.nativeModel,
+                // The workflow canvas stores ratio presets (for example
+                // `1:1`), while the OpenAI-compatible contract accepts a
+                // concrete pixel size or `auto`.
+                size:
+                  typeof imageBody.imageSize === "string" &&
+                  ["auto", "1024x1024", "1536x1024", "1024x1536"].includes(imageBody.imageSize)
+                    ? imageBody.imageSize
+                    : "auto",
+                quality: imageBody.imageQuality,
+                background: imageBody.imageBackground,
+                outputFormat: imageBody.imageOutputFormat,
+                outputCompression: imageBody.imageOutputCompression,
+                moderation: imageBody.imageModeration,
+                responseFormat: imageBody.imageResponseFormat,
+                candidateCount: imageBody.candidateCount,
+                referenceImages: resolveWorkflowOpenAiInlineReferenceImages(params),
+              },
+            })
+            return {
+              output: {
+                image: result.outputs
+                  .filter((output) => output.kind === "image" && typeof output.url === "string")
+                  .map((output) => ({
+                    url: output.url,
+                    mimeType: output.mimeType,
+                    title: output.title,
+                    sourceNodeKey: params.node.nodeKey,
+                  })),
+              },
+              providerId: result.provider,
+              modelId: result.modelId,
+              creditsConsumed: 0,
+              metadata: {
+                ...(result.payload ?? {}),
+                executionMode: "workflow_ai_runtime",
+              },
+            }
+          }
+
           if (target.downstreamPath.startsWith("/api/image-assistant/generate")) {
             const response = await imageAssistantGeneratePost(
               createJsonRequest({
@@ -1992,6 +2192,7 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
       })(),
       callTimeoutMs,
       resolveWorkflowCapabilityTimeoutError(params.capabilitySlug),
+      params.signal,
     )
   }
 }

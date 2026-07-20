@@ -23,7 +23,18 @@ RUN npm ci --legacy-peer-deps
 COPY lib ./lib
 COPY infra/railway/ppt-master-worker ./infra/railway/ppt-master-worker
 
-RUN git clone --depth 1 https://github.com/hugohe3/ppt-master.git /opt/ppt-master
+# The hosted worker must accept the public auto-4 contract; fail the image build
+# if an older template-selection guard is accidentally copied into the image.
+RUN ! grep -q "ppt_master_template_selection_required" lib/lead-tools/generation-ppt-fixed.ts
+
+ARG PPT_MASTER_REF=68bd7a24e2bbab87bbaa600a367b60b56eb3e0ae
+RUN git init /opt/ppt-master \
+  && git -C /opt/ppt-master remote add origin https://github.com/hugohe3/ppt-master.git \
+  && git -C /opt/ppt-master fetch --depth 1 origin "$PPT_MASTER_REF" \
+  && git -C /opt/ppt-master checkout --detach FETCH_HEAD \
+  && test "$(git -C /opt/ppt-master rev-parse HEAD)" = "$PPT_MASTER_REF" \
+  && test -f /opt/ppt-master/skills/ppt-master/templates/brands/google/templates/design_spec.md \
+  && test -d /opt/ppt-master/skills/ppt-master/templates/layouts/presentation_core/templates
 
 RUN python3 -m venv /opt/ppt-master-venv \
   && for attempt in 1 2 3; do \

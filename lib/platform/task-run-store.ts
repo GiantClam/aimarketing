@@ -12,7 +12,7 @@ import {
 import { ensureEnterpriseAuthTables } from "@/lib/enterprise/server"
 
 export type PlatformTaskRunKind = "workflow" | "media" | "tool" | "agent"
-export type PlatformTaskRunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled"
+export type PlatformTaskRunStatus = "queued" | "running" | "cancel_requested" | "succeeded" | "failed" | "cancelled"
 export type PlatformRunEventLevel = "info" | "warn" | "error"
 export type PlatformArtifactKind = "file" | "link" | "text" | "json"
 export type PlatformWorkItemType = "deck" | "article" | "image_set" | "video" | "audio" | "document"
@@ -108,6 +108,7 @@ export type UpdatePlatformKnowledgeSaveJobInput = {
 
 export type PlatformTaskRunStore = {
   createPlatformTaskRun(input: CreatePlatformTaskRunInput): Promise<PlatformTaskRunRecord>
+  updatePlatformTaskRun(runId: number, input: { status?: PlatformTaskRunStatus; normalizedResult?: Record<string, unknown> | null; startedAt?: Date | null; finishedAt?: Date | null }): Promise<PlatformTaskRunRecord | null>
   appendPlatformRunEvent(runId: number, input: AppendPlatformRunEventInput): Promise<PlatformTaskRunEventRecord>
   getPlatformTaskRun(runId: number): Promise<HydratedPlatformTaskRun | null>
   savePlatformArtifact(input: SavePlatformArtifactInput): Promise<PlatformArtifactRecord>
@@ -143,7 +144,7 @@ const PLATFORM_TASK_RUN_DB_RETRY_DELAYS_MS = [250, 750] as const
 const isRetryablePlatformTaskRunDbError = createRetryableDbErrorMatcher(["timeout exceeded"])
 
 const TASK_RUN_KINDS = new Set<PlatformTaskRunKind>(["workflow", "media", "tool", "agent"])
-const TASK_RUN_STATUSES = new Set<PlatformTaskRunStatus>(["queued", "running", "succeeded", "failed", "cancelled"])
+const TASK_RUN_STATUSES = new Set<PlatformTaskRunStatus>(["queued", "running", "cancel_requested", "succeeded", "failed", "cancelled"])
 const RUN_EVENT_LEVELS = new Set<PlatformRunEventLevel>(["info", "warn", "error"])
 const ARTIFACT_KINDS = new Set<PlatformArtifactKind>(["file", "link", "text", "json"])
 const WORK_ITEM_TYPES = new Set<PlatformWorkItemType>(["deck", "article", "image_set", "video", "audio", "document"])
@@ -643,6 +644,36 @@ export async function createPlatformTaskRun(input: CreatePlatformTaskRunInput) {
   return row
 }
 
+export async function updatePlatformTaskRun(runId: number, input: { status?: PlatformTaskRunStatus; normalizedResult?: Record<string, unknown> | null; startedAt?: Date | null; finishedAt?: Date | null }) {
+  await ensurePlatformTaskRunTables()
+  const terminalStatus = input.status === "succeeded" || input.status === "failed" || input.status === "cancelled"
+  // Terminal transitions are compare-and-set.  In particular, a worker that
+  // finishes after cancellation must not overwrite cancel_requested with
+  // succeeded/failed.  Cancellation is the only terminal status allowed to
+  // win from cancel_requested.
+  const allowedStatuses = input.status === "cancelled"
+    ? ["queued", "running", "cancel_requested"] as const
+    : terminalStatus
+      ? ["queued", "running"] as const
+      : null
+  const [row] = await withPlatformTaskRunDbRetry("update-platform-task-run", () =>
+    db
+      .update(platformTaskRuns)
+      .set({
+        ...(input.status === undefined ? {} : { status: input.status }),
+        ...(input.normalizedResult === undefined ? {} : { normalizedResult: input.normalizedResult }),
+        ...(input.startedAt === undefined ? {} : { startedAt: input.startedAt }),
+        ...(input.finishedAt === undefined ? {} : { finishedAt: input.finishedAt }),
+        updatedAt: new Date(),
+      })
+      .where(allowedStatuses
+        ? and(eq(platformTaskRuns.id, runId), inArray(platformTaskRuns.status, allowedStatuses))
+        : eq(platformTaskRuns.id, runId))
+      .returning(),
+  )
+  return row ?? null
+}
+
 export async function appendPlatformRunEvent(runId: number, input: AppendPlatformRunEventInput) {
   await ensurePlatformTaskRunTables()
 
@@ -665,6 +696,18 @@ export async function getPlatformTaskRun(runId: number) {
 
   if (!row) return null
   return loadHydratedPlatformTaskRun(row)
+}
+
+export async function getPlatformTaskRunsByIdsForUser(runIds: number[], userId: number) {
+  const ids = [...new Set(runIds.filter((value) => Number.isInteger(value) && value > 0))].slice(0, 50)
+  if (ids.length === 0) return []
+  await ensurePlatformTaskRunTables()
+  return withPlatformTaskRunDbRetry("get-platform-task-runs-by-ids-for-user", () =>
+    db
+      .select()
+      .from(platformTaskRuns)
+      .where(and(inArray(platformTaskRuns.id, ids), eq(platformTaskRuns.userId, userId))),
+  )
 }
 
 export async function savePlatformArtifact(input: SavePlatformArtifactInput) {
@@ -1087,6 +1130,24 @@ export function createInMemoryPlatformTaskRunStore(): PlatformTaskRunStore {
       )
     },
 
+    async updatePlatformTaskRun(runId, input) {
+      const current = runs.get(runId)
+      if (!current) return null
+      const terminalStatus = input.status === "succeeded" || input.status === "failed" || input.status === "cancelled"
+      if (terminalStatus && (current.status === "succeeded" || current.status === "failed" || current.status === "cancelled")) return current
+      if (terminalStatus && current.status === "cancel_requested" && input.status !== "cancelled") return current
+      const updated = {
+        ...current,
+        ...(input.status === undefined ? {} : { status: input.status }),
+        ...(input.normalizedResult === undefined ? {} : { normalizedResult: input.normalizedResult }),
+        ...(input.startedAt === undefined ? {} : { startedAt: input.startedAt }),
+        ...(input.finishedAt === undefined ? {} : { finishedAt: input.finishedAt }),
+        updatedAt: new Date(),
+      }
+      runs.set(runId, updated)
+      return updated
+    },
+
     async savePlatformArtifact(input) {
       const row = buildInMemoryPlatformArtifactRecord(nextArtifactId, input)
       nextArtifactId += 1
@@ -1259,6 +1320,7 @@ export function createInMemoryPlatformTaskRunStore(): PlatformTaskRunStore {
 
 export const platformTaskRunStore: PlatformTaskRunStore = {
   createPlatformTaskRun,
+  updatePlatformTaskRun,
   appendPlatformRunEvent,
   getPlatformTaskRun,
   savePlatformArtifact,

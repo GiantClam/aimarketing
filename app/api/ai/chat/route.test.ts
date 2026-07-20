@@ -19,6 +19,10 @@ let emitToolFailureFlow = false
 let emitPreviewSelectionRequiredFlow = false
 let emitQueuedPreviewFlow = false
 let emitClosedControllerErrorFlow = false
+let opencodeFailureMode = false
+let lastOpenCodeOptions: Record<string, unknown> | null = null
+let lastNativeProviderOptions: Record<string, unknown> | null = null
+let backgroundRunCalls: Array<Record<string, unknown>> = []
 let lastStreamingSystemPrompt = ""
 let lastStreamingToolChoice: Record<string, unknown> | undefined
 let customAgentExecutionMode: "direct_agent" | "workflow_backed" = "direct_agent"
@@ -98,11 +102,106 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       }) => {
         appendMessageCalls.push(input)
       },
+      listAiEntryMessages: async () => ({
+        conversation_state: { ppt: { latestPreview: null, latestExport: null, phase: "idle" }, artifacts: [] },
+      }),
+    }
+  }
+
+  if (request === "@/lib/ai-entry/runtime/opencode-adapter") {
+    return {
+      runOpenCodeAgent: async function* (input: { runId: string }, options: Record<string, unknown>) {
+        lastOpenCodeOptions = options
+        yield { event: "runtime_selected", provider: "opencode", backend: "railway-opencode", runId: input.runId }
+        yield { event: "runtime_started", runId: input.runId }
+        if (opencodeFailureMode) {
+          yield { event: "runtime_error", code: "runner_unavailable", message: "runner unavailable", retryable: true, runId: input.runId }
+          throw new Error("runner unavailable")
+        }
+        if (emitArtifactFlow) {
+          yield { event: "skill_activated", skillId: "ppt-master", runId: input.runId }
+          yield { event: "tool_event", tool: "export_ppt_deck", phase: "started", message: "export_ppt_deck: started", runId: input.runId }
+          yield {
+            event: "artifact_payload",
+            artifact: {
+              path: "artifacts/ai-marketing-workbench.pptx",
+              title: "AI Marketing Workbench",
+              kind: "pptx",
+              mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+              sizeBytes: 128,
+              contentBase64: "dGVzdA==",
+            },
+            runId: input.runId,
+          }
+        }
+        yield { event: "text_delta", delta: emitArtifactFlow ? "PPT ready." : "OpenCode reply.", runId: input.runId }
+        yield { event: "done", runId: input.runId }
+      },
+    }
+  }
+
+  if (request === "@/lib/ai-entry/runtime/artifact-publisher") {
+    return {
+      publishRuntimeArtifact: async (input: { artifact: Record<string, unknown> }) => ({
+        artifactId: 401,
+        title: input.artifact.title || "AI Marketing Workbench",
+        kind: input.artifact.kind || "pptx",
+        fileName: "ai-marketing-workbench.pptx",
+        downloadUrl: "/api/platform/artifacts/401/download?download=1",
+      }),
+    }
+  }
+
+  if (request === "@/lib/ai-entry/runtime/background-run-service") {
+    return {
+      createBackgroundOpenCodeRun: async (input: Record<string, unknown>) => {
+        backgroundRunCalls.push(input)
+        return { taskRunId: 902, runtimeRunId: "55555555-5555-4555-8555-555555555555" }
+      },
     }
   }
 
   if (request === "@/lib/ai-entry/provider-routing") {
-    return {}
+    const getConfiguredAiEntryProviderForModel = (providerId: string, modelId: string) => {
+      const provider = [
+        {
+          id: "deepseek",
+          apiKey: process.env.AI_ENTRY_DEEPSEEK_API_KEY || "",
+          baseURL: process.env.AI_ENTRY_DEEPSEEK_BASE_URL || "",
+          model: process.env.AI_ENTRY_DEEPSEEK_MODEL || "deepseek-v4-pro",
+        },
+        {
+          id: "pptoken",
+          apiKey: process.env.AI_ENTRY_PPTOKEN_API_KEY || "",
+          baseURL: process.env.AI_ENTRY_PPTOKEN_BASE_URL || "",
+          model: process.env.AI_ENTRY_PPTOKEN_MODEL || "grok-4.5",
+        },
+      ].find((item) => item.id === providerId)
+      if (!provider) return null
+      if (providerId === "pptoken" && /^grok(?:[-_.]|$)/iu.test(modelId.replace(/^pptoken\//iu, ""))) {
+        const grokKey = process.env.AI_ENTRY_PPTOKEN_GROK_API_KEY || process.env.AI_ENTRY_PPTOKEN_API_KEY || ""
+        return { ...provider, apiKey: grokKey, baseURL: process.env.AI_ENTRY_PPTOKEN_GROK_BASE_URL || provider.baseURL }
+      }
+      return provider
+    }
+
+    return {
+      getConfiguredAiEntryProviders: () => [
+        {
+          id: "deepseek",
+          apiKey: process.env.AI_ENTRY_DEEPSEEK_API_KEY || "",
+          baseURL: process.env.AI_ENTRY_DEEPSEEK_BASE_URL || "",
+          model: process.env.AI_ENTRY_DEEPSEEK_MODEL || "deepseek-v4-pro",
+        },
+        {
+          id: "pptoken",
+          apiKey: process.env.AI_ENTRY_PPTOKEN_API_KEY || "",
+          baseURL: process.env.AI_ENTRY_PPTOKEN_BASE_URL || "",
+          model: process.env.AI_ENTRY_PPTOKEN_MODEL || "grok-4.5",
+        },
+      ],
+      getConfiguredAiEntryProviderForModel,
+    }
   }
 
   if (request === "@/lib/ai-entry/agent-catalog") {
@@ -143,8 +242,10 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/ai-entry/model-policy") {
     return {
       AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT: "gpt-5.4",
+      isConsultingAdvisorEntryMode: (value: unknown) => value === "consulting-advisor",
       isAiEntryPptAgentId: (value: string | null | undefined) =>
         value === "executive-ppt" || value === "executive-presentation-ppt",
+      pickAgentDefaultModelId: () => "grok-4.5",
       pickConsultingModelId: () => "gpt-5.4",
       resolveConsultingModelMode: () => "quality",
       shouldLockConsultingAdvisorModel: () => false,
@@ -253,7 +354,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/skills/runtime/ai-entry-consulting") {
     return {
       prepareAiEntryConsultingRuntime: async (input: { requestedAgentId?: string | null }) => ({
-        effectiveAgentId: input.requestedAgentId || "general",
+        effectiveAgentId: input.requestedAgentId || null,
         routeDecision: null,
         skillRouteDecision: emitArtifactFlow
           ? {
@@ -278,7 +379,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
           : [],
         selectedSkillIds: emitArtifactFlow ? ["ppt-master"] : [],
         runtimePolicy: {
-          agentId: input.requestedAgentId || "general",
+          agentId: input.requestedAgentId || null,
           allowedSkillIds: ["ppt-master"],
           allowedToolIds: ["web_search", "preview_ppt_deck", "export_ppt_deck"],
           allowedMcpServerIds: [],
@@ -322,6 +423,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       }) => {
         lastStreamingSystemPrompt = input.systemPrompt || ""
         lastStreamingToolChoice = input.toolChoice
+        lastNativeProviderOptions = (input as unknown as { providerOptions?: Record<string, unknown> }).providerOptions || null
         input.onProviderSelected?.({
           providerId: "pptoken",
           model: "gpt-5.4",
@@ -496,6 +598,12 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       getGovernedAiEntryModelCatalogForUser: async () => ({
         models: [
           {
+            id: "deepseek::deepseek-v4-pro",
+            modelId: "deepseek-v4-pro",
+            runtimeId: "deepseek-v4-pro",
+            providerId: "deepseek",
+          },
+          {
             id: "pptoken::gpt-5.4",
             modelId: "gpt-5.4",
             runtimeId: "gpt-5.4",
@@ -535,6 +643,10 @@ test.beforeEach(() => {
   emitPreviewSelectionRequiredFlow = false
   emitQueuedPreviewFlow = false
   emitClosedControllerErrorFlow = false
+  opencodeFailureMode = false
+  lastOpenCodeOptions = null
+  lastNativeProviderOptions = null
+  backgroundRunCalls = []
   lastStreamingSystemPrompt = ""
   lastStreamingToolChoice = undefined
   customAgentExecutionMode = "direct_agent"
@@ -564,8 +676,215 @@ test("ai chat route keeps ordinary streaming chat working even when MCP tool loa
   assert.match(text, /conversation_init/)
   assert.match(text, /message_end/)
   assert.match(text, /Normal chat reply\./)
+  assert.match(lastStreamingSystemPrompt, /general-purpose AI chat assistant/u)
+  assert.doesNotMatch(lastStreamingSystemPrompt, /general consulting advisor assistant/u)
+  assert.doesNotMatch(lastStreamingSystemPrompt, /sound consulting practice/u)
   assert.equal(finalizeCalls, 1)
   assert.equal(releaseCalls, 0)
+})
+
+test("ordinary AI Chat stays native even when Railway OpenCode is configured", async () => {
+  const previous = { ...process.env }
+  Object.assign(process.env, {
+    AI_ENTRY_SAAS_OPENCODE_ENABLED: "true",
+    AI_ENTRY_RUNTIME_MODE: "opencode-railway",
+    AI_ENTRY_OPENCODE_BACKEND: "railway-opencode",
+    RAILWAY_OPENCODE_RUNTIME_URL: "https://runner.example.com",
+    RAILWAY_OPENCODE_RUNTIME_TOKEN: "test-secret",
+    AI_ENTRY_DEEPSEEK_API_KEY: "deepseek-app-key",
+    AI_ENTRY_DEEPSEEK_BASE_URL: "https://deepseek.example/v1",
+  })
+  try {
+    const response = await POST({
+      json: async () => ({ messages: [{ role: "user", content: "帮我写一段产品介绍。" }], stream: true }),
+      nextUrl: { origin: "https://example.com" },
+    })
+    const text = await response.text()
+    assert.doesNotMatch(text, /"provider":"opencode"/)
+    assert.match(text, /Normal chat reply\./)
+    assert.match(text, /"event":"message_end"/)
+    assert.equal(lastOpenCodeOptions, null)
+    assert.equal(finalizeCalls, 1)
+    assert.equal(releaseCalls, 0)
+  } finally {
+    for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key]
+    Object.assign(process.env, previous)
+  }
+})
+
+test("ordinary AI Chat preserves the explicitly selected provider on the native path", async () => {
+  const previous = { ...process.env }
+  Object.assign(process.env, {
+    AI_ENTRY_SAAS_OPENCODE_ENABLED: "true",
+    AI_ENTRY_RUNTIME_MODE: "opencode-railway",
+    AI_ENTRY_OPENCODE_BACKEND: "railway-opencode",
+    RAILWAY_OPENCODE_RUNTIME_URL: "https://runner.example.com",
+    RAILWAY_OPENCODE_RUNTIME_TOKEN: "test-secret",
+    AI_ENTRY_PPTOKEN_API_KEY: "pptoken-app-key",
+    AI_ENTRY_PPTOKEN_BASE_URL: "https://pptoken.example/v1",
+    AI_ENTRY_PPTOKEN_MODEL: "grok-4.5",
+  })
+  try {
+    const response = await POST({
+      json: async () => ({
+        messages: [{ role: "user", content: "请直接回复 provider check。" }],
+        stream: true,
+        modelConfig: { providerId: "pptoken", modelId: "gpt-5.4" },
+      }),
+      nextUrl: { origin: "https://example.com" },
+    })
+    await response.text()
+
+    assert.equal(lastOpenCodeOptions, null)
+    assert.equal(lastNativeProviderOptions?.preferredProviderId, "pptoken")
+  } finally {
+    for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key]
+    Object.assign(process.env, previous)
+  }
+})
+
+test("ai chat route preserves an explicitly selected DeepSeek provider", async () => {
+  const response = await POST({
+    json: async () => ({
+      messages: [{ role: "user", content: "请直接总结这段内容。" }],
+      stream: true,
+      modelConfig: { providerId: "deepseek", modelId: "deepseek-v4-pro" },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+  await response.text()
+
+  assert.equal(lastNativeProviderOptions?.preferredProviderId, "deepseek")
+  assert.equal(lastNativeProviderOptions?.preferredModel, "deepseek-v4-pro")
+})
+
+test("workflow chat falls back to the current provider model when a saved model is stale", async () => {
+  const response = await POST({
+    json: async () => ({
+      messages: [{ role: "user", content: "请总结这份工作流输入。" }],
+      stream: true,
+      executionContext: "workflow",
+      modelConfig: { providerId: "deepseek", modelId: "deepseek-v3-legacy" },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+  await response.text()
+
+  assert.equal(response.status, 200)
+  assert.equal(lastNativeProviderOptions?.preferredProviderId, "deepseek")
+  assert.equal(lastNativeProviderOptions?.preferredModel, "deepseek-v4-pro")
+})
+
+test("presentation PPT queues Cloudflare OpenCode and never enters the legacy PPT tool flow", async () => {
+  const previous = { ...process.env }
+  Object.assign(process.env, {
+    AI_ENTRY_SAAS_OPENCODE_ENABLED: "true",
+    AI_ENTRY_RUNTIME_MODE: "opencode-cloudflare-sandbox",
+    AI_ENTRY_OPENCODE_BACKEND: "cloudflare-sandbox-exec",
+    AI_ENTRY_OPENCODE_SESSION_ENABLED: "true",
+    AI_ENTRY_OPENCODE_ASYNC_ENABLED: "true",
+    CLOUDFLARE_OPENCODE_RUNNER_URL: "https://runner.example.com",
+    CLOUDFLARE_OPENCODE_RUNNER_HMAC_SECRET: "test-secret",
+    AI_ENTRY_PPTOKEN_API_KEY: "pptoken-app-key",
+    AI_ENTRY_PPTOKEN_BASE_URL: "https://pptoken.example/v1",
+  })
+  try {
+    const response = await POST({
+      json: async () => ({
+        messages: [{ role: "user", content: "生成一份 8 页产品发布演讲型 PPT。" }],
+        stream: true,
+        agentConfig: { agentId: "executive-presentation-ppt" },
+      }),
+      nextUrl: { origin: "https://example.com" },
+    })
+    const text = await response.text()
+
+    assert.match(text, /"event":"background_task_queued"/u)
+    assert.match(text, /"taskType":"opencode_agent_run"/u)
+    assert.equal(backgroundRunCalls.length, 1)
+    assert.equal(
+      (backgroundRunCalls[0]?.runtimeInput as { agentId?: string } | undefined)?.agentId,
+      "executive-presentation-ppt",
+    )
+    assert.equal(
+      (backgroundRunCalls[0]?.runtimeInput as { modelHint?: string } | undefined)?.modelHint,
+      "pptoken/grok-4.5",
+    )
+    assert.deepEqual(backgroundRunCalls[0]?.provider, {
+      providerId: "pptoken",
+      modelId: "grok-4.5",
+      baseUrl: "https://pptoken.example/v1",
+      apiKey: "pptoken-app-key",
+    })
+    assert.deepEqual(backgroundRunCalls[0]?.selectedSkillIds, [])
+    assert.equal(toolRegistryToolIds.includes("preview_ppt_deck"), false)
+    assert.equal(toolRegistryToolIds.includes("export_ppt_deck"), false)
+  } finally {
+    for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key]
+    Object.assign(process.env, previous)
+  }
+})
+
+test("presentation PPT uses OpenRouter only when explicitly selected", async () => {
+  const previous = { ...process.env }
+  Object.assign(process.env, {
+    AI_ENTRY_SAAS_OPENCODE_ENABLED: "true",
+    AI_ENTRY_RUNTIME_MODE: "opencode-railway",
+    AI_ENTRY_OPENCODE_BACKEND: "railway-opencode",
+    AI_ENTRY_OPENCODE_SESSION_ENABLED: "true",
+    AI_ENTRY_OPENCODE_ASYNC_ENABLED: "true",
+    RAILWAY_OPENCODE_RUNTIME_URL: "https://runner.example.com",
+    RAILWAY_OPENCODE_RUNTIME_TOKEN: "test-secret",
+    AI_ENTRY_OPENROUTER_API_KEY: "openrouter-app-key",
+    AI_ENTRY_OPENROUTER_BASE_URL: "https://openrouter.example/v1",
+  })
+  try {
+    const response = await POST({
+      json: async () => ({
+        messages: [{ role: "user", content: "生成一份演讲型发布会 PPT。" }],
+        stream: true,
+        agentConfig: { agentId: "executive-presentation-ppt" },
+        modelConfig: { providerId: "openrouter", modelId: "x-ai/grok-4.5" },
+      }),
+      nextUrl: { origin: "https://example.com" },
+    })
+    assert.equal(response.status, 500)
+    assert.equal((response as any).body?.error, "ai_entry_model_unavailable_for_provider")
+    assert.equal(backgroundRunCalls.length, 0)
+  } finally {
+    for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key]
+    Object.assign(process.env, previous)
+  }
+})
+
+test("ai chat route does not fall back from OpenCode and never duplicates billing", async () => {
+  const previous = { ...process.env }
+  Object.assign(process.env, {
+    AI_ENTRY_SAAS_OPENCODE_ENABLED: "true",
+    AI_ENTRY_RUNTIME_MODE: "opencode-railway",
+    AI_ENTRY_OPENCODE_BACKEND: "railway-opencode",
+    RAILWAY_OPENCODE_RUNTIME_URL: "https://runner.example.com",
+    RAILWAY_OPENCODE_RUNTIME_TOKEN: "test-secret",
+    AI_ENTRY_BUSINESS_AGENT_RAILWAY_ENABLED: "true",
+  })
+  opencodeFailureMode = true
+  try {
+    const response = await POST({
+      json: async () => ({ messages: [{ role: "user", content: "hello" }], stream: true, agentConfig: { agentId: "business-content-growth" } }),
+      nextUrl: { origin: "https://example.com" },
+    })
+    const text = await response.text()
+    assert.equal(response.status, 200)
+    assert.doesNotMatch(text, /"event":"provider_fallback"/)
+    assert.doesNotMatch(text, /Normal chat reply\./)
+  assert.match(text, /runner unavailable/)
+    assert.equal(finalizeCalls, 0)
+    assert.equal(releaseCalls, 1)
+  } finally {
+    opencodeFailureMode = false
+    for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key]
+    Object.assign(process.env, previous)
+  }
 })
 
 test("ai chat route forwards the selected model into the PPT tool registry context", async () => {
@@ -618,8 +937,7 @@ test("ai chat route preserves business-agent streaming and emits artifact-create
   assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
   const text = await response.text()
   assert.match(text, /"event":"skill_selected"/)
-  assert.match(text, /"event":"tool_call_start"/)
-  assert.match(text, /"event":"validation_result"/)
+  assert.match(text, /"event":"runtime_stage"/)
   assert.match(text, /"event":"artifact_created"/)
   assert.match(text, /ai-marketing-workbench\.pptx/)
   assert.match(text, /message_end/)

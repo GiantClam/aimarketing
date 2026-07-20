@@ -11,6 +11,12 @@ import {
 import { queryRunningHubTask, type RunningHubTaskResponse } from "@/lib/platform/runninghub"
 import { queryRunningHubVideoTask, type RunningHubVideoTask } from "@/lib/platform/runninghub-video"
 import { appendPlatformRunEvent, type PlatformTaskRunRecord, type PlatformTaskRunStatus } from "@/lib/platform/task-run-store"
+import { materializeRemotePptWorkerPreview } from "@/lib/lead-tools/ppt-engines"
+import {
+  listPendingLeadToolPptPreviewJobs,
+  updateLeadToolPptPreviewJob,
+} from "@/lib/lead-tools/ppt-preview-job-store"
+import { requestPptWorkerPreviewStatus } from "@/lib/lead-tools/ppt-worker-client"
 
 type SyncablePlatformRun = Pick<
   PlatformTaskRunRecord,
@@ -35,6 +41,12 @@ export type PlatformRunSyncResult = {
 }
 
 type PlatformRunSyncSummary = {
+  scanned: number
+  updated: number
+  failed: number
+}
+
+export type LeadToolPptPreviewSyncSummary = {
   scanned: number
   updated: number
   failed: number
@@ -386,6 +398,70 @@ export async function syncPlatformTaskRuns(
 
   return {
     scanned,
+    updated,
+    failed,
+  }
+}
+
+export async function syncLeadToolPptPreviewJobs(
+  input: { limit?: number } = {},
+): Promise<LeadToolPptPreviewSyncSummary> {
+  const jobs = await listPendingLeadToolPptPreviewJobs(input.limit ?? 25)
+  let updated = 0
+  let failed = 0
+
+  for (const job of jobs) {
+    try {
+      const status = await requestPptWorkerPreviewStatus(job.externalJobId)
+
+      if (status.status === "queued" || status.status === "running") {
+        await updateLeadToolPptPreviewJob(job.id, { status: status.status })
+        updated += 1
+        continue
+      }
+
+      if (status.status === "failed") {
+        await updateLeadToolPptPreviewJob(job.id, {
+          status: "failed",
+          errorMessage: status.message || "PPT preview failed",
+          normalizedResult: {
+            ...(job.normalizedResult ?? {}),
+            providerStatus: status.status,
+          },
+        })
+        updated += 1
+        failed += 1
+        continue
+      }
+
+      if (status.status !== "completed") {
+        continue
+      }
+
+      const result = await materializeRemotePptWorkerPreview(status)
+      await updateLeadToolPptPreviewJob(job.id, {
+        status: "succeeded",
+        normalizedResult: {
+          ...(job.normalizedResult ?? {}),
+          provider: "ppt-master-worker",
+          status: "completed",
+          previewSessionId: result.previewSessionId,
+          generatedAt: result.generatedAt,
+        },
+      })
+      updated += 1
+    } catch (error) {
+      failed += 1
+      console.error("lead_tool_ppt_preview_sync_failed", {
+        jobId: job.id,
+        externalJobId: job.externalJobId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  return {
+    scanned: jobs.length,
     updated,
     failed,
   }

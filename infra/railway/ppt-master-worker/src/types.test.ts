@@ -20,6 +20,22 @@ test("worker preview schema accepts official ppt-master layout ids", () => {
   assert.equal(parsed.preferredProviderId, "enterprise-openai-compatible")
 })
 
+test("worker preview schema accepts legacy ai_ops jobs during template migration", () => {
+  const parsed = previewRequestSchema.parse({
+    requestId: "req_legacy_ai_ops",
+    prompt: "Build an AI operations deck",
+    scenario: "sales-deck",
+    language: "zh-CN",
+    preferredProviderId: "deepseek",
+    templateMode: "single-template",
+    templateId: "ai_ops",
+    allowMockFallback: false,
+    runtimeProfile: "railway-linux",
+  })
+
+  assert.equal(parsed.templateId, "ai_ops")
+})
+
 test("worker preview schema accepts official ppt-master example ids", () => {
   const parsed = previewRequestSchema.parse({
     requestId: "req_example_template",

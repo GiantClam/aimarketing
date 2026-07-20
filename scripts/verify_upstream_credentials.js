@@ -140,7 +140,7 @@ async function verifyCrazyroute() {
       process.env.CRAZYROUTE_BASE_URL ||
       process.env.CRAZYROUTER_BASE_URL ||
       process.env.AI_ENTRY_CRAZYROUTE_BASE_URL ||
-      "https://api.crazyroute.com/v1",
+      "https://crazyrouter.com/v1",
     model: process.env.AI_ENTRY_CRAZYROUTE_MODEL || "gpt-4-mini",
   })
 }

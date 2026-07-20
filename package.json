@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "node scripts/clean-build-artifacts.js && next build",
+    "prebuild": "pnpm run validate:workflow:upstream",
     "clean:build": "node scripts/clean-build-artifacts.js",
     "dev": "node scripts/run-next-dev-with-local-proxy.cjs",
     "lint": "eslint app components lib modules --max-warnings=0",
@@ -22,6 +23,13 @@
     "migrate:billing:plan-change": "node scripts/run-billing-plan-change-migration.js",
     "migrate:billing:stripe": "node scripts/run-billing-stripe-migration.js",
     "migrate:all": "node scripts/run-all-db-migrations.js",
+    "db:opencode:v2:migrate": "node scripts/run-opencode-runtime-v2-migration.js",
+    "db:opencode:v2:verify": "node scripts/run-opencode-runtime-v2-migration.js --verify",
+    "opencode:runtime:sync": "node scripts/sync-opencode-runtime.js",
+    "shared-agent:skills:sync": "tsx --require ./scripts/register-server-only-shim.cjs scripts/sync-shared-agent-skill-bundles.ts",
+    "shared-agent:runtime:smoke": "tsx scripts/shared-agent-runtime-smoke.ts",
+    "shared-agent:r2:bootstrap": "tsx scripts/bootstrap-shared-agent-r2-credentials.ts",
+    "opencode:deploy:configure": "bash scripts/configure-opencode-deployment.sh",
     "migrate:data": "node scripts/migrate-legacy-data-to-ai-marketing.js",
     "paypal:create-plans": "node scripts/create-paypal-subscription-plans.js",
     "seed:writer:history": "node scripts/seed-writer-history.js",
@@ -63,7 +71,8 @@
     "test:e2e:lead-hunter:workflows:with-server": "python scripts/run_lead_hunter_workflows_e2e_with_server.py",
     "test:e2e:real-stack": "python scripts/run_real_stack_e2e_with_server.py",
     "test:e2e:deployed": "python tests/deployed-e2e.py",
-    "test:e2e:deployed:dify": "python tests/dify-deployed-check.py"
+    "test:e2e:deployed:dify": "python tests/dify-deployed-check.py",
+    "validate:workflow:upstream": "tsx scripts/validate-infinite-canvas-import-manifest.ts"
   },
   "dependencies": {
     "@ai-sdk/mcp": "^1.0.35",

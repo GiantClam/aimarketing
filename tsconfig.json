@@ -34,6 +34,7 @@
     "**/*.tsx",
     ".next-ai-entry-model-selection-e2e/types/**/*.ts",
     ".next-ai-entry-validation/types/**/*.ts",
+    ".next-e2e-local/types/**/*.ts",
     ".next-image-assistant-e2e/types/**/*.ts",
     ".next-lead-hunter-timing/types/**/*.ts",
     ".next-lead-hunter-workflows-e2e/types/**/*.ts",
@@ -52,6 +53,8 @@
   "exclude": [
     "node_modules",
     "submodules",
+    "infra/cloudflare/opencode-runner",
+    "infra/cloudflare/dashi-ppt-smoke",
     "zola-reference",
     ".next",
     "coverage"

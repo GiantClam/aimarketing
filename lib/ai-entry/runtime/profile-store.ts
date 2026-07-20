@@ -21,29 +21,45 @@ function normalizeUrl(value: string | undefined) {
 
 function buildProfile(input: {
   env: Readonly<Record<string, string | undefined>>
-  backend: "railway-opencode"
+  backend: "cloudflare-opencode-session" | "railway-opencode"
+  deploymentMode: "saas-cloudflare-sandbox" | "saas-railway"
   enabled: boolean
   runnerUrl: string | null
   hasRunnerSecret: boolean
+  timeoutEnvKey?: "CLOUDFLARE_OPENCODE_V2_TIMEOUT_MS" | "RAILWAY_OPENCODE_TIMEOUT_MS"
+  maxArtifactsEnvKey?: "CLOUDFLARE_OPENCODE_MAX_ARTIFACTS" | "RAILWAY_OPENCODE_MAX_ARTIFACTS"
+  maxArtifactBytesEnvKey?: "CLOUDFLARE_OPENCODE_MAX_ARTIFACT_BYTES" | "RAILWAY_OPENCODE_MAX_ARTIFACT_BYTES"
+  maxArtifactTotalBytesEnvKey?: "CLOUDFLARE_OPENCODE_MAX_ARTIFACT_TOTAL_BYTES" | "RAILWAY_OPENCODE_MAX_ARTIFACT_TOTAL_BYTES"
 }) : RuntimeProfile {
-  const { env, backend, enabled, runnerUrl, hasRunnerSecret } = input
+  const {
+    env,
+    backend,
+    deploymentMode,
+    enabled,
+    runnerUrl,
+    hasRunnerSecret,
+    timeoutEnvKey = "RAILWAY_OPENCODE_TIMEOUT_MS",
+    maxArtifactsEnvKey = "RAILWAY_OPENCODE_MAX_ARTIFACTS",
+    maxArtifactBytesEnvKey = "RAILWAY_OPENCODE_MAX_ARTIFACT_BYTES",
+    maxArtifactTotalBytesEnvKey = "RAILWAY_OPENCODE_MAX_ARTIFACT_TOTAL_BYTES",
+  } = input
   const active = enabled && Boolean(runnerUrl) && hasRunnerSecret
   return {
     provider: active ? "opencode" : "ai-sdk-native",
     backend: active ? backend : "native",
-    deploymentMode: active ? "saas-railway" : "saas-railway",
+    deploymentMode,
     enabled: active,
     asyncEnabled: readBoolean(env.AI_ENTRY_OPENCODE_ASYNC_ENABLED, false),
     sessionEnabled: readBoolean(env.AI_ENTRY_OPENCODE_SESSION_ENABLED, false),
     runnerUrl,
-    timeoutMs: readPositiveInt(env.RAILWAY_OPENCODE_TIMEOUT_MS, 3_600_000),
+    timeoutMs: readPositiveInt(env[timeoutEnvKey], 3_600_000),
     maxOutputBytes: readPositiveInt(env.RAILWAY_OPENCODE_MAX_OUTPUT_BYTES, 512 * 1024),
     // Dashi presentation runs publish SVG QA assets alongside the final HTML,
     // PPTX, and manifest. Keep enough room for the deliverables instead of
     // allowing the asset list to crowd out the final files.
-    maxArtifacts: readPositiveInt(env.RAILWAY_OPENCODE_MAX_ARTIFACTS, 24),
-    maxArtifactBytes: readPositiveInt(env.RAILWAY_OPENCODE_MAX_ARTIFACT_BYTES, 2 * 1024 * 1024),
-    maxArtifactTotalBytes: readPositiveInt(env.RAILWAY_OPENCODE_MAX_ARTIFACT_TOTAL_BYTES, 16 * 1024 * 1024),
+    maxArtifacts: readPositiveInt(env[maxArtifactsEnvKey], 24),
+    maxArtifactBytes: readPositiveInt(env[maxArtifactBytesEnvKey], 2 * 1024 * 1024),
+    maxArtifactTotalBytes: readPositiveInt(env[maxArtifactTotalBytesEnvKey], 16 * 1024 * 1024),
   }
 }
 
@@ -66,6 +82,7 @@ export function resolveDefaultAgentRuntimeProfile(env: Readonly<Record<string, s
   const profile = buildProfile({
     env,
     backend: "railway-opencode",
+    deploymentMode: "saas-railway",
     enabled,
     runnerUrl,
     hasRunnerSecret,
@@ -83,6 +100,7 @@ export function resolveEditablePptRailwayRuntimeProfile(
   return buildProfile({
     env,
     backend: "railway-opencode",
+    deploymentMode: "saas-railway",
     enabled,
     runnerUrl,
     hasRunnerSecret,
@@ -106,10 +124,36 @@ export function resolveBusinessAgentRailwayRuntimeProfile(
   const profile = buildProfile({
     env,
     backend: "railway-opencode",
+    deploymentMode: "saas-railway",
     enabled,
     runnerUrl,
     hasRunnerSecret,
   })
+  return { ...profile, sessionEnabled: profile.enabled }
+}
+
+/** The speaker-style PPT assistant runs the pinned dashi-ppt-skill in Cloudflare Sandbox. */
+export function resolveDashiPptCloudflareRuntimeProfile(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): RuntimeProfile {
+  const runtimeMode = env.AI_ENTRY_RUNTIME_MODE?.trim() || ""
+  const enabled =
+    readBoolean(env.AI_ENTRY_SAAS_OPENCODE_ENABLED, false) &&
+    (runtimeMode === "" || runtimeMode === "opencode-cloudflare-sandbox")
+  const profile = buildProfile({
+    env,
+    backend: "cloudflare-opencode-session",
+    deploymentMode: "saas-cloudflare-sandbox",
+    enabled,
+    runnerUrl: normalizeUrl(env.CLOUDFLARE_OPENCODE_RUNNER_URL),
+    hasRunnerSecret: Boolean(env.CLOUDFLARE_OPENCODE_RUNNER_HMAC_SECRET?.trim()),
+    timeoutEnvKey: "CLOUDFLARE_OPENCODE_V2_TIMEOUT_MS",
+    maxArtifactsEnvKey: "CLOUDFLARE_OPENCODE_MAX_ARTIFACTS",
+    maxArtifactBytesEnvKey: "CLOUDFLARE_OPENCODE_MAX_ARTIFACT_BYTES",
+    maxArtifactTotalBytesEnvKey: "CLOUDFLARE_OPENCODE_MAX_ARTIFACT_TOTAL_BYTES",
+  })
+  // V2 Cloudflare runs always use the durable session protocol. This is
+  // independent of the optional async queue response mode.
   return { ...profile, sessionEnabled: profile.enabled }
 }
 

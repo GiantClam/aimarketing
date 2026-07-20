@@ -561,7 +561,7 @@ function toNumberList(value: unknown) {
 export function buildWorkflowRunNormalizedResult(input: {
   workflowId: number
   finalNodeKeys: string[]
-  workflowStatus: "succeeded" | "failed"
+  workflowStatus: "succeeded" | "failed" | "cancelled"
   persistedArtifactIds: number[]
   persistedWorkItemIds: number[]
   persistedKnowledgeSaveJobIds?: number[]

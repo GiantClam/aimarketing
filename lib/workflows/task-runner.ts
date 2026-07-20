@@ -111,7 +111,7 @@ async function listRecoverableWorkflowRuns(limit: number) {
       and(
         eq(platformTaskRuns.kind, "workflow"),
         eq(platformTaskRuns.itemType, "workflow"),
-        inArray(platformTaskRuns.status, ["queued", "running"]),
+        inArray(platformTaskRuns.status, ["queued", "running", "cancel_requested"]),
       ),
     )
     .orderBy(desc(platformTaskRuns.createdAt), desc(platformTaskRuns.id))
@@ -156,6 +156,7 @@ async function markWorkflowRunStaleFailed(run: RecoverableWorkflowRun) {
     runId: run.id,
     patch: {
       status: "failed",
+      expectedStatus: ["running"],
       finishedAt: new Date(),
       normalizedResult,
     },
@@ -185,6 +186,7 @@ function executeTrackedWorkflowRun(runId: number, requestOrigin: string) {
         runId,
         patch: {
           status: "failed",
+          expectedStatus: ["queued", "running"],
           finishedAt: new Date(),
         },
         event: {
@@ -201,6 +203,7 @@ function executeTrackedWorkflowRun(runId: number, requestOrigin: string) {
         runId,
         patch: {
           status: "failed",
+          expectedStatus: ["queued", "running"],
           finishedAt: new Date(),
           normalizedResult: {
             ...(cloneNormalizedResult(hydratedRun.normalizedResult) ?? {}),
@@ -223,6 +226,22 @@ function executeTrackedWorkflowRun(runId: number, requestOrigin: string) {
     }, WORKFLOW_RUN_HEARTBEAT_MS)
 
     try {
+      if (pendingRetry?.mode === "iteration") {
+        await executeWorkflowRunJob({
+          runId,
+          workflow: detail.workflow,
+          currentUser,
+          seedInput,
+          iterationRetry: {
+            iterationKey: pendingRetry.iterationKey!,
+            attemptNumber: pendingRetry.attemptNumber,
+          },
+          locale: "zh",
+          requestOrigin,
+        })
+        return
+      }
+
       if (pendingRetry) {
         await executeWorkflowRetryJob({
           runId,
@@ -264,7 +283,7 @@ async function handleWorkflowRun(runId: number, requestOrigin: string, waitForCo
     !hydratedRun ||
     hydratedRun.kind !== "workflow" ||
     hydratedRun.itemType !== "workflow" ||
-    (hydratedRun.status !== "queued" && hydratedRun.status !== "running")
+    (hydratedRun.status !== "queued" && hydratedRun.status !== "running" && hydratedRun.status !== "cancel_requested")
   ) {
     return { considered: 1, started: 0, alreadyRunning: 0, staleFailed: 0, skipped: 1 }
   }
@@ -289,7 +308,7 @@ async function handleWorkflowRun(runId: number, requestOrigin: string, waitForCo
     activeWorkflowRuns.delete(runId)
   }
 
-  if (run.status === "running") {
+  if (run.status === "running" || run.status === "cancel_requested") {
     if (activeWorkflowRuns.has(runId)) {
       return { considered: 1, started: 0, alreadyRunning: 1, staleFailed: 0, skipped: 0 }
     }

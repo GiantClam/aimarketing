@@ -27,8 +27,13 @@ export type AiEntryStreamEvent = {
   event?: string
   conversation_id?: string
   answer?: string
+  agent_id?: string | null
+  skill_id?: string | null
+  message?: string
   provider?: string
   provider_model?: string
+  fallback_reason?: "empty_response" | "timeout" | "connection" | "rate_limit" | "provider_error"
+  runtime_error?: string
   artifact?: {
     kind?: string
     title?: string

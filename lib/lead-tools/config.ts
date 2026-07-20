@@ -99,7 +99,7 @@ export function getPptWorkerInternalToken() {
 export function getPptWorkerRuntimeProfile() {
   const runtimeProfile = process.env.PPT_WORKER_RUNTIME_PROFILE?.trim()
 
-  if (runtimeProfile === "railway-linux") {
+  if (runtimeProfile === "cloudflare-linux" || runtimeProfile === "railway-linux") {
     return runtimeProfile
   }
 
@@ -107,6 +107,9 @@ export function getPptWorkerRuntimeProfile() {
   if (workerBaseUrl) {
     try {
       const hostname = new URL(workerBaseUrl).hostname.toLowerCase()
+      if (hostname.endsWith(".workers.dev") || hostname.endsWith(".cloudflare.com")) {
+        return "cloudflare-linux" as const
+      }
       if (hostname.endsWith(".railway.app")) {
         return "railway-linux" as const
       }

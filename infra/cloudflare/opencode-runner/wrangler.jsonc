@@ -1,0 +1,70 @@
+{
+  "name": "aimarketing-opencode-runner",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "SANDBOX_TRANSPORT": "rpc",
+    "COMMAND_TIMEOUT_MS": "180000",
+    "SANDBOX_LOG_LEVEL": "warn",
+    "SANDBOX_LOG_FORMAT": "json",
+    "SHARED_AGENT_SESSION_SLEEP_AFTER": "15m",
+    "SHARED_AGENT_PREWARM_ENABLED": "false",
+    "OPENCODE_EVENT_ALLOWED_ORIGINS": "http://localhost:3000,http://localhost:3100,https://www.aimarketingsite.com,https://aimarketingsite.com",
+    "PLATFORM_CALLBACK_URL": "https://www.aimarketingsite.com/api/internal/opencode-runtime/callback",
+    "PPT_WORKER_RAILWAY_BASE_URL": "https://ppt-master-worker-editable-production.up.railway.app"
+  },
+  "r2_buckets": [
+    { "binding": "BACKUP_BUCKET", "bucket_name": "aimarketing-opencode-runtime" },
+    { "binding": "ARTIFACT_BUCKET", "bucket_name": "aimarketing-opencode-runtime" },
+    { "binding": "SHARED_AGENT_SKILL_BUNDLE_BUCKET", "bucket_name": "aimarketing-shared-agent-runtime" }
+  ],
+  "queues": {
+    "producers": [
+      { "binding": "AGENT_RUN_QUEUE", "queue": "aimarketing-opencode-runs" }
+    ],
+    "consumers": [
+      {
+        "queue": "aimarketing-opencode-runs",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 5,
+        "dead_letter_queue": "aimarketing-opencode-runs-dlq"
+      }
+    ]
+  },
+  "workflows": [
+    {
+      "binding": "AGENT_RUN_WORKFLOW",
+      "name": "aimarketing-opencode-run-workflow",
+      "class_name": "AgentRunWorkflow"
+    }
+  ],
+  "containers": [
+    {
+      "class_name": "Sandbox",
+      "image": "registry.cloudflare.com/9630806d5a588fc350ee64c395005cfa/aimarketing-opencode-runner-sandbox@sha256:90da46fc9e4517f02e6dfe030a0dabbf301b7f34cc0192897794f8ddf839b4a3",
+      "instance_type": "standard-4",
+      "max_instances": 50
+    },
+    {
+      "class_name": "PptMasterContainer",
+      "image": "registry.cloudflare.com/9630806d5a588fc350ee64c395005cfa/aimarketing-opencode-runner-pptmastercontainer:ppt-reliability-20260713-r5",
+      "instance_type": "standard-2",
+      "max_instances": 5
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "class_name": "Sandbox", "name": "Sandbox" },
+      { "class_name": "AgentRunCoordinator", "name": "AgentRunCoordinator" },
+      { "class_name": "PptMasterContainer", "name": "PPT_MASTER_CONTAINER" },
+      { "class_name": "SessionCoordinator", "name": "SessionCoordinator" }
+    ]
+  },
+  "migrations": [
+    { "new_sqlite_classes": ["Sandbox", "AgentRunCoordinator"], "tag": "v1" },
+    { "new_sqlite_classes": ["SessionCoordinator"], "tag": "v2" },
+    { "new_sqlite_classes": ["PptMasterContainer"], "tag": "v3" }
+  ]
+}

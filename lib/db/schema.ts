@@ -1,4 +1,5 @@
-import { pgTable, serial, integer, varchar, text, timestamp, boolean, uniqueIndex, jsonb, real, index } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
+import { pgTable, serial, integer, varchar, text, timestamp, boolean, uniqueIndex, jsonb, real, index, uuid, check } from "drizzle-orm/pg-core"
 
 const withPrefix = (name: string) => `AI_MARKETING_${name}`
 
@@ -784,6 +785,8 @@ export const platformWorkflows = pgTable(
     triggerType: varchar("trigger_type", { length: 24 }).default("manual").notNull(),
     description: text("description"),
     metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
+    schemaVersion: integer("schema_version").default(1).notNull(),
+    currentRevision: integer("current_revision").default(1).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -806,6 +809,7 @@ export const platformWorkflowNodes = pgTable(
     positionX: integer("position_x").default(0).notNull(),
     positionY: integer("position_y").default(0).notNull(),
     config: jsonb("config").$type<Record<string, unknown>>().default({}).notNull(),
+    nodeVersion: integer("node_version").default(1).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -832,6 +836,9 @@ export const platformWorkflowEdges = pgTable(
     sourceNodeKey: varchar("source_node_key", { length: 120 }).notNull(),
     targetNodeKey: varchar("target_node_key", { length: 120 }).notNull(),
     inputName: varchar("input_name", { length: 80 }),
+    edgeKey: varchar("edge_key", { length: 180 }),
+    sourcePortId: varchar("source_port_id", { length: 120 }),
+    targetPortId: varchar("target_port_id", { length: 120 }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
@@ -844,6 +851,103 @@ export const platformWorkflowEdges = pgTable(
       table.workflowId,
       table.sourceNodeKey,
     ),
+  }),
+)
+
+/** Immutable v2 workflow snapshots.  Normalized node/edge rows remain the
+ * query projection; this table is the audit/run contract and is append-only. */
+export const platformWorkflowRevisions = pgTable(
+  withPrefix("platform_workflow_revisions"),
+  {
+    id: serial("id").primaryKey(),
+    workflowId: integer("workflow_id")
+      .notNull()
+      .references(() => platformWorkflows.id, { onDelete: "restrict" }),
+    revision: integer("revision").notNull(),
+    schemaVersion: integer("schema_version").notNull(),
+    definitionHash: varchar("definition_hash", { length: 64 }).notNull(),
+    definition: jsonb("definition").$type<Record<string, unknown>>().notNull(),
+    createdByUserId: integer("created_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    workflowRevisionUnique: uniqueIndex(withPrefix("platform_workflow_revisions_workflow_revision_idx")).on(
+      table.workflowId,
+      table.revision,
+    ),
+    workflowCreatedIdx: index(withPrefix("platform_workflow_revisions_workflow_created_idx")).on(
+      table.workflowId,
+      table.createdAt,
+    ),
+  }),
+)
+
+/** Immutable run-time definition snapshot captured at run creation time. */
+export const platformWorkflowRunSnapshots = pgTable(
+  withPrefix("platform_workflow_run_snapshots"),
+  {
+    taskRunId: integer("task_run_id")
+      .primaryKey()
+      .references(() => platformTaskRuns.id, { onDelete: "cascade" }),
+    workflowId: integer("workflow_id")
+      .notNull()
+      .references(() => platformWorkflows.id, { onDelete: "restrict" }),
+    revisionId: integer("revision_id")
+      .notNull()
+      .references(() => platformWorkflowRevisions.id, { onDelete: "restrict" }),
+    definitionHash: varchar("definition_hash", { length: 64 }).notNull(),
+    definition: jsonb("definition").$type<Record<string, unknown>>().notNull(),
+    requestId: varchar("request_id", { length: 64 }).notNull(),
+    cancelRequestedAt: timestamp("cancel_requested_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    workflowRequestUnique: uniqueIndex(withPrefix("platform_workflow_run_snapshots_workflow_request_idx")).on(
+      table.workflowId,
+      table.requestId,
+    ),
+    revisionIdx: index(withPrefix("platform_workflow_run_snapshots_revision_idx")).on(table.revisionId),
+  }),
+)
+
+export const platformWorkflowIterations = pgTable(
+  withPrefix("platform_workflow_iterations"),
+  {
+    id: serial("id").primaryKey(),
+    runId: integer("run_id")
+      .notNull()
+      .references(() => platformTaskRuns.id, { onDelete: "cascade" }),
+    scopeNodeKey: varchar("scope_node_key", { length: 120 }).notNull(),
+    iterationKey: varchar("iteration_key", { length: 160 }).notNull(),
+    iterationIndex: integer("iteration_index").notNull(),
+    status: varchar("status", { length: 24 }).default("queued").notNull(),
+    inputPayload: jsonb("input_payload").$type<Record<string, unknown> | null>(),
+    outputPayload: jsonb("output_payload").$type<Record<string, unknown> | null>(),
+    creditsReserved: integer("credits_reserved").default(0).notNull(),
+    creditsConsumed: integer("credits_consumed").default(0).notNull(),
+    startedAt: timestamp("started_at"),
+    finishedAt: timestamp("finished_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    statusCheck: check(
+      withPrefix("platform_workflow_iterations_status_check"),
+      sql` ${table.status} IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')`,
+    ),
+    runScopeKeyUnique: uniqueIndex(withPrefix("platform_workflow_iterations_run_scope_key_idx")).on(
+      table.runId,
+      table.scopeNodeKey,
+      table.iterationKey,
+    ),
+    runScopeIndexUnique: uniqueIndex(withPrefix("platform_workflow_iterations_run_scope_index_idx")).on(
+      table.runId,
+      table.scopeNodeKey,
+      table.iterationIndex,
+    ),
+    runStatusIdx: index(withPrefix("platform_workflow_iterations_run_status_idx")).on(table.runId, table.status),
   }),
 )
 
@@ -1049,6 +1153,70 @@ export const platformTaskRuns = pgTable(
   }),
 )
 
+export const platformOpenCodeRuntimeRuns = pgTable(
+  withPrefix("platform_opencode_runtime_runs"),
+  {
+    id: serial("id").primaryKey(),
+    taskRunId: integer("task_run_id")
+      .notNull()
+      .unique()
+      .references(() => platformTaskRuns.id, { onDelete: "cascade" }),
+    runtimeRunId: uuid("runtime_run_id").notNull().unique(),
+    sessionKey: varchar("session_key", { length: 64 }).notNull(),
+    conversationId: varchar("conversation_id", { length: 128 }),
+    agentId: varchar("agent_id", { length: 128 }),
+    functionId: varchar("function_id", { length: 64 }),
+    backend: varchar("backend", { length: 40 }).default("cloudflare-opencode-session").notNull(),
+    status: varchar("status", { length: 24 }).default("queued").notNull(),
+    dispatchKey: text("dispatch_key"),
+    workflowInstanceId: varchar("workflow_instance_id", { length: 128 }),
+    opencodeSessionId: varchar("opencode_session_id", { length: 128 }),
+    sandboxId: varchar("sandbox_id", { length: 128 }),
+    workspaceBackup: jsonb("workspace_backup").$type<Record<string, unknown> | null>(),
+    attempt: integer("attempt").default(0).notNull(),
+    maxAttempts: integer("max_attempts").default(3).notNull(),
+    deadlineAt: timestamp("deadline_at", { withTimezone: true }).notNull(),
+    leaseOwner: varchar("lease_owner", { length: 128 }),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    billingPayload: jsonb("billing_payload").$type<Record<string, unknown> | null>(),
+    lastErrorCode: varchar("last_error_code", { length: 128 }),
+    lastErrorMessage: text("last_error_message"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (table) => ({
+    sessionStatusIdx: index(withPrefix("platform_opencode_runtime_session_status_idx")).on(table.sessionKey, table.status),
+    leaseIdx: index(withPrefix("platform_opencode_runtime_lease_idx")).on(table.status, table.leaseExpiresAt),
+  }),
+)
+
+export const platformOpenCodeRuntimeCheckpoints = pgTable(
+  withPrefix("platform_opencode_runtime_checkpoints"),
+  {
+    id: serial("id").primaryKey(),
+    runtimeRunId: uuid("runtime_run_id")
+      .notNull()
+      .references(() => platformOpenCodeRuntimeRuns.runtimeRunId, { onDelete: "cascade" }),
+    sequence: integer("sequence").notNull(),
+    stage: varchar("stage", { length: 128 }).notNull(),
+    backupHandle: jsonb("backup_handle").$type<Record<string, unknown> | null>(),
+    resumePayload: jsonb("resume_payload").$type<Record<string, unknown>>().default({}).notNull(),
+    artifactIds: jsonb("artifact_ids").$type<number[]>().default([]).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    runSequenceUnique: uniqueIndex(withPrefix("platform_opencode_runtime_checkpoints_run_sequence_idx")).on(
+      table.runtimeRunId,
+      table.sequence,
+    ),
+    runCreatedIdx: index(withPrefix("platform_opencode_runtime_checkpoints_run_created_idx")).on(
+      table.runtimeRunId,
+      table.createdAt,
+    ),
+  }),
+)
+
 export const platformTaskRunEvents = pgTable(
   withPrefix("platform_task_run_events"),
   {
@@ -1200,6 +1368,53 @@ export const platformWorkflowNodeExecutions = pgTable(
       table.createdAt,
     ),
     taskRunIdx: index(withPrefix("platform_workflow_node_executions_task_run_idx")).on(table.taskRunId),
+  }),
+)
+
+export const platformWorkflowNodeAttempts = pgTable(
+  withPrefix("platform_workflow_node_attempts"),
+  {
+    id: serial("id").primaryKey(),
+    nodeExecutionId: integer("node_execution_id")
+      .notNull()
+      .references(() => platformWorkflowNodeExecutions.id, { onDelete: "cascade" }),
+    iterationId: integer("iteration_id").references(() => platformWorkflowIterations.id, { onDelete: "cascade" }),
+    scopeKey: varchar("scope_key", { length: 160 }).notNull(),
+    attemptNumber: integer("attempt_number").notNull(),
+    status: varchar("status", { length: 24 }).default("queued").notNull(),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+    providerId: varchar("provider_id", { length: 80 }),
+    modelId: varchar("model_id", { length: 160 }),
+    providerRequestId: varchar("provider_request_id", { length: 255 }),
+    providerTaskId: varchar("provider_task_id", { length: 255 }),
+    inputPayload: jsonb("input_payload").$type<Record<string, unknown> | null>(),
+    outputPayload: jsonb("output_payload").$type<Record<string, unknown> | null>(),
+    errorCode: varchar("error_code", { length: 128 }),
+    errorMessage: text("error_message"),
+    creditsReserved: integer("credits_reserved").default(0).notNull(),
+    creditsConsumed: integer("credits_consumed").default(0).notNull(),
+    submittedAt: timestamp("submitted_at"),
+    startedAt: timestamp("started_at"),
+    finishedAt: timestamp("finished_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    statusCheck: check(
+      withPrefix("platform_workflow_node_attempts_status_check"),
+      sql` ${table.status} IN ('queued', 'submitting', 'running', 'cancel_requested', 'succeeded', 'failed', 'cancelled')`,
+    ),
+    nodeScopeAttemptUnique: uniqueIndex(withPrefix("platform_workflow_node_attempts_node_scope_number_idx")).on(
+      table.nodeExecutionId,
+      table.scopeKey,
+      table.attemptNumber,
+    ),
+    idempotencyUnique: uniqueIndex(withPrefix("platform_workflow_node_attempts_idempotency_idx")).on(table.idempotencyKey),
+    providerTaskIdx: index(withPrefix("platform_workflow_node_attempts_provider_task_idx")).on(table.providerTaskId),
+    nodeCreatedIdx: index(withPrefix("platform_workflow_node_attempts_node_created_idx")).on(
+      table.nodeExecutionId,
+      table.createdAt,
+    ),
   }),
 )
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { syncPlatformTaskRuns } from "@/lib/platform/task-run-sync"
+import { syncLeadToolPptPreviewJobs, syncPlatformTaskRuns } from "@/lib/platform/task-run-sync"
 
 export const runtime = "nodejs"
 export const maxDuration = 600
@@ -39,18 +39,20 @@ function parseLimit(request: NextRequest) {
   return Math.max(1, Math.min(100, parsed))
 }
 
-export async function POST(request: NextRequest) {
+async function runSync(request: NextRequest) {
   const auth = authorizeRequest(request)
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status })
   }
 
   try {
-    const result = await syncPlatformTaskRuns({
-      limit: parseLimit(request),
-    })
+    const limit = parseLimit(request)
+    const [platformTasks, pptPreviewJobs] = await Promise.all([
+      syncPlatformTaskRuns({ limit }),
+      syncLeadToolPptPreviewJobs({ limit }),
+    ])
 
-    return NextResponse.json(result)
+    return NextResponse.json({ platformTasks, pptPreviewJobs })
   } catch (error) {
     return NextResponse.json(
       {
@@ -59,4 +61,12 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     )
   }
+}
+
+export async function POST(request: NextRequest) {
+  return runSync(request)
+}
+
+export async function GET(request: NextRequest) {
+  return runSync(request)
 }

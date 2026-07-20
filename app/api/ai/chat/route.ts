@@ -102,12 +102,13 @@ import { getGovernedAiEntryModelCatalogForUser } from "@/lib/platform/model-gove
 import { getEnterpriseTextRuntimeProviderConfigsForUser } from "@/lib/platform/enterprise-runtime-config"
 import { buildAgentRuntimeInput } from "@/lib/ai-entry/runtime/context-builder"
 import { resolveAiEntryRuntimeDecision } from "@/lib/ai-entry/runtime/gateway"
-import { isAiEntrySharedAgentRuntimeEnabled, isBusinessAgentId, resolveBusinessAgentRailwayRuntimeProfile, resolveDefaultAgentRuntimeProfile, resolveEditablePptRailwayRuntimeProfile } from "@/lib/ai-entry/runtime/profile-store"
+import { isAiEntrySharedAgentRuntimeEnabled, isBusinessAgentId, resolveBusinessAgentRailwayRuntimeProfile, resolveDashiPptCloudflareRuntimeProfile, resolveDefaultAgentRuntimeProfile, resolveEditablePptRailwayRuntimeProfile } from "@/lib/ai-entry/runtime/profile-store"
 import { runOpenCodeAgent } from "@/lib/ai-entry/runtime/opencode-adapter"
 import { createBackgroundOpenCodeRun } from "@/lib/ai-entry/runtime/background-run-service"
 import { publishRuntimeArtifact } from "@/lib/ai-entry/runtime/artifact-publisher"
 import { resolveOpenCodeModelHint } from "@/lib/ai-runtime/opencode-model"
 import { buildAgentRuntimeSessionKey } from "@/lib/ai-runtime/session-key"
+import { isExplicitPptExportConfirmation } from "@/lib/ai-runtime/ppt-export-confirmation"
 import type { OpenCodeProviderConfig } from "@/lib/ai-runtime/contracts"
 
 export const runtime = "nodejs"
@@ -175,8 +176,13 @@ function isClosedStreamControllerError(error: unknown) {
   return error instanceof Error && /controller is already closed/i.test(error.message)
 }
 
-function isOpenCodeRuntimeDecision(value: unknown): value is { kind: "opencode-chat"; backend: "railway-opencode" } {
-  return Boolean(value && typeof value === "object" && (value as { kind?: unknown }).kind === "opencode-chat" && (value as { backend?: unknown }).backend === "railway-opencode")
+function isOpenCodeRuntimeDecision(value: unknown): value is { kind: "opencode-chat"; backend: "cloudflare-opencode-session" | "railway-opencode" } {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    (value as { kind?: unknown }).kind === "opencode-chat" &&
+    ["cloudflare-opencode-session", "railway-opencode"].includes(String((value as { backend?: unknown }).backend)),
+  )
 }
 
 function isRuntimeInputTooLargeError(error: unknown) {
@@ -1179,7 +1185,9 @@ export async function POST(request: NextRequest) {
     const runtimeProfile = runtimeDecision.kind === "opencode-chat"
       ? businessAgentRuntime
         ? resolveBusinessAgentRailwayRuntimeProfile()
-        : resolveEditablePptRailwayRuntimeProfile()
+        : (effectiveAgentId === "executive-presentation-ppt" || selectedSkillIds.includes("dashiai-ppt"))
+          ? resolveDashiPptCloudflareRuntimeProfile()
+          : resolveEditablePptRailwayRuntimeProfile()
       : defaultRuntimeProfile
     let persistedRuntimeArtifacts: Array<{ artifactId: number; title: string; kind: string; summary: string }> = []
     let canonicalConversationRevision: number | null = null
@@ -1393,7 +1401,7 @@ export async function POST(request: NextRequest) {
     const buildChatRuntimeInput = async (systemPrompt: string) => buildAgentRuntimeInput({
       runId: randomUUID(),
       sessionKey:
-        runtimeProfile.backend === "railway-opencode" && conversationId
+        (runtimeProfile.backend === "railway-opencode" || runtimeProfile.backend === "cloudflare-opencode-session") && conversationId
           ? await buildAgentRuntimeSessionKey({
               enterpriseId: currentUser.enterpriseId,
               userId: currentUser.id,
@@ -1409,6 +1417,8 @@ export async function POST(request: NextRequest) {
       userId: currentUser.id,
       agentId: effectiveAgentId,
       selectedSkillIds,
+      exportConfirmationGranted:
+        isEditablePptAgent && isExplicitPptExportConfirmation(latestUserPrompt),
       sharedSkillSetSelection: preparedSharedSkillSetSelection,
       systemPrompt,
       messages: canonicalRuntimeMessages,
@@ -1548,10 +1558,11 @@ export async function POST(request: NextRequest) {
         try {
           for await (const event of runOpenCodeAgent(runtimeInput, {
             runnerUrl: runtimeProfile.runnerUrl,
+            backend: runtimeProfile.backend === "cloudflare-opencode-session" ? "cloudflare-opencode-session" : "railway-opencode",
             railway: runtimeProfile.backend === "railway-opencode",
             timeoutMs: runtimeProfile.timeoutMs,
             provider: openCodeProvider,
-            session: runtimeProfile.backend === "railway-opencode",
+            session: runtimeProfile.sessionEnabled,
           })) {
             if (event.event === "text_delta") {
               openCodeAnswer += event.delta
@@ -2116,11 +2127,12 @@ export async function POST(request: NextRequest) {
             try {
               for await (const event of runOpenCodeAgent(runtimeInput, {
                 runnerUrl: runtimeProfile.runnerUrl,
+                backend: runtimeProfile.backend === "cloudflare-opencode-session" ? "cloudflare-opencode-session" : "railway-opencode",
                 railway: runtimeProfile.backend === "railway-opencode",
                 timeoutMs: runtimeProfile.timeoutMs,
                 signal: request.signal,
                 provider: openCodeProvider,
-                session: runtimeProfile.backend === "railway-opencode",
+                session: runtimeProfile.sessionEnabled,
               })) {
                 if (event.event === "runtime_selected") {
                   providerSelectedAtMs = Date.now()
@@ -2171,7 +2183,8 @@ export async function POST(request: NextRequest) {
                     event: "runtime_stage",
                     conversation_id: conversationId,
                     data: {
-                      stage: `opencode_${event.tool}_${event.phase}`,
+                      stage: `opencode_${event.tool}`,
+                      runtimeStatus: event.phase === "started" ? "running" : event.phase,
                       message: event.message || `${event.tool}: ${event.phase}`,
                     },
                   })

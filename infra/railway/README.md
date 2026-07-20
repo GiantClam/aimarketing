@@ -7,6 +7,7 @@
 - `ragflow-redis`
 - `ragflow-minio`
 - `ppt-master-worker`
+- `opencode-runtime`
 
 ## Shared Variables
 
@@ -55,7 +56,42 @@ If the preview planning stage itself is unstable, set `LEAD_TOOLS_PPT_PREVIEW_PR
 - Optional explicit overrides:
   - `LEAD_TOOLS_PPT_EXECUTION_TRANSPORT=remote-worker`
   - `LEAD_TOOLS_PPT_PREVIEW_RUNTIME=ppt-master-agent`
-  - `PPT_WORKER_PREVIEW_TIMEOUT_MS=5400000`
+  - `PPT_WORKER_PREVIEW_TIMEOUT_MS=3600000`
+
+## `opencode-runtime`
+
+- Runs one resident `opencode serve` process on Railway using the repository-root `Dockerfile`; this service handles Business Agents and editable PPT/`ppt-master` contexts.
+- `OPENCODE_WORKER_INTERNAL_TOKEN`
+- `OPENCODE_RUN_TIMEOUT_MS=3600000`
+- `RAILWAY_OPENCODE_RUNTIME_URL=https://<service-domain>`
+- `RAILWAY_OPENCODE_RUNTIME_TOKEN=<same-token>`
+- `OPENCODE_RUNTIME_STATE_URL=https://<canonical-app-domain>/api/internal/opencode-runtime/state`
+- `RUNTIME_STATE_TOKEN=<internal-state-token>`
+- `RUNTIME_PROXY_TOKEN=<internal-provider-proxy-token>`
+- `OPENCODE_PROVIDER_PROXY_URL=https://<canonical-app-domain>/api/internal/provider-proxy/routes`
+- `OPENCODE_PROVIDER_PROXY_PUBLIC_URL=https://<app-domain>/api/internal/provider-proxy/upstream`
+- `OPENCODE_ALLOW_DIRECT_PROVIDER=false` (仅本地调试可显式设为 `true`)
+- PPToken text accounts are model-scoped: keep the GPT account in
+  `AI_ENTRY_PPTOKEN_API_KEY`/`AI_ENTRY_PPTOKEN_BASE_URL` and configure the Grok
+  account separately with `AI_ENTRY_PPTOKEN_GROK_API_KEY`/
+  `AI_ENTRY_PPTOKEN_GROK_BASE_URL` on the app/Provider Proxy deployment.
+  `pptoken/grok-*` requests fail closed when the dedicated Grok key is absent;
+  they are never sent with the GPT key.
+- The service exposes `GET /health`, `POST /runs`, and `POST /runs/:runId/cancel` with a bearer token.
+- `POST /sessions/prepare` verifies the resident service and bundle, then returns `sessionReady=true`; it does not allocate a native session or persist conversation state.
+- Each run creates one transient native session under `/data/sessions/runs/<runId>`, sends `prompt_async` to it, consumes the resident `/global/event` SSE stream, and deletes the session/workspace in `finally`.
+- Supabase remains the canonical conversation context. The app attaches the last bounded context window and immutable Skill bundle on every turn. Production Provider credentials are resolved just-in-time through `OPENCODE_PROVIDER_PROXY_URL`; direct credentials are disabled unless `OPENCODE_ALLOW_DIRECT_PROVIDER=true`.
+- `<canonical-app-domain>` must be the final HTTPS hostname (currently `https://www.aimarketingsite.com`) and must not redirect to another host. Railway's `fetch` follows a cross-host `307` without forwarding the bearer authorization header, which causes `provider_proxy_route_failed:401`.
+- Attachments are intentionally implemented with the OpenCode HTTP session API; the interactive `opencode attach <url>` terminal command is not suitable for the backend SSE path.
+- Session workspaces are stored under `/data/sessions`; attach a Railway volume for durable session continuity.
+- The app selects this service for `executive-ppt`/`ppt-master` when `AI_ENTRY_PPT_RAILWAY_ENABLED=true`, and for every `business-*` Agent when `AI_ENTRY_BUSINESS_AGENT_RAILWAY_ENABLED=true`. Plain AI Chat stays on the direct AI SDK/Provider path. All OpenCode Agent/PPT/Workflow execution is Railway-only; Cloudflare Runner is retired and must not receive new traffic.
+
+### Business Agent runtime
+
+- Set `AI_ENTRY_BUSINESS_AGENT_RAILWAY_ENABLED=true` and provide `RAILWAY_OPENCODE_RUNTIME_URL` plus `RAILWAY_OPENCODE_RUNTIME_TOKEN` in the app deployment.
+- Set `AI_ENTRY_SHARED_AGENT_RUNTIME_ENABLED=true` and `AI_ENTRY_SHARED_AGENT_SCOPE=business-prefix` to include every `business-*` Agent in the shared-session policy.
+- Set `AI_ENTRY_OPENCODE_SESSION_ENABLED=true` and keep `AI_ENTRY_OPENCODE_ASYNC_ENABLED=false` for the interactive SSE path.
+- Business Agent requests use the single signed `deepseek/deepseek-v4-pro` provider configuration; runtime failures surface to the user and never fail over to another Provider or execution stack.
 
 ## Rollout Order
 

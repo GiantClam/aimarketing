@@ -1,0 +1,10 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "../../../lib/ai-runtime/contracts.ts", "../../../lib/ai-runtime/opencode-prompt.ts", "../../../lib/ai-runtime/opencode-protocol.ts"]
+}

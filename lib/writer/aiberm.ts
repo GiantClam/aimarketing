@@ -9,7 +9,7 @@ const CRAZYROUTE_API_BASE = (
   process.env.CRAZYROUTER_BASE_URL ||
   process.env.AI_ENTRY_CRAZYROUTE_BASE_URL ||
   process.env.AI_ENTRY_CRAZYROUTER_BASE_URL ||
-  "https://api.crazyroute.com/v1"
+  "https://crazyrouter.com/v1"
 ).replace(/\/$/, "")
 const CRAZYROUTE_API_KEY =
   process.env.CRAZYROUTE_API_KEY ||

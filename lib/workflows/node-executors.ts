@@ -1,6 +1,8 @@
 import { resolveUploadNodeOutputs, type WorkflowAssetRef } from "@/lib/workflows/uploads"
 import { getDefaultEnterpriseWorkflowPreset } from "@/lib/workflows/presets"
+import { workflowNodeRegistry } from "@/lib/workflows/node-definitions/registry"
 import type { WorkflowDefinitionNode, WorkflowNodeType, WorkflowValueKind } from "@/lib/workflows/schema"
+import { workflowControlExecutors } from "@/lib/workflows/node-executors/control"
 
 export type WorkflowMediaRef = {
   url?: string | null
@@ -31,6 +33,8 @@ export type WorkflowCapabilityInvokeParams = {
   action: string
   node: WorkflowDefinitionNode
   input: WorkflowNodeInputBundle
+  idempotencyKey?: string
+  signal?: AbortSignal
 }
 
 export type WorkflowNodeExecutionContext = {
@@ -40,6 +44,8 @@ export type WorkflowNodeExecutionContext = {
   input: WorkflowNodeInputBundle
   workflowMetadata?: Record<string, unknown> | null
   capabilityInvoker?: (params: WorkflowCapabilityInvokeParams) => Promise<WorkflowNodeExecutionResult>
+  idempotencyKey?: string
+  signal?: AbortSignal
 }
 
 export type WorkflowNodeExecutionResult = {
@@ -247,12 +253,21 @@ function createCapabilityBackedExecutor(input: {
         action: input.action,
         node: context.node,
         input: context.input,
+        idempotencyKey: context.idempotencyKey,
+        signal: context.signal,
       })
     },
   }
 }
 
-const WORKFLOW_NODE_EXECUTORS: Record<WorkflowNodeType, WorkflowNodeExecutor> = {
+/**
+ * Executor implementations are still kept in one module for now, but the
+ * registry is the source of truth for resolving them. This keeps execution
+ * aligned with the node definition version and lets future definition
+ * packages register an executor id without adding another type switch.
+ */
+const WORKFLOW_NODE_EXECUTORS_BY_ID: Record<string, WorkflowNodeExecutor> = {
+  ...workflowControlExecutors,
   upload: {
     nodeType: "upload",
     action: "upload",
@@ -549,7 +564,29 @@ const WORKFLOW_NODE_EXECUTORS: Record<WorkflowNodeType, WorkflowNodeExecutor> = 
 }
 
 export function resolveWorkflowNodeExecutor(nodeType: WorkflowNodeType): WorkflowNodeExecutor {
-  return WORKFLOW_NODE_EXECUTORS[nodeType]
+  const definition = workflowNodeRegistry.get(nodeType)
+  if (!definition) {
+    throw new Error(`workflow_node_definition_missing:${nodeType}`)
+  }
+  const executor = WORKFLOW_NODE_EXECUTORS_BY_ID[definition.executorId]
+  if (!executor) {
+    throw new Error(`workflow_node_executor_missing:${definition.executorId}`)
+  }
+  return executor
+}
+
+/** Returns registry/executor mismatches as diagnostics instead of failing at run time. */
+export function validateWorkflowNodeExecutors() {
+  return workflowNodeRegistry.list().flatMap((definition) => {
+    const executor = WORKFLOW_NODE_EXECUTORS_BY_ID[definition.executorId]
+    if (!executor) {
+      return [`${definition.type}:missing_executor:${definition.executorId}`]
+    }
+    if (executor.nodeType !== definition.type) {
+      return [`${definition.type}:executor_node_type_mismatch:${executor.nodeType}`]
+    }
+    return []
+  })
 }
 
 export function createWorkflowNodeInputBundle(): WorkflowNodeInputBundle {

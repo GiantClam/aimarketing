@@ -8,6 +8,7 @@ import {
 
 import {
   executeAiEntryWithProviderFailover,
+  type AiEntryProviderFallbackReason,
   type AiEntryProviderConfig,
   type AiEntryProviderId,
 } from "@/lib/ai-entry/provider-routing"
@@ -16,6 +17,7 @@ export type ProviderOptions = {
   preferredProviderId?: AiEntryProviderId | null
   preferredModel?: string
   forcePreferredProvider?: boolean
+  disableProviderFailover?: boolean
   forceModelAcrossProviders?: boolean
   disableSameProviderModelFallback?: boolean
   directProviderFailoverOnError?: boolean
@@ -28,6 +30,7 @@ type ProviderRunInfo = {
   attempt: number
   providerOrder: string[]
   upgradeProbe?: boolean
+  fallbackReason?: AiEntryProviderFallbackReason
 }
 
 type BlockingExecution = {
@@ -189,6 +192,7 @@ export async function runAiEntryConsultingBlocking(params: {
             attempt: providerRun.attempt,
             providerOrder: providerRun.providerOrder,
             upgradeProbe: providerRun.upgradeProbe,
+            fallbackReason: providerRun.fallbackReason,
           })
           const providerInput = buildAiEntryProviderMessages({
             providerId: providerRun.providerId,
@@ -213,6 +217,7 @@ export async function runAiEntryConsultingBlocking(params: {
             attempt: providerRun.attempt,
             providerOrder: providerRun.providerOrder,
             upgradeProbe: providerRun.upgradeProbe,
+            fallbackReason: providerRun.fallbackReason,
             outputChars: resolvedText.length,
           })
           return result
@@ -249,6 +254,7 @@ export async function runAiEntryConsultingStreaming(params: {
             attempt: providerRun.attempt,
             providerOrder: providerRun.providerOrder,
             upgradeProbe: providerRun.upgradeProbe,
+            fallbackReason: providerRun.fallbackReason,
           })
           params.onProviderSelected?.({
             providerId: providerRun.providerId,
@@ -256,6 +262,7 @@ export async function runAiEntryConsultingStreaming(params: {
             attempt: providerRun.attempt,
             providerOrder: providerRun.providerOrder,
             upgradeProbe: providerRun.upgradeProbe,
+            fallbackReason: providerRun.fallbackReason,
           })
 
           const providerInput = buildAiEntryProviderMessages({

@@ -13,7 +13,7 @@ export function resolvePptMasterTemplateStyleKey(templateId: string, quickLookup
   if (!normalizedId) return null
 
   if (normalizedId.startsWith("ppt169_")) return templateId.trim()
-  if (["anthropic", "google", "中国电信", "ai_ops"].includes(templateId.trim())) {
+  if (["anthropic", "google", "中国电信", "ai_ops", "presentation_core"].includes(templateId.trim())) {
     return "ppt169_building_effective_agents"
   }
   if (templateId === "academic_defense" || templateId === "重庆大学") return "ppt169_attention_is_all_you_need"

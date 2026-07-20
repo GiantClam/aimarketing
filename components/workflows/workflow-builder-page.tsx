@@ -7,6 +7,7 @@ import { Check, ChevronDown, PanelLeftClose, PanelLeftOpen, PanelRightClose, Pan
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -14,6 +15,8 @@ import {
   type WorkflowBuiltinAgentOption,
   type WorkflowCustomAgentOption,
 } from "@/components/workflows/workflow-agent-options"
+import { resolveWorkflowPortConnection } from "@/lib/workflows/connect"
+import type { WorkflowFeatures } from "@/lib/workflows/features"
 import { WorkflowCanvas } from "@/components/workflows/workflow-canvas"
 import { WorkflowNodeConfigPanel } from "@/components/workflows/workflow-node-config-panel"
 import { WorkflowNodePalette } from "@/components/workflows/workflow-node-palette"
@@ -23,7 +26,6 @@ import { getDefaultModelId } from "@/lib/ai-runtime/model-registry"
 import { pptPreviewModelOptions, pptPreviewRuntimeOptions } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import { buildGovernedImageAssistantModelOptionId } from "@/lib/platform/governed-image-model-option-id"
 import {
-  canWorkflowNodeConnectValueKind,
   getDefaultWorkflowNodeTitle,
   resolveWorkflowNodeTitle,
   type WorkflowDefinitionEdge,
@@ -50,7 +52,7 @@ import { isWorkflowRunActiveStatus, isWorkflowRunResumableStatus } from "@/lib/w
 import type { WorkflowDefinition } from "@/lib/workflows/store"
 
 type SerializedWorkflowEdge = Omit<WorkflowDefinitionEdge, "inputName"> & {
-  inputName: string | null
+  inputName?: string | null
 }
 
 type SerializedWorkflowDefinition = {
@@ -65,6 +67,7 @@ type SerializedWorkflowDefinition = {
   metadata: Record<string, unknown> | null
   createdAt: string
   updatedAt: string
+  revision?: number
   nodes: WorkflowDefinitionNode[]
   edges: SerializedWorkflowEdge[]
 }
@@ -138,6 +141,14 @@ type WorkflowRunStartResponse = WorkflowRunResultsDetail & {
     nodeKey: string
     runId: number
   }
+}
+
+type WorkflowBudgetConfirmation = {
+  requestId: string
+  taskCount: number
+  maxCredits: number
+  expiresAt: number
+  confirmationToken: string
 }
 
 type FloatingControlKey = "library" | "settings"
@@ -509,18 +520,12 @@ function edgesEqual(left: WorkflowDefinitionEdge, right: WorkflowDefinitionEdge)
   return (
     left.sourceNodeKey === right.sourceNodeKey &&
     left.targetNodeKey === right.targetNodeKey &&
-    (left.inputName || null) === (right.inputName || null)
+    (left.sourcePortId || null) === (right.sourcePortId || null) &&
+    (left.targetPortId || null) === (right.targetPortId || null) &&
+    (left.sourcePortId || left.targetPortId || right.sourcePortId || right.targetPortId
+      ? true
+      : (left.inputName || null) === (right.inputName || null))
   )
-}
-
-function inputNameToWorkflowValueKind(inputName: string | null | undefined) {
-  if (inputName === "text") return "text" as const
-  if (inputName === "assets") return "asset" as const
-  if (inputName === "images") return "image" as const
-  if (inputName === "videos") return "video" as const
-  if (inputName === "audios") return "audio" as const
-  if (inputName === "presentations") return "ppt" as const
-  return null
 }
 
 function wouldCreateCycle(
@@ -552,6 +557,7 @@ function wouldCreateCycle(
 
 export function WorkflowBuilderPage({
   locale,
+  features,
   initialWorkflow,
   assets,
   llmModelCatalog,
@@ -563,6 +569,7 @@ export function WorkflowBuilderPage({
   initialLatestRunId = null,
 }: {
   locale: "zh" | "en"
+  features?: WorkflowFeatures
   initialWorkflow: SerializedWorkflowDefinition
   assets: WorkflowAssetCandidate[]
   llmModelCatalog: WorkflowLlmModelCatalog
@@ -599,6 +606,7 @@ export function WorkflowBuilderPage({
   const [controlDragState, setControlDragState] = useState<FloatingControlDragState | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [budgetConfirmation, setBudgetConfirmation] = useState<WorkflowBudgetConfirmation | null>(null)
   const [publishPanelOpen, setPublishPanelOpen] = useState(false)
   const [publishPending, setPublishPending] = useState(false)
   const [publishName, setPublishName] = useState(`${initialWorkflow.title} Agent`)
@@ -704,7 +712,7 @@ export function WorkflowBuilderPage({
     Boolean(latestRunDetail) &&
     !latestRunMatchesWorkflow &&
     isWorkflowRunResumableStatus(latestRunDetail?.run.status)
-  const controlsLocked = saving || runActionPending || hasActiveRun
+  const controlsLocked = saving || runActionPending || hasActiveRun || Boolean(budgetConfirmation)
   const selectedNode = useMemo(
     () => workflow.nodes.find((node) => node.nodeKey === selectedNodeKey) ?? null,
     [selectedNodeKey, workflow.nodes],
@@ -1115,6 +1123,14 @@ export function WorkflowBuilderPage({
           resumeOutdated: "上一轮失败运行对应的是旧版工作流，当前画布已变更，请重新运行。",
           resumeTargetHint: "继续运行会从上次失败的节点分支开始。",
           resumeTargetHintWithNode: "继续运行会从上次失败的“{node}”节点分支开始，其他失败节点保留上次结果，直到该分支重新触达。",
+          budgetTitle: "运行预算确认",
+          budgetDescription: "本次运行可能消耗较多任务额度，请确认后继续。",
+          budgetTasks: "预计任务数",
+          budgetCredits: "预计额度",
+          budgetUnknownCredits: "部分节点额度无法预估",
+          budgetCancel: "取消",
+          budgetConfirm: "确认并运行",
+          budgetConfirming: "确认中...",
         }
       : {
           title: "Workflow builder",
@@ -1159,6 +1175,14 @@ export function WorkflowBuilderPage({
           resumeTargetHint: "Resume will continue from the last failed branch.",
           resumeTargetHintWithNode:
             "Resume will continue from the last failed “{node}” branch. Other failed nodes keep their previous result until that branch reaches them again.",
+          budgetTitle: "Confirm workflow budget",
+          budgetDescription: "This run may consume a larger amount of task credits. Confirm before continuing.",
+          budgetTasks: "Estimated tasks",
+          budgetCredits: "Estimated credits",
+          budgetUnknownCredits: "Some node costs cannot be estimated",
+          budgetCancel: "Cancel",
+          budgetConfirm: "Confirm and run",
+          budgetConfirming: "Confirming...",
         }
 
   useEffect(() => {
@@ -1375,7 +1399,7 @@ export function WorkflowBuilderPage({
     setSelectedNodeKey((current) => (current === nodeKey ? null : current))
   }
 
-  const deleteEdge = (sourceNodeKey: string, targetNodeKey: string, inputName: string) => {
+  const deleteEdge = (sourceNodeKey: string, targetNodeKey: string, sourcePortId: string, targetPortId: string) => {
     setWorkflow((current) => ({
       ...current,
       edges: current.edges.filter(
@@ -1383,7 +1407,8 @@ export function WorkflowBuilderPage({
           !(
             edge.sourceNodeKey === sourceNodeKey &&
             edge.targetNodeKey === targetNodeKey &&
-            (edge.inputName || "input") === inputName
+            (edge.sourcePortId || "output") === sourcePortId &&
+            (edge.targetPortId || "input") === targetPortId
           ),
       ),
     }))
@@ -1411,7 +1436,7 @@ export function WorkflowBuilderPage({
     })
   }
 
-  const connectNodes = (sourceNodeKey: string, targetNodeKey: string, inputName: string) => {
+  const connectNodes = (sourceNodeKey: string, targetNodeKey: string, sourcePortId: string, targetPortId: string) => {
     if (sourceNodeKey === targetNodeKey) {
       setErrorMessage(copy.connectToSelf)
       return
@@ -1419,13 +1444,20 @@ export function WorkflowBuilderPage({
 
     const sourceNode = workflow.nodes.find((node) => node.nodeKey === sourceNodeKey)
     const targetNode = workflow.nodes.find((node) => node.nodeKey === targetNodeKey)
-    const inputKind = inputNameToWorkflowValueKind(inputName)
-    if (!sourceNode || !targetNode || !inputKind || !canWorkflowNodeConnectValueKind(targetNode.type, inputKind)) {
+    const connection = sourceNode && targetNode
+      ? resolveWorkflowPortConnection(sourceNode.type, targetNode.type, sourcePortId, targetPortId)
+      : null
+    if (!sourceNode || !targetNode || !connection) {
       setErrorMessage(copy.invalidInputType)
       return
     }
 
-    const nextEdge = { sourceNodeKey, targetNodeKey, inputName }
+    const nextEdge: WorkflowDefinitionEdge = {
+      sourceNodeKey,
+      targetNodeKey,
+      sourcePortId: connection.sourcePortId,
+      targetPortId: connection.targetPortId,
+    }
     if (workflow.edges.some((edge) => edgesEqual(edge, nextEdge))) {
       setErrorMessage(copy.duplicateEdge)
       return
@@ -1458,6 +1490,7 @@ export function WorkflowBuilderPage({
         description: currentWorkflow.description,
         status: currentWorkflow.status,
         metadata: currentWorkflow.metadata,
+        expectedRevision: currentWorkflow.revision ?? 1,
         nodes: currentWorkflow.nodes,
         edges: currentWorkflow.edges,
       }),
@@ -1489,7 +1522,7 @@ export function WorkflowBuilderPage({
     }
   }
 
-  const handleRun = async () => {
+  const handleRun = async (confirmedBudget?: WorkflowBudgetConfirmation) => {
     if (workflow.nodes.length === 0) {
       setErrorMessage(copy.createNodeFirst)
       return
@@ -1500,22 +1533,57 @@ export function WorkflowBuilderPage({
     setErrorMessage(null)
 
     try {
+      const activeWorkflow = await saveWorkflow(workflow)
+      const requestId = confirmedBudget?.requestId ?? crypto.randomUUID()
+      const response = await fetch(`/api/workflows/${activeWorkflow.id}/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          requestId,
+          revision: activeWorkflow.revision ?? 1,
+          iterationsEnabled: true,
+          ...(confirmedBudget
+            ? {
+                confirmationToken: confirmedBudget.confirmationToken,
+                confirmationExpiresAt: confirmedBudget.expiresAt,
+              }
+            : {}),
+        }),
+      })
+      const payload = (await response.json().catch(() => null)) as {
+        data?: WorkflowRunStartResponse
+        error?: string
+        details?: Partial<WorkflowBudgetConfirmation>
+      } | null
+      if (
+        response.status === 409 &&
+        payload?.error === "workflow_budget_confirmation_required" &&
+        typeof payload.details?.taskCount === "number" &&
+        typeof payload.details.maxCredits === "number" &&
+        typeof payload.details.expiresAt === "number" &&
+        typeof payload.details.confirmationToken === "string" &&
+        payload.details.confirmationToken.trim()
+      ) {
+        setBudgetConfirmation({
+          requestId,
+          taskCount: payload.details.taskCount,
+          maxCredits: payload.details.maxCredits,
+          expiresAt: payload.details.expiresAt,
+          confirmationToken: payload.details.confirmationToken,
+        })
+        setErrorMessage(null)
+        return
+      }
+      if (!response.ok || !payload?.data?.run?.id) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : "workflow_run_failed")
+      }
       const optimisticResumeDetail =
         canResumeRun && latestRunDetail ? buildOptimisticResumeDetail(latestRunDetail) : null
       if (optimisticResumeDetail) {
         setLatestRunDetail(optimisticResumeDetail)
       }
-
-      const activeWorkflow = await saveWorkflow(workflow)
-      const response = await fetch(`/api/workflows/${activeWorkflow.id}/run`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-      })
-      const payload = (await response.json().catch(() => null)) as { data?: WorkflowRunStartResponse; error?: string } | null
-      if (!response.ok || !payload?.data?.run?.id) {
-        throw new Error(typeof payload?.error === "string" ? payload.error : "workflow_run_failed")
-      }
+      setBudgetConfirmation(null)
       setLatestRunDetail(payload.data as WorkflowRunResultsDetail)
       setMessage(
         payload.data.executionMode === "resume"
@@ -1978,6 +2046,52 @@ export function WorkflowBuilderPage({
               {errorMessage}
             </div>
           ) : null}
+          <Dialog
+            open={Boolean(budgetConfirmation)}
+            onOpenChange={(open) => {
+              if (!open && !runActionPending) setBudgetConfirmation(null)
+            }}
+          >
+            <DialogContent data-workflow-budget-confirmation className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>{copy.budgetTitle}</DialogTitle>
+                <DialogDescription>{copy.budgetDescription}</DialogDescription>
+              </DialogHeader>
+              {budgetConfirmation ? (
+                <div className="grid gap-3 rounded-[10px] border border-border/80 bg-background/60 p-4 text-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground">{copy.budgetTasks}</span>
+                    <span className="font-semibold text-foreground">{budgetConfirmation.taskCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground">{copy.budgetCredits}</span>
+                    <span className="font-semibold text-foreground">
+                      {budgetConfirmation.maxCredits < 0 ? copy.budgetUnknownCredits : budgetConfirmation.maxCredits}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setBudgetConfirmation(null)}
+                  disabled={runActionPending}
+                >
+                  {copy.budgetCancel}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    if (budgetConfirmation) void handleRun(budgetConfirmation)
+                  }}
+                  disabled={!budgetConfirmation || runActionPending}
+                >
+                  {runActionPending ? copy.budgetConfirming : copy.budgetConfirm}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           {hasOutdatedFailedRun ? (
             <div className="rounded-[10px] border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
               {copy.resumeOutdated}
@@ -2051,6 +2165,7 @@ export function WorkflowBuilderPage({
               <WorkflowCanvas
                 className="h-full rounded-[18px] border-0 bg-card/72 shadow-none"
                 locale={locale}
+                features={features}
                 nodes={workflow.nodes}
                 edges={workflow.edges}
                 assets={assetCandidates}
@@ -2103,6 +2218,7 @@ export function WorkflowBuilderPage({
                     <WorkflowNodePalette
                       className="flex-1 overflow-y-auto rounded-none border-0 bg-transparent shadow-none"
                       locale={locale}
+                      features={features}
                       builtinAgents={selectableBuiltinAgents}
                       customAgents={customAgents}
                       onAddNode={(type) => addNode(type)}

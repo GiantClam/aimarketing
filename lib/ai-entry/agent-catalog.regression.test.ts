@@ -15,5 +15,5 @@ test("agent catalog exposes ppt assistant as an executive advisor", () => {
   assert.match(item?.description.en || "", /downloadable, editable PPTX presentation/i)
   assert.equal(presentationItem?.category, "executive")
   assert.equal(presentationItem?.name.zh, "演讲型 PPT 助手")
-  assert.match(presentationItem?.description.en || "", /presentation-first HTML deck/i)
+  assert.match(presentationItem?.description.en || "", /OpenCode and the native Dashi skill/i)
 })

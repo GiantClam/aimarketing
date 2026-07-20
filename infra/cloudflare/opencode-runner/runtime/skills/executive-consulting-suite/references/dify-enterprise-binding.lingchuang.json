@@ -1,0 +1,10 @@
+{
+  "enterprise_id": "lingchuang-ai",
+  "enterprise_display_name": "灵创智能",
+  "provider": "dify",
+  "dify_base_url": "https://dify-api.o3-tools.com/v1",
+  "credential_ref": "DIFY_API_KEY_LINGCHUANG",
+  "default_dataset_id": "302cf95a-2473-4d57-be04-401d5cfda3d6",
+  "default_dataset_name": "灵创企业知识库",
+  "status": "active"
+}

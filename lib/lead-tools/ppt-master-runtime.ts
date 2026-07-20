@@ -35,9 +35,26 @@ const PREVIEW_WIDTH = 1280
 const PREVIEW_HEIGHT = 720
 const SESSION_TTL_MS = 1000 * 60 * 60 * 6
 const SVG_REGENERATION_RETRY_LIMIT = 2
+const DEFAULT_PPT_MASTER_SCRIPT_TIMEOUT_MS = 5 * 60 * 1000
 const PROJECT_CACHE_DIR_SEGMENTS = [".cache", ["ppt", "master"].join("-")]
 const PROJECT_CACHE_UPSTREAM_DIR_SEGMENTS = [".cache", "ppt-master-upstream"]
 const BITMAP_FILE_PATTERN = /\.(?:png|jpe?g|gif|webp|bmp|avif)$/i
+const UPSTREAM_TEMPLATE_ID_ALIASES: Readonly<Record<string, string>> = {
+  ai_ops: "presentation_core",
+  academic_defense: "presentation_core",
+  government_blue: "presentation_core",
+  government_red: "presentation_core",
+  medical_university: "presentation_core",
+  pixel_retro: "presentation_core",
+  psychology_attachment: "presentation_core",
+  招商银行: "presentation_core",
+  重庆大学: "presentation_core",
+  中国电建_常规: "中国电建",
+  中国电建_现代: "中国电建",
+  中汽研_商务: "中汽研",
+  中汽研_常规: "中汽研",
+  中汽研_现代: "中汽研",
+}
 
 type PptMasterImportedTemplateKind = "brand" | "layout" | "deck" | "example"
 
@@ -283,6 +300,11 @@ function getPptMasterPythonCandidates() {
   )
 }
 
+function getPptMasterScriptTimeoutMs() {
+  const value = Number.parseInt(process.env.PPT_MASTER_SCRIPT_TIMEOUT_MS?.trim() || "", 10)
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_PPT_MASTER_SCRIPT_TIMEOUT_MS
+}
+
 async function runPythonScript(repoDir: string, scriptRelativePath: string, args: string[]) {
   const scriptPath = path.join(repoDir, "skills", "ppt-master", "scripts", scriptRelativePath)
   let commandNotFound = false
@@ -293,12 +315,22 @@ async function runPythonScript(repoDir: string, scriptRelativePath: string, args
         cwd: repoDir,
         maxBuffer: 1024 * 1024 * 20,
         encoding: "utf8",
+        timeout: getPptMasterScriptTimeoutMs(),
       })
       return
     } catch (error) {
       if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
         commandNotFound = true
         continue
+      }
+
+      if (
+        error &&
+        typeof error === "object" &&
+        (("code" in error && error.code === "ETIMEDOUT") ||
+          ("killed" in error && error.killed === true && "signal" in error && error.signal === "SIGTERM"))
+      ) {
+        throw new Error(`ppt_master_script_timeout:${scriptRelativePath}`)
       }
 
       const stderr = error && typeof error === "object" && "stderr" in error ? String(error.stderr || "") : ""
@@ -333,32 +365,52 @@ async function createProjectStructure(projectDir: string) {
 }
 
 function getOfficialTemplateSourceCandidates(repoDir: string, templateId: string) {
+  const upstreamTemplateId = templateId
   return [
     {
       kind: "layout" as const,
-      sourceDir: path.join(repoDir, "skills", "ppt-master", "templates", "layouts", templateId),
-      sourcePathLabel: `skills/ppt-master/templates/layouts/${templateId}/`,
+      sourceDir: path.join(repoDir, "skills", "ppt-master", "templates", "layouts", upstreamTemplateId),
+      sourcePathLabel: `skills/ppt-master/templates/layouts/${upstreamTemplateId}/`,
     },
     {
       kind: "deck" as const,
-      sourceDir: path.join(repoDir, "skills", "ppt-master", "templates", "decks", templateId),
-      sourcePathLabel: `skills/ppt-master/templates/decks/${templateId}/`,
+      sourceDir: path.join(repoDir, "skills", "ppt-master", "templates", "decks", upstreamTemplateId),
+      sourcePathLabel: `skills/ppt-master/templates/decks/${upstreamTemplateId}/`,
     },
     {
       kind: "brand" as const,
-      sourceDir: path.join(repoDir, "skills", "ppt-master", "templates", "brands", templateId),
-      sourcePathLabel: `skills/ppt-master/templates/brands/${templateId}/`,
+      sourceDir: path.join(repoDir, "skills", "ppt-master", "templates", "brands", upstreamTemplateId),
+      sourcePathLabel: `skills/ppt-master/templates/brands/${upstreamTemplateId}/`,
     },
     {
       kind: "example" as const,
-      sourceDir: path.join(repoDir, "examples", templateId),
-      sourcePathLabel: `examples/${templateId}/`,
+      sourceDir: path.join(repoDir, "examples", upstreamTemplateId),
+      sourcePathLabel: `examples/${upstreamTemplateId}/`,
     },
   ] satisfies Array<{
     kind: PptMasterImportedTemplateKind
     sourceDir: string
     sourcePathLabel: string
   }>
+}
+
+async function readOfficialTemplateContract(sourceDir: string) {
+  const contractDirs = [sourceDir, path.join(sourceDir, "templates")]
+  let designSpecPath: string | null = null
+  let specLockPath: string | null = null
+
+  for (const contractDir of contractDirs) {
+    const candidate = path.join(contractDir, "design_spec.md")
+    if (!designSpecPath && (await pathExists(candidate))) designSpecPath = candidate
+  }
+  for (const contractDir of contractDirs) {
+    const candidate = path.join(contractDir, "spec_lock.md")
+    if (!specLockPath && (await pathExists(candidate))) specLockPath = candidate
+  }
+
+  const designSpecContent = designSpecPath ? await fs.readFile(designSpecPath, "utf8") : null
+  const specLockContent = specLockPath ? await fs.readFile(specLockPath, "utf8") : null
+  return { designSpecContent, specLockContent }
 }
 
 async function pathExists(targetPath: string) {
@@ -375,9 +427,14 @@ async function resolveOfficialTemplateSource(repoDir: string, templateId?: strin
     return null
   }
 
-  for (const candidate of getOfficialTemplateSourceCandidates(repoDir, templateId.trim())) {
-    if (await pathExists(candidate.sourceDir)) {
-      return candidate
+  const requestedTemplateId = templateId.trim()
+  const templateIds = [requestedTemplateId, UPSTREAM_TEMPLATE_ID_ALIASES[requestedTemplateId]]
+    .filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index)
+  for (const candidateTemplateId of templateIds) {
+    for (const candidate of getOfficialTemplateSourceCandidates(repoDir, candidateTemplateId)) {
+      if (await pathExists(candidate.sourceDir)) {
+        return candidate
+      }
     }
   }
 
@@ -483,24 +540,15 @@ async function materializeOfficialTemplateAssets(
     imagesDir,
   )
 
-  const designSpecPath = path.join(templatesDir, "design_spec.md")
+  const { designSpecContent, specLockContent: importedSpecLockContent } =
+    await readOfficialTemplateContract(templatesDir)
   let designSpecTitle: string | null = null
   let designSpecExcerpt: string | null = null
-  let designSpecContent: string | null = null
-  let specLockContent: string | null = null
-
-  if (await pathExists(designSpecPath)) {
-    const designSpec = await fs.readFile(designSpecPath, "utf8")
-    designSpecContent = designSpec
-    designSpecTitle = extractTemplateDesignSpecTitle(designSpec)
-    designSpecExcerpt = buildTemplateDesignSpecExcerpt(designSpec)
+  if (designSpecContent) {
+    designSpecTitle = extractTemplateDesignSpecTitle(designSpecContent)
+    designSpecExcerpt = buildTemplateDesignSpecExcerpt(designSpecContent)
   }
-
-  const specLockPath = path.join(templatesDir, "spec_lock.md")
-  if (await pathExists(specLockPath)) {
-    specLockContent = await fs.readFile(specLockPath, "utf8")
-  }
-  specLockContent ??= designSpecContent
+  const specLockContent = importedSpecLockContent ?? designSpecContent
 
   return {
     templateId: templateId.trim(),
@@ -518,18 +566,22 @@ async function materializeOfficialTemplateAssets(
 
 export async function loadPptMasterTemplateReference(templateId: string): Promise<ImportedPptMasterTemplateReference> {
   const repoDir = await resolvePptMasterRepoDir()
+  return loadPptMasterTemplateReferenceFromRepo(repoDir, templateId)
+}
+
+async function loadPptMasterTemplateReferenceFromRepo(
+  repoDir: string,
+  templateId: string,
+): Promise<ImportedPptMasterTemplateReference> {
   const resolvedSource = await resolveOfficialTemplateSource(repoDir, templateId)
   if (!resolvedSource) {
     throw new Error(`ppt_master_template_missing:${templateId}`)
   }
 
-  const designSpecPath = path.join(resolvedSource.sourceDir, "design_spec.md")
-  const specLockPath = path.join(resolvedSource.sourceDir, "spec_lock.md")
-  const designSpecContent = (await pathExists(designSpecPath)) ? await fs.readFile(designSpecPath, "utf8") : null
-  const specLockContent = (await pathExists(specLockPath)) ? await fs.readFile(specLockPath, "utf8") : null
+  const { designSpecContent, specLockContent } = await readOfficialTemplateContract(resolvedSource.sourceDir)
 
   const officialContract = specLockContent ?? designSpecContent
-  if (!designSpecContent && !officialContract) {
+  if (!officialContract && resolvedSource.kind !== "layout") {
     throw new Error(`ppt_master_template_contract_missing:${templateId}`)
   }
 
@@ -764,6 +816,9 @@ function buildRuntimeSpecLock(variant: PptPreviewVariant, typography: RuntimeTyp
     "- viewBox: 0 0 1280 720",
     "- format: PPT 16:9",
     "",
+    "## pptx_structure",
+    "- mode: flat",
+    "",
     "## colors",
     `- bg: ${variant.palette.background}`,
     `- primary: ${variant.palette.foreground}`,
@@ -800,6 +855,32 @@ function buildRuntimeSpecLock(variant: PptPreviewVariant, typography: RuntimeTyp
   ].join("\n")
 }
 
+function ensurePptxStructureMode(
+  specLockContent: string,
+  mode: "flat" | "structured",
+  templateId?: string | null,
+) {
+  const existingMode = specLockContent.match(/^\s*-\s*mode\s*:\s*(flat|structured)\s*$/mu)?.[1]
+  if (existingMode === mode) {
+    return specLockContent
+  }
+
+  if (mode === "flat" && existingMode === "structured") {
+    return specLockContent
+      .replace(/^\s*-\s*mode\s*:\s*structured\s*$/mu, "- mode: flat")
+      .replace(/^\s*-\s*template:\s*.*$/mu, "")
+  }
+
+  return [
+    specLockContent.trimEnd(),
+    "",
+    "## pptx_structure",
+    `- mode: ${mode}`,
+    ...(mode === "structured" && templateId ? [`- template: ${templateId}`] : []),
+    "",
+  ].join("\n")
+}
+
 async function writeProjectArtifacts(
   projectDir: string,
   deck: PptPreviewDeck,
@@ -817,9 +898,10 @@ async function writeProjectArtifacts(
     templateReference?.designSpecContent ?? buildRuntimeDesignSpec(deck, variant, typography, templateReference),
     "utf8",
   )
+  const specLockContent = templateReference?.specLockContent ?? buildRuntimeSpecLock(variant, typography)
   await fs.writeFile(
     specLockPath,
-    templateReference?.specLockContent ?? buildRuntimeSpecLock(variant, typography),
+    ensurePptxStructureMode(specLockContent, "flat", templateReference?.templateId),
     "utf8",
   )
 
@@ -2295,6 +2377,14 @@ export async function exportPptMasterSessionVariant(sessionId: string, variantKe
   const { variant, session } = await getPptMasterSessionVariant(sessionId, variantKey)
   const repoDir = await resolvePptMasterRepoDir()
   const svgFinalDir = path.join(variant.projectDir, "svg_final")
+  const specLockPath = path.join(variant.projectDir, "spec_lock.md")
+  const templateId = session.deck?.variants.find((item) => item.key === variant.key)?.templateId
+
+  const specLockContent = (await pathExists(specLockPath)) ? await fs.readFile(specLockPath, "utf8") : ""
+  const normalizedSpecLock = ensurePptxStructureMode(specLockContent, "flat", templateId)
+  if (normalizedSpecLock !== specLockContent || !(await pathExists(specLockPath))) {
+    await fs.writeFile(specLockPath, normalizedSpecLock, "utf8")
+  }
 
   await repairStoredSvgFinalDirectory(svgFinalDir)
   await runPptMasterSvgQualityCheck(repoDir, svgFinalDir)
@@ -2331,7 +2421,11 @@ export const __testables__ = {
   getProjectCachePptMasterCandidate,
   getProjectCachePptMasterUpstreamCandidate,
   getPptMasterPythonCandidates,
+  getPptMasterScriptTimeoutMs,
+  runPythonScript,
   resolveOfficialTemplateSource,
+  readOfficialTemplateContract,
+  loadPptMasterTemplateReferenceFromRepo,
   materializeOfficialTemplateAssets,
   readManifest,
   compactRuntimeText,
@@ -2339,6 +2433,7 @@ export const __testables__ = {
   prepareGeneratedSvg,
   postprocessGeneratedSvg,
   buildEmergencyRuntimeSvg,
+  ensurePptxStructureMode,
   shouldFallbackForGeneratedSvg,
   shouldUseDeterministicRuntimeSvg,
   isRecoverableRuntimeSlideFailure,

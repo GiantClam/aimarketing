@@ -71,12 +71,12 @@ const QUICK_PROMPTS_BY_AGENT: Record<string, PromptPair> = {
   },
   "executive-presentation-ppt": {
     zh: [
-      "围绕这个主题生成一套演讲型 PPT，大纲要有起承转合。",
+      "围绕这个主题通过 Dashi 多轮生成一套演讲型 PPT，大纲要有起承转合。",
       "把这份材料改写成适合路演的演讲型展示稿，突出叙事节奏。",
       "为 10 分钟现场分享设计一套有节奏的演示结构和讲述重点。",
     ],
     en: [
-      "Build a presentation-first deck around this topic with a clear narrative arc.",
+      "Use the Dashi presentation skill to build a presentation-first deck around this topic with a clear narrative arc.",
       "Rewrite this material into a pitch-style presentation deck with stronger storytelling flow.",
       "Design a paced presentation structure for a 10-minute live talk, including speaking beats.",
     ],

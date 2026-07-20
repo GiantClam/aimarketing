@@ -434,8 +434,45 @@ export function applySseEvent(parts: MessagePart[], event: AiEntryStreamEvent): 
     return startOrUpdateTaskProgress(parts, { type: "conversation_init", status: "completed", at: Date.now() })
   }
 
+  if (type === "agent_resolved") {
+    return startOrUpdateTaskProgress(parts, {
+      type: "agent_resolved",
+      status: "completed",
+      detail: optionalString(event.agent_id) ?? undefined,
+      at: Date.now(),
+    })
+  }
+
+  if (type === "skill_selected" || type === "skill_activated" || type === "skill_completed" || type === "skill_failed") {
+    const skillId = optionalString(event.skill_id) ?? "skill"
+    return startOrUpdateTaskProgress(parts, {
+      type: type === "skill_selected" ? `skill-resolved:${skillId}` : `skill-invocation:${skillId}`,
+      status: type === "skill_activated" ? "running" : type === "skill_failed" ? "failed" : type === "skill_selected" ? "info" : "completed",
+      detail: type === "skill_selected"
+        ? "Resolved"
+        : type === "skill_failed"
+          ? optionalString(event.message) ?? "Skill invocation failed"
+          : type === "skill_activated"
+            ? "Invoked"
+            : "Completed",
+      at: Date.now(),
+    })
+  }
+
   if (type === "provider_selected" || type === "provider_fallback") {
-    const detail = [optionalString(event.provider), optionalString(event.provider_model)].filter(Boolean).join(" / ")
+    const fallbackReason = optionalString(event.fallback_reason)
+    const reasonLabel = type === "provider_fallback"
+      ? fallbackReason === "empty_response"
+        ? "empty response"
+        : fallbackReason === "timeout"
+          ? "Provider connection timeout"
+          : fallbackReason === "connection"
+            ? "Provider network connection failed"
+            : fallbackReason === "rate_limit"
+              ? "Provider rate limited"
+              : "Provider request failed"
+      : null
+    const detail = [optionalString(event.provider), optionalString(event.provider_model), reasonLabel].filter(Boolean).join(" / ")
     return startOrUpdateTaskProgress(parts, {
       type: "provider",
       status: type === "provider_fallback" ? "info" : "running",

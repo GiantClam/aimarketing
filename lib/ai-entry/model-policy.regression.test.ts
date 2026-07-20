@@ -3,6 +3,7 @@ import test from "node:test"
 
 import {
   AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT,
+  AI_ENTRY_AGENT_DEFAULT_MODEL_HINT,
   AI_ENTRY_CONSULTING_ENTRY_MODE,
   AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS,
   AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT,
@@ -12,6 +13,7 @@ import {
   isAiEntryPptAgentId,
   isConsultingAdvisorEntryMode,
   pickConsultingModelId,
+  pickAgentDefaultModelId,
   pickPptAssistantDefaultModelId,
   pickSonnet46ModelId,
   resolvePptAssistantModelSelection,
@@ -38,37 +40,48 @@ test("pickSonnet46ModelId returns null when sonnet-4.6 model does not exist", ()
   assert.equal(selected, null)
 })
 
-test("pickConsultingModelId defaults consulting advisor to pptoken GPT-5.6 Luna", () => {
+test("pickConsultingModelId defaults consulting advisor to DeepSeek V4 Pro", () => {
   const selected = pickConsultingModelId([
-    { id: "aiberm::gpt-5.4", name: "AIBERM / GPT 5.4", providerId: "aiberm", modelId: "gpt-5.4" },
-    { id: "crazyroute::gpt-5.4", name: "Crazyroute / GPT 5.4", providerId: "crazyroute", modelId: "gpt-5.4" },
-    { id: "pptoken::gpt-5.6-luna", name: "PPToken / GPT-5.6 Luna", providerId: "pptoken", modelId: "gpt-5.6-luna" },
+    { id: "deepseek::deepseek-v4-pro", name: "DeepSeek V4 Pro", providerId: "deepseek", modelId: "deepseek-v4-pro" },
+    { id: "pptoken::grok-4.5", name: "PPToken / Grok 4.5", providerId: "pptoken", modelId: "grok-4.5" },
   ])
 
-  assert.equal(selected, "pptoken::gpt-5.6-luna")
+  assert.equal(selected, "deepseek::deepseek-v4-pro")
 })
 
-test("pickConsultingModelId quality mode targets GPT-5.6 Luna", () => {
+test("pickConsultingModelId quality mode targets DeepSeek V4 Pro", () => {
   const selected = pickConsultingModelId(
     [
-      { id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6" },
-      { id: "pptoken::gpt-5.6-luna", name: "PPToken / GPT-5.6 Luna", providerId: "pptoken", modelId: "gpt-5.6-luna" },
+      { id: "deepseek::deepseek-v4-pro", name: "DeepSeek V4 Pro", providerId: "deepseek", modelId: "deepseek-v4-pro" },
+      { id: "pptoken::grok-4.5", name: "PPToken / Grok 4.5", providerId: "pptoken", modelId: "grok-4.5" },
     ],
     "quality",
   )
 
-  assert.equal(selected, "pptoken::gpt-5.6-luna")
+  assert.equal(selected, "deepseek::deepseek-v4-pro")
 })
 
-test("pickPptAssistantDefaultModelId defaults PPT assistant to DeepSeek V4 Pro", () => {
+test("agent default model selector targets DeepSeek V4 Pro", () => {
+  assert.equal(
+    pickAgentDefaultModelId([
+      { id: "deepseek::deepseek-v4-pro", providerId: "deepseek", modelId: "deepseek-v4-pro" },
+      { id: "pptoken::grok-4.5", providerId: "pptoken", modelId: "grok-4.5" },
+    ]),
+    "deepseek::deepseek-v4-pro",
+  )
+})
+
+test("pickPptAssistantDefaultModelId defaults PPT assistant to PPToken Grok-4.5", () => {
   const selected = pickPptAssistantDefaultModelId([
     { id: "aiberm::gpt-5.4", name: "AIBERM / GPT 5.4", providerId: "aiberm", modelId: "gpt-5.4" },
+    { id: "pptoken::grok-4.5", name: "PPToken / Grok 4.5", providerId: "pptoken", modelId: "grok-4.5" },
+    { id: "pptoken::gpt-5.4", name: "PPToken / GPT 5.4", providerId: "pptoken", modelId: "gpt-5.4" },
     { id: "pptoken::gpt-5.6-sol", name: "PPToken / GPT-5.6 Sol", providerId: "pptoken", modelId: "gpt-5.6-sol" },
     { id: "deepseek::deepseek-v4-pro", name: "DeepSeek V4 Pro", providerId: "deepseek", modelId: "deepseek-v4-pro" },
     { id: "openrouter::claude-sonnet-4.6", name: "OpenRouter / Claude Sonnet 4.6", providerId: "openrouter", modelId: "claude-sonnet-4.6" },
   ])
 
-  assert.equal(selected, "deepseek::deepseek-v4-pro")
+  assert.equal(selected, "pptoken::grok-4.5")
 })
 
 test("PPT assistant keeps the current conversation model before applying its default", () => {
@@ -76,7 +89,7 @@ test("PPT assistant keeps the current conversation model before applying its def
     resolvePptAssistantModelSelection({
       currentModelId: "pptoken::gpt-5.4",
       availableModelIds: ["deepseek::deepseek-v4-pro", "pptoken::gpt-5.4"],
-      defaultModelId: "deepseek::deepseek-v4-pro",
+      defaultModelId: "pptoken::gpt-5.4",
     }),
     "pptoken::gpt-5.4",
   )
@@ -84,9 +97,21 @@ test("PPT assistant keeps the current conversation model before applying its def
     resolvePptAssistantModelSelection({
       currentModelId: null,
       availableModelIds: ["deepseek::deepseek-v4-pro", "pptoken::gpt-5.4"],
+      defaultModelId: "pptoken::gpt-5.4",
+    }),
+    "pptoken::gpt-5.4",
+  )
+})
+
+test("PPT assistant restores a persisted conversation model when model loading races", () => {
+  assert.equal(
+    resolvePptAssistantModelSelection({
+      currentModelId: null,
+      conversationModelId: "pptoken::gpt-5.4",
+      availableModelIds: ["deepseek::deepseek-v4-pro", "pptoken::gpt-5.4"],
       defaultModelId: "deepseek::deepseek-v4-pro",
     }),
-    "deepseek::deepseek-v4-pro",
+    "pptoken::gpt-5.4",
   )
 })
 
@@ -107,7 +132,7 @@ test("consulting entry mode detection and lock flag", () => {
       entryMode: AI_ENTRY_CONSULTING_ENTRY_MODE,
       agentId: "general",
     }),
-    true,
+    false,
   )
   assert.equal(
     shouldLockConsultingAdvisorModel({
@@ -135,8 +160,9 @@ test("consulting entry mode detection and lock flag", () => {
   assert.equal(isAiEntryPptAgentId("executive-ppt"), true)
   assert.equal(isAiEntryPptAgentId("executive-presentation-ppt"), true)
   assert.equal(isAiEntryPptAgentId("executive-brand"), false)
-  assert.equal(AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT, "claude-sonnet-4.6")
-  assert.equal(AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT, "gpt-5.6-luna")
+  assert.equal(AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT, "deepseek-v4-pro")
+  assert.equal(AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT, "deepseek-v4-pro")
+  assert.equal(AI_ENTRY_AGENT_DEFAULT_MODEL_HINT, "deepseek-v4-pro")
   assert.equal(AI_ENTRY_SONNET_46_MODEL_HINT, "claude-sonnet-4.6")
-  assert.equal(AI_ENTRY_PPT_ASSISTANT_DEFAULT_MODEL_HINT, "deepseek-v4-pro")
+  assert.equal(AI_ENTRY_PPT_ASSISTANT_DEFAULT_MODEL_HINT, "grok-4.5")
 })
