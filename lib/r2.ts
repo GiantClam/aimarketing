@@ -3,28 +3,39 @@ import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3"
 let r2Client: S3Client | null = null
 let r2ClientSignature = ""
 
+function normalizeR2EnvValue(value: string | undefined) {
+  const trimmed = value?.trim() || ""
+  const wrapped = trimmed.match(/^(?:"([\s\S]*)"|'([\s\S]*)')$/u)
+  return (wrapped?.[1] ?? wrapped?.[2] ?? trimmed).trim()
+}
+
 function getR2Endpoint() {
-  return process.env.R2_ENDPOINT || (process.env.R2_ACCOUNT_ID ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : "")
+  const explicitEndpoint = normalizeR2EnvValue(process.env.R2_ENDPOINT).replace(/["']/gu, "")
+  if (explicitEndpoint) return explicitEndpoint
+
+  const accountId = normalizeR2EnvValue(process.env.R2_ACCOUNT_ID)
+  return accountId ? `https://${accountId}.r2.cloudflarestorage.com` : ""
 }
 
 function getR2AccessKeyId() {
-  return process.env.R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY || ""
+  return normalizeR2EnvValue(process.env.R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY)
 }
 
 function getR2SecretAccessKey() {
-  return process.env.R2_SECRET_ACCESS_KEY || process.env.R2_SECRET_KEY || ""
+  return normalizeR2EnvValue(process.env.R2_SECRET_ACCESS_KEY || process.env.R2_SECRET_KEY)
 }
 
 function getR2BucketEnv() {
-  return process.env.R2_BUCKET_NAME || process.env.R2_BUCKET || ""
+  return normalizeR2EnvValue(process.env.R2_BUCKET_NAME || process.env.R2_BUCKET)
 }
 
 function getR2PublicBaseEnv() {
-  return process.env.R2_PUBLIC_BASE || process.env.R2_PUBLIC_URL || ""
+  return normalizeR2EnvValue(process.env.R2_PUBLIC_BASE || process.env.R2_PUBLIC_URL)
 }
 
 function getAccountIdFromEndpoint() {
-  if (process.env.R2_ACCOUNT_ID) return process.env.R2_ACCOUNT_ID
+  const configuredAccountId = normalizeR2EnvValue(process.env.R2_ACCOUNT_ID)
+  if (configuredAccountId) return configuredAccountId
   const endpoint = getR2Endpoint()
   if (!endpoint) return ""
 
