@@ -16,10 +16,10 @@ const GENERAL_RUNTIME_ARTIFACT_EXTENSIONS = [
   ".webp",
 ] as const
 
-// Native Dashi exports commonly contain embedded fonts and images. A valid
-// PPTX can therefore be larger than the generic runtime artifact limit.
-export const DASHI_PPT_MAX_ARTIFACT_BYTES = 16 * 1024 * 1024
-export const DASHI_PPT_MAX_ARTIFACT_TOTAL_BYTES = 32 * 1024 * 1024
+// Native Dashi exports commonly contain embedded fonts and images. Keep the
+// per-file ceiling at 100MB so large but valid PPTX files are not dropped.
+export const DASHI_PPT_MAX_ARTIFACT_BYTES = 100 * 1024 * 1024
+export const DASHI_PPT_MAX_ARTIFACT_TOTAL_BYTES = 200 * 1024 * 1024
 
 export function isDashiPptRuntime(agentId: unknown, selectedSkillIds: unknown) {
   return agentId === "executive-presentation-ppt" ||

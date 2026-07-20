@@ -7,7 +7,7 @@ import {
   resolveRuntimeArtifactLimits,
 } from "./artifact-policy"
 
-test("raises Dashi artifact limits enough for native PPTX exports", () => {
+test("allows native Dashi artifact files up to 100MB", () => {
   const limits = resolveRuntimeArtifactLimits({
     agentId: "executive-presentation-ppt",
     selectedSkillIds: ["dashiai-ppt"],

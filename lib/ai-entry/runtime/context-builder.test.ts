@@ -84,8 +84,8 @@ test("limits native Dashi artifacts to PPTX and HTML", () => {
   })
 
   assert.deepEqual(input.artifactContract.allowedExtensions, [".pptx", ".html"])
-  assert.equal(input.artifactContract.maxArtifactBytes, 16 * 1024 * 1024)
-  assert.equal(input.artifactContract.maxArtifactTotalBytes, 32 * 1024 * 1024)
+  assert.equal(input.artifactContract.maxArtifactBytes, 100 * 1024 * 1024)
+  assert.equal(input.artifactContract.maxArtifactTotalBytes, 200 * 1024 * 1024)
 })
 
 test("passes the lightweight ppt-master project snapshot to the runtime", () => {
