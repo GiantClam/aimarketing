@@ -51,6 +51,14 @@ async function sha256(bytes: Uint8Array) {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")
 }
 
+function findExpression(allowedExtensions: string[]) {
+  const patterns = [...new Set(allowedExtensions
+    .map((extension) => extension.replace(/^\./, "").toLowerCase())
+    .filter((extension) => /^[a-z0-9]+$/.test(extension)))]
+    .map((extension) => `-iname '*.${extension}'`)
+  return patterns.length > 0 ? `\\( ${patterns.join(" -o ")} \\)` : "-false"
+}
+
 export async function publishRuntimeArtifactsV2(input: {
   bucket: R2Bucket
   sandbox: ArtifactSandbox
@@ -93,8 +101,9 @@ export async function publishRuntimeArtifactsV2(input: {
     const dashiOutputRoot = "/workspace/output"
     const sessionRoots = [`${turnDir}/artifacts`, `${turnDir}`, `${input.sessionDir}/final`, `${input.sessionDir}/project`, `${input.sessionDir}/workspace`]
     const findArgs = sessionRoots.map((root) => JSON.stringify(root)).join(" ")
+    const findFiles = findExpression(input.allowedExtensions)
     const marker = `${turnDir}/.dashi-artifact-start`
-    const discovered = await input.sandbox.exec(`{ find ${findArgs} -type f \\( -iname '*.pptx' -o -iname '*.html' -o -iname '*.png' -o -iname '*.svg' -o -iname '*.json' -o -iname '*.md' -o -iname '*.txt' \\) -print 2>/dev/null; if [ -f ${JSON.stringify(marker)} ]; then find ${JSON.stringify(dashiRoot)} -newer ${JSON.stringify(marker)} -type f \\( -iname '*.pptx' -o -iname '*.html' -o -iname '*.png' -o -iname '*.svg' -o -iname '*.json' -o -iname '*.md' -o -iname '*.txt' \\) -print 2>/dev/null; find ${JSON.stringify(dashiOutputRoot)} -newer ${JSON.stringify(marker)} -type f \\( -iname '*.pptx' -o -iname '*.html' -o -iname '*.png' -o -iname '*.svg' -o -iname '*.json' -o -iname '*.md' -o -iname '*.txt' \\) -print 2>/dev/null; else find ${JSON.stringify(dashiRoot)} -mmin -180 -type f \\( -iname '*.pptx' -o -iname '*.html' -o -iname '*.png' -o -iname '*.svg' -o -iname '*.json' -o -iname '*.md' -o -iname '*.txt' \\) -print 2>/dev/null; find ${JSON.stringify(dashiOutputRoot)} -mmin -180 -type f \\( -iname '*.pptx' -o -iname '*.html' -o -iname '*.png' -o -iname '*.svg' -o -iname '*.json' -o -iname '*.md' -o -iname '*.txt' \\) -print 2>/dev/null; fi; } | head -200`)
+    const discovered = await input.sandbox.exec(`{ find ${findArgs} -type f ${findFiles} -print 2>/dev/null; if [ -f ${JSON.stringify(marker)} ]; then find ${JSON.stringify(dashiRoot)} -newer ${JSON.stringify(marker)} -type f ${findFiles} -print 2>/dev/null; find ${JSON.stringify(dashiOutputRoot)} -newer ${JSON.stringify(marker)} -type f ${findFiles} -print 2>/dev/null; else find ${JSON.stringify(dashiRoot)} -mmin -180 -type f ${findFiles} -print 2>/dev/null; find ${JSON.stringify(dashiOutputRoot)} -mmin -180 -type f ${findFiles} -print 2>/dev/null; fi; } | head -200`)
     const seen = new Set<string>()
     const fallbackRecords = (discovered.stdout || "").split(/\r?\n/).map((path) => path.trim()).filter((path) => {
       if (!path || seen.has(path)) return false

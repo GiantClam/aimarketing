@@ -48,10 +48,18 @@ function allowedFullPath(path: string, runDir: string) {
   return path.startsWith(`${runDir}/`) || path.startsWith("/opt/dashiai-ppt/project/") || path.startsWith("/workspace/output/")
 }
 
-async function discoverDashiArtifacts(sandbox: SandboxArtifactApi, runDir: string): Promise<ArtifactRecord[]> {
+function findExpression(allowedExtensions: string[]) {
+  const patterns = [...new Set(allowedExtensions
+    .map((extension) => extension.replace(/^\./, "").toLowerCase())
+    .filter((extension) => /^[a-z0-9]+$/.test(extension)))]
+    .map((extension) => `-iname '*.${extension}'`)
+  return patterns.length > 0 ? `\\( ${patterns.join(" -o ")} \\)` : "-false"
+}
+
+async function discoverDashiArtifacts(sandbox: SandboxArtifactApi, runDir: string, allowedExtensions: string[]): Promise<ArtifactRecord[]> {
   const roots = [`${runDir}/artifacts`, `${runDir}`, "/opt/dashiai-ppt/project", "/workspace/output"]
   const rootArgs = roots.map((root) => JSON.stringify(root)).join(" ")
-  const result = await sandbox.exec(`find ${rootArgs} -type f \\( -iname '*.pptx' -o -iname '*.html' -o -iname '*.png' -o -iname '*.svg' -o -iname '*.json' -o -iname '*.md' -o -iname '*.txt' \\) -print 2>/dev/null | head -200`)
+  const result = await sandbox.exec(`find ${rootArgs} -type f ${findExpression(allowedExtensions)} -print 2>/dev/null | head -200`)
   const records: ArtifactRecord[] = []
   const seen = new Set<string>()
   for (const fullPath of (result.stdout || "").split(/\r?\n/).map((value) => value.trim())) {
@@ -102,7 +110,7 @@ export async function collectRunArtifacts(sandbox: SandboxArtifactApi, runDir: s
       records.push({ record: { ...record, path: `artifacts/${relativePath}` }, fullPath: requestedFullPath })
     }
   }
-  if (records.length === 0 && input.discoverDashi) records.push(...await discoverDashiArtifacts(sandbox, runDir))
+  if (records.length === 0 && input.discoverDashi) records.push(...await discoverDashiArtifacts(sandbox, runDir, input.allowedExtensions))
   if (records.length === 0) return { artifacts: [] as RuntimeArtifactPayload[], warnings: manifestWarning ? [manifestWarning] : [] }
 
   const allowed = new Set(input.allowedExtensions.map((value) => value.replace(/^\./, "").toLowerCase()))

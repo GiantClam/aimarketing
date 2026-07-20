@@ -123,6 +123,7 @@ test("prioritizes final PPTX and HTML over manifest JSON when artifact slots are
   const jsonPath = `${turnDir}/artifacts/brief.json`
   const pptxPath = "/workspace/output/customer-review/deck.pptx"
   const htmlPath = "/workspace/output/customer-review/ppt/index.html"
+  let findCommand = ""
   const sandbox = {
     async readFile(path: string) {
       if (path.endsWith("artifact-manifest.json")) {
@@ -134,7 +135,10 @@ test("prioritizes final PPTX and HTML over manifest JSON when artifact slots are
       return null
     },
     async exec(command: string) {
-      if (command.includes("find ")) return { success: true, stdout: `${jsonPath}\n${htmlPath}\n${pptxPath}\n` }
+      if (command.includes("find ")) {
+        findCommand = command
+        return { success: true, stdout: `${jsonPath}\n${htmlPath}\n${pptxPath}\n` }
+      }
       return { success: false }
     },
   }
@@ -150,7 +154,7 @@ test("prioritizes final PPTX and HTML over manifest JSON when artifact slots are
     maxArtifacts: 2,
     maxArtifactBytes: 1024,
     maxArtifactTotalBytes: 4096,
-    allowedExtensions: ["json", "html", "pptx"],
+    allowedExtensions: ["html", "pptx"],
     allowPptx: true,
   })
 
@@ -160,6 +164,9 @@ test("prioritizes final PPTX and HTML over manifest JSON when artifact slots are
   ])
   assert.equal(puts.length, 2)
   assert.ok(result.warnings.includes("runtime_artifact_count_exceeded"))
+  assert.match(findCommand, /-iname '\*\.pptx'/u)
+  assert.match(findCommand, /-iname '\*\.html'/u)
+  assert.doesNotMatch(findCommand, /-iname '\*\.json'/u)
 })
 
 test("rejects a final PPTX reference until the user confirms export", async () => {

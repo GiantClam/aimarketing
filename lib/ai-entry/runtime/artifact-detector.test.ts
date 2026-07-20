@@ -39,3 +39,17 @@ test("validates a bounded Cloudflare R2 artifact reference", () => {
   assert.equal(artifact.fileName, "deck.pptx")
   assert.equal(artifact.storageKey, "artifacts/sess-1/run-1/final/deck.pptx")
 })
+
+test("rejects non-PPTX/HTML files under the Dashi artifact contract", () => {
+  const dashiLimits = { ...limits, allowedExtensions: [".pptx", ".html"] }
+  const contentBase64 = Buffer.from("{}", "utf8").toString("base64")
+
+  assert.throws(() => validateRuntimeArtifactPayload({
+    path: "artifacts/goal.json",
+    title: "Goal",
+    kind: "file",
+    mimeType: "application/json",
+    sizeBytes: 2,
+    contentBase64,
+  }, dashiLimits), /extension_not_allowed/)
+})
