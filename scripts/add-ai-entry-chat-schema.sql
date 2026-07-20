@@ -19,9 +19,17 @@ CREATE TABLE IF NOT EXISTS "AI_MARKETING_messages" (
   conversation_id INTEGER NOT NULL REFERENCES "AI_MARKETING_conversations"(id) ON DELETE CASCADE,
   role VARCHAR(20) NOT NULL,
   content TEXT NOT NULL,
+  idempotency_key VARCHAR(255),
   knowledge_source VARCHAR(50),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE "AI_MARKETING_messages"
+ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(255);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "AI_MARKETING_messages_conversation_idempotency_idx"
+ON "AI_MARKETING_messages"(conversation_id, idempotency_key)
+WHERE idempotency_key IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS "AI_MARKETING_conversations_user_created_idx"
 ON "AI_MARKETING_conversations"(user_id, created_at DESC, id DESC);
