@@ -113,8 +113,11 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
     pathname.startsWith("/dashboard/advisor")
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/login")
-  }, [loading, router, user])
+    if (!loading && !user) {
+      const currentPath = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`
+      router.replace(`/login?next=${encodeURIComponent(currentPath)}`)
+    }
+  }, [loading, pathname, router, searchParams, user])
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
