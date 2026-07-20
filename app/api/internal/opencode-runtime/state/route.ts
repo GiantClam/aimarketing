@@ -180,7 +180,7 @@ async function syncRailwayTask(input: { runtimeRunId: string; status: OpenCodeRu
   if (input.status === "succeeded" && conversationId && !assistantMessagePersisted) {
     const assistantMessage = buildRuntimeAssistantMessage(text, artifactEvents.map((event) => asRecord(event.artifact) || {}))
     if (assistantMessage) {
-      await appendAiEntryMessage({ userId: platformRun.userId, conversationId, role: "assistant", content: assistantMessage, agentId: typeof taskInput.agentId === "string" ? taskInput.agentId : null })
+      await appendAiEntryMessage({ userId: platformRun.userId, conversationId, role: "assistant", content: assistantMessage, idempotencyKey: `opencode:${input.runtimeRunId}:assistant`, agentId: typeof taskInput.agentId === "string" ? taskInput.agentId : null })
       assistantMessagePersisted = true
     }
   }

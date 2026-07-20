@@ -4,6 +4,7 @@ import { normalizeConversationMessageOrder } from "@/lib/ai-entry/message-restor
 import {
   collapsePptTemplateRecommendationMessageBlocks,
   extractLatestPptPreviewContext,
+  extractLatestPptExportContext,
   extractPptTemplateRecommendationContexts,
   isFailedPptBackgroundStatusMessage,
   stripPptHiddenContextMarkers,
@@ -95,7 +96,21 @@ export function mapPersistedAiEntryMessages(
       .filter((item): item is PersistedAiEntryMappedMessage => Boolean(item)),
   )
 
-  const latestPreviewMessageIndex = [...mappedMessages]
+  const seenPptAssistantContent = new Set<string>()
+  const dedupedPptMessages = mappedMessages.filter((message) => {
+    if (message.role !== "assistant") return true
+    const hasPptContext = Boolean(
+      extractLatestPptPreviewContext(message.content) || extractLatestPptExportContext(message.content),
+    )
+    if (!hasPptContext) return true
+
+    const contentKey = message.content.trim()
+    if (seenPptAssistantContent.has(contentKey)) return false
+    seenPptAssistantContent.add(contentKey)
+    return true
+  })
+
+  const latestPreviewMessageIndex = [...dedupedPptMessages]
     .reverse()
     .findIndex(
       (message) =>
@@ -104,11 +119,11 @@ export function mapPersistedAiEntryMessages(
     )
 
   if (latestPreviewMessageIndex < 0) {
-    return mappedMessages
+    return dedupedPptMessages
   }
 
-  const latestPreviewAbsoluteIndex = mappedMessages.length - 1 - latestPreviewMessageIndex
-  return mappedMessages.filter((message, index) => {
+  const latestPreviewAbsoluteIndex = dedupedPptMessages.length - 1 - latestPreviewMessageIndex
+  return dedupedPptMessages.filter((message, index) => {
     if (index >= latestPreviewAbsoluteIndex) return true
     if (message.role !== "assistant") return true
     return !isFailedPptBackgroundStatusMessage(message.content)

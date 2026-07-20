@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
   const assistantContent = buildRuntimeAssistantMessage(text, artifacts)
   let assistantMessagePersisted = previous.assistantMessagePersisted === true
   if (payload.status === "succeeded" && assistantContent && conversationId && !assistantMessagePersisted) {
-    await appendAiEntryMessage({ userId: platformRun.userId, conversationId, role: "assistant", content: assistantContent, agentId: typeof taskInput.agentId === "string" ? taskInput.agentId : null })
+    await appendAiEntryMessage({ userId: platformRun.userId, conversationId, role: "assistant", content: assistantContent, idempotencyKey: `opencode:${payload.runId}:assistant`, agentId: typeof taskInput.agentId === "string" ? taskInput.agentId : null })
     assistantMessagePersisted = true
   }
   let savedArtifactCount = 0

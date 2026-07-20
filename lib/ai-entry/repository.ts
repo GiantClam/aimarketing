@@ -1045,6 +1045,7 @@ export async function appendAiEntryMessage(params: {
   conversationId: string | number | null | undefined
   role: "user" | "assistant"
   content: string
+  idempotencyKey?: string | null
   scope?: AiEntryConversationScope
   agentId?: string | null
 }) {
@@ -1060,6 +1061,9 @@ export async function appendAiEntryMessage(params: {
   }
 
   const normalizedContent = params.content.trim()
+  const idempotencyKey = typeof params.idempotencyKey === "string" && params.idempotencyKey.trim()
+    ? params.idempotencyKey.trim().slice(0, 255)
+    : null
   if (!normalizedContent) {
     return mapConversationSummary({
       id: conversation.id,
@@ -1106,8 +1110,9 @@ export async function appendAiEntryMessage(params: {
 
   await withAiEntryDbRetry(`insert-ai-entry-message:${params.role}`, () =>
     db.execute(sql`
-      INSERT INTO ${messages} ("conversation_id", "role", "content")
-      VALUES (${conversation.id}, ${params.role}, ${normalizedContent})
+      INSERT INTO ${messages} ("conversation_id", "role", "content", "idempotency_key")
+      VALUES (${conversation.id}, ${params.role}, ${normalizedContent}, ${idempotencyKey})
+      ON CONFLICT DO NOTHING
     `),
   )
 
