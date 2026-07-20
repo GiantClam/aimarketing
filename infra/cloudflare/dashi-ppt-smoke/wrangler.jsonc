@@ -7,7 +7,7 @@
   "containers": [
     {
       "class_name": "Sandbox",
-      "image": "registry.cloudflare.com/9630806d5a588fc350ee64c395005cfa/aimarketing-dashi-ppt-smoke-sandbox:dashi-v0.4.4-fdbb145-20260720",
+      "image": "registry.cloudflare.com/9630806d5a588fc350ee64c395005cfa/aimarketing-dashi-ppt-smoke-sandbox:dashi-v0.4.5-ff3a733-20260720",
       "instance_type": "standard-4",
       "max_instances": 1
     }

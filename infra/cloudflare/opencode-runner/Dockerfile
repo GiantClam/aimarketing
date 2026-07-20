@@ -2,8 +2,8 @@ FROM docker.io/cloudflare/sandbox:0.12.3-opencode
 
 USER root
 
-ARG DASHI_PPT_SKILL_REF=fdbb145517ea0e289000aef9b7906bcb3e0cd19a
-ARG DASHI_PPT_EXPECTED_VERSION=0.4.4
+ARG DASHI_PPT_SKILL_REF=ff3a7330e4967147a40310669703b911fb1f708a
+ARG DASHI_PPT_EXPECTED_VERSION=0.4.5
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates fontconfig fonts-noto-cjk git ripgrep \

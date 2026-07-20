@@ -17,8 +17,8 @@ type OpenCodeModelConfig = {
 // an older container filesystem for a new benchmark deck.
 const SANDBOX_ID = "dashi-ppt-research-20260713"
 const LEGACY_SANDBOX_ID = "dashi-ppt-smoke"
-const DASHI_PPT_VERSION = "0.4.4"
-const DASHI_PPT_COMMIT = "fdbb145517ea0e289000aef9b7906bcb3e0cd19a"
+const DASHI_PPT_VERSION = "0.4.5"
+const DASHI_PPT_COMMIT = "ff3a7330e4967147a40310669703b911fb1f708a"
 const SMOKE_DIR = "/workspace/dashi-smoke"
 const PPTX_PATH = `${SMOKE_DIR}/dashi-cloudflare-smoke.pptx`
 const BENCHMARK_DIR = "/workspace/dashi-benchmark-10"

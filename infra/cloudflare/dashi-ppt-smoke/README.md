@@ -1,7 +1,7 @@
 # OpenCode + DashiAI PPT Cloudflare smoke container
 
-This disposable canary packages OpenCode, DashiAI PPT Skill v0.4.4
-(`fdbb145517ea0e289000aef9b7906bcb3e0cd19a`), Chromium,
+This disposable canary packages OpenCode, DashiAI PPT Skill v0.4.5
+(`ff3a7330e4967147a40310669703b911fb1f708a`), Chromium,
 and its npm dependencies in a Cloudflare `standard-4` container. It has no
 arbitrary command endpoint: the authenticated smoke route renders a fixed
 five-slide deck and exports a real editable `.pptx`.

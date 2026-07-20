@@ -10,7 +10,7 @@ workflow state, billing, tools, and platform artifacts.
 - `@cloudflare/sandbox`: `0.12.3`
 - container base: `docker.io/cloudflare/sandbox:0.12.3`
 - OpenCode CLI: Cloudflare's `sandbox:0.12.3-opencode` image (`opencode 1.17.13`)
-- Dashi AI PPT: `chuspeeism/dashi-ppt-skill` pinned at `fdbb145517ea0e289000aef9b7906bcb3e0cd19a` (`v0.4.4`), published as image tag `ppt-dashi-v0.4.4-fdbb145-20260720`
+- Dashi AI PPT: `chuspeeism/dashi-ppt-skill` pinned at `ff3a7330e4967147a40310669703b911fb1f708a` (`v0.4.5`), published as image tags `dashi-v0.4.5-ff3a733-20260720` (Sandbox) and `ppt-dashi-v0.4.5-ff3a733-20260720` (PptMasterContainer)
 - Dashi Sandbox class: Cloudflare `standard-4` with Chromium headless-shell
 - Sandbox transport: `rpc`
 - Speaker PPT sessions enable OpenCode `webfetch`/`websearch` when the runtime

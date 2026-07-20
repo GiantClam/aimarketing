@@ -43,13 +43,13 @@
   "containers": [
     {
       "class_name": "Sandbox",
-      "image": "registry.cloudflare.com/9630806d5a588fc350ee64c395005cfa/aimarketing-opencode-runner-sandbox@sha256:90da46fc9e4517f02e6dfe030a0dabbf301b7f34cc0192897794f8ddf839b4a3",
+      "image": "registry.cloudflare.com/9630806d5a588fc350ee64c395005cfa/aimarketing-opencode-runner-sandbox:dashi-v0.4.5-ff3a733-20260720",
       "instance_type": "standard-4",
       "max_instances": 50
     },
     {
       "class_name": "PptMasterContainer",
-      "image": "registry.cloudflare.com/9630806d5a588fc350ee64c395005cfa/aimarketing-opencode-runner-pptmastercontainer:ppt-dashi-v0.4.4-fdbb145-20260720",
+      "image": "registry.cloudflare.com/9630806d5a588fc350ee64c395005cfa/aimarketing-opencode-runner-pptmastercontainer:ppt-dashi-v0.4.5-ff3a733-20260720",
       "instance_type": "standard-2",
       "max_instances": 5
     }
