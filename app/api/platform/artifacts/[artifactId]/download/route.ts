@@ -93,7 +93,7 @@ export async function GET(
 
     headers.set("Content-Type", localContent.contentType)
 
-    return new NextResponse(localContent.bytes, {
+    return new NextResponse(Buffer.from(localContent.bytes), {
       status: 200,
       headers,
     })
