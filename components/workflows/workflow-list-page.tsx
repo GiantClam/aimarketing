@@ -84,7 +84,8 @@ function parseDate(value: string | null) {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
-function formatDateTime(value: string | null, locale: "zh" | "en") {
+function formatDateTime(value: string | null, locale: "zh" | "en", nowMs: number | null = null) {
+  if (nowMs === null) return locale === "zh" ? "待加载" : "Loading"
   const parsed = parseDate(value)
   if (!parsed) return locale === "zh" ? "未记录" : "Not recorded"
   return parsed.toLocaleString(locale === "zh" ? "zh-CN" : "en-US", {
@@ -95,11 +96,12 @@ function formatDateTime(value: string | null, locale: "zh" | "en") {
   })
 }
 
-function formatRelativeTime(value: string | null, locale: "zh" | "en") {
+function formatRelativeTime(value: string | null, locale: "zh" | "en", nowMs: number | null = null) {
+  if (nowMs === null) return locale === "zh" ? "待加载" : "Loading"
   const parsed = parseDate(value)
   if (!parsed) return locale === "zh" ? "未记录" : "Not recorded"
 
-  const diffMs = parsed.getTime() - Date.now()
+  const diffMs = parsed.getTime() - nowMs
   const absSeconds = Math.round(Math.abs(diffMs) / 1000)
   const rtf = new Intl.RelativeTimeFormat(locale === "zh" ? "zh-CN" : "en-US", { numeric: "auto" })
 
@@ -110,7 +112,7 @@ function formatRelativeTime(value: string | null, locale: "zh" | "en") {
   if (absHours < 24) return rtf.format(Math.round(diffMs / (60 * 60 * 1000)), "hour")
   const absDays = Math.round(absHours / 24)
   if (absDays < 30) return rtf.format(Math.round(diffMs / DAY_MS), "day")
-  return formatDateTime(value, locale)
+  return formatDateTime(value, locale, nowMs)
 }
 
 function formatDuration(createdAt: string | null, finishedAt: string | null, locale: "zh" | "en") {
@@ -408,6 +410,7 @@ export function WorkflowListPage({
   const [runSearch, setRunSearch] = useState("")
   const [runStatusFilter, setRunStatusFilter] = useState("all")
   const [runDateFilter, setRunDateFilter] = useState("7d")
+  const [nowMs, setNowMs] = useState<number | null>(null)
 
   const copy =
     locale === "zh"
@@ -606,7 +609,7 @@ export function WorkflowListPage({
   }, [recentRuns])
 
   const workflowMetrics = useMemo(() => {
-    const now = Date.now()
+    const now = nowMs ?? 0
     const last7DaysRuns = recentRuns.filter((run) => {
       const created = parseDate(run.createdAt)
       return created ? now - created.getTime() <= 7 * DAY_MS : false
@@ -623,9 +626,9 @@ export function WorkflowListPage({
       active: workflows.filter((workflow) => workflow.status === "live").length,
       succeeded7d: last7DaysRuns.filter((run) => run.status === "succeeded").length,
       failed7d: last7DaysRuns.filter((run) => run.status === "failed").length,
-      lastUpdated: latestWorkflow ? formatRelativeTime(latestWorkflow.updatedAt, locale) : "—",
+      lastUpdated: latestWorkflow ? formatRelativeTime(latestWorkflow.updatedAt, locale, nowMs) : "—",
     }
-  }, [locale, recentRuns, workflows])
+  }, [locale, nowMs, recentRuns, workflows])
 
   const totalPages = Math.max(1, Math.ceil(workflows.length / WORKFLOW_CARDS_PER_PAGE))
   const pagedWorkflows = useMemo(() => {
@@ -634,7 +637,6 @@ export function WorkflowListPage({
   }, [currentPage, workflows])
 
   const filteredRuns = useMemo(() => {
-    const now = Date.now()
     const search = runSearch.trim().toLowerCase()
 
     return recentRuns.filter((run) => {
@@ -643,14 +645,18 @@ export function WorkflowListPage({
         const created = parseDate(run.createdAt)
         if (!created) return false
         const maxAge = runDateFilter === "7d" ? 7 * DAY_MS : 30 * DAY_MS
-        if (now - created.getTime() > maxAge) return false
+        if (nowMs !== null && nowMs - created.getTime() > maxAge) return false
       }
       if (!search) return true
 
       const workflowTitle = run.workflowId ? workflowMap.get(run.workflowId)?.title ?? "" : ""
       return [workflowTitle, run.itemSlug, String(run.id)].some((value) => value.toLowerCase().includes(search))
     })
-  }, [recentRuns, runDateFilter, runSearch, runStatusFilter, workflowMap])
+  }, [nowMs, recentRuns, runDateFilter, runSearch, runStatusFilter, workflowMap])
+
+  useEffect(() => {
+    setNowMs(Date.now())
+  }, [])
 
   const totalRunsPages = Math.max(1, Math.ceil(filteredRuns.length / RECENT_RUNS_PER_PAGE))
   const pagedRuns = useMemo(() => {
@@ -947,7 +953,7 @@ export function WorkflowListPage({
                             {workflow.title}
                           </h3>
                           <div className="mt-2 text-[13px] text-[#666]">
-                            {copy.updatedBy} {formatRelativeTime(workflow.updatedAt, locale)} · {copy.ownerBy} {currentUserName}
+                            {copy.updatedBy} {formatRelativeTime(workflow.updatedAt, locale, nowMs)} · {copy.ownerBy} {currentUserName}
                           </div>
                         </div>
                         <WorkflowStatusBadge label={status.label} className={status.className} />
@@ -965,7 +971,7 @@ export function WorkflowListPage({
                         <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">{copy.latestRunLabel}</div>
                         <div className="mt-2 flex items-center justify-between gap-3">
                           <div className="text-sm font-semibold text-[#111]">
-                            {latestRun ? `#${latestRun.id} · ${formatRelativeTime(latestRun.createdAt, locale)}` : copy.latestRunNone}
+                            {latestRun ? `#${latestRun.id} · ${formatRelativeTime(latestRun.createdAt, locale, nowMs)}` : copy.latestRunNone}
                           </div>
                           {latestRun ? (
                             <RunStatusBadge {...getRunStatusMeta(latestRun.status, locale)} />
@@ -1275,8 +1281,8 @@ export function WorkflowListPage({
                           <div className="mt-1 text-xs text-[#666]">{run.itemSlug}</div>
                         </td>
                         <td className="px-4 py-[14px] text-[13px] font-semibold text-[#111]">#{run.id}</td>
-                        <td className="px-4 py-[14px] text-[13px] text-[#666]">{formatDateTime(run.createdAt, locale)}</td>
-                        <td className="px-4 py-[14px] text-[13px] text-[#666]">{formatDateTime(run.finishedAt || run.createdAt, locale)}</td>
+                        <td className="px-4 py-[14px] text-[13px] text-[#666]">{formatDateTime(run.createdAt, locale, nowMs)}</td>
+                        <td className="px-4 py-[14px] text-[13px] text-[#666]">{formatDateTime(run.finishedAt || run.createdAt, locale, nowMs)}</td>
                         <td className="px-4 py-[14px] text-[13px] text-[#111]">{copy.triggerManual}</td>
                         <td className="px-4 py-[14px] text-[13px] text-[#666]">{formatDuration(run.createdAt, run.finishedAt, locale)}</td>
                         <td className="px-4 py-[14px] text-[13px]">

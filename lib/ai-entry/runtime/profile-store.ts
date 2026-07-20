@@ -136,17 +136,23 @@ export function resolveBusinessAgentRailwayRuntimeProfile(
 export function resolveDashiPptCloudflareRuntimeProfile(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): RuntimeProfile {
+  // The deployment bootstrap stores the worker-side secret as
+  // AGENT_RUNNER_HMAC_SECRET. Accept that name as a compatibility alias so a
+  // production environment synchronized from the worker is not treated as
+  // disabled merely because the app-specific alias was omitted.
+  const runnerUrl = normalizeUrl(env.CLOUDFLARE_OPENCODE_RUNNER_URL)
+  const runnerSecret = env.CLOUDFLARE_OPENCODE_RUNNER_HMAC_SECRET?.trim() || env.AGENT_RUNNER_HMAC_SECRET?.trim() || ""
   const enabled =
     readBoolean(env.AI_ENTRY_SAAS_OPENCODE_ENABLED, false) &&
-    Boolean(env.CLOUDFLARE_OPENCODE_RUNNER_URL?.trim()) &&
-    Boolean(env.CLOUDFLARE_OPENCODE_RUNNER_HMAC_SECRET?.trim())
+    Boolean(runnerUrl) &&
+    Boolean(runnerSecret)
   const profile = buildProfile({
     env,
     backend: "cloudflare-opencode-session",
     deploymentMode: "saas-cloudflare-sandbox",
     enabled,
-    runnerUrl: normalizeUrl(env.CLOUDFLARE_OPENCODE_RUNNER_URL),
-    hasRunnerSecret: Boolean(env.CLOUDFLARE_OPENCODE_RUNNER_HMAC_SECRET?.trim()),
+    runnerUrl,
+    hasRunnerSecret: Boolean(runnerSecret),
     timeoutEnvKey: "CLOUDFLARE_OPENCODE_V2_TIMEOUT_MS",
     maxArtifactsEnvKey: "CLOUDFLARE_OPENCODE_MAX_ARTIFACTS",
     maxArtifactBytesEnvKey: "CLOUDFLARE_OPENCODE_MAX_ARTIFACT_BYTES",

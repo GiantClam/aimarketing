@@ -19,6 +19,16 @@ test("resolves the Dashi PPT Cloudflare session runtime", () => {
   assert.equal(profile.timeoutMs, 3_600_000)
 })
 
+test("accepts the worker bootstrap secret alias for Dashi runtime", () => {
+  const profile = resolveDashiPptCloudflareRuntimeProfile({
+    AI_ENTRY_SAAS_OPENCODE_ENABLED: "true",
+    CLOUDFLARE_OPENCODE_RUNNER_URL: "https://runner.example.com",
+    AGENT_RUNNER_HMAC_SECRET: "secret",
+  })
+  assert.equal(profile.enabled, true)
+  assert.equal(profile.runnerUrl, "https://runner.example.com")
+})
+
 test("missing runner URL cannot select a broken OpenCode path", () => {
   const profile = resolveDefaultAgentRuntimeProfile({
     AI_ENTRY_SAAS_OPENCODE_ENABLED: "true",

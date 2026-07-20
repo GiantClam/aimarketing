@@ -610,7 +610,12 @@ async function resolveModelConfig(
   const catalogFallbackModelId =
     agentDefaultModelId ||
     providerScopedFallbackModelId ||
-    (effectiveRequestedProviderId ? null : catalog.selectedModelId || catalog.models[0]?.id || null)
+    // Workflow definitions can outlive an enterprise provider migration. If
+    // the saved provider is no longer accessible, use the current governed
+    // selection instead of leaving the fallback empty and failing the node.
+    catalog.selectedModelId ||
+    catalog.models[0]?.id ||
+    null
   const requestedModelId = requestedSelection?.modelId || input?.modelId || null
   if (options?.forceConsultingModel) {
     const lockedModelId =
@@ -667,7 +672,27 @@ async function resolveModelConfig(
       fallbackModelId: catalogFallbackModelId,
     })
   }
-  const fallbackModelOption = findCatalogModelOption(catalogFallbackModelId) || null
+  const fallbackModelOption =
+    findCatalogModelOption(catalogFallbackModelId) ||
+    (options?.allowUnavailableRequestedModelFallback
+      ? catalog.models.find((item) => {
+          const normalized = catalogFallbackModelId?.trim() || ""
+          if (!normalized) return false
+          return [
+            item.id,
+            item.modelId,
+            item.providerId && item.modelId
+              ? serializeAiEntryModelSelection({
+                  providerId: item.providerId,
+                  modelId: item.modelId,
+                })
+              : null,
+            item.canonicalId,
+            item.runtimeId,
+            ...(Array.isArray(item.aliases) ? item.aliases : []),
+          ].some((candidate) => candidate === normalized)
+        }) || null
+      : null)
   const resolvedModelId =
     requestedModelOption?.modelId ||
     requestedModelOption?.runtimeId ||

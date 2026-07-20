@@ -62,7 +62,12 @@ async function withRunnerRetry<T>(operation: () => Promise<T>, signal?: AbortSig
 
 function endpoint(options: CloudflareSessionClientOptions) {
   const runnerUrl = (options.runnerUrl || process.env.CLOUDFLARE_OPENCODE_RUNNER_URL || "").trim().replace(/\/+$/, "")
-  const secret = (options.secret || process.env.CLOUDFLARE_OPENCODE_RUNNER_HMAC_SECRET || "").trim()
+  const secret = (
+    options.secret ||
+    process.env.CLOUDFLARE_OPENCODE_RUNNER_HMAC_SECRET ||
+    process.env.AGENT_RUNNER_HMAC_SECRET ||
+    ""
+  ).trim()
   if (!runnerUrl || !secret) throw new Error("opencode_runner_not_configured")
   return { runnerUrl, secret, fetchImpl: options.fetchImpl || fetch }
 }
