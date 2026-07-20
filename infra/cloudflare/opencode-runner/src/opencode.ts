@@ -6,6 +6,8 @@ type SandboxExecApi = {
   exec(command: string, options?: Record<string, unknown>): Promise<{ success?: boolean; exitCode?: number | null; stdout?: string; stderr?: string }>
 }
 
+export const DEFAULT_OPENCODE_MAX_OUTPUT_BYTES = 8 * 1024 * 1024
+
 class AsyncEventQueue<T> {
   private values: T[] = []
   private waiters: Array<(result: IteratorResult<T>) => void> = []
@@ -61,6 +63,7 @@ export type OpenCodeExecutionOptions = {
   continueSession?: boolean
   agent?: string
   skipPermissions?: boolean
+  maxOutputBytes?: number
 }
 
 export async function* runOpenCode(
@@ -80,6 +83,7 @@ export async function* runOpenCode(
   let stdoutBytes = 0
   let fatalOutput = false
   let stderrText = ""
+  const maxOutputBytes = execution.maxOutputBytes || DEFAULT_OPENCODE_MAX_OUTPUT_BYTES
   const command = protocolRuntime.buildOpenCodeCommand({ modelHint: input.modelHint || `${provider.providerId}/${provider.modelId}` })
   const workingDir = execution.workingDir || runDir
   const promptPath = execution.promptPath || `${runDir}/prompt.md`
@@ -188,7 +192,7 @@ export async function* runOpenCode(
           }
           if (fatalOutput) return
           stdoutBytes += new TextEncoder().encode(data).byteLength
-          if (stdoutBytes > 512 * 1024) {
+          if (stdoutBytes > maxOutputBytes) {
             fatalOutput = true
             queue.push({ event: "runtime_error", code: "stdout_limit_exceeded", message: "OpenCode output limit exceeded.", retryable: true, runId: input.runId })
             return

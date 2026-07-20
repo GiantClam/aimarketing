@@ -208,3 +208,39 @@ test("forwards stdout before command completion and keeps stderr out of events",
   assert.match(scriptContent, /cat -- .*prompt\.md/)
   assert.doesNotMatch(scriptContent, /> .*prompt\.md/)
 })
+
+test("allows PPT-sized OpenCode event output under the default limit", async () => {
+  const input = {
+    runId: "11111111-1111-4111-8111-111111111111",
+    conversationId: "42",
+    enterpriseId: 1,
+    userId: 1,
+    agentId: "executive-presentation-ppt",
+    systemPrompt: "system",
+    messages: [{ role: "user" as const, content: "Create a deck" }],
+    attachments: [],
+    artifactContext: [],
+    workflowContext: null,
+    artifactContract: { manifestPath: "artifact-manifest.json" as const, artifactDir: "artifacts" as const, maxArtifacts: 8, maxArtifactBytes: 100, maxArtifactTotalBytes: 100, allowedExtensions: [".pptx"] },
+    policy: { allowPlatformTools: false as const, allowTools: false as const, allowMcp: false as const, allowSkillInstall: false as const, allowNetwork: true },
+  }
+  const sandbox = {
+    async writeFile() {},
+    async exec(_command: string, options: Record<string, unknown>) {
+      const onOutput = options.onOutput as (stream: "stdout" | "stderr", data: string) => void
+      onOutput("stdout", `${JSON.stringify({ type: "text", part: { text: "x".repeat(600 * 1024) } })}\n`)
+      return { success: true, exitCode: 0 }
+    },
+  }
+  const events = []
+  for await (const event of runOpenCode(sandbox, "/workspace/runs/11111111-1111-4111-8111-111111111111", input, undefined, 1000, {
+    providerId: "pptoken",
+    modelId: "grok-4.5",
+    baseUrl: "https://pptoken.example/v1",
+    apiKey: "pptoken-test-key",
+  })) {
+    events.push(event)
+  }
+  assert.equal(events.some((event) => event.event === "runtime_error" && event.code === "stdout_limit_exceeded"), false)
+  assert.equal(events.at(-1)?.event, "done")
+})
