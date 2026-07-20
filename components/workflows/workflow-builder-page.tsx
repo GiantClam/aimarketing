@@ -1749,7 +1749,7 @@ export function WorkflowBuilderPage({
             </div>
           </div>
 
-          <section className="dashboard-panel rounded-[12px] border border-border bg-card/85 px-4 py-4">
+          <section className="hidden dashboard-panel rounded-[12px] border border-border bg-card/85 px-4 py-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="max-w-3xl">
                 <div className="dashboard-kicker text-muted-foreground">{presetCopy.title}</div>
