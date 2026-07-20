@@ -49,7 +49,7 @@
     },
     {
       "class_name": "PptMasterContainer",
-      "image": "registry.cloudflare.com/9630806d5a588fc350ee64c395005cfa/aimarketing-opencode-runner-pptmastercontainer:ppt-dashi-v0.4.4",
+      "image": "registry.cloudflare.com/9630806d5a588fc350ee64c395005cfa/aimarketing-opencode-runner-pptmastercontainer:ppt-dashi-v0.4.4-fdbb145",
       "instance_type": "standard-2",
       "max_instances": 5
     }
