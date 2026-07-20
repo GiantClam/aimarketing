@@ -53,6 +53,9 @@ jobs:
           npx wrangler containers build .
           --tag registry.cloudflare.com/${CLOUDFLARE_ACCOUNT_ID}/aimarketing-dashi-ppt-smoke-sandbox:dashi-v0.4.4-fdbb145-20260720
           --push
+      - name: Install smoke Worker dependencies
+        working-directory: infra/cloudflare/dashi-ppt-smoke
+        run: npm ci
       - name: Deploy Cloudflare Worker
         working-directory: infra/cloudflare/opencode-runner
         run: npx wrangler deploy
