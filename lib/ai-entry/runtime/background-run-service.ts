@@ -41,7 +41,14 @@ export async function createBackgroundOpenCodeRun(input: {
     status: "queued",
     externalSystem: "opencode-v2",
     externalRunId: input.runtimeInput.runId,
-    inputPayload: { conversationId: input.runtimeInput.conversationId, agentId: input.runtimeInput.agentId, traceId: input.traceId, billingReservation: input.billingReservation },
+    inputPayload: {
+      conversationId: input.runtimeInput.conversationId,
+      agentId: input.runtimeInput.agentId,
+      selectedSkillIds: v2Input.selectedSkillIds,
+      artifactContract: v2Input.artifactContract,
+      traceId: input.traceId,
+      billingReservation: input.billingReservation,
+    },
   })
   await createOpenCodeRuntimeRun({ backend: "railway-opencode", taskRunId: taskRun.id, runtimeRunId: request.runId, sessionKey, conversationId: request.input.conversationId, agentId: request.input.agentId, functionId: request.input.functionId, deadlineAt: new Date(Date.now() + 3_600_000), billingPayload: input.billingReservation })
   try {
