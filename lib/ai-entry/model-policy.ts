@@ -1,8 +1,14 @@
 export const AI_ENTRY_CONSULTING_ENTRY_MODE = "consulting-advisor"
-export const AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT = "claude-sonnet-4.6"
-export const AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT = "gpt-5.6-luna"
+export const AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT = "deepseek-v4-pro"
+export const AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT = "deepseek-v4-pro"
 export const AI_ENTRY_SONNET_46_MODEL_HINT = "claude-sonnet-4.6"
-export const AI_ENTRY_PPT_ASSISTANT_DEFAULT_MODEL_HINT = "deepseek-v4-pro"
+/**
+ * Editable PPT is an OpenCode + native ppt-master session. Prefer the
+ * PPToken Grok route; the Railway runtime owns any provider fallback.
+ */
+export const AI_ENTRY_PPT_ASSISTANT_DEFAULT_MODEL_HINT = "grok-4.5"
+/** Default model for business agents and the Agent Platform entry points. */
+export const AI_ENTRY_AGENT_DEFAULT_MODEL_HINT = "deepseek-v4-pro"
 export const AI_ENTRY_CONSULTING_DEFAULT_EXECUTIVE_AGENT_ID = "executive-diagnostic"
 export const AI_ENTRY_PPT_AGENT_IDS = ["executive-ppt", "executive-presentation-ppt"] as const
 export const AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS = AI_ENTRY_PPT_AGENT_IDS
@@ -26,13 +32,6 @@ export function normalizeModelFingerprint(value: string) {
 
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
-}
-
-function isConsultingModelLockExemptAgent(agentId: unknown) {
-  const normalizedAgentId = normalizeText(agentId)
-  return AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS.includes(
-    normalizedAgentId as (typeof AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS)[number],
-  )
 }
 
 export function isAiEntryPptAgentId(agentId: unknown) {
@@ -155,6 +154,10 @@ export function getPptAssistantDefaultModelHint() {
   )
 }
 
+export function pickAgentDefaultModelId(models: ModelCandidate[]) {
+  return pickModelByHint(models, AI_ENTRY_AGENT_DEFAULT_MODEL_HINT)
+}
+
 export function pickPptAssistantDefaultModelId(models: ModelCandidate[]) {
   const modelHint = getPptAssistantDefaultModelHint()
   const matched = models
@@ -193,12 +196,18 @@ export function pickPptAssistantDefaultModelId(models: ModelCandidate[]) {
 
 export function resolvePptAssistantModelSelection(input: {
   currentModelId?: string | null
+  conversationModelId?: string | null
   availableModelIds: string[]
   defaultModelId?: string | null
 }) {
   const currentModelId = normalizeText(input.currentModelId)
   if (currentModelId && input.availableModelIds.includes(currentModelId)) {
     return currentModelId
+  }
+
+  const conversationModelId = normalizeText(input.conversationModelId)
+  if (conversationModelId && input.availableModelIds.includes(conversationModelId)) {
+    return conversationModelId
   }
 
   return normalizeText(input.defaultModelId) || input.availableModelIds[0] || null
@@ -215,9 +224,9 @@ export function shouldLockConsultingAdvisorModel(input: {
   entryMode?: unknown
   agentId?: string | null
 }) {
-  if (!isConsultingAdvisorEntryMode(input.entryMode)) {
-    return false
-  }
-
-  return !isConsultingModelLockExemptAgent(input.agentId)
+  // Consulting is an entry mode, not a model lock. Keep this compatibility
+  // helper for callers that still use the old name, but always allow the
+  // model selector and preserve entry-mode routing separately.
+  void input
+  return false
 }

@@ -3,6 +3,8 @@ import path from "node:path"
 
 import { PPT_MASTER_TEMPLATE_MANIFEST } from "@/lib/lead-tools/ppt-master-template-manifest"
 
+const PPT_MASTER_COMPAT_TEMPLATE_IDS = new Set(["ai_ops"])
+
 type PptMasterLayoutsIndex = {
   categories?: Record<string, { label?: string; layouts?: string[] }>
   quickLookup?: Record<string, string[]>
@@ -169,10 +171,10 @@ const officialPptMasterTemplateHints: Record<
     quickLookup: ["academic"],
     keywords: ["academic", "defense", "research", "thesis"],
   },
-  ai_ops: {
-    categories: ["brand"],
-    quickLookup: ["technology", "general_business", "government"],
-    keywords: ["telecom", "ai operations", "digital intelligence", "architecture", "platform"],
+  presentation_core: {
+    categories: ["general"],
+    quickLookup: ["general_business"],
+    keywords: ["presentation", "general purpose", "comparison", "content", "closing"],
   },
   government_blue: {
     categories: ["brand"],
@@ -390,7 +392,10 @@ export function getPptWorkerSupportedTemplateIds() {
 }
 
 export function isPptWorkerTemplateSupported(templateId: unknown) {
-  return typeof templateId === "string" && getPptWorkerSupportedTemplateIds().includes(templateId.trim())
+  return typeof templateId === "string" && (
+    getPptWorkerSupportedTemplateIds().includes(templateId.trim()) ||
+    PPT_MASTER_COMPAT_TEMPLATE_IDS.has(templateId.trim())
+  )
 }
 
 export function getPptMasterLibraryTemplateIds() {

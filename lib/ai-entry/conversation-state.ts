@@ -6,6 +6,18 @@ import {
 
 export type AiEntryConversationState = {
   ppt: PptConversationState
+  artifacts?: AiEntryRuntimeArtifactContext[]
+}
+
+export type AiEntryRuntimeArtifactContext = {
+  artifactId: number
+  title: string
+  kind: string
+  summary: string
+}
+
+function withArtifacts(state: { ppt: PptConversationState }, artifacts: AiEntryRuntimeArtifactContext[] | undefined): AiEntryConversationState {
+  return artifacts && artifacts.length > 0 ? { ...state, artifacts } : state
 }
 
 export function createEmptyAiEntryConversationState(): AiEntryConversationState {
@@ -19,14 +31,28 @@ export function createEmptyAiEntryConversationState(): AiEntryConversationState 
 }
 
 export function normalizeAiEntryConversationState(value: unknown): AiEntryConversationState {
-  const raw = value as { ppt?: PptConversationState | null } | null | undefined
+  const raw = value as { ppt?: PptConversationState | null; artifacts?: unknown } | null | undefined
   const fallback = createEmptyAiEntryConversationState()
   const ppt = raw?.ppt
   if (!ppt || typeof ppt !== "object") {
     return fallback
   }
 
-  return {
+  const normalizedArtifacts = Array.isArray(raw?.artifacts)
+    ? raw.artifacts.reduce<AiEntryRuntimeArtifactContext[]>((items, item) => {
+        if (!item || typeof item !== "object") return items
+        const record = item as Record<string, unknown>
+        const artifactId = typeof record.artifactId === "number" && Number.isInteger(record.artifactId) && record.artifactId > 0 ? record.artifactId : null
+        const title = typeof record.title === "string" ? record.title.trim().slice(0, 255) : ""
+        const kind = typeof record.kind === "string" ? record.kind.trim().slice(0, 64) : ""
+        const summary = typeof record.summary === "string" ? record.summary.trim().slice(0, 2_000) : ""
+        if (!artifactId || !title || !kind) return items
+        items.push({ artifactId, title, kind, summary })
+        return items
+      }, []).slice(-10)
+    : []
+
+  return withArtifacts({
     ppt: {
       latestPreview: ppt.latestPreview ?? null,
       latestExport: ppt.latestExport ?? null,
@@ -38,7 +64,7 @@ export function normalizeAiEntryConversationState(value: unknown): AiEntryConver
           ? ppt.phase
           : "idle",
     },
-  }
+  }, normalizedArtifacts)
 }
 
 export function resolveAiEntryConversationStateFromContents(messageContents: string[] | undefined): AiEntryConversationState {
@@ -70,7 +96,7 @@ export function mergeAiEntryConversationState(input: {
   }
 
   if (derivedState.ppt.phase !== "idle") {
-    return derivedState
+    return withArtifacts(derivedState, storedState.artifacts)
   }
 
   return storedState
@@ -91,7 +117,7 @@ export function applyAiEntryConversationStateDelta(input: {
     previousState.ppt.latestPreview &&
     invalidatedPreview.previewSessionId === previousState.ppt.latestPreview.previewSessionId
   ) {
-    return {
+    return withArtifacts({
       ppt: {
         latestPreview: null,
         latestExport:
@@ -100,11 +126,11 @@ export function applyAiEntryConversationStateDelta(input: {
             : previousState.ppt.latestExport,
         phase: "preview-invalidated",
       },
-    }
+    }, previousState.artifacts)
   }
 
   if (preview) {
-    return {
+    return withArtifacts({
       ppt: exported
         ? {
             latestPreview: preview,
@@ -116,18 +142,27 @@ export function applyAiEntryConversationStateDelta(input: {
             latestExport: null,
             phase: "preview-ready",
           },
-    }
+    }, previousState.artifacts)
   }
 
   if (exported) {
-    return {
+    return withArtifacts({
       ppt: {
         latestPreview: previousState.ppt.latestPreview,
         latestExport: exported,
         phase: previousState.ppt.latestPreview ? "exported" : previousState.ppt.phase,
       },
-    }
+    }, previousState.artifacts)
   }
 
   return previousState
+}
+
+export function appendAiEntryRuntimeArtifactContext(input: {
+  previousState?: unknown
+  artifact: AiEntryRuntimeArtifactContext
+}) {
+  const previousState = normalizeAiEntryConversationState(input.previousState)
+  const artifacts = [...(previousState.artifacts || []).filter((item) => item.artifactId !== input.artifact.artifactId), input.artifact].slice(-10)
+  return withArtifacts({ ppt: previousState.ppt }, artifacts)
 }

@@ -5,8 +5,17 @@ import {
   createWorkflowNodeInputBundle,
   mergeWorkflowNodeOutputBundles,
   resolveWorkflowNodeExecutor,
+  validateWorkflowNodeExecutors,
   resolveKnowledgeRetrieveEnterpriseDatasetSelection,
 } from "@/lib/workflows/node-executors"
+import { workflowNodeRegistry } from "@/lib/workflows/node-definitions/registry"
+
+test("every registered built-in node resolves through its executor id", () => {
+  assert.deepEqual(validateWorkflowNodeExecutors(), [])
+  for (const definition of workflowNodeRegistry.list()) {
+    assert.equal(resolveWorkflowNodeExecutor(definition.type).nodeType, definition.type)
+  }
+})
 
 test("image_generate resolves to the existing image capability executor", () => {
   const executor = resolveWorkflowNodeExecutor("image_generate")

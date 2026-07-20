@@ -1,0 +1,199 @@
+{
+  "title": "企业 AI 客服：从试点到规模化",
+  "goal": "面向客户服务管理层，用公开行业研究和案例说明 AI 客服的价值、前提条件与规模化决策路径。",
+  "audience": "客户服务、运营与数字化负责人",
+  "owner": "客户体验战略组",
+  "randomSeed": "ai-service-evidence-review-2026",
+  "pageCount": 10,
+  "themePack": "theme08",
+  "slides": [
+    {
+      "layout": "theme08_page001",
+      "props": {
+        "backgroundTheme": "primary", "mediaCount": 0,
+        "eyebrow": "EVIDENCE REVIEW · JUL 2026", "yearTag": "2026",
+        "headlineLine1": "企业 AI 客服", "headlineHl": "规模化", "headlineTail": "决策框架",
+        "subtitle": "基于 OpenAI、Salesforce 与 Zendesk 公开研究的管理层简报",
+        "goldenLine": "价值不只来自自动化率，更来自可控、可复用的服务系统。",
+        "handNote": "CUSTOMER EXPERIENCE STRATEGY", "indexNum": "01", "indexTotal": "10"
+      }
+    },
+    {
+      "layout": "theme08_page006",
+      "props": {
+        "backgroundTheme": "muted", "cardCount": 4, "focusIndex": 1, "chartType": "bars",
+        "eyebrow": "Industry Signal · Salesforce 2025",
+        "headline": "AI 客服正从辅助工具变成服务运营能力",
+        "subheadline": "全球 6,500 名服务从业者调研",
+        "summary": "Salesforce 预计 AI 处理的服务案例占比将从当前 30% 上升至 2027 年的 50%；AI 已成为服务负责人的第二优先事项。",
+        "metrics": [
+          { "value": "30", "unit": "%", "label": "当前由 AI 处理" },
+          { "value": "50", "unit": "%", "label": "2027 年预期" },
+          { "value": "#2", "unit": "优先级", "label": "AI 对服务负责人" },
+          { "value": "6,500", "unit": "人", "label": "受访服务从业者" }
+        ],
+        "trackTitle": "管理层应优先讨论的扩展顺序",
+        "trackData": [
+          { "label": "体验与信任", "pct": 38 },
+          { "label": "知识与数据", "pct": 29 },
+          { "label": "流程与权限", "pct": 20 },
+          { "label": "模型与渠道", "pct": 13 }
+        ],
+        "closingLine": "问题已不是“要不要试”，而是“哪些场景能安全扩展”。"
+      }
+    },
+    {
+      "layout": "theme08_page007",
+      "props": {
+        "backgroundTheme": "primary", "cardCount": 7, "focusIndex": 4,
+        "eyebrow": "Decision Path", "headline": "规模化需要一条从价值到治理的完整路径",
+        "subheadline": "先证明结果，再扩大边界",
+        "chapters": [
+          { "name": "外部信号", "en": "Market Signal" },
+          { "name": "标杆结果", "en": "Benchmark" },
+          { "name": "价值来源", "en": "Value" },
+          { "name": "数据前提", "en": "Data" },
+          { "name": "控制边界", "en": "Controls" },
+          { "name": "试点设计", "en": "Pilot" },
+          { "name": "扩展决策", "en": "Scale" }
+        ],
+        "closingLine": "每一步都要回答：收益是否可验证，风险是否可管理？"
+      }
+    },
+    {
+      "layout": "theme08_page018",
+      "props": {
+        "backgroundTheme": "primary", "bandCount": 4, "focusIndex": 3,
+        "eyebrow": "Public Benchmark · Klarna / OpenAI",
+        "headline": "Klarna 证明了规模，但也说明了门槛",
+        "subheadline": "上线首月的公开运营结果",
+        "summary": "Klarna 的 OpenAI 驱动助手覆盖多语言客服、退款与退货；公开结果显示，在高频服务流中可获得显著规模效应。",
+        "bands": [
+          { "label": "230 万", "range": "首月会话", "count": 41, "amount": 66 },
+          { "label": "2/3", "range": "客服聊天占比", "count": 29, "amount": 25 },
+          { "label": "<2 分钟", "range": "客户解决时长", "count": 15, "amount": 82 },
+          { "label": "-25%", "range": "重复咨询", "count": 12, "amount": 33 }
+        ],
+        "weights": [34, 25, 16, 10, 15], "countUnit": "标尺", "amountUnit": "%",
+        "closingLine": "公开案例的核心信息：大规模收益来自端到端服务流程，而非单一问答机器人。",
+        "categoryLabels": ["规模", "覆盖", "时效", "复询", "体验"],
+        "legendFallback": "Klarna 公开指标", "sizeHintCaption": "气泡仅用于呈现指标分层", "focusBandStickerLabel": "规模化结果"
+      }
+    },
+    {
+      "layout": "theme08_page009",
+      "props": {
+        "backgroundTheme": "muted", "chartType": "donut", "segmentCount": 4, "focusIndex": 2,
+        "eyebrow": "Operating Model", "headline": "人机协作更适合早期扩展",
+        "subheadline": "把生成能力嵌入可审计的服务流程",
+        "summary": "先用检索、摘要和草拟辅助坐席；退款、投诉、身份与隐私保留人审与升级。",
+        "shareTitle": "建议的流程分工", "shareTag": "Controlled workflow · illustrative",
+        "segments": [
+          { "label": "识别意图", "pct": 25 },
+          { "label": "检索依据", "pct": 25 },
+          { "label": "生成建议", "pct": 25 },
+          { "label": "确认留痕", "pct": 25 }
+        ],
+        "roundsTitle": "风险处理层级", "roundsTag": "Escalation design · illustrative",
+        "winnerStickerLabel": "人机协作",
+        "rounds": [
+          { "label": "知识问答", "pct": 35, "note": "AI 优先" },
+          { "label": "订单查询", "pct": 30, "note": "人工确认", "focus": true },
+          { "label": "退款与投诉", "pct": 20, "note": "人工主导" },
+          { "label": "身份与隐私", "pct": 15, "note": "严格升级" }
+        ],
+        "closingLine": "将风险边界写入流程，才能把试点成果稳定地复制出去。"
+      }
+    },
+    {
+      "layout": "theme08_page042",
+      "props": {
+        "backgroundTheme": "primary", "chartType": "gate", "segmentCount": 4, "metricCount": 3, "focusIndex": 1,
+        "eyebrow": "Data Prerequisite · Salesforce 2024",
+        "headline": "瓶颈通常在数据连接，不在模型",
+        "subheadline": "速度、质量与上下文必须同时解决",
+        "summary": "Salesforce 调研：83% 决策者拟增投数据集成；69% 坐席仍难兼顾速度与质量。",
+        "badge": "DATA READINESS · 数据就绪", "perimeterHeading": "规模化前的四道防线",
+        "mustHaveStickerLabel": "前置条件", "mustHaveStickerSub": "MUST-HAVE",
+        "modulesHeading": "落地检查 · Readiness Check",
+        "hero": { "label": "计划增投数据集成", "value": "83", "unit": "%" },
+        "metrics": [
+          { "k": "速度与质量难兼顾", "v": "69", "unit": "%" },
+          { "k": "受访服务从业者", "v": "5,500", "unit": "人+" },
+          { "k": "调研覆盖", "v": "30", "unit": "国" }
+        ],
+        "segments": [
+          { "k": "统一客户视图", "en": "Context", "v": 6 },
+          { "k": "可用知识库", "en": "Grounding", "v": 5 },
+          { "k": "权限与审计", "en": "Control", "v": 4 },
+          { "k": "人工回流", "en": "Escalation", "v": 3 }
+        ],
+        "valueUnit": "项", "closingLine": "先补全上下文与追溯能力，再提高自动处理比例。"
+      }
+    },
+    {
+      "layout": "theme08_page054",
+      "props": {
+        "backgroundTheme": "primary", "segmentCount": 4, "mediaCount": 0, "focusIndex": 2,
+        "eyebrow": "Experience Signal · Zendesk 2025",
+        "headline": "客户体验的分水岭是个性化与信任",
+        "subheadline": "不是更多自动化，而是更相关的服务",
+        "summary": "Zendesk 的全球研究把“人本 AI”定义为忠诚度驱动因素；领先团队更重视用 AI 实现个性化体验。",
+        "nodeUnit": "", "cardUnit": "", "hubLabel": "CX", "hubValue": "3 信号", "hubSub": "Experience matters · 体验是结果",
+        "segments": [
+          { "label": "优先 AI 个性化", "value": "56%" },
+          { "label": "更可能报告高 ROI", "value": "128%" },
+          { "label": "调研样本", "value": "10k+ 人" },
+          { "label": "调研国家", "value": "22 国" }
+        ],
+        "closingLine": "把 AI 当作“更懂客户”的能力，而不是简单的成本压缩工具。"
+      }
+    },
+    {
+      "layout": "theme08_page008",
+      "props": {
+        "backgroundTheme": "primary", "chartType": "column", "focusIndex": 1,
+        "eyebrow": "Pilot Selection", "headline": "用 90 天验证首批场景",
+        "subheadline": "每 30 天设一道扩展闸门",
+        "summary": "先在高频、低风险、知识可检索的场景中验证体验与运营收益；达到质量门槛后再复制。",
+        "points": [
+          { "label": "1–30 天", "sub": "准备", "amount": 1, "count": 4 },
+          { "label": "31–60 天", "sub": "验证", "amount": 2, "count": 3 },
+          { "label": "61–90 天", "sub": "复制", "amount": 3, "count": 3 }
+        ],
+        "amountUnit": "阶段", "countUnit": "检查项",
+        "peakNote": "达到质量阈值 →", "trendNote": "每周复盘 CSAT、处理时长、升级率",
+        "closingLine": "先验证价值，再扩大覆盖。"
+      }
+    },
+    {
+      "layout": "theme08_page074",
+      "props": {
+        "backgroundTheme": "ink", "emphasisStyle": "band", "supportCount": 3, "focusIndex": 1,
+        "eyebrow": "Executive Decision", "kicker": "管理层建议", "label": "规模化建议 · Controlled Scale",
+        "lines": ["先扩展可控场景，", "再扩展自动化边界。"],
+        "supports": [
+          { "name": "用业务结果而非演示效果立项", "en": "Measure outcomes" },
+          { "name": "以数据与权限作为扩展闸门", "en": "Set control gates" },
+          { "name": "把人机协作设计成标准流程", "en": "Operationalize" }
+        ],
+        "sealTop": "受控\n> 速度", "sealBottom": "Evidence-led · 2026",
+        "source": "综合 OpenAI / Salesforce / Zendesk 公开研究"
+      }
+    },
+    {
+      "layout": "theme08_page084",
+      "props": {
+        "backgroundTheme": "primary", "supportCount": 3, "focusIndex": 0,
+        "eyebrow": "90-Day Plan", "kicker": "下一步行动", "label": "用三个月把 AI 客服变成可运营能力",
+        "lines": ["先验证一个场景，", "再复制一套治理机制。"],
+        "supports": [
+          "第 1–30 天：盘点知识、接口、风险和回流路径。",
+          "第 31–60 天：低风险场景评估 CSAT、时长、升级率。",
+          "第 61–90 天：达阈值后复制，并建立周度复盘。"
+        ],
+        "source": "OpenAI · Salesforce · Zendesk"
+      }
+    }
+  ]
+}

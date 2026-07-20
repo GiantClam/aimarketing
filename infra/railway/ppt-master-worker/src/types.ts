@@ -73,7 +73,7 @@ export const previewRequestSchema = z.object({
     )
     .optional(),
   allowMockFallback: z.boolean(),
-  runtimeProfile: z.enum(["local-dev", "railway-linux"]),
+  runtimeProfile: z.enum(["local-dev", "cloudflare-linux", "railway-linux"]),
 })
 
 export const exportRequestSchema = z.object({

@@ -113,8 +113,11 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
     pathname.startsWith("/dashboard/advisor")
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/login")
-  }, [loading, router, user])
+    if (!loading && !user) {
+      const currentPath = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`
+      router.replace(`/login?next=${encodeURIComponent(currentPath)}`)
+    }
+  }, [loading, pathname, router, searchParams, user])
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
@@ -592,6 +595,15 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                                     label={agent.name}
                                     active={agent.active}
                                     highlighted={agent.highlighted}
+                                    onClick={() => {
+                                      const existingTab = Array.from(
+                                        document.querySelectorAll<HTMLElement>('[role="tab"][data-agent-id]'),
+                                      ).find((tab) => tab.dataset.agentId === agent.agentId)
+                                      if (!existingTab) return false
+                                      existingTab.click()
+                                      setSidebarOpen(false)
+                                      return true
+                                    }}
                                   />
                                 )
                               })}
@@ -825,16 +837,21 @@ function DashboardSubMenuLink({
   label,
   active,
   highlighted,
+  onClick,
 }: {
   href: string
   label: string
   active: boolean
   highlighted?: boolean
+  onClick?: () => boolean
 }) {
   return (
     <Link
       href={href}
       data-agent-nav={label}
+      onClick={(event) => {
+        if (onClick?.()) event.preventDefault()
+      }}
       className={cn(
         "block rounded-[8px] border border-transparent px-3 py-2 text-xs text-sidebar-foreground/80 transition hover:border-primary/30 hover:bg-primary/10 hover:text-sidebar-foreground",
         active && "border-foreground/10 bg-foreground text-primary",

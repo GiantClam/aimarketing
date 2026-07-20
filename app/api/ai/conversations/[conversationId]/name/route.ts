@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
 import { renameAiEntryConversation } from "@/lib/ai-entry/repository"
-import { shouldLockConsultingAdvisorModel } from "@/lib/ai-entry/model-policy"
+import { isConsultingAdvisorEntryMode } from "@/lib/ai-entry/model-policy"
 
 function parseAgentId(input: unknown) {
   const normalized = typeof input === "string" ? input.trim() : ""
@@ -26,9 +26,7 @@ export async function POST(
   if (typeof body.name !== "string" || !body.name.trim()) {
     return NextResponse.json({ error: "name is required" }, { status: 400 })
   }
-  const conversationScope = shouldLockConsultingAdvisorModel({
-    entryMode: body.entryMode,
-  })
+  const conversationScope = isConsultingAdvisorEntryMode(body.entryMode)
     ? "consulting"
     : "chat"
 

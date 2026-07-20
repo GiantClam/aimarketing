@@ -1,0 +1,40 @@
+name: OpenCode runner CI
+
+on:
+  pull_request:
+    paths:
+      - "infra/cloudflare/opencode-runner/**"
+      - "lib/ai-runtime/**"
+      - "lib/ai-entry/runtime/**"
+      - "app/api/ai/chat/route.ts"
+  push:
+    branches: [main]
+    paths:
+      - "infra/cloudflare/opencode-runner/**"
+      - "lib/ai-runtime/**"
+      - "lib/ai-entry/runtime/**"
+      - "app/api/ai/chat/route.ts"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: infra/cloudflare/opencode-runner/package-lock.json
+      - name: Verify app runtime
+        run: |
+          npm ci
+          npx tsc --noEmit --pretty false
+          npx eslint app/api/ai/chat/route.ts lib/ai-runtime lib/ai-entry/runtime lib/ai-entry/conversation-state.ts lib/ai-entry/repository.ts --max-warnings=0
+          npx tsx --test lib/ai-runtime/opencode-protocol.test.ts lib/ai-entry/runtime/*.test.ts app/api/ai/chat/route.test.ts
+      - name: Verify Cloudflare runner
+        working-directory: infra/cloudflare/opencode-runner
+        run: |
+          npm ci
+          npm test
+          npm run typecheck
+          npm run deploy:dry-run

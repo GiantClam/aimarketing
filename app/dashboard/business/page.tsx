@@ -3,7 +3,6 @@ import { getServerSessionUser } from "@/lib/auth/server-session"
 import { getRequestLocale } from "@/lib/i18n/request-locale"
 import {
   buildBusinessWorkbenchCustomAgents,
-  listBusinessScopedCustomAgents,
   listCustomAgentBoundBusinessSlugs,
 } from "@/lib/platform/custom-agent-business-view"
 import { getBusinessMarketplaceSelection } from "@/lib/platform/business-marketplace-selection"
@@ -69,7 +68,6 @@ export default async function DashboardBusinessWorkbenchPage({
   const currentSlug = entries.some((entry) => entry.slug === resolvedSlug)
     ? resolvedSlug
     : (entries[0]?.slug || "content-growth")
-  const businessScopedCustomAgents = listBusinessScopedCustomAgents(customAgents, currentSlug)
   const workbenchCustomAgents = buildBusinessWorkbenchCustomAgents(customAgents, currentSlug, uiLocale)
   const workbenchAgents = [...agents, ...workbenchCustomAgents]
 
@@ -79,7 +77,6 @@ export default async function DashboardBusinessWorkbenchPage({
       currentSlug={currentSlug}
       entries={entries}
       agents={workbenchAgents}
-      customAgents={businessScopedCustomAgents}
     />
   )
 }

@@ -786,6 +786,9 @@ export function WorkflowListPage({
       const response = await fetch(`/api/workflows/${workflow.id}`, {
         method: "DELETE",
         credentials: "same-origin",
+        headers: {
+          "If-Match": `"${workflow.revision ?? 1}"`,
+        },
       })
       const result = await response.json().catch(() => null)
       if (!response.ok) {

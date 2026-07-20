@@ -342,6 +342,45 @@ test("direct output intent skips clarification even when brief is incomplete", a
   assert.equal(result.routing.targetPlatform, "X")
 })
 
+test("workflow execution generates once even when the brief is incomplete", async () => {
+  let generated = false
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query: "根据这些输入直接完成一篇公众号文章",
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "zh",
+      conversationStatus: "text_ready",
+      history: [],
+    },
+    createRuntime({
+      extractBrief: async () => ({
+        resolvedBrief: {
+          topic: "企业 AI 客服",
+          audience: "",
+          objective: "",
+          tone: "",
+          constraints: "",
+        },
+        routingDecision: createRouting(),
+        answeredFields: ["topic"],
+        suggestedFollowUpFields: ["audience", "objective"],
+        suggestedFollowUpQuestion: "请补充受众和目标",
+        userWantsDirectOutput: false,
+        briefSufficient: false,
+        confidence: 0.9,
+      }),
+      onGenerate: () => {
+        generated = true
+      },
+    }),
+  )
+
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(result.readyForGeneration, true)
+  assert.equal(generated, true)
+})
+
 test("model-authored follow-up question is used when clarification is still needed", async () => {
   const result = await runWriterSkillsTurnWithRuntime(
     {

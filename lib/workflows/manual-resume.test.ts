@@ -530,6 +530,50 @@ test("normalizeWorkflowRunStatusFromNodeExecutions derives running from mixed no
   assert.equal(normalized.finishedAt, null)
 })
 
+test("normalizeWorkflowRunStatusFromNodeExecutions preserves cancellation terminal intent", () => {
+  const now = new Date()
+  const run = {
+    id: 92,
+    enterpriseId: 151,
+    userId: 96,
+    kind: "workflow",
+    itemType: "workflow",
+    itemSlug: "test",
+    externalRunId: null,
+    externalSystem: null,
+    status: "cancel_requested",
+    inputPayload: { workflowId: 2 },
+    normalizedResult: null,
+    startedAt: now,
+    finishedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    events: [],
+    artifacts: [],
+    workItems: [],
+    knowledgeSaveJobs: [],
+  } satisfies WorkflowRunDetail["run"]
+  const normalized = normalizeWorkflowRunStatusFromNodeExecutions(run, [
+    nodeExecution({
+      id: 130,
+      runId: 92,
+      workflowId: 2,
+      nodeKey: "image-1",
+      nodeType: "image_generate",
+      status: "running",
+      providerId: null,
+      modelId: null,
+      taskRunId: null,
+      creditsConsumed: 0,
+      startedAt: now,
+      finishedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    }),
+  ])
+  assert.equal(normalized.status, "cancel_requested")
+})
+
 test("normalizeWorkflowRunStatusFromNodeExecutions derives success once every node succeeds", () => {
   const now = new Date()
   const run = {

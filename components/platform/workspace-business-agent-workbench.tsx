@@ -572,6 +572,15 @@ export function WorkspaceBusinessAgentWorkbench({
     })
 
     try {
+      const workflowResponse = await fetch(`/api/workflows/${activeWorkflowBackedAgent.linkedWorkflowId}`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      })
+      const workflowPayload = (await workflowResponse.json().catch(() => null)) as { data?: { revision?: number } } | null
+      const workflowRevision = workflowPayload?.data?.revision
+      if (!workflowResponse.ok || !Number.isInteger(workflowRevision)) {
+        throw new Error("workflow_revision_unavailable")
+      }
       const response = await fetch(`/api/workflows/${activeWorkflowBackedAgent.linkedWorkflowId}/run`, {
         method: "POST",
         headers: {
@@ -579,6 +588,9 @@ export function WorkspaceBusinessAgentWorkbench({
         },
         credentials: "same-origin",
         body: JSON.stringify({
+          requestId: crypto.randomUUID(),
+          revision: workflowRevision,
+          iterationsEnabled: true,
           prompt: activeTab.draftSeed,
           sourceAgentId: activeWorkflowBackedAgent.agentId,
         }),
@@ -663,6 +675,7 @@ export function WorkspaceBusinessAgentWorkbench({
                   >
                     <button
                       type="button"
+                      data-agent-id={tab.agentId}
                       onClick={() => {
                         setActiveTabId(tab.id)
                         replaceWorkspaceQuery(agent.businessSlug, tab.agentId)

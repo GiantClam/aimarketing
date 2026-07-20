@@ -1,0 +1,10 @@
+.git
+.cache
+node_modules
+.next
+.next-build
+output
+*.log
+.env
+.env.local
+.vercel

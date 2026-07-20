@@ -62,11 +62,12 @@ const OPENAI_COMPATIBLE_IMAGE_CURL_MAX_BUFFER_BYTES = 20 * 1024 * 1024
 
 const execFileAsync = promisify(execFile)
 
-type CurlRunner = (args: string[]) => Promise<{ stdout: string; stderr: string }>
+type CurlRunner = (args: string[], options?: { signal?: AbortSignal }) => Promise<{ stdout: string; stderr: string }>
 
-let curlRunner: CurlRunner = async (args) =>
+let curlRunner: CurlRunner = async (args, options) =>
   execFileAsync("curl", args, {
     maxBuffer: OPENAI_COMPATIBLE_IMAGE_CURL_MAX_BUFFER_BYTES,
+    signal: options?.signal,
   })
 
 function normalizeText(raw: unknown) {
@@ -80,9 +81,10 @@ function trimBaseUrl(baseUrl: string) {
 export function setOpenAiCompatibleImageCurlRunnerForTests(runner: CurlRunner | null) {
   curlRunner = runner
     ? runner
-    : async (args) =>
+    : async (args, options) =>
         execFileAsync("curl", args, {
           maxBuffer: OPENAI_COMPATIBLE_IMAGE_CURL_MAX_BUFFER_BYTES,
+          signal: options?.signal,
         })
 }
 
@@ -170,7 +172,7 @@ export function getOpenAiCompatibleImageProviderConfig(
         normalizeText(process.env.IMAGE_ASSISTANT_CRAZYROUTE_BASE_URL) ||
         normalizeText(process.env.CRAZYROUTE_BASE_URL) ||
         normalizeText(process.env.CRAZYROUTER_BASE_URL) ||
-        "https://api.crazyroute.com/v1",
+        "https://crazyrouter.com/v1",
       model:
         normalizeText(process.env.IMAGE_ASSISTANT_CRAZYROUTE_MODEL) ||
         normalizeText(process.env.CRAZYROUTE_IMAGE_MODEL) ||
@@ -334,6 +336,8 @@ async function requestOpenAiCompatibleImageGenerationWithCurl(params: {
   requestParts: OpenAiCompatibleImageRequestParts
   count: number
   timeoutMs: number
+  signal?: AbortSignal
+  idempotencyKey?: string | null
 }) {
   const requestBody = JSON.stringify({
     model: params.requestParts.model,
@@ -363,13 +367,14 @@ async function requestOpenAiCompatibleImageGenerationWithCurl(params: {
     `Authorization: Bearer ${params.config.apiKey}`,
     "-H",
     "Content-Type: application/json",
+    ...(params.idempotencyKey ? ["-H", `Idempotency-Key: ${params.idempotencyKey}`] : []),
     "-d",
     requestBody,
     "-w",
     "\n__HTTP_STATUS__:%{http_code}",
   ]
 
-  const { stdout } = await curlRunner(args)
+  const { stdout } = await curlRunner(args, { signal: params.signal })
   const marker = "\n__HTTP_STATUS__:"
   const markerIndex = stdout.lastIndexOf(marker)
   if (markerIndex === -1) {
@@ -418,6 +423,7 @@ export async function generateImagesWithOpenAiCompatibleProvider(params: {
   snapshotAssetId?: string | null
   maskAssetId?: string | null
   candidateCount?: number
+  idempotencyKey?: string | null
   signal?: AbortSignal
   attempts?: number
   timeoutMs?: number
@@ -460,6 +466,8 @@ export async function generateImagesWithOpenAiCompatibleProvider(params: {
       requestParts,
       count,
       timeoutMs,
+      signal: params.signal,
+      idempotencyKey: params.idempotencyKey,
     })
   }
 
@@ -469,6 +477,7 @@ export async function generateImagesWithOpenAiCompatibleProvider(params: {
       signal,
       headers: {
         Authorization: `Bearer ${params.config.apiKey}`,
+        ...(params.idempotencyKey ? { "Idempotency-Key": params.idempotencyKey } : {}),
       },
     }
 
@@ -562,7 +571,6 @@ export async function generateImagesWithOpenAiCompatibleProvider(params: {
           provider: params.config.provider,
           attempt,
           endpoint: requestParts.endpoint,
-          message: error instanceof Error ? error.message : String(error),
         })
         await sleep(500 * attempt)
         continue
@@ -575,7 +583,6 @@ export async function generateImagesWithOpenAiCompatibleProvider(params: {
         console.warn("image-assistant.openai-compatible.curl-fallback", {
           provider: params.config.provider,
           endpoint: requestParts.endpoint,
-          message: error instanceof Error ? error.message : String(error),
         })
         return requestOpenAiCompatibleImageGenerationWithCurl({
           config: params.config,
@@ -583,6 +590,8 @@ export async function generateImagesWithOpenAiCompatibleProvider(params: {
           requestParts,
           count,
           timeoutMs,
+          signal: params.signal,
+          idempotencyKey: params.idempotencyKey,
         })
       }
       throw error

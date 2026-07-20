@@ -10,6 +10,7 @@ import { listCustomAgentsForUser } from "@/lib/platform/custom-agents"
 import { listRecentWorkflowTaskRunsForEnterprise } from "@/lib/platform/task-run-store"
 import { serializeWorkflowRunDetail } from "@/lib/workflows/run-detail-serialization"
 import { getWorkflowDefinition, getWorkflowRunDetail } from "@/lib/workflows/store"
+import { resolveWorkflowFeatures } from "@/lib/workflows/features"
 import { findLatestWorkflowRunRecordForWorkflow } from "@/lib/workflows/manual-resume"
 import {
   getGovernedAiEntryModelCatalogForUser,
@@ -119,6 +120,7 @@ export default async function WorkflowBuilderRoutePage({
   return (
     <WorkflowBuilderPage
       locale={displayLocale}
+      features={resolveWorkflowFeatures()}
       initialWorkflow={{
         ...workflow,
         createdAt: workflow.createdAt.toISOString(),

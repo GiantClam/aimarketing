@@ -595,6 +595,7 @@ function createVideoParams(overrides?: Partial<WorkflowCapabilityInvokeParams>):
         model: "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
         featureId: "image-to-video",
         duration: "6",
+        resolution: "768p",
       },
     },
     input: {
@@ -642,6 +643,17 @@ test("image capability request injects a complete default brief for workflow exe
   assert.equal(body.brief.ratio_confirmed, true)
   assert.equal(typeof body.brief.style, "string")
   assert.equal(body.brief.style.length > 0, true)
+})
+
+test("image capability request bounds workflow prompts to the provider limit", () => {
+  const body = buildWorkflowImageGenerateRequestBody(
+    createImageParams(),
+    `${"E2E workflow image prompt ".repeat(100)}核心画面要求`,
+    "zh",
+  )
+
+  assert.equal(body.prompt.length <= 2000, true)
+  assert.match(body.prompt, /^E2E workflow image prompt/)
 })
 
 test("image capability request falls back to all upstream image urls when no alias token is used", () => {
@@ -722,6 +734,7 @@ test("video capability request automatically uses text-to-video when there is no
   assert.equal(body.params.prompt, "生成品牌宣传短片")
   assert.equal(body.params.firstFrameUrl, undefined)
   assert.equal(body.params.modelId, "minimax:video:text-to-video:MiniMax-Hailuo-2.3")
+  assert.equal(body.params.resolution, "768P")
 })
 
 test("video capability request automatically uses image-to-video when image input exists", () => {
@@ -1177,6 +1190,7 @@ test("workflow ppt capability forwards the selected preview model", async () => 
         scenario: "marketing-campaign",
         language: "zh-CN",
         previewRuntime: "ppt-master-agent",
+        selectedProviderId: "deepseek",
         model: "step-3.7-flash",
         templateId: "neo-grid-bold",
       },
@@ -1185,9 +1199,10 @@ test("workflow ppt capability forwards the selected preview model", async () => 
 
   assert.equal(leadToolPreviewBodies.length, 1)
   assert.equal(leadToolPreviewBodies[0]?.model, "step-3.7-flash")
+  assert.equal(leadToolPreviewBodies[0]?.preferredProviderId, "deepseek")
   assert.equal(leadToolPreviewBodies[0]?.previewRuntime, "ppt-master-agent")
   assert.equal(leadToolPreviewBodies[0]?.templateMode, "single-template")
-  assert.equal(leadToolPreviewBodies[0]?.templateId, "neo-grid-bold")
+  assert.equal(leadToolPreviewBodies[0]?.templateId, "ppt169_swiss_grid_systems")
 })
 
 test("workflow editable ppt auto-selects a template and generates in one pass when no template is selected", async () => {
@@ -1228,6 +1243,7 @@ test("workflow editable ppt auto-selects a template and generates in one pass wh
   assert.equal(leadToolDownloadBodies.length, 1)
   assert.equal(leadToolPreviewBodies[0]?.previewRuntime, "ppt-master-agent")
   assert.equal(leadToolPreviewBodies[0]?.model, "deepseek-v4-pro")
+  assert.equal(leadToolPreviewBodies[0]?.preferredProviderId, "deepseek")
   assert.equal(leadToolPreviewBodies[0]?.scenario, "sales-deck")
   assert.equal(leadToolPreviewBodies[0]?.templateMode, "single-template")
   assert.equal(typeof leadToolPreviewBodies[0]?.templateId, "string")
@@ -1268,6 +1284,7 @@ test("workflow writer capability forwards the selected model config", async () =
     providerId: "pptoken",
     modelId: "gpt-5.4",
   })
+  assert.equal(writerChatBodies[0]?.executionContext, "workflow")
   assert.deepEqual(result.output.text, ["Writer draft"])
   assert.equal(result.providerId, "pptoken")
   assert.equal(result.modelId, "gpt-5.4")
@@ -1542,7 +1559,7 @@ test("agent-platform forwards the selected model config for builtin agents", asy
       config: {
         agentId: "executive-brand",
         selectedProviderId: "openrouter",
-        selectedModelId: "gpt-5.4",
+        selectedModelId: "openrouter::gpt-5.4",
       },
     },
     input: {

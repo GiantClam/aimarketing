@@ -79,3 +79,17 @@ test("knowledge-asset-loop blueprint wires asset retention into knowledge write"
     true,
   )
 })
+
+test("built-in deepseek PPT nodes declare the provider explicitly", () => {
+  for (const key of ["campaign-launch", "sales-proposal", "brand-asset-factory", "training-enablement"] as const) {
+    const blueprint = buildWorkflowFromTemplate({ key, locale: "zh" })
+    const pptNodes = blueprint.nodes.filter(
+      (node) => node.type === "ppt_generate" && node.config.model === "deepseek-v4-pro",
+    )
+
+    assert.equal(pptNodes.length > 0, true, `missing deepseek PPT node in ${key}`)
+    for (const node of pptNodes) {
+      assert.equal(node.config.selectedProviderId, "deepseek", `${key}:${node.nodeKey}`)
+    }
+  }
+})

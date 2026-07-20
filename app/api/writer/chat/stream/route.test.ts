@@ -200,3 +200,15 @@ test("writer chat stream route forwards workflow model preferences to the runner
   assert.equal(lastWriterRunInput?.selectedProviderId, "pptoken")
   assert.equal(lastWriterRunInput?.selectedModelId, "gpt-5.4")
 })
+
+test("writer chat stream route forces workflow requests into one-shot generation", async () => {
+  const response = await POST({
+    json: async () => ({
+      query: "根据输入直接完成文章",
+      executionContext: "workflow",
+    }),
+  })
+
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+  assert.equal(lastWriterRunInput?.conversationStatus, "text_ready")
+})

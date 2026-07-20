@@ -1,0 +1,586 @@
+{
+  "title": "企业 AI 客服：从试点到规模化",
+  "goal": "面向客户服务管理层，用公开行业研究和案例说明 AI 客服的价值、前提条件与规模化决策路径。",
+  "audience": "客户服务、运营与数字化负责人",
+  "owner": "客户体验战略组",
+  "randomSeed": "ai-service-evidence-review-theme09-2026",
+  "pageCount": 10,
+  "themePack": "theme09",
+  "slides": [
+    {
+      "layout": "theme09_page001",
+      "props": {
+        "kicker": "企业 AI 客服：从试点到规模化",
+        "year": "JUL · 2026",
+        "reportLabel": "EVIDENCE REVIEW",
+        "titleLines": [
+          "规模化",
+          "决策框架"
+        ],
+        "edition": [
+          {
+            "label": "公开研究",
+            "value": "03"
+          },
+          {
+            "label": "管理简报",
+            "value": "10页"
+          }
+        ],
+        "meta": [
+          {
+            "k": "受众",
+            "v": "服务管理层"
+          },
+          {
+            "k": "主题",
+            "v": "受控扩展"
+          },
+          {
+            "k": "证据",
+            "v": "公开案例"
+          },
+          {
+            "k": "日期",
+            "v": "2026.07"
+          }
+        ],
+        "metaCount": 4
+      }
+    },
+    {
+      "layout": "theme09_page050",
+      "props": {
+        "badge": "行业信号",
+        "headEn": "SERVICE SIGNAL",
+        "headCn": "AI 已成为服务运营能力",
+        "asideTag": "Salesforce 2025",
+        "methodologyPre": "全球 ",
+        "methodologyBold": "6,500 名",
+        "methodologyPost": " 服务从业者调研；问题是安全扩展，不是是否试用。",
+        "stats": [
+          {
+            "value": "30",
+            "unit": "%",
+            "label": "当前由 AI 处理",
+            "en": "CURRENT",
+            "pct": 30,
+            "delta": "当前"
+          },
+          {
+            "value": "50",
+            "unit": "%",
+            "label": "2027 年预期",
+            "en": "FORECAST",
+            "pct": 50,
+            "delta": "+20pp"
+          },
+          {
+            "value": "#2",
+            "unit": "优先级",
+            "label": "AI 对服务负责人",
+            "en": "PRIORITY",
+            "pct": 80,
+            "delta": "高优先"
+          },
+          {
+            "value": "6,500",
+            "unit": "人",
+            "label": "调研样本",
+            "en": "SAMPLE",
+            "pct": 65,
+            "delta": "全球"
+          }
+        ],
+        "itemCount": 4,
+        "columns": 2,
+        "focusIndex": 1
+      }
+    },
+    {
+      "layout": "theme09_page104",
+      "props": {
+        "head": {
+          "no": "01",
+          "en": "DECISION PATH",
+          "cn": "从价值到治理的完整路径"
+        },
+        "outcome": {
+          "tag": "SCALE",
+          "text": "每一步都要回答：收益是否可验证，风险是否可管理？"
+        },
+        "steps": [
+          {
+            "title": "外部信号",
+            "desc": "确认场景已形成可复制的价值窗口。"
+          },
+          {
+            "title": "标杆结果",
+            "desc": "用公开案例校准收益与门槛。"
+          },
+          {
+            "title": "数据与控制",
+            "desc": "补足上下文、权限、审计与回流。"
+          },
+          {
+            "title": "试点到扩展",
+            "desc": "先证明结果，再扩大自动化边界。"
+          }
+        ],
+        "stepCount": 4,
+        "focusIndex": 3
+      }
+    },
+    {
+      "layout": "theme09_page038",
+      "props": {
+        "value": "230万",
+        "unit": "首月会话",
+        "label": "Klarna / OpenAI 公开结果",
+        "statement": "规模收益来自端到端服务流程，而非单一问答机器人。",
+        "badge": "PUBLIC BENCHMARK",
+        "kicker": "Klarna 证明规模，也说明门槛",
+        "supports": [
+          {
+            "value": "2/3",
+            "unit": "聊天",
+            "label": "客服聊天占比"
+          },
+          {
+            "value": "<2分",
+            "unit": "钟",
+            "label": "客户解决时长"
+          },
+          {
+            "value": "-25%",
+            "unit": "复询",
+            "label": "重复咨询"
+          }
+        ],
+        "supportCount": 3,
+        "accentNumber": true,
+        "focusIndex": 0
+      }
+    },
+    {
+      "layout": "theme09_page092",
+      "props": {
+        "rowHeader": "扩展方式",
+        "note": "建议从高频、低风险、知识可检索的流程开始；退款、投诉、身份与隐私保持人工控制。",
+        "head": {
+          "no": "02",
+          "en": "OPERATING MODEL",
+          "cn": "人机协作更适合早期扩展"
+        },
+        "attributes": [
+          {
+            "label": "知识问答"
+          },
+          {
+            "label": "订单查询"
+          },
+          {
+            "label": "退款投诉"
+          },
+          {
+            "label": "身份隐私"
+          },
+          {
+            "label": "审计留痕"
+          },
+          {
+            "label": "人工兜底"
+          }
+        ],
+        "plans": [
+          {
+            "name": "AI 优先",
+            "sub": "低风险",
+            "tag": "START",
+            "cells": [
+              "适用",
+              "辅助",
+              "不适用",
+              "不适用",
+              "自动",
+              "可用"
+            ]
+          },
+          {
+            "name": "人工确认",
+            "sub": "过渡",
+            "tag": "CONTROL",
+            "cells": [
+              "辅助",
+              "适用",
+              "辅助",
+              "不适用",
+              "必需",
+              "必需"
+            ]
+          },
+          {
+            "name": "人工主导",
+            "sub": "高风险",
+            "tag": "ESCALATE",
+            "cells": [
+              "不适用",
+              "辅助",
+              "适用",
+              "适用",
+              "必需",
+              "必需"
+            ]
+          }
+        ],
+        "planCount": 3,
+        "rowCount": 5,
+        "focusIndex": 1,
+        "recommendBadge": "推荐：受控协作"
+      }
+    },
+    {
+      "layout": "theme09_page085",
+      "props": {
+        "badge": "数据前提",
+        "headEn": "READINESS CHECK",
+        "headCn": "瓶颈通常在数据连接，不在模型",
+        "asideTag": "Salesforce 2024",
+        "methodologyPre": "先补全 ",
+        "methodologyBold1": "上下文",
+        "methodologyMid": " 与 ",
+        "methodologyBold2": "追溯能力",
+        "methodologyPost": "，再提高自动处理比例。",
+        "items": [
+          {
+            "cn": "增投数据集成",
+            "en": "INTEGRATION",
+            "value": 83,
+            "note": "决策者计划增投"
+          },
+          {
+            "cn": "速度与质量",
+            "en": "TRADE-OFF",
+            "value": 69,
+            "note": "坐席仍难兼顾"
+          },
+          {
+            "cn": "调研样本",
+            "en": "SAMPLE",
+            "value": 55,
+            "note": "5,500+ 从业者"
+          },
+          {
+            "cn": "调研覆盖",
+            "en": "COVERAGE",
+            "value": 30,
+            "note": "30 国"
+          }
+        ],
+        "itemCount": 4,
+        "gaugeStyle": "半环",
+        "focusIndex": 0
+      }
+    },
+    {
+      "layout": "theme09_page043",
+      "props": {
+        "badge": "体验信号",
+        "headEn": "EXPERIENCE SIGNAL",
+        "headCn": "个性化与信任，决定体验分水岭",
+        "asideTag": "Zendesk 2025",
+        "insightPre": "AI 的角色是 ",
+        "insightBold1": "更懂客户",
+        "insightMid1": "，而不是简单压缩成本。",
+        "insightBold2": "体验是结果",
+        "insightPost": "。",
+        "events": [
+          {
+            "mark": "01",
+            "date": "信号",
+            "name": "个性化",
+            "text": "领先团队优先用 AI 实现相关服务。",
+            "tag": "56%"
+          },
+          {
+            "mark": "02",
+            "date": "结果",
+            "name": "高 ROI",
+            "text": "重视个性化的团队更可能报告高回报。",
+            "tag": "128%"
+          },
+          {
+            "mark": "03",
+            "date": "样本",
+            "name": "全球调研",
+            "text": "研究覆盖 10k+ 受访者。",
+            "tag": "10k+"
+          },
+          {
+            "mark": "04",
+            "date": "覆盖",
+            "name": "多国研究",
+            "text": "研究覆盖 22 个国家。",
+            "tag": "22国"
+          },
+          {
+            "mark": "05",
+            "date": "设计",
+            "name": "人本 AI",
+            "text": "将忠诚度和信任嵌入服务体验。",
+            "tag": "TRUST"
+          },
+          {
+            "mark": "06",
+            "date": "动作",
+            "name": "周度复盘",
+            "text": "持续校验满意度、时长与升级率。",
+            "tag": "LEARN"
+          }
+        ],
+        "itemCount": 6,
+        "imgCount": 0,
+        "focusIndex": 1
+      }
+    },
+    {
+      "layout": "theme09_page098",
+      "props": {
+        "badge": "PILOT ROADMAP",
+        "headEn": "90-DAY PLAN",
+        "headCn": "用三个月把试点变成可运营能力",
+        "axisCornerLabel": "每 30 天设一道扩展闸门",
+        "asideTag": "CONTROLLED SCALE",
+        "insightMid1": "先验证价值，",
+        "insightMid2": "再扩大覆盖。",
+        "insightPost": "达不到质量阈值，不扩大自动化范围。",
+        "phases": [
+          "第1周",
+          "第2周",
+          "第3周",
+          "第4周",
+          "第5–8周",
+          "第9–12周"
+        ],
+        "milestones": [
+          {
+            "at": 1,
+            "text": "基线"
+          },
+          {
+            "at": 3,
+            "text": "质量门"
+          },
+          {
+            "at": 5,
+            "text": "复制门"
+          }
+        ],
+        "lanes": [
+          {
+            "cn": "知识与接口",
+            "items": [
+              "盘点",
+              "清洗",
+              "接入",
+              "验证",
+              "补缺",
+              "固化"
+            ]
+          },
+          {
+            "cn": "风险与回流",
+            "items": [
+              "分级",
+              "规则",
+              "演练",
+              "审计",
+              "升级",
+              "复盘"
+            ]
+          },
+          {
+            "cn": "运营指标",
+            "items": [
+              "设基线",
+              "采样",
+              "CSAT",
+              "时长",
+              "阈值",
+              "追踪"
+            ]
+          },
+          {
+            "cn": "扩展决策",
+            "items": [
+              "选场景",
+              "试运行",
+              "评审",
+              "闸门",
+              "复制",
+              "规模化"
+            ]
+          }
+        ],
+        "phaseCount": 6,
+        "laneCount": 4,
+        "focusIndex": 3
+      }
+    },
+    {
+      "layout": "theme09_page099",
+      "props": {
+        "badge": "EXECUTIVE GATE",
+        "headEn": "SCALE SCORECARD",
+        "headCn": "用一张评分表决定是否扩展",
+        "asideTag": "达阈值后复制",
+        "methodologyPre": "评分不是为了追求自动化率，而是确认 ",
+        "methodologyMid": "可以同时满足。",
+        "methodologyPost": "建议每周复盘并保留人工否决权。",
+        "criteria": [
+          "业务价值",
+          "客户体验",
+          "知识就绪",
+          "权限审计",
+          "人工回流",
+          "可复制性"
+        ],
+        "objects": [
+          {
+            "cn": "知识问答",
+            "en": "KNOWLEDGE",
+            "scores": [
+              5,
+              4,
+              5,
+              5,
+              4,
+              5
+            ]
+          },
+          {
+            "cn": "订单查询",
+            "en": "ORDER",
+            "scores": [
+              4,
+              4,
+              4,
+              4,
+              5,
+              4
+            ]
+          },
+          {
+            "cn": "退款投诉",
+            "en": "REFUND",
+            "scores": [
+              4,
+              3,
+              3,
+              2,
+              5,
+              2
+            ]
+          },
+          {
+            "cn": "身份隐私",
+            "en": "IDENTITY",
+            "scores": [
+              2,
+              2,
+              3,
+              1,
+              5,
+              1
+            ]
+          }
+        ],
+        "criteriaCount": 6,
+        "itemCount": 4,
+        "focusIndex": 0
+      }
+    },
+    {
+      "layout": "theme09_page089",
+      "props": {
+        "badge": "CLOSING",
+        "unit": "建议指标",
+        "headEn": "WEEKLY REVIEW",
+        "headCn": "把试点结果做成可决策的周度信号",
+        "chartTitle": "90 天运营复盘看板",
+        "asideTag": "ILLUSTRATIVE",
+        "insightMid1": " 从 W1 的 ",
+        "insightMid2": " 提升至 W8 的 ",
+        "insightPost": "；达阈值后再扩展。来源：OpenAI/Klarna、Salesforce 2024/2025、Zendesk 2025 公开研究。",
+        "finalLabelSuffix": "达阈值",
+        "rangeLabel": "周度趋势",
+        "xLabels": [
+          "W1",
+          "W2",
+          "W3",
+          "W4",
+          "W5",
+          "W6",
+          "W7",
+          "W8"
+        ],
+        "series": [
+          {
+            "cn": "CSAT",
+            "vals": [
+              72,
+              74,
+              76,
+              77,
+              79,
+              80,
+              81,
+              82
+            ]
+          },
+          {
+            "cn": "处理时长",
+            "vals": [
+              85,
+              80,
+              76,
+              71,
+              67,
+              63,
+              60,
+              58
+            ]
+          },
+          {
+            "cn": "升级率",
+            "vals": [
+              38,
+              36,
+              34,
+              32,
+              30,
+              29,
+              28,
+              27
+            ]
+          },
+          {
+            "cn": "审计通过",
+            "vals": [
+              60,
+              66,
+              71,
+              76,
+              80,
+              84,
+              87,
+              90
+            ]
+          }
+        ],
+        "seriesCount": 4,
+        "focusIndex": 3
+      }
+    }
+  ]
+}

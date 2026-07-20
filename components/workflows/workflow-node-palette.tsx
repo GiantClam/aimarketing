@@ -1,105 +1,21 @@
 "use client"
 
+import { useMemo } from "react"
 import type { WorkflowBuiltinAgentOption, WorkflowCustomAgentOption } from "@/components/workflows/workflow-agent-options"
+import {
+  buildWorkflowNodePalette,
+  type WorkflowNodeVisual,
+} from "@/components/workflows/workflow-node-registry-ui"
 import { cn } from "@/lib/utils"
-import { getDefaultWorkflowNodeTitle, type WorkflowLocale, type WorkflowNodeType } from "@/lib/workflows/schema"
-import { Archive, ArrowDownToLine, AudioLines, Bot, FileText, FileUp, Film, ImageIcon, Link2, Mic, Music, PanelsTopLeft, PenSquare, Sparkles, Type, UserRound } from "lucide-react"
-
-const NODE_ORDER: WorkflowNodeType[] = [
-  "upload",
-  "text_input",
-  "file_create",
-  "writer",
-  "llm_generate",
-  "agent_execute",
-  "image_generate",
-  "video_generate",
-  "digital_human",
-  "music_generate",
-  "voice_synthesis",
-  "audio_generate",
-  "ppt_generate",
-  "knowledge_retrieve",
-  "knowledge_write",
-  "product_store",
-]
-
-const NODE_VISUALS: Record<
-  WorkflowNodeType,
-  {
-    icon: typeof FileUp
-    accentClassName: string
-  }
-> = {
-  upload: {
-    icon: FileUp,
-    accentClassName: "border-amber-300/80 bg-amber-100 text-amber-800",
-  },
-  text_input: {
-    icon: Type,
-    accentClassName: "border-sky-300/80 bg-sky-100 text-sky-800",
-  },
-  file_create: {
-    icon: FileText,
-    accentClassName: "border-lime-300/80 bg-lime-100 text-lime-800",
-  },
-  writer: {
-    icon: PenSquare,
-    accentClassName: "border-indigo-300/80 bg-indigo-100 text-indigo-800",
-  },
-  llm_generate: {
-    icon: Sparkles,
-    accentClassName: "border-fuchsia-300/80 bg-fuchsia-100 text-fuchsia-800",
-  },
-  agent_execute: {
-    icon: Bot,
-    accentClassName: "border-amber-400/80 bg-amber-100 text-amber-900",
-  },
-  image_generate: {
-    icon: ImageIcon,
-    accentClassName: "border-emerald-300/80 bg-emerald-100 text-emerald-800",
-  },
-  video_generate: {
-    icon: Film,
-    accentClassName: "border-rose-300/80 bg-rose-100 text-rose-800",
-  },
-  digital_human: {
-    icon: UserRound,
-    accentClassName: "border-orange-300/80 bg-orange-100 text-orange-800",
-  },
-  music_generate: {
-    icon: Music,
-    accentClassName: "border-cyan-300/80 bg-cyan-100 text-cyan-800",
-  },
-  voice_synthesis: {
-    icon: Mic,
-    accentClassName: "border-teal-300/80 bg-teal-100 text-teal-800",
-  },
-  audio_generate: {
-    icon: AudioLines,
-    accentClassName: "border-cyan-300/80 bg-cyan-100 text-cyan-800",
-  },
-  ppt_generate: {
-    icon: PanelsTopLeft,
-    accentClassName: "border-violet-300/80 bg-violet-100 text-violet-800",
-  },
-  knowledge_retrieve: {
-    icon: Link2,
-    accentClassName: "border-sky-300/80 bg-sky-100 text-sky-800",
-  },
-  knowledge_write: {
-    icon: ArrowDownToLine,
-    accentClassName: "border-emerald-300/80 bg-emerald-100 text-emerald-800",
-  },
-  product_store: {
-    icon: Archive,
-    accentClassName: "border-slate-300/80 bg-slate-100 text-slate-800",
-  },
-}
+import { Bot } from "lucide-react"
+import { workflowNodeRegistry } from "@/lib/workflows/node-definitions/registry"
+import type { WorkflowFeatures } from "@/lib/workflows/features"
+import type { WorkflowLocale, WorkflowNodeType } from "@/lib/workflows/schema"
 
 type WorkflowNodePaletteProps = {
   className?: string
   locale: WorkflowLocale
+  features?: WorkflowFeatures
   builtinAgents: WorkflowBuiltinAgentOption[]
   customAgents: WorkflowCustomAgentOption[]
   onAddNode: (type: WorkflowNodeType) => void
@@ -110,10 +26,12 @@ type WorkflowNodePaletteProps = {
 export function WorkflowNodePalette({
   className,
   locale,
+  features,
   customAgents,
   onAddNode,
   onAddCustomAgent,
 }: WorkflowNodePaletteProps) {
+  const paletteItems = useMemo(() => buildWorkflowNodePalette(workflowNodeRegistry, locale), [locale])
   const copy =
     locale === "zh"
       ? {
@@ -143,7 +61,10 @@ export function WorkflowNodePalette({
   }
 
   return (
-    <section className={cn("dashboard-panel rounded-[14px] border border-border bg-card/88 p-2", className)}>
+    <section
+      className={cn("dashboard-panel rounded-[14px] border border-border bg-card/88 p-2", className)}
+      data-workflow-node-registry={features?.nodeRegistryV2 === false ? "legacy" : "v2"}
+    >
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="dashboard-kicker text-muted-foreground">{copy.library}</div>
@@ -157,9 +78,10 @@ export function WorkflowNodePalette({
       </div>
 
       <div className="mt-2 grid gap-1.5">
-        {NODE_ORDER.map((type) => {
-          const displayTitle = getDefaultWorkflowNodeTitle(type, locale)
-          const visual = NODE_VISUALS[type]
+        {paletteItems.map((item) => {
+          const type = item.type as WorkflowNodeType
+          const displayTitle = item.title
+          const visual: WorkflowNodeVisual = item.visual
           const NodeIcon = visual.icon
 
           return (

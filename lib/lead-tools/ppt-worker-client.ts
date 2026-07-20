@@ -253,7 +253,7 @@ export async function requestPptWorkerPreviewSubmit(
 }
 
 export async function requestPptWorkerPreviewStatus(jobId: string) {
-  return requestWorker<PptWorkerPreviewStatusResponse>(`/preview-jobs/${jobId}`, {
+  return requestWorker<PptWorkerPreviewStatusResponse>(`/preview-jobs/${encodeURIComponent(jobId)}`, {
     method: "GET",
   })
 }

@@ -45,12 +45,21 @@ type ExecuteAiEntryProviderParams = {
   providerOrder: AiEntryProviderId[]
   attempt: number
   upgradeProbe: boolean
+  fallbackReason?: AiEntryProviderFallbackReason
 }
+
+export type AiEntryProviderFallbackReason =
+  | "empty_response"
+  | "timeout"
+  | "connection"
+  | "rate_limit"
+  | "provider_error"
 
 type ExecuteAiEntryOptions = {
   preferredProviderId?: AiEntryProviderId | null
   preferredModel?: string | null
   forcePreferredProvider?: boolean
+  disableProviderFailover?: boolean
   forceModelAcrossProviders?: boolean
   disableSameProviderModelFallback?: boolean
   directProviderFailoverOnError?: boolean
@@ -79,8 +88,10 @@ type ProviderModelsApiResponse = {
 const DEFAULT_AIBERM_BASE_URL = "https://aiberm.com/v1"
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 const DEFAULT_PPTOKEN_BASE_URL = "https://api.pptoken.org/v1"
+const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 const DEFAULT_MODEL = "openai/gpt-5.4-mini"
 const DEFAULT_PPTOKEN_MODEL = "gpt-5.6-luna"
+const DEFAULT_OPENROUTER_MODEL = "openai/gpt-4.1-mini"
 const PROVIDER_MODEL_LIST_CACHE_TTL_MS = parsePositiveInt(
   process.env.AI_ENTRY_PROVIDER_MODEL_LIST_CACHE_TTL_MS,
   30 * 60 * 1000,
@@ -146,6 +157,10 @@ function inferProviderPrefixFromModel(modelId: string) {
 
 function isOpenAiFamilyModel(modelId: string) {
   return inferProviderPrefixFromModel(modelId) === "openai"
+}
+
+function isGrokModel(modelId: string) {
+  return /(?:^|\/)grok[-_.]4[-_.]5$/iu.test(modelId.trim())
 }
 
 function buildEquivalentModelVariants(modelId: string) {
@@ -413,6 +428,16 @@ function resolveDegradeReason(error: unknown): "policy" | "retryable" | "nonretr
   return isRetryableProviderError(error) ? "retryable" : "nonretryable"
 }
 
+function resolveProviderFallbackReason(error: unknown): AiEntryProviderFallbackReason {
+  const message = error instanceof Error ? error.message : String(error || "")
+  const normalized = message.toLowerCase()
+  if (normalized.includes("empty") || normalized.includes("no content")) return "empty_response"
+  if (normalized.includes("timeout") || normalized.includes("timed out") || normalized.includes("deadline")) return "timeout"
+  if (normalized.includes("429") || normalized.includes("rate limit") || normalized.includes("too many requests")) return "rate_limit"
+  if (normalized.includes("connect") || normalized.includes("network") || normalized.includes("econn") || normalized.includes("socket")) return "connection"
+  return "provider_error"
+}
+
 function isRetryableProviderError(error: unknown) {
   return (error as AiEntryExecutionError | null | undefined)?.aiEntryRetryable !== false
 }
@@ -487,6 +512,10 @@ function getAiEntryDefaultModel() {
 
 function getRawProviderConfigs(): AiEntryProviderConfig[] {
   const fallbackModel = getAiEntryDefaultModel()
+  const openrouterEnabled =
+    normalizeText(process.env.AI_ENTRY_OPENROUTER_ENABLED).toLowerCase() === "true" ||
+    Boolean(normalizeText(process.env.AI_ENTRY_OPENROUTER_API_KEY)) ||
+    Boolean(normalizeText(process.env.AI_ENTRY_OPENROUTER_MODEL))
 
   return [
     {
@@ -516,6 +545,20 @@ function getRawProviderConfigs(): AiEntryProviderConfig[] {
         normalizeText(process.env.AI_ENTRY_PPTOKEN_MODEL) ||
         normalizeText(process.env.PPTOKEN_MODEL) ||
         DEFAULT_PPTOKEN_MODEL,
+    },
+    {
+      id: "openrouter",
+      apiKey:
+        normalizeText(process.env.AI_ENTRY_OPENROUTER_API_KEY) ||
+        (openrouterEnabled ? normalizeText(process.env.OPENROUTER_API_KEY) : ""),
+      baseURL:
+        normalizeText(process.env.AI_ENTRY_OPENROUTER_BASE_URL) ||
+        normalizeText(process.env.OPENROUTER_BASE_URL) ||
+        DEFAULT_OPENROUTER_BASE_URL,
+      model:
+        normalizeText(process.env.AI_ENTRY_OPENROUTER_MODEL) ||
+        normalizeText(process.env.OPENROUTER_TEXT_MODEL) ||
+        DEFAULT_OPENROUTER_MODEL,
     },
     {
       id: "aiberm",
@@ -554,6 +597,50 @@ export function getConfiguredAiEntryProviders() {
   return getRawProviderConfigs().filter((item) => item.apiKey && item.baseURL)
 }
 
+function isPptokenGrokModel(modelId: string) {
+  const normalized = normalizeText(modelId).replace(/^pptoken\//iu, "").replace(/^x-ai\//iu, "")
+  return /^grok(?:[-_.]|$)/iu.test(normalized)
+}
+
+/**
+ * Resolve credentials for the exact provider/model pair.
+ *
+ * PPToken uses separate accounts for GPT and Grok. Keep the existing
+ * PPTOKEN_API_KEY as the GPT/default account and require a dedicated Grok
+ * credential for Grok models so a GPT account can never be sent a Grok
+ * request by accident.
+ */
+export function getConfiguredAiEntryProviderForModel(
+  providerId: string,
+  modelId: string,
+): AiEntryProviderConfig | null {
+  const normalizedProviderId = normalizeText(providerId).toLowerCase()
+  const normalizedModelId = normalizeText(modelId)
+  const provider = getRawProviderConfigs().find((item) => item.id === normalizedProviderId)
+  if (!provider) return null
+
+  if (normalizedProviderId !== "pptoken" || !isPptokenGrokModel(normalizedModelId)) {
+    return provider.apiKey && provider.baseURL ? provider : null
+  }
+
+  const grokApiKey =
+    normalizeText(process.env.AI_ENTRY_PPTOKEN_GROK_API_KEY) ||
+    normalizeText(process.env.PPTOKEN_GROK_API_KEY)
+  if (!grokApiKey) return null
+
+  const grokBaseURL =
+    normalizeText(process.env.AI_ENTRY_PPTOKEN_GROK_BASE_URL) ||
+    normalizeText(process.env.PPTOKEN_GROK_BASE_URL) ||
+    provider.baseURL
+
+  return {
+    ...provider,
+    apiKey: grokApiKey,
+    baseURL: grokBaseURL,
+    model: normalizedModelId || provider.model,
+  }
+}
+
 export function getAiEntryCurrentProviderConfig() {
   const providers = getConfiguredAiEntryProviders()
   if (providers.length === 0) return null
@@ -568,6 +655,7 @@ async function buildProviderRuntimes(
   const preferredProviderId = options?.preferredProviderId || null
   const preferredModel = normalizeText(options?.preferredModel || undefined)
   const forcePreferredProvider = Boolean(options?.forcePreferredProvider && preferredProviderId)
+  const disableProviderFailover = Boolean(options?.disableProviderFailover)
   const forceModelAcrossProviders = Boolean(
     options?.forceModelAcrossProviders && preferredModel,
   )
@@ -584,9 +672,10 @@ async function buildProviderRuntimes(
   if (configs.length === 0) return []
 
   const routingModel = preferredModel || getAiEntryDefaultModel()
-  const allowPptoken = isOpenAiFamilyModel(routingModel)
+  const allowPptoken = isOpenAiFamilyModel(routingModel) || isGrokModel(routingModel)
+  const allowOpenrouter = preferredProviderId === "openrouter"
   configs = configs.filter((item) =>
-    allowPptoken ? true : item.id !== "pptoken",
+    (allowPptoken || item.id !== "pptoken") && (allowOpenrouter || item.id !== "openrouter"),
   )
   if (configs.length === 0) return []
 
@@ -620,6 +709,12 @@ async function buildProviderRuntimes(
     }
   }
 
+  if (disableProviderFailover) {
+    if (preferredProviderId && !configs.some((item) => item.id === preferredProviderId)) return []
+    const lockedProviderId = preferredProviderId || configs[0]?.id
+    configs = lockedProviderId ? configs.filter((item) => item.id === lockedProviderId) : []
+  }
+
   const runtimes: AiEntryProviderRuntime[] = []
   for (let index = 0; index < configs.length; index += 1) {
     const item = configs[index]
@@ -635,7 +730,7 @@ async function buildProviderRuntimes(
         : item.model
 
     let candidateModels: string[] = [selectedModel]
-    if (forceModelAcrossProviders && preferredModel) {
+    if (!disableProviderFailover && forceModelAcrossProviders && preferredModel) {
       const matchedFromProviderCatalog = await resolveProviderMatchedModels(
         item,
         preferredModel,
@@ -723,6 +818,7 @@ export async function executeAiEntryWithProviderFailover<T>(
       : findRuntimeStartIndexByStateIndex(providers, startStateIndex)
 
   let lastError: unknown = null
+  let previousFailureReason: AiEntryProviderFallbackReason | undefined
   let attempt = 0
   let index = startIndex
   const visitedIndices = new Set<number>()
@@ -741,6 +837,7 @@ export async function executeAiEntryWithProviderFailover<T>(
         providerOrder,
         attempt,
         upgradeProbe: shouldTryUpgrade && index === startIndex,
+        fallbackReason: previousFailureReason,
       })
 
       state.activeIndex = candidate.stateIndex
@@ -755,15 +852,18 @@ export async function executeAiEntryWithProviderFailover<T>(
       }
     } catch (error) {
       lastError = error
+      previousFailureReason = resolveProviderFallbackReason(error)
       const degradeReason = resolveDegradeReason(error)
-      const nextIndex = findNextRuntimeIndex({
-        providers,
-        currentIndex: index,
-        visited: visitedIndices,
-        skipSameProvider:
-          degradeReason === "policy" ||
-          Boolean(options?.directProviderFailoverOnError),
-      })
+      const nextIndex = options?.disableProviderFailover
+        ? -1
+        : findNextRuntimeIndex({
+            providers,
+            currentIndex: index,
+            visited: visitedIndices,
+            skipSameProvider:
+              degradeReason === "policy" ||
+              Boolean(options?.directProviderFailoverOnError),
+          })
       const canFailover = nextIndex >= 0
       const nextCandidate = canFailover ? providers[nextIndex] : null
       state.activeIndex = clampIndex(

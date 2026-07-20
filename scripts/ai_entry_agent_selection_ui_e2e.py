@@ -313,7 +313,9 @@ def run():
             textarea = wait_for_chat_interactive(page)
             textarea.click()
             page.keyboard.type("Reply with exactly: smoke test passed.")
-            page.keyboard.press("Enter")
+            # PromptInput reserves Enter for newlines; submit through the
+            # visible send action, matching the product interaction contract.
+            page.get_by_role("button", name=re.compile(r"send", re.IGNORECASE)).last.click()
 
             deadline = time() + 120
             while time() < deadline:
@@ -367,7 +369,9 @@ def run():
             critical_console_errors = [
                 item
                 for item in console_errors
-                if "favicon" not in item.lower() and "failed to load resource" not in item.lower()
+                if "favicon" not in item.lower()
+                and "failed to load resource" not in item.lower()
+                and "_vercel/insights" not in item.lower()
             ]
             expect(
                 not critical_console_errors,

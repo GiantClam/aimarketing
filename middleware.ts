@@ -55,7 +55,8 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  if (PUBLIC_PATHS.has(normalizedPathname) && hasUserSession) {
+  const hasLoginTarget = Boolean(request.nextUrl.searchParams.get("next"))
+  if (PUBLIC_PATHS.has(normalizedPathname) && hasUserSession && !hasLoginTarget) {
     return applySecurityHeaders(applyLocaleCookie(NextResponse.redirect(new URL("/dashboard", request.url)), locale))
   }
 

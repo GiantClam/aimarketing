@@ -11,6 +11,14 @@ import {
   resolveWorkflowImagePromptRuntimeReferences,
 } from "@/lib/workflows/image-prompt-references"
 
+const MAX_WORKFLOW_IMAGE_PROMPT_LENGTH = 2000
+
+function boundWorkflowImagePrompt(prompt: string) {
+  const normalized = prompt.trim()
+  if (normalized.length <= MAX_WORKFLOW_IMAGE_PROMPT_LENGTH) return normalized
+  return `${normalized.slice(0, MAX_WORKFLOW_IMAGE_PROMPT_LENGTH - 3).trimEnd()}...`
+}
+
 function extractWorkflowImageAssistantReferenceId(item: WorkflowCapabilityInvokeParams["input"]["image"][number]) {
   if (typeof item.assetId === "string" && item.assetId.trim()) {
     return item.assetId.trim()
@@ -187,9 +195,10 @@ export function buildWorkflowImageGenerateRequestBody(
   const inferredSizePreset = normalizedConfig.sizePreset || inferSizePresetFromImageSize(normalizedConfig.imageSize) || "1:1"
   const inferredResolution = normalizedConfig.resolution || inferResolutionFromImageSize(normalizedConfig.imageSize) || "2K"
   const usagePreset = inferWorkflowUsagePreset(inferredSizePreset)
+  const boundedPrompt = boundWorkflowImagePrompt(resolvedReferences.prompt)
 
   return {
-    prompt: resolvedReferences.prompt,
+    prompt: boundedPrompt,
     preferAsync: true,
     invocationMode: "workflow_runtime",
     modelOptionId: selectedModelOptionId,
@@ -211,8 +220,8 @@ export function buildWorkflowImageGenerateRequestBody(
         ? resolvedReferences.referenceUrls
         : buildWorkflowImageAssistantReferenceUrls(params, prompt, locale),
     brief: {
-      goal: resolvedReferences.prompt,
-      subject: resolvedReferences.prompt,
+      goal: boundedPrompt,
+      subject: boundedPrompt,
       style: buildDefaultImageStyle(locale),
       composition: buildDefaultImageComposition(normalizedConfig.imageSize, locale),
       constraints: "",

@@ -296,6 +296,31 @@ function buildEnterpriseTextProviderConfig(provider: EnterpriseModelProviderConf
   } satisfies AiEntryProviderConfig
 }
 
+/**
+ * Resolve an enterprise-owned text Provider for the internal Provider Proxy.
+ * The proxy is called by the Railway runtime with an enterprise binding, not a
+ * browser user session, so access is constrained to the signed internal
+ * token and the enterprise's enabled Provider configuration.
+ */
+export async function getEnterpriseTextRuntimeProviderConfigForProxy(input: {
+  enterpriseId: number
+  providerId: string
+}) {
+  if (!Number.isInteger(input.enterpriseId) || input.enterpriseId <= 0) return null
+  const settings = await getCustomerGovernanceSettings(input.enterpriseId, {
+    includeSecrets: true,
+  }).catch(() => null)
+  if (!settings) return null
+
+  const provider = settings.modelConfig.text_generation.providers.find((candidate) => {
+    const runtimeProviderId = mapEnterpriseTextProviderId(
+      candidate.providerId as EnterpriseTextModelProviderId,
+    )
+    return runtimeProviderId === input.providerId
+  })
+  return provider ? buildEnterpriseTextProviderConfig(provider) : null
+}
+
 function buildEnterpriseTextProviderCatalogEntry(provider: EnterpriseModelProviderConfig) {
   const hasApiKey = Boolean(normalizeText(provider.apiKey) || provider.apiKeyConfigured)
   const baseURL = getEnterpriseTextBaseUrl(provider)

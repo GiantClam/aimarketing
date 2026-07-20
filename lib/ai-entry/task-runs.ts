@@ -12,6 +12,10 @@ export type AiEntryTaskRunStage =
   | "variant_generating"
   | "preview_rendering"
   | "session_persisting"
+  | "runtime_queued"
+  | "runtime_running"
+  | "runtime_checkpointing"
+  | "runtime_publishing"
 
 export type AiEntryTaskRunEvent = {
   type: string
@@ -24,7 +28,7 @@ export type AiEntryTaskRunEvent = {
 export type AiEntryTaskRunSummary = {
   task_id: string
   status: AiEntryTaskRunStatus
-  task_type: "preview_ppt_deck"
+  task_type: "preview_ppt_deck" | "opencode_agent_run"
   conversation_id: string | null
   agent_id: string | null
   created_at: number
@@ -187,6 +191,10 @@ function resolveSelectedTemplate(input: {
 }
 
 function resolveStageLabel(stage: AiEntryTaskRunStage, isZh: boolean) {
+  if (stage === "runtime_queued") return isZh ? "任务已排队，关闭页面后仍会继续执行" : "Queued; execution continues after you leave"
+  if (stage === "runtime_running") return isZh ? "智能体正在执行任务" : "Agent is executing the task"
+  if (stage === "runtime_checkpointing") return isZh ? "正在保存会话检查点" : "Saving session checkpoint"
+  if (stage === "runtime_publishing") return isZh ? "正在发布生成结果" : "Publishing generated results"
   if (stage === "brief_validating") return isZh ? "已排队，准备校验需求" : "Queued, validating brief"
   if (stage === "story_planning") return isZh ? "正在规划结构与故事线" : "Planning structure and storyline"
   if (stage === "variant_generating") return isZh ? "正在生成预览方向" : "Generating preview variants"
@@ -195,6 +203,10 @@ function resolveStageLabel(stage: AiEntryTaskRunStage, isZh: boolean) {
 }
 
 function resolveStageProgress(stage: AiEntryTaskRunStage) {
+  if (stage === "runtime_queued") return { current: 0, total: 4 }
+  if (stage === "runtime_running") return { current: 1, total: 4 }
+  if (stage === "runtime_checkpointing") return { current: 2, total: 4 }
+  if (stage === "runtime_publishing") return { current: 3, total: 4 }
   if (stage === "brief_validating") return { current: 0, total: 5 }
   if (stage === "story_planning") return { current: 1, total: 5 }
   if (stage === "variant_generating") return { current: 2, total: 5 }
@@ -204,7 +216,7 @@ function resolveStageProgress(stage: AiEntryTaskRunStage) {
 
 function normalizeLegacyStage(value: string | null) {
   if (!value) return null
-  if (value === "brief_validating" || value === "story_planning" || value === "variant_generating" || value === "preview_rendering" || value === "session_persisting") {
+  if (value === "brief_validating" || value === "story_planning" || value === "variant_generating" || value === "preview_rendering" || value === "session_persisting" || value === "runtime_queued" || value === "runtime_running" || value === "runtime_checkpointing" || value === "runtime_publishing") {
     return value satisfies AiEntryTaskRunStage
   }
   if (value === "queued") return "brief_validating" satisfies AiEntryTaskRunStage
@@ -213,6 +225,66 @@ function normalizeLegacyStage(value: string | null) {
   if (value === "completed") return "session_persisting" satisfies AiEntryTaskRunStage
   if (value === "failed") return "variant_generating" satisfies AiEntryTaskRunStage
   return null
+}
+
+function normalizeRuntimeStatus(value: unknown): AiEntryTaskRunStatus | null {
+  if (value === "queued" || value === "pending") return "pending"
+  if (value === "running") return "running"
+  if (value === "succeeded" || value === "success") return "success"
+  if (value === "failed" || value === "cancelled" || value === "timed_out") return "failed"
+  return null
+}
+
+function resolveRuntimeStage(status: AiEntryTaskRunStatus, result: Record<string, unknown> | null, events: AiEntryTaskRunEvent[]) {
+  const explicit = normalizeLegacyStage(normalizeText(result?.stage))
+  if (explicit && explicit.startsWith("runtime_")) return explicit
+  const last = events.at(-1)?.type
+  if (status === "success") return "runtime_publishing" satisfies AiEntryTaskRunStage
+  if (last === "run_queued") return "runtime_queued" satisfies AiEntryTaskRunStage
+  if (last === "checkpoint_saved") return "runtime_checkpointing" satisfies AiEntryTaskRunStage
+  if (last === "artifact_reference") return "runtime_publishing" satisfies AiEntryTaskRunStage
+  if (status === "failed") return "runtime_running" satisfies AiEntryTaskRunStage
+  return "runtime_running" satisfies AiEntryTaskRunStage
+}
+
+export function parseAiEntryOpenCodeTaskRunSummary(source: TaskRunSource): AiEntryTaskRunSummary | null {
+  const taskId = parsePositiveInt(source.id)
+  const status = normalizeRuntimeStatus(source.status)
+  if (!taskId || !status) return null
+  const payload = safeParseRecord(source.payload)
+  const result = safeParseRecord(source.result)
+  const events = normalizeEvents(result?.events)
+  const stage = resolveRuntimeStage(status, result, events)
+  const isZh = payload?.isZh === false ? false : true
+  const updatedAt = toEpochSeconds(source.updatedAt)
+  const finishedAt = status === "success" || status === "failed" ? updatedAt : null
+  const errorMessage = normalizeText(result?.errorMessage) || normalizeText(result?.error)
+  const progress = resolveStageProgress(stage)
+  return {
+    task_id: String(taskId),
+    status,
+    task_type: "opencode_agent_run",
+    conversation_id: normalizeText(payload?.conversationId) || normalizeText(result?.conversation_id),
+    agent_id: normalizeText(payload?.agentId),
+    created_at: toEpochSeconds(source.createdAt),
+    updated_at: updatedAt,
+    started_at: source.startedAt ? toEpochSeconds(source.startedAt) : null,
+    stage,
+    stage_label: normalizeText(result?.stageLabel) || (status === "failed" ? (isZh ? "智能体任务失败" : "Agent task failed") : status === "success" ? (isZh ? "智能体任务已完成" : "Agent task completed") : resolveStageLabel(stage, isZh)),
+    progress_current: typeof result?.progressCurrent === "number" && Number.isFinite(result.progressCurrent) ? Math.max(0, Math.floor(result.progressCurrent)) : progress.current,
+    progress_total: typeof result?.progressTotal === "number" && Number.isFinite(result.progressTotal) ? Math.max(1, Math.floor(result.progressTotal)) : status === "success" ? progress.total : progress.total,
+    last_heartbeat_at: typeof result?.lastHeartbeatAt === "number" && Number.isFinite(result.lastHeartbeatAt) ? Math.floor(result.lastHeartbeatAt) : updatedAt,
+    finished_at: typeof result?.finishedAt === "number" && Number.isFinite(result.finishedAt) ? Math.floor(result.finishedAt) : finishedAt,
+    preview_session_id: null,
+    request_label: resolveRequestLabel(safeParseRecord(payload?.input)),
+    result_summary: normalizeText(result?.resultSummary) || normalizeText(result?.assistantMessage),
+    selected_template_id: null,
+    selected_template_label: null,
+    error_code: normalizeText(result?.errorCode) || errorMessage,
+    error_message: errorMessage,
+    error: errorMessage,
+    events: events.sort((left, right) => left.at - right.at),
+  }
 }
 
 function resolveStage(input: {
@@ -238,10 +310,10 @@ function resolveStage(input: {
 
 export function parseAiEntryTaskRunSummary(source: TaskRunSource): AiEntryTaskRunSummary | null {
   const taskId = parsePositiveInt(source.id)
+  const payload = safeParseRecord(source.payload)
+  if (normalizeText(payload?.kind) === "opencode_runtime") return parseAiEntryOpenCodeTaskRunSummary(source)
   const status = normalizeTaskStatus(source.status)
   if (!taskId || !status) return null
-
-  const payload = safeParseRecord(source.payload)
   if (normalizeText(payload?.kind) !== "ai_entry_ppt_preview") return null
   const result = safeParseRecord(source.result)
   const taskType = normalizeText(result?.toolName) === "preview_ppt_deck" ? "preview_ppt_deck" : "preview_ppt_deck"

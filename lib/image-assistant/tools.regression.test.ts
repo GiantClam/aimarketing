@@ -170,6 +170,18 @@ test("workflow runtime turn bypasses clarification and composes a generation pro
   assert.ok(typeof result.orchestration.generated_prompt === "string" && result.orchestration.generated_prompt.length > 0)
 })
 
+test("workflow runtime image prompts stay within the provider limit", async () => {
+  const result = await buildWorkflowImageRuntimeTurn({
+    prompt: "E2E workflow image prompt ".repeat(500),
+    taskType: "generate",
+    sizePreset: "1:1",
+    resolution: "1K",
+    referenceCount: 0,
+  })
+
+  assert.ok((result.orchestration.generated_prompt?.length || 0) <= 2000)
+})
+
 test("falls back to text JSON extraction when structured tool-call is unsupported", async () => {
   structuredShouldThrow = true
   const result = await planImageAssistantTurn({

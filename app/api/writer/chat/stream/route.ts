@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
     const platform = normalizeWriterPlatform(body?.platform)
     const mode = normalizeWriterMode(platform, body?.mode)
     const language = normalizeWriterLanguage(body?.language)
+    const workflowExecution = body?.executionContext === "workflow"
     const selectedProviderId =
       typeof body?.modelConfig?.providerId === "string" && body.modelConfig.providerId.trim()
         ? body.modelConfig.providerId.trim()
@@ -238,7 +239,9 @@ export async function POST(req: NextRequest) {
             mode,
             preferredLanguage: language,
             history,
-            conversationStatus: existingConversation?.status as WriterConversationStatus | undefined,
+            conversationStatus: workflowExecution
+              ? "text_ready"
+              : (existingConversation?.status as WriterConversationStatus | undefined),
             enterpriseId: auth.user.enterpriseId,
             selectedProviderId,
             selectedModelId,

@@ -131,6 +131,54 @@ test("ragflow provider parses retrieval chunks from object response", async () =
   assert.equal(result?.datasetsUsed[0]?.datasetId, "ds_1")
 })
 
+test("ragflow provider isolates datasets with incompatible embedding models", async () => {
+  datasets = [
+    { ...baseDataset, id: 21, providerDatasetId: "ds_1", name: "Brand" },
+    { ...baseDataset, id: 22, providerDatasetId: "ds_2", name: "Legacy" },
+  ]
+  fetchQueue.push(
+    {
+      ok: true,
+      status: 200,
+      body: { code: 0, data: { chunks: [{ dataset_id: "ds_1", content: "Brand facts", similarity: 0.92 }] } },
+    },
+    {
+      ok: false,
+      status: 400,
+      body: { code: 100, message: "Datasets use different embedding models." },
+    },
+  )
+
+  const result = await ragflowKnowledgeProvider.retrieve({ enterpriseId: 7, query: "brand facts" })
+
+  assert.equal(fetchCalls.length, 2)
+  assert.deepEqual(JSON.parse(String(fetchCalls[0]?.init?.body)).dataset_ids, ["ds_1"])
+  assert.deepEqual(JSON.parse(String(fetchCalls[1]?.init?.body)).dataset_ids, ["ds_2"])
+  assert.equal(result?.snippets[0]?.content, "Brand facts")
+})
+
+test("ragflow provider aborts a dataset retrieval after the configured timeout", async () => {
+  datasets = [{ ...baseDataset }]
+  const previousTimeout = process.env.RAGFLOW_RETRIEVAL_TIMEOUT_MS
+  process.env.RAGFLOW_RETRIEVAL_TIMEOUT_MS = "1000"
+  const originalFetchImpl = global.fetch
+  global.fetch = (async (_input, init) => {
+    await new Promise<void>((resolve, reject) => {
+      const signal = init?.signal
+      if (signal?.aborted) return reject(new DOMException("aborted", "AbortError"))
+      signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true })
+    })
+    throw new Error("unexpected_fetch_completion")
+  }) as typeof fetch
+  try {
+    assert.equal(await ragflowKnowledgeProvider.retrieve({ enterpriseId: 7, query: "slow" }), null)
+  } finally {
+    global.fetch = originalFetchImpl
+    if (previousTimeout === undefined) delete process.env.RAGFLOW_RETRIEVAL_TIMEOUT_MS
+    else process.env.RAGFLOW_RETRIEVAL_TIMEOUT_MS = previousTimeout
+  }
+})
+
 test("ragflow provider uploadDocument triggers parse after upload", async () => {
   fetchQueue.push(
     {

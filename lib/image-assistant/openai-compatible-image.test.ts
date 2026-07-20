@@ -113,6 +113,18 @@ test("workflow image config derives gpt-image-2 quality from resolution when uns
   assert.equal(normalized.imageQuality, "low")
 })
 
+test("workflow image config derives a provider-safe gpt-image-2 size from 2K resolution", () => {
+  const normalized = normalizeWorkflowImageConfig({
+    selectedProviderId: "pptoken",
+    selectedModelId: "gpt-image-2",
+    resolution: "2K",
+    sizePreset: "1:1",
+    imageSize: "auto",
+  })
+
+  assert.equal(normalized.imageSize, "2048x2048")
+})
+
 test("workflow image config upgrades legacy square size when switching to seedream", () => {
   const normalized = normalizeWorkflowImageConfig({
     selectedProviderId: "runninghub",

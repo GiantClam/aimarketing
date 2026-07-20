@@ -21,7 +21,7 @@ export async function executeCapability(input: CapabilityExecutionRequest) {
   if (model.capability !== input.capability) {
     throw new Error("capability_model_mismatch")
   }
-  const adapter = getProviderAdapter(model.provider)
+  const adapter = getProviderAdapter(model.provider, model.capability)
   if (!adapter) {
     throw new Error("capability_provider_adapter_not_found")
   }

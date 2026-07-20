@@ -1,4 +1,4 @@
-export type PptWorkerRuntimeProfile = "local-dev" | "railway-linux"
+export type PptWorkerRuntimeProfile = "local-dev" | "cloudflare-linux" | "railway-linux"
 
 export type PptWorkerScenario = "marketing-campaign" | "product-launch" | "sales-deck" | "training"
 export type PptWorkerLanguage = "zh-CN" | "en-US"

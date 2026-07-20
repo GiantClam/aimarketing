@@ -240,6 +240,21 @@ test("template recommendation message includes a hidden template context marker"
   })
 })
 
+test("template recommendation message reports one template when the editable flow is single-template", () => {
+  const message = buildPptTemplateRecommendationMessage({
+    recommendedTemplates: [
+      { rank: 1, templateId: "ppt169_glassmorphism_demo", templateLabel: "Glassmorphism Demo", styleName: "Glassmorphism SaaS" },
+    ],
+    isZh: true,
+  })
+
+  assert.match(message || "", /已为这次需求推荐 1 个模板：/)
+  assert.doesNotMatch(message || "", /推荐 4 个模板/u)
+  assert.deepEqual(extractLatestPptTemplateRecommendationContext(message)?.templateIds, [
+    "ppt169_glassmorphism_demo",
+  ])
+})
+
 test("template recommendation marker can be extracted and stripped for persisted message rendering", () => {
   const message = buildPptTemplateRecommendationMessage({
     recommendedTemplates: [
@@ -300,7 +315,7 @@ test("template recommendation message blocks collapse to the latest generated bl
   ].join("\n\n")
   const collapsed = collapsePptTemplateRecommendationMessageBlocks(content)
 
-  assert.equal((collapsed.match(/已为这次需求推荐 4 个模板：/g) || []).length, 1)
+  assert.equal((collapsed.match(/已为这次需求推荐 2 个模板：/g) || []).length, 1)
   assert.match(collapsed, /苍桌纪要 \(cangzhuo\)/)
   assert.doesNotMatch(collapsed, /AI 运维 \(ai-ops\)/)
 })

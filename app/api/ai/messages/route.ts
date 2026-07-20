@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
 import { listAiEntryMessages } from "@/lib/ai-entry/repository"
-import { shouldLockConsultingAdvisorModel } from "@/lib/ai-entry/model-policy"
+import { isConsultingAdvisorEntryMode } from "@/lib/ai-entry/model-policy"
 
 function parseLimit(input: string | null, fallback: number) {
   const parsed = Number.parseInt(input || "", 10)
@@ -25,9 +25,7 @@ export async function GET(request: NextRequest) {
   const conversationId = searchParams.get("conversation_id")?.trim() || ""
   const limit = parseLimit(searchParams.get("limit"), 200)
   const agentId = parseAgentId(searchParams.get("agent"))
-  const conversationScope = shouldLockConsultingAdvisorModel({
-    entryMode: searchParams.get("entryMode"),
-  })
+  const conversationScope = isConsultingAdvisorEntryMode(searchParams.get("entryMode"))
     ? "consulting"
     : "chat"
 

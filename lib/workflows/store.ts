@@ -4,9 +4,14 @@ import { db } from "@/lib/db"
 import { createRetryableDbErrorMatcher, withDbRetry } from "@/lib/db/retry"
 import {
   platformWorkflowEdges,
+  platformWorkflowIterations,
+  platformWorkflowNodeAttempts,
   platformWorkflowNodeExecutions,
   platformWorkflowNodes,
+  platformWorkflowRevisions,
+  platformWorkflowRunSnapshots,
   platformWorkflows,
+  platformTaskRuns,
 } from "@/lib/db/schema"
 import { ensureEnterpriseAuthTables } from "@/lib/enterprise/server"
 import { disableCustomAgentsLinkedToWorkflow } from "@/lib/platform/custom-agents"
@@ -24,6 +29,11 @@ import {
   type WorkflowNodeType,
 } from "@/lib/workflows/schema"
 import { reconcileWorkflowTemplateNodeConfig } from "@/lib/workflows/template-definitions"
+import {
+  migrateWorkflowDefinitionToCurrent,
+  type LegacyWorkflowDefinition,
+} from "@/lib/workflows/workflow-definition-migrations"
+import type { WorkflowDefinitionEnvelopeV2 } from "@/lib/workflows/workflow-definition-v2"
 
 export type WorkflowDefinitionStatus = "draft" | "live" | "archived"
 export type WorkflowDefinitionTriggerType = "manual"
@@ -46,6 +56,9 @@ export type WorkflowDefinition = {
   metadata: Record<string, unknown> | null
   createdAt: Date
   updatedAt: Date
+  schemaVersion?: 1 | 2
+  revision?: number
+  definitionHash?: string
   nodes: WorkflowDefinitionNode[]
   edges: WorkflowDefinitionEdge[]
 }
@@ -72,6 +85,8 @@ export type UpdateWorkflowDefinitionInput = {
   metadata?: Record<string, unknown> | null
   nodes?: WorkflowDefinitionNode[]
   edges?: WorkflowDefinitionEdge[]
+  expectedRevision?: number
+  definition?: Omit<WorkflowDefinitionEnvelopeV2, "revision" | "definitionHash">
 }
 
 export type WorkflowStore = {
@@ -79,7 +94,7 @@ export type WorkflowStore = {
   listWorkflowDefinitionsForEnterprise(enterpriseId: number): Promise<WorkflowDefinition[]>
   getWorkflowDefinition(workflowId: number, enterpriseId: number): Promise<WorkflowDefinition | null>
   updateWorkflowDefinition(input: UpdateWorkflowDefinitionInput): Promise<WorkflowDefinition>
-  deleteWorkflowDefinition(workflowId: number, enterpriseId: number): Promise<void>
+  deleteWorkflowDefinition(workflowId: number, enterpriseId: number): Promise<{ archived: boolean }>
 }
 
 export type CreateInMemoryWorkflowStoreOptions = {
@@ -90,6 +105,10 @@ export type WorkflowRunDetail = {
   run: HydratedPlatformTaskRun
   workflow: WorkflowDefinition
   nodeExecutions: WorkflowNodeExecutionRecord[]
+  /** Immutable definition and M3 progress records captured for this run. */
+  snapshot?: typeof platformWorkflowRunSnapshots.$inferSelect | null
+  iterations?: Array<typeof platformWorkflowIterations.$inferSelect>
+  attempts?: Array<typeof platformWorkflowNodeAttempts.$inferSelect>
 }
 
 export type WorkflowRunStatusDetail = {
@@ -201,11 +220,17 @@ function migrateLegacyTextStoreConnections(input: {
     nextEdges.push({
       sourceNodeKey: edge.sourceNodeKey,
       targetNodeKey: fileNodeKey,
+      edgeKey: edge.edgeKey ? `${edge.edgeKey}:file` : undefined,
+      sourcePortId: edge.sourcePortId ?? "text",
+      targetPortId: "text",
       inputName: "text",
     })
     nextEdges.push({
       sourceNodeKey: fileNodeKey,
       targetNodeKey: edge.targetNodeKey,
+      edgeKey: edge.edgeKey ? `${edge.edgeKey}:assets` : undefined,
+      sourcePortId: "asset",
+      targetPortId: "assets",
       inputName: "assets",
     })
   }
@@ -317,9 +342,19 @@ export async function ensureWorkflowTables() {
             trigger_type VARCHAR(24) NOT NULL DEFAULT 'manual',
             description TEXT,
             metadata JSONB,
+            schema_version INTEGER NOT NULL DEFAULT 1,
+            current_revision INTEGER NOT NULL DEFAULT 1,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
           )
+        `),
+      )
+      await withWorkflowDbRetry("ensure-platform-workflows-v2-columns", async () =>
+        db.execute(sql`
+          ALTER TABLE "AI_MARKETING_platform_workflows"
+          ADD COLUMN IF NOT EXISTS schema_version INTEGER NOT NULL DEFAULT 1;
+          ALTER TABLE "AI_MARKETING_platform_workflows"
+          ADD COLUMN IF NOT EXISTS current_revision INTEGER NOT NULL DEFAULT 1
         `),
       )
 
@@ -334,10 +369,14 @@ export async function ensureWorkflowTables() {
             position_x INTEGER NOT NULL DEFAULT 0,
             position_y INTEGER NOT NULL DEFAULT 0,
             config JSONB NOT NULL DEFAULT '{}'::jsonb,
+            node_version INTEGER NOT NULL DEFAULT 1,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
           )
         `),
+      )
+      await withWorkflowDbRetry("ensure-platform-workflow-nodes-v2-columns", async () =>
+        db.execute(sql`ALTER TABLE "AI_MARKETING_platform_workflow_nodes" ADD COLUMN IF NOT EXISTS node_version INTEGER NOT NULL DEFAULT 1`),
       )
 
       await withWorkflowDbRetry("ensure-platform-workflow-edges-table", async () =>
@@ -348,8 +387,54 @@ export async function ensureWorkflowTables() {
             source_node_key VARCHAR(120) NOT NULL,
             target_node_key VARCHAR(120) NOT NULL,
             input_name VARCHAR(80),
+            edge_key VARCHAR(180),
+            source_port_id VARCHAR(120),
+            target_port_id VARCHAR(120),
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
           )
+        `),
+      )
+      await withWorkflowDbRetry("ensure-platform-workflow-edges-v2-columns", async () =>
+        db.execute(sql`
+          ALTER TABLE "AI_MARKETING_platform_workflow_edges" ADD COLUMN IF NOT EXISTS edge_key VARCHAR(180);
+          ALTER TABLE "AI_MARKETING_platform_workflow_edges" ADD COLUMN IF NOT EXISTS source_port_id VARCHAR(120);
+          ALTER TABLE "AI_MARKETING_platform_workflow_edges" ADD COLUMN IF NOT EXISTS target_port_id VARCHAR(120)
+        `),
+      )
+      await withWorkflowDbRetry("ensure-platform-workflow-revisions-table", async () =>
+        db.execute(sql`
+          CREATE TABLE IF NOT EXISTS "AI_MARKETING_platform_workflow_revisions" (
+            id SERIAL PRIMARY KEY,
+            workflow_id INTEGER NOT NULL REFERENCES "AI_MARKETING_platform_workflows"(id) ON DELETE RESTRICT,
+            revision INTEGER NOT NULL,
+            schema_version INTEGER NOT NULL,
+            definition_hash VARCHAR(64) NOT NULL,
+            definition JSONB NOT NULL,
+            created_by_user_id INTEGER NOT NULL REFERENCES "AI_MARKETING_users"(id),
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT "AI_MARKETING_platform_workflow_revisions_workflow_revision_unique" UNIQUE(workflow_id, revision)
+          )
+        `),
+      )
+      await withWorkflowDbRetry("ensure-platform-workflow-run-snapshots-table", async () =>
+        db.execute(sql`
+          CREATE TABLE IF NOT EXISTS "AI_MARKETING_platform_workflow_run_snapshots" (
+            task_run_id INTEGER PRIMARY KEY REFERENCES "AI_MARKETING_platform_task_runs"(id) ON DELETE CASCADE,
+            workflow_id INTEGER NOT NULL REFERENCES "AI_MARKETING_platform_workflows"(id) ON DELETE RESTRICT,
+            revision_id INTEGER NOT NULL REFERENCES "AI_MARKETING_platform_workflow_revisions"(id) ON DELETE RESTRICT,
+            definition_hash VARCHAR(64) NOT NULL,
+            definition JSONB NOT NULL,
+            request_id VARCHAR(64) NOT NULL,
+            cancel_requested_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT "AI_MARKETING_platform_workflow_run_snapshots_workflow_request_unique" UNIQUE(workflow_id, request_id)
+          )
+        `),
+      )
+      await withWorkflowDbRetry("ensure-platform-workflow-run-snapshots-index", async () =>
+        db.execute(sql`
+          CREATE INDEX IF NOT EXISTS "AI_MARKETING_platform_workflow_run_snapshots_workflow_idx"
+          ON "AI_MARKETING_platform_workflow_run_snapshots"(workflow_id, created_at DESC)
         `),
       )
 
@@ -547,11 +632,78 @@ function normalizeWorkflowEdges(edges: WorkflowDefinitionEdge[] | undefined, nod
     }
 
     return {
+      edgeKey: normalizeOptionalText(edge.edgeKey ?? null, 180) ?? undefined,
       sourceNodeKey,
+      sourcePortId: normalizeOptionalText(edge.sourcePortId ?? null, 120),
       targetNodeKey,
+      targetPortId: normalizeOptionalText(edge.targetPortId ?? null, 120),
       inputName,
     }
   })
+}
+
+type WorkflowRevisionSnapshotV2 = {
+  workflowId: number
+  title: string
+  description: string | null
+  status: WorkflowDefinitionStatus
+  triggerType: WorkflowDefinitionTriggerType
+  metadata: Record<string, unknown> | null
+  definition: WorkflowDefinitionEnvelopeV2
+}
+
+function buildWorkflowRevisionSnapshot(input: {
+  workflowId: number
+  revision: number
+  title: string
+  description: string | null
+  status: WorkflowDefinitionStatus
+  triggerType: WorkflowDefinitionTriggerType
+  metadata: Record<string, unknown> | null
+  nodes: WorkflowDefinitionNode[]
+  edges: WorkflowDefinitionEdge[]
+}): WorkflowRevisionSnapshotV2 {
+  const migrated = migrateWorkflowDefinitionToCurrent({
+    schemaVersion: 1,
+    revision: input.revision,
+    nodes: input.nodes,
+    edges: input.edges,
+  } as LegacyWorkflowDefinition)
+  // A v2 edge is authoritative once all semantic identifiers are present.
+  // Re-running the v1 port inference here would silently turn distinct ports
+  // (for example image.reference vs image.first_frame) into the first matching
+  // legacy port.  Legacy/incomplete edges still use the migration fallback.
+  const hasCompleteSemanticEdges = input.edges.every(
+    (edge) =>
+      typeof edge.edgeKey === "string" &&
+      typeof edge.sourcePortId === "string" &&
+      typeof edge.targetPortId === "string",
+  )
+  const definition = hasCompleteSemanticEdges
+    ? migrateWorkflowDefinitionToCurrent({
+        schemaVersion: 2,
+        revision: input.revision,
+        definitionHash: "",
+        nodes: migrated.nodes,
+        edges: input.edges.map((edge) => ({
+          edgeKey: edge.edgeKey as string,
+          sourceNodeKey: edge.sourceNodeKey,
+          sourcePortId: edge.sourcePortId as string,
+          targetNodeKey: edge.targetNodeKey,
+          targetPortId: edge.targetPortId as string,
+          inputName: edge.inputName ?? null,
+        })),
+      })
+    : migrated
+  return {
+    workflowId: input.workflowId,
+    title: input.title,
+    description: input.description,
+    status: input.status,
+    triggerType: input.triggerType,
+    metadata: input.metadata,
+    definition,
+  }
 }
 
 function toWorkflowDefinition(
@@ -582,10 +734,25 @@ function toWorkflowDefinition(
       }
     }),
     edges: edges.map((edge) => ({
+      edgeKey: edge.edgeKey ?? undefined,
       sourceNodeKey: edge.sourceNodeKey,
+      sourcePortId: edge.sourcePortId ?? null,
       targetNodeKey: edge.targetNodeKey,
+      targetPortId: edge.targetPortId ?? null,
       inputName: edge.inputName ?? null,
     })),
+  })
+  const revision = Number.isInteger(workflow.currentRevision) && workflow.currentRevision > 0 ? workflow.currentRevision : 1
+  const snapshot = buildWorkflowRevisionSnapshot({
+    workflowId: workflow.id,
+    revision,
+    title: workflow.title,
+    description: workflow.description ?? null,
+    status: normalizeStatus(workflow.status as WorkflowDefinitionStatus),
+    triggerType: normalizeTriggerType(workflow.triggerType as WorkflowDefinitionTriggerType),
+    metadata: workflow.metadata ?? null,
+    nodes: migrated.nodes,
+    edges: migrated.edges,
   })
 
   return {
@@ -600,6 +767,9 @@ function toWorkflowDefinition(
     metadata: workflow.metadata ?? null,
     createdAt: workflow.createdAt,
     updatedAt: workflow.updatedAt,
+    schemaVersion: workflow.schemaVersion === 2 ? 2 : 1,
+    revision,
+    definitionHash: snapshot.definition.definitionHash,
     nodes: migrated.nodes,
     edges: migrated.edges,
   }
@@ -616,8 +786,17 @@ function areWorkflowNodeDefinitionsEqual(left: WorkflowDefinitionNode, right: Wo
   )
 }
 
-function getWorkflowEdgeSignature(edge: Pick<WorkflowDefinitionEdge, "sourceNodeKey" | "targetNodeKey" | "inputName">) {
-  return JSON.stringify([edge.sourceNodeKey, edge.targetNodeKey, edge.inputName ?? null])
+function getWorkflowEdgeSignature(
+  edge: Pick<WorkflowDefinitionEdge, "edgeKey" | "sourceNodeKey" | "sourcePortId" | "targetNodeKey" | "targetPortId" | "inputName">,
+) {
+  return JSON.stringify([
+    edge.sourceNodeKey,
+    edge.sourcePortId ?? null,
+    edge.targetNodeKey,
+    edge.targetPortId ?? null,
+    edge.inputName ?? null,
+    edge.edgeKey ?? null,
+  ])
 }
 
 function countWorkflowEdgesBySignature(edges: WorkflowDefinitionEdge[]) {
@@ -734,6 +913,8 @@ const dbWorkflowStore: WorkflowStore = {
           triggerType: normalizeTriggerType(input.triggerType),
           description,
           metadata: input.metadata ?? null,
+          schemaVersion: 2,
+          currentRevision: 1,
           createdAt: now,
           updatedAt: now,
         })
@@ -757,15 +938,39 @@ const dbWorkflowStore: WorkflowStore = {
 
       if (edges.length > 0) {
         await tx.insert(platformWorkflowEdges).values(
-          edges.map((edge) => ({
+          edges.map((edge, index) => ({
             workflowId: workflow.id,
             sourceNodeKey: edge.sourceNodeKey,
             targetNodeKey: edge.targetNodeKey,
             inputName: edge.inputName ?? null,
+            edgeKey: edge.edgeKey ?? `legacy:${edge.sourceNodeKey}:${edge.targetNodeKey}:${edge.inputName ?? "input"}:${index}`,
+            sourcePortId: edge.sourcePortId ?? (edge.inputName === "text" ? "text" : edge.inputName === "assets" ? "asset" : "output"),
+            targetPortId: edge.targetPortId ?? (edge.inputName === "text" ? "text" : edge.inputName === "assets" ? "assets" : "input"),
             createdAt: now,
           })),
         )
       }
+
+      const snapshot = buildWorkflowRevisionSnapshot({
+        workflowId: workflow.id,
+        revision: 1,
+        title,
+        description,
+        status: normalizeStatus(input.status),
+        triggerType: normalizeTriggerType(input.triggerType),
+        metadata: input.metadata ?? null,
+        nodes,
+        edges,
+      })
+      await tx.insert(platformWorkflowRevisions).values({
+        workflowId: workflow.id,
+        revision: 1,
+        schemaVersion: 2,
+        definitionHash: snapshot.definition.definitionHash,
+        definition: snapshot,
+        createdByUserId: input.ownerUserId,
+        createdAt: now,
+      })
 
       return workflow.id
     })
@@ -806,12 +1011,40 @@ const dbWorkflowStore: WorkflowStore = {
       throw new Error("workflow_definition_not_found")
     }
 
+    if (input.definition && (input.nodes !== undefined || input.edges !== undefined)) {
+      throw new Error("ambiguous_workflow_definition_payload")
+    }
+    let definitionNodes = input.nodes ?? existing.nodes
+    let definitionEdges = input.edges ?? existing.edges
+    if (input.definition) {
+      const migrated = migrateWorkflowDefinitionToCurrent({
+        ...input.definition,
+        revision: existing.revision,
+        definitionHash: "",
+      } as WorkflowDefinitionEnvelopeV2)
+      definitionNodes = migrated.nodes.map((node) => ({
+        nodeKey: node.nodeKey,
+        type: node.type as WorkflowNodeType,
+        title: node.title,
+        positionX: node.positionX,
+        positionY: node.positionY,
+        config: node.config,
+      }))
+      definitionEdges = migrated.edges.map((edge) => ({
+        edgeKey: edge.edgeKey,
+        sourceNodeKey: edge.sourceNodeKey,
+        sourcePortId: edge.sourcePortId,
+        targetNodeKey: edge.targetNodeKey,
+        targetPortId: edge.targetPortId,
+        inputName: edge.inputName ?? null,
+      }))
+    }
     const title = normalizeTitle(input.title ?? existing.title, existing.title)
     const description =
       input.description !== undefined ? normalizeOptionalText(input.description, 10_000) : existing.description
-    const normalizedNodes = normalizeWorkflowNodes(input.nodes ?? existing.nodes)
+    const normalizedNodes = normalizeWorkflowNodes(definitionNodes)
     const normalizedNodeKeys = new Set(normalizedNodes.map((node) => node.nodeKey))
-    const normalizedEdges = normalizeWorkflowEdges(input.edges ?? existing.edges, normalizedNodeKeys)
+    const normalizedEdges = normalizeWorkflowEdges(definitionEdges, normalizedNodeKeys)
     const { nodes, edges } = migrateLegacyTextStoreConnections({
       nodes: normalizedNodes,
       edges: normalizedEdges,
@@ -850,6 +1083,17 @@ const dbWorkflowStore: WorkflowStore = {
     }
 
     const edgesToInsert = edges.filter((edge) => edgeSignaturesToRewrite.has(getWorkflowEdgeSignature(edge)))
+    const nextDefinitionSnapshot = buildWorkflowRevisionSnapshot({
+      workflowId: input.workflowId,
+      revision: (existing.revision ?? 1) + 1,
+      title,
+      description,
+      status,
+      triggerType,
+      metadata: metadata ?? null,
+      nodes,
+      edges,
+    })
     const definitionChanged =
       title !== existing.title ||
       description !== existing.description ||
@@ -857,16 +1101,30 @@ const dbWorkflowStore: WorkflowStore = {
       triggerType !== existing.triggerType ||
       slug !== existing.slug ||
       JSON.stringify(metadata) !== JSON.stringify(existing.metadata) ||
-      nodeKeysToDelete.length > 0 ||
-      nodesToInsert.length > 0 ||
-      nodesToUpdate.length > 0 ||
-      edgeSignaturesToRewrite.size > 0
+      nextDefinitionSnapshot.definition.definitionHash !== (existing.definitionHash ?? "")
 
     if (!definitionChanged) {
       return existing
     }
 
+    let committedRevision = existing.revision ?? 1
     await db.transaction(async (tx) => {
+      const currentRows = await tx
+        .select({ currentRevision: platformWorkflows.currentRevision })
+        .from(platformWorkflows)
+        .where(and(eq(platformWorkflows.id, input.workflowId), eq(platformWorkflows.enterpriseId, input.enterpriseId)))
+        .limit(1)
+      const currentRevision = currentRows[0]?.currentRevision ?? existing.revision
+      if (input.expectedRevision !== undefined && input.expectedRevision !== currentRevision) {
+        const conflict = new Error("workflow_revision_conflict") as Error & {
+          expectedRevision?: number
+          currentRevision?: number
+        }
+        conflict.expectedRevision = input.expectedRevision
+        conflict.currentRevision = currentRevision
+        throw conflict
+      }
+      committedRevision = currentRevision + 1
       await tx
         .update(platformWorkflows)
         .set({
@@ -876,6 +1134,8 @@ const dbWorkflowStore: WorkflowStore = {
           triggerType,
           description,
           metadata,
+          schemaVersion: 2,
+          currentRevision: committedRevision,
           updatedAt: now,
         })
         .where(and(eq(platformWorkflows.id, input.workflowId), eq(platformWorkflows.enterpriseId, input.enterpriseId)))
@@ -934,15 +1194,39 @@ const dbWorkflowStore: WorkflowStore = {
 
       if (edgesToInsert.length > 0) {
         await tx.insert(platformWorkflowEdges).values(
-          edgesToInsert.map((edge) => ({
+          edgesToInsert.map((edge, index) => ({
             workflowId: input.workflowId,
             sourceNodeKey: edge.sourceNodeKey,
             targetNodeKey: edge.targetNodeKey,
             inputName: edge.inputName ?? null,
+            edgeKey: edge.edgeKey ?? `legacy:${edge.sourceNodeKey}:${edge.targetNodeKey}:${edge.inputName ?? "input"}:${index}`,
+            sourcePortId: edge.sourcePortId ?? (edge.inputName === "text" ? "text" : edge.inputName === "assets" ? "asset" : "output"),
+            targetPortId: edge.targetPortId ?? (edge.inputName === "text" ? "text" : edge.inputName === "assets" ? "assets" : "input"),
             createdAt: now,
           })),
         )
       }
+
+      const snapshot = buildWorkflowRevisionSnapshot({
+        workflowId: input.workflowId,
+        revision: committedRevision,
+        title,
+        description,
+        status,
+        triggerType,
+        metadata: metadata ?? null,
+        nodes,
+        edges,
+      })
+      await tx.insert(platformWorkflowRevisions).values({
+        workflowId: input.workflowId,
+        revision: committedRevision,
+        schemaVersion: 2,
+        definitionHash: snapshot.definition.definitionHash,
+        definition: snapshot,
+        createdByUserId: existing.ownerUserId,
+        createdAt: now,
+      })
     })
 
     if (status === "archived" && existing.status !== "archived") {
@@ -961,6 +1245,19 @@ const dbWorkflowStore: WorkflowStore = {
       description,
       metadata: metadata ?? null,
       updatedAt: now,
+      schemaVersion: 2,
+      revision: committedRevision,
+      definitionHash: buildWorkflowRevisionSnapshot({
+        workflowId: input.workflowId,
+        revision: committedRevision,
+        title,
+        description,
+        status,
+        triggerType,
+        metadata: metadata ?? null,
+        nodes,
+        edges,
+      }).definition.definitionHash,
       nodes,
       edges,
     }
@@ -974,16 +1271,65 @@ const dbWorkflowStore: WorkflowStore = {
       throw new Error("workflow_definition_not_found")
     }
 
-    await disableCustomAgentsLinkedToWorkflow({
-      workflowId,
-      enterpriseId,
+    const archived = await withWorkflowDbRetry("workflow-store.has-workflow-history", async () => {
+      const result = await db.execute(sql`
+        SELECT EXISTS (
+          SELECT 1
+          FROM "AI_MARKETING_platform_workflow_run_snapshots" snapshots
+          WHERE snapshots.workflow_id = ${workflowId}
+          UNION ALL
+          SELECT 1
+          FROM "AI_MARKETING_platform_workflow_revisions" revisions
+          WHERE revisions.workflow_id = ${workflowId}
+        ) AS has_history
+      `)
+      const row = Array.isArray((result as { rows?: unknown[] }).rows)
+        ? (result as { rows: Array<Record<string, unknown>> }).rows[0]
+        : null
+      return row?.has_history === true || row?.has_history === "true"
     })
+
+    if (archived) {
+      const now = new Date()
+      const revision = (existing.revision ?? 1) + 1
+      const snapshot = buildWorkflowRevisionSnapshot({
+        workflowId,
+        revision,
+        title: existing.title,
+        description: existing.description,
+        status: "archived",
+        triggerType: existing.triggerType,
+        metadata: existing.metadata,
+        nodes: existing.nodes,
+        edges: existing.edges,
+      })
+      await db.transaction(async (tx) => {
+        await tx
+          .update(platformWorkflows)
+          .set({ status: "archived", schemaVersion: 2, currentRevision: revision, updatedAt: now })
+          .where(and(eq(platformWorkflows.id, workflowId), eq(platformWorkflows.enterpriseId, enterpriseId)))
+        await tx.insert(platformWorkflowRevisions).values({
+          workflowId,
+          revision,
+          schemaVersion: 2,
+          definitionHash: snapshot.definition.definitionHash,
+          definition: snapshot,
+          createdByUserId: existing.ownerUserId,
+          createdAt: now,
+        })
+      })
+      await disableCustomAgentsLinkedToWorkflow({ workflowId, enterpriseId })
+      return { archived: true }
+    }
+
+    await disableCustomAgentsLinkedToWorkflow({ workflowId, enterpriseId })
 
     await withWorkflowDbRetry("workflow-store.delete-workflow", async () =>
       db
         .delete(platformWorkflows)
         .where(and(eq(platformWorkflows.id, workflowId), eq(platformWorkflows.enterpriseId, enterpriseId))),
     )
+    return { archived: false }
   },
 }
 
@@ -1033,6 +1379,17 @@ export function createInMemoryWorkflowStore(options: CreateInMemoryWorkflowStore
       }
 
       const now = new Date()
+      const revisionSnapshot = buildWorkflowRevisionSnapshot({
+        workflowId: nextWorkflowId,
+        revision: 1,
+        title,
+        description: normalizeOptionalText(input.description, 10_000),
+        status: normalizeStatus(input.status),
+        triggerType: normalizeTriggerType(input.triggerType),
+        metadata: input.metadata ?? null,
+        nodes,
+        edges,
+      })
       const workflow: WorkflowDefinition = {
         id: nextWorkflowId,
         enterpriseId: input.enterpriseId,
@@ -1045,6 +1402,9 @@ export function createInMemoryWorkflowStore(options: CreateInMemoryWorkflowStore
         metadata: input.metadata ?? null,
         createdAt: now,
         updatedAt: now,
+        schemaVersion: 2,
+        revision: 1,
+        definitionHash: revisionSnapshot.definition.definitionHash,
         nodes,
         edges,
       }
@@ -1073,15 +1433,80 @@ export function createInMemoryWorkflowStore(options: CreateInMemoryWorkflowStore
         throw new Error("workflow_definition_not_found")
       }
 
+      if (input.definition && (input.nodes !== undefined || input.edges !== undefined)) {
+        throw new Error("ambiguous_workflow_definition_payload")
+      }
+      let definitionNodes = input.nodes ?? existing.nodes
+      let definitionEdges = input.edges ?? existing.edges
+      if (input.definition) {
+        const migrated = migrateWorkflowDefinitionToCurrent({
+          ...input.definition,
+          revision: existing.revision ?? 1,
+          definitionHash: "",
+        } as WorkflowDefinitionEnvelopeV2)
+        definitionNodes = migrated.nodes.map((node) => ({
+          nodeKey: node.nodeKey,
+          type: node.type as WorkflowNodeType,
+          title: node.title,
+          positionX: node.positionX,
+          positionY: node.positionY,
+          config: node.config,
+        }))
+      definitionEdges = migrated.edges.map((edge) => ({
+        edgeKey: edge.edgeKey,
+        sourceNodeKey: edge.sourceNodeKey,
+        sourcePortId: edge.sourcePortId,
+        targetNodeKey: edge.targetNodeKey,
+        targetPortId: edge.targetPortId,
+        inputName: edge.inputName ?? null,
+      }))
+      }
       const title = normalizeTitle(input.title ?? existing.title, existing.title)
-      const normalizedNodes = normalizeWorkflowNodes(input.nodes ?? existing.nodes)
+      const normalizedNodes = normalizeWorkflowNodes(definitionNodes)
       const normalizedNodeKeys = new Set(normalizedNodes.map((node) => node.nodeKey))
-      const normalizedEdges = normalizeWorkflowEdges(input.edges ?? existing.edges, normalizedNodeKeys)
+      const normalizedEdges = normalizeWorkflowEdges(definitionEdges, normalizedNodeKeys)
       const { nodes, edges } = migrateLegacyTextStoreConnections({
         nodes: normalizedNodes,
         edges: normalizedEdges,
       })
       const status = normalizeStatus(input.status ?? existing.status)
+      const triggerType = normalizeTriggerType(input.triggerType ?? existing.triggerType)
+      const description = input.description !== undefined ? normalizeOptionalText(input.description, 10_000) : existing.description
+      const metadata = input.metadata !== undefined ? input.metadata : existing.metadata
+      const nextRevision = (existing.revision ?? 1) + 1
+      if (input.expectedRevision !== undefined && input.expectedRevision !== (existing.revision ?? 1)) {
+        const conflict = new Error("workflow_revision_conflict") as Error & { expectedRevision?: number; currentRevision?: number }
+        conflict.expectedRevision = input.expectedRevision
+        conflict.currentRevision = existing.revision ?? 1
+        throw conflict
+      }
+      const nextSnapshot = buildWorkflowRevisionSnapshot({
+        workflowId: existing.id,
+        revision: nextRevision,
+        title,
+        description,
+        status,
+        triggerType,
+        metadata: metadata ?? null,
+        nodes,
+        edges,
+      })
+      const currentSnapshot = buildWorkflowRevisionSnapshot({
+        workflowId: existing.id,
+        revision: existing.revision ?? 1,
+        title: existing.title,
+        description: existing.description,
+        status: existing.status,
+        triggerType: existing.triggerType,
+        metadata: existing.metadata,
+        nodes: existing.nodes,
+        edges: existing.edges,
+      })
+      if (nextSnapshot.definition.definitionHash === currentSnapshot.definition.definitionHash &&
+          title === existing.title && description === existing.description && status === existing.status &&
+          triggerType === existing.triggerType && JSON.stringify(metadata) === JSON.stringify(existing.metadata)) {
+        return cloneWorkflow(existing)
+      }
       const now = new Date()
       const workflow: WorkflowDefinition = {
         ...existing,
@@ -1091,10 +1516,13 @@ export function createInMemoryWorkflowStore(options: CreateInMemoryWorkflowStore
             ? existing.slug
             : `${normalizeSlug(title)}-${input.workflowId}`.slice(0, 160),
         status,
-        triggerType: normalizeTriggerType(input.triggerType ?? existing.triggerType),
-        description: input.description !== undefined ? normalizeOptionalText(input.description, 10_000) : existing.description,
-        metadata: input.metadata !== undefined ? input.metadata : existing.metadata,
+        triggerType,
+        description,
+        metadata,
         updatedAt: now,
+        schemaVersion: 2,
+        revision: nextRevision,
+        definitionHash: nextSnapshot.definition.definitionHash,
         nodes,
         edges,
       }
@@ -1115,6 +1543,7 @@ export function createInMemoryWorkflowStore(options: CreateInMemoryWorkflowStore
         throw new Error("workflow_definition_not_found")
       }
       workflows.delete(workflowId)
+      return { archived: false }
     },
   }
 }
@@ -1305,6 +1734,50 @@ export async function resetWorkflowNodeExecutions(runId: number, nodeKeys: strin
   )
 }
 
+/** Atomically claim a terminal run for retry before clearing its node rows. */
+export async function claimWorkflowRunForRetry(input: {
+  runId: number
+  nodeKeys: string[]
+  normalizedResult: Record<string, unknown>
+  /** Iteration-only retries may recover a failed item inside an otherwise
+   * successful `failurePolicy=continue` run. Node/branch retries remain
+   * restricted to terminal failed/cancelled runs. */
+  allowSucceeded?: boolean
+}) {
+  await ensureWorkflowTables()
+  const normalizedNodeKeys = [...new Set(input.nodeKeys.map((nodeKey) => normalizeNodeKey(nodeKey, 0)))]
+  return db.transaction(async (tx) => {
+    const [run] = await tx
+      .update(platformTaskRuns)
+      .set({ status: "queued", startedAt: null, finishedAt: null, normalizedResult: input.normalizedResult, updatedAt: new Date() })
+      .where(and(
+        eq(platformTaskRuns.id, input.runId),
+        inArray(platformTaskRuns.status, input.allowSucceeded ? ["succeeded", "failed", "cancelled"] : ["failed", "cancelled"]),
+      ))
+      .returning()
+    if (!run) return false
+    if (normalizedNodeKeys.length > 0) {
+      await tx
+        .update(platformWorkflowNodeExecutions)
+        .set({
+          status: "queued",
+          providerId: null,
+          modelId: null,
+          taskRunId: null,
+          inputPayload: null,
+          outputPayload: null,
+          errorMessage: null,
+          creditsConsumed: 0,
+          startedAt: null,
+          finishedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(platformWorkflowNodeExecutions.runId, input.runId), inArray(platformWorkflowNodeExecutions.nodeKey, normalizedNodeKeys)))
+    }
+    return true
+  })
+}
+
 export async function failRunningWorkflowNodeExecutions(runId: number) {
   await ensureWorkflowTables()
   const now = new Date()
@@ -1357,7 +1830,16 @@ export async function getWorkflowRunDetail(runId: number, enterpriseId: number):
     return null
   }
 
-  const workflow = await getWorkflowDefinition(workflowId, enterpriseId)
+  const currentWorkflow = await getWorkflowDefinition(workflowId, enterpriseId)
+  if (!currentWorkflow) return null
+
+  // M3 runs are immutable: once a run snapshot exists, never hydrate the
+  // execution graph from the mutable current draft.  Legacy runs do not have
+  // a snapshot and intentionally retain the existing current-definition path.
+  const m3Records = await loadWorkflowRunM3Records(runId)
+  const workflow = m3Records.snapshot
+    ? workflowDefinitionFromRunSnapshot(currentWorkflow, m3Records.snapshot)
+    : currentWorkflow
   if (!workflow) return null
 
   const nodeExecutions = await listWorkflowNodeExecutions(runId)
@@ -1366,6 +1848,160 @@ export async function getWorkflowRunDetail(runId: number, enterpriseId: number):
     run: runWithNormalizedStatus,
     workflow,
     nodeExecutions: normalizeWorkflowNodeStatusesForRunningRun(runWithNormalizedStatus, nodeExecutions, workflow.edges),
+    ...(m3Records.snapshot ? { snapshot: m3Records.snapshot } : {}),
+    ...(m3Records.iterations ? { iterations: m3Records.iterations } : {}),
+    ...(m3Records.attempts ? { attempts: m3Records.attempts } : {}),
+  }
+}
+
+type WorkflowRunM3Records = {
+  snapshot: typeof platformWorkflowRunSnapshots.$inferSelect | null
+  iterations?: Array<typeof platformWorkflowIterations.$inferSelect>
+  attempts?: Array<typeof platformWorkflowNodeAttempts.$inferSelect>
+}
+
+/**
+ * Load records only when the M3 tables are present.  The explicit deployment
+ * migration remains the production path; the guarded queries keep old local
+ * databases and legacy runs readable during a rolling upgrade.
+ */
+async function loadWorkflowRunM3Records(runId: number): Promise<WorkflowRunM3Records> {
+  let snapshot: typeof platformWorkflowRunSnapshots.$inferSelect | null
+  try {
+    snapshot = (await db
+      .select()
+      .from(platformWorkflowRunSnapshots)
+      .where(eq(platformWorkflowRunSnapshots.taskRunId, runId))
+      .limit(1))[0] ?? null
+  } catch (error) {
+    console.warn("workflow.store.m3-snapshot-unavailable", {
+      runId,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return { snapshot: null }
+  }
+
+  if (!snapshot) return { snapshot: null }
+
+  const [iterations, attempts] = await Promise.all([
+    db
+      .select()
+      .from(platformWorkflowIterations)
+      .where(eq(platformWorkflowIterations.runId, runId))
+      .orderBy(asc(platformWorkflowIterations.iterationIndex), asc(platformWorkflowIterations.id))
+      .catch((error) => {
+        console.warn("workflow.store.m3-iterations-unavailable", {
+          runId,
+          message: error instanceof Error ? error.message : String(error),
+        })
+        return undefined
+      }),
+    db
+      .select({
+        attempt: platformWorkflowNodeAttempts,
+      })
+      .from(platformWorkflowNodeAttempts)
+      .innerJoin(
+        platformWorkflowNodeExecutions,
+        eq(platformWorkflowNodeAttempts.nodeExecutionId, platformWorkflowNodeExecutions.id),
+      )
+      .where(eq(platformWorkflowNodeExecutions.runId, runId))
+      .orderBy(asc(platformWorkflowNodeAttempts.nodeExecutionId), asc(platformWorkflowNodeAttempts.scopeKey), asc(platformWorkflowNodeAttempts.attemptNumber))
+      .then((rows) => rows.map((row) => row.attempt))
+      .catch((error) => {
+        console.warn("workflow.store.m3-attempts-unavailable", {
+          runId,
+          message: error instanceof Error ? error.message : String(error),
+        })
+        return undefined
+      }),
+  ])
+
+  return { snapshot, iterations, attempts }
+}
+
+/** Convert the persisted revision envelope into the public workflow shape. */
+export function workflowDefinitionFromRunSnapshot(
+  currentWorkflow: WorkflowDefinition,
+  snapshot: typeof platformWorkflowRunSnapshots.$inferSelect,
+): WorkflowDefinition | null {
+  const wrapper = snapshot.definition
+  if (!wrapper || typeof wrapper !== "object" || Array.isArray(wrapper)) return null
+  const definition = (wrapper as Record<string, unknown>).definition
+  if (!definition || typeof definition !== "object" || Array.isArray(definition)) return null
+  const value = definition as Record<string, unknown>
+  if (!Array.isArray(value.nodes) || !Array.isArray(value.edges)) return null
+
+  const nodes = value.nodes.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return []
+    const node = candidate as Record<string, unknown>
+    if (
+      typeof node.nodeKey !== "string" ||
+      typeof node.type !== "string" ||
+      !isWorkflowNodeType(node.type) ||
+      typeof node.title !== "string" ||
+      typeof node.positionX !== "number" ||
+      typeof node.positionY !== "number" ||
+      !node.config ||
+      typeof node.config !== "object" ||
+      Array.isArray(node.config)
+    ) return []
+    return [{
+      nodeKey: node.nodeKey,
+      type: node.type,
+      title: node.title,
+      positionX: node.positionX,
+      positionY: node.positionY,
+      config: node.config as Record<string, unknown>,
+    }]
+  })
+  if (nodes.length !== value.nodes.length) return null
+
+  const edges = value.edges.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return []
+    const edge = candidate as Record<string, unknown>
+    if (
+      typeof edge.edgeKey !== "string" ||
+      typeof edge.sourceNodeKey !== "string" ||
+      typeof edge.targetNodeKey !== "string" ||
+      typeof edge.sourcePortId !== "string" ||
+      typeof edge.targetPortId !== "string"
+    ) return []
+    return [{
+      edgeKey: edge.edgeKey,
+      sourceNodeKey: edge.sourceNodeKey,
+      sourcePortId: edge.sourcePortId,
+      targetNodeKey: edge.targetNodeKey,
+      targetPortId: edge.targetPortId,
+      inputName: typeof edge.inputName === "string" ? edge.inputName : null,
+    }]
+  })
+  if (edges.length !== value.edges.length) return null
+
+  const title = typeof wrapper.title === "string" ? wrapper.title : currentWorkflow.title
+  const description = typeof wrapper.description === "string" ? wrapper.description : null
+  const status = wrapper.status === "live" || wrapper.status === "archived" || wrapper.status === "draft"
+    ? wrapper.status
+    : currentWorkflow.status
+  const triggerType = wrapper.triggerType === "manual" ? "manual" : currentWorkflow.triggerType
+  const metadata = wrapper.metadata && typeof wrapper.metadata === "object" && !Array.isArray(wrapper.metadata)
+    ? wrapper.metadata as Record<string, unknown>
+    : null
+  const revision = typeof value.revision === "number" && Number.isInteger(value.revision) ? value.revision : snapshot.revisionId
+  const definitionHash = typeof value.definitionHash === "string" ? value.definitionHash : snapshot.definitionHash
+
+  return {
+    ...currentWorkflow,
+    title,
+    description,
+    status,
+    triggerType,
+    metadata,
+    schemaVersion: 2,
+    revision,
+    definitionHash,
+    nodes,
+    edges,
   }
 }
 
@@ -1373,6 +2009,10 @@ export function normalizeWorkflowRunStatusFromNodeExecutions(
   run: WorkflowRunStatusDetail["run"],
   nodeExecutions: WorkflowRunStatusDetail["nodeExecutions"],
 ) {
+  // Cancellation is a first-terminal-wins transition.  Node rows may still
+  // be queued/running while provider cancellation propagates, so never derive
+  // a cancellable run back to running/failed from stale node projections.
+  if (run.status === "cancel_requested" || run.status === "cancelled") return run
   if (nodeExecutions.length === 0) return run
 
   const hasFailedNode = nodeExecutions.some(
@@ -1453,10 +2093,15 @@ export async function getWorkflowRunStatusDetail(
         ? run.normalizedResult.workflowId
         : NaN,
   )
-  const workflow =
+  const currentWorkflow =
     Number.isInteger(workflowId) && workflowId > 0
       ? await getWorkflowDefinition(workflowId, enterpriseId)
       : null
+  const m3Records = await loadWorkflowRunM3Records(runId)
+  const workflow = m3Records.snapshot
+    ? (currentWorkflow ? workflowDefinitionFromRunSnapshot(currentWorkflow, m3Records.snapshot) : null)
+    : currentWorkflow
+  if (m3Records.snapshot && !workflow) return null
   const runWithNormalizedStatus = normalizeWorkflowRunStatusFromNodeExecutions(run, nodeExecutions)
 
   return {

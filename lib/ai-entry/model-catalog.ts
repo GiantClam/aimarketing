@@ -1,4 +1,5 @@
 import {
+  getConfiguredAiEntryProviderForModel,
   getConfiguredAiEntryProviders,
   type AiEntryProviderConfig,
   type AiEntryProviderId,
@@ -16,14 +17,15 @@ import {
 } from "@/lib/ai-entry/model-policy"
 
 const CACHE_TTL_MS = 30 * 60 * 1000
-const CATALOG_FILTER_CACHE_VERSION = "v8"
-const PRIORITY_PROVIDER_FAMILIES = ["anthropic", "openai", "deepseek", "gemini", "minimax"] as const
+const CATALOG_FILTER_CACHE_VERSION = "v9"
+const PRIORITY_PROVIDER_FAMILIES = ["anthropic", "openai", "deepseek", "gemini", "minimax", "xai"] as const
 const ALLOWED_PROVIDER_FAMILIES = [
   "anthropic",
   "openai",
   "deepseek",
   "gemini",
   "minimax",
+  "xai",
 ] as const
 const ALLOWED_PROVIDER_FAMILY_SET = new Set<string>(ALLOWED_PROVIDER_FAMILIES)
 const ALLOWED_DISPLAY_MODEL_IDS = [
@@ -38,6 +40,7 @@ const ALLOWED_DISPLAY_MODEL_IDS = [
   "gpt-5.4",
   "gpt-5.4-mini",
   "deepseek-v4-pro",
+  "grok-4.5",
   "gemini-3.1-pro-preview",
   "gemini-3-flash-preview",
   "MiniMax-M2.7",
@@ -189,11 +192,13 @@ const VERIFIED_PROVIDER_MODEL_IDS: Partial<Record<AiEntryProviderId, string[]>> 
     "deepseek-v4-pro",
   ],
   pptoken: [
+    "grok-4.5",
     "gpt-5.6-luna",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
   ],
   openrouter: [
+    "grok-4.5",
     "claude-opus-4.6",
     "claude-opus-4.7",
     "claude-sonnet-4.6",
@@ -539,7 +544,12 @@ function addVerifiedProviderModels(
 
   const existingIds = new Set(models.map((model) => model.id))
   const additions = verifiedIds
-    .filter((id) => !existingIds.has(id))
+    .filter((id) => {
+      if (existingIds.has(id)) return false
+      // Grok is served by a separate PPToken account. Never advertise the
+      // verified Grok model when its dedicated credentials are not configured.
+      return Boolean(getConfiguredAiEntryProviderForModel(provider.id, id))
+    })
     .map((id) => ({
       id,
       name: id,
@@ -814,12 +824,14 @@ function createCacheKey(
   providers: AiEntryProviderConfig[],
   recentDays: number | null,
   recentStrict: boolean,
+  requestedProviderId: AiEntryProviderId | null,
 ) {
+  const scope = requestedProviderId || "all"
   if (providers.length === 0) {
-    return `none|cache:${CATALOG_FILTER_CACHE_VERSION}|recent:${recentDays ?? "none"}|strict:${recentStrict ? "1" : "0"}`
+    return `none|scope:${scope}|cache:${CATALOG_FILTER_CACHE_VERSION}|recent:${recentDays ?? "none"}|strict:${recentStrict ? "1" : "0"}`
   }
   const providerSignature = providers.map((item) => `${item.id}:${item.baseURL}`).join("|")
-  return `${providerSignature}|cache:${CATALOG_FILTER_CACHE_VERSION}|recent:${recentDays ?? "none"}|strict:${recentStrict ? "1" : "0"}`
+  return `${providerSignature}|scope:${scope}|cache:${CATALOG_FILTER_CACHE_VERSION}|recent:${recentDays ?? "none"}|strict:${recentStrict ? "1" : "0"}`
 }
 
 export async function getAiEntryModelCatalog(options?: AiEntryModelCatalogOptions) {
@@ -834,7 +846,7 @@ export async function getAiEntryModelCatalog(options?: AiEntryModelCatalogOption
 
   const cacheStore = globalScope.__aiEntryModelCatalogCacheV2__ || {}
   globalScope.__aiEntryModelCatalogCacheV2__ = cacheStore
-  const cacheKey = createCacheKey(providers, recentDays, recentStrict)
+  const cacheKey = createCacheKey(providers, recentDays, recentStrict, requestedProviderId)
   const cached = cacheStore[cacheKey]
   if (cached && cached.expiresAt > now) {
     return {
@@ -858,13 +870,18 @@ export async function getAiEntryModelCatalog(options?: AiEntryModelCatalogOption
       const fetchedModels = await fetchProviderModels(provider)
       const configuredDefaultModel = provider.model.trim()
 
-      const modelsWithDefault = requestedProviderId
-        ? addVerifiedProviderModels(provider, [...fetchedModels])
-        : [...fetchedModels]
+      // The unscoped catalog powers the model picker used by AI Chat. Keep
+      // verified, credential-gated provider models visible there as well as
+      // in provider-scoped queries; an upstream /models response may omit a
+      // model even though its dedicated account is configured.
+      const modelsWithDefault = addVerifiedProviderModels(provider, [...fetchedModels])
       const hasConfiguredDefaultInList =
         configuredDefaultModel.length > 0 &&
         modelsWithDefault.some((item) => item.id === configuredDefaultModel)
-      if (!hasConfiguredDefaultInList && configuredDefaultModel) {
+      const configuredDefaultProvider = configuredDefaultModel
+        ? getConfiguredAiEntryProviderForModel(provider.id, configuredDefaultModel)
+        : null
+      if (!hasConfiguredDefaultInList && configuredDefaultModel && configuredDefaultProvider) {
         modelsWithDefault.push({
           id: configuredDefaultModel,
           name: configuredDefaultModel,

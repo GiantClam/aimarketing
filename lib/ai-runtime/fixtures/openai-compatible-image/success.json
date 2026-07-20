@@ -1,0 +1,6 @@
+{
+  "data": [
+    { "url": "https://cdn.example.test/image-1.png" },
+    { "b64_json": "aW1hZ2UtMg==" }
+  ]
+}

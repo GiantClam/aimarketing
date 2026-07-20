@@ -34,6 +34,7 @@ function toOutputs(task: Pick<MiniMaxNormalizedTask, "results">): CapabilityOutp
 
 export const minimaxAudioAdapter: ProviderAdapter = {
   provider: "minimax",
+  capabilities: ["audio.generate", "audio.voice_clone", "audio.voice_synthesis"],
   isConfigured(input: ProviderConfigContext) {
     return isMiniMaxAudioConfigured(input.runtimeContext?.minimaxAudioConfig)
   },

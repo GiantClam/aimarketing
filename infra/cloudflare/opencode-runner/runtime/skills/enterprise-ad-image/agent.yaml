@@ -1,0 +1,8 @@
+interface:
+  display_name: Enterprise Ad Image
+  description: Execute ad-focused image generation with channel fit, clear focal hierarchy, and brand-safe constraints.
+  short_description: Marketing and ad execution
+  default_prompt: Use $enterprise-ad-image for ad posters, campaign visuals, and promotional creatives when the brief is ready.
+routing:
+  stage: execution
+  when_to_use: Use when the brief is complete and the request is ad or campaign oriented, including posters, promotional hero visuals, and performance creatives.

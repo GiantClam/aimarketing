@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
 import { deleteAiEntryConversation } from "@/lib/ai-entry/repository"
-import { shouldLockConsultingAdvisorModel } from "@/lib/ai-entry/model-policy"
+import { isConsultingAdvisorEntryMode } from "@/lib/ai-entry/model-policy"
 
 function parseAgentId(input: string | null | undefined) {
   const normalized = typeof input === "string" ? input.trim() : ""
@@ -19,9 +19,7 @@ export async function DELETE(
   }
 
   const resolved = await params
-  const conversationScope = shouldLockConsultingAdvisorModel({
-    entryMode: request.nextUrl.searchParams.get("entryMode"),
-  })
+  const conversationScope = isConsultingAdvisorEntryMode(request.nextUrl.searchParams.get("entryMode"))
     ? "consulting"
     : "chat"
   const agentId = parseAgentId(request.nextUrl.searchParams.get("agent"))

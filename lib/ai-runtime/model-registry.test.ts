@@ -47,6 +47,15 @@ test("every provider in the registry resolves to an adapter", () => {
   }
 })
 
+test("shared MiniMax provider selects the adapter by model capability", () => {
+  const audioAdapter = getProviderAdapter("minimax", "audio.generate")
+  const videoAdapter = getProviderAdapter("minimax", "video.text_to_video")
+
+  assert.equal(audioAdapter?.capabilities?.includes("audio.generate"), true)
+  assert.equal(videoAdapter?.capabilities?.includes("video.text_to_video"), true)
+  assert.notEqual(audioAdapter, videoAdapter)
+})
+
 test("validateAndNormalizeModelInput drops unsupported parameters", () => {
   const model = getModelDefinition("minimax:video:text-to-video:MiniMax-Hailuo-2.3")
   assert.ok(model)
@@ -73,4 +82,23 @@ test("model registry exposes RunningHub seedance mini video models", () => {
   assert.equal(imageModel?.provider, "runninghub")
   assert.equal(imageModel?.capability, "video.image_to_video")
   assert.equal(imageModel?.providerMetadata?.nativeModel, "seedance-mini-image-to-video")
+})
+
+test("OpenAI image model and adapter are opt-in behind the workflow feature flag", async () => {
+  const previous = process.env.WORKFLOW_OPENAI_IMAGE_ADAPTER_V1
+  try {
+    delete process.env.WORKFLOW_OPENAI_IMAGE_ADAPTER_V1
+    assert.equal(getModelDefinition("openai:image:gpt-image-2"), null)
+    assert.equal(
+      getProviderAdapter("openai_compatible", "image.text_to_image"),
+      null,
+    )
+
+    process.env.WORKFLOW_OPENAI_IMAGE_ADAPTER_V1 = "1"
+    assert.equal(getModelDefinition("openai:image:gpt-image-2")?.id, "openai:image:gpt-image-2")
+    assert.ok(getProviderAdapter("openai_compatible", "image.text_to_image"))
+  } finally {
+    if (previous === undefined) delete process.env.WORKFLOW_OPENAI_IMAGE_ADAPTER_V1
+    else process.env.WORKFLOW_OPENAI_IMAGE_ADAPTER_V1 = previous
+  }
 })

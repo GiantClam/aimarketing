@@ -36,6 +36,7 @@ function toOutputs(task: Pick<RunningHubVideoTask, "results">): CapabilityOutput
 
 export const runninghubVideoAdapter: ProviderAdapter = {
   provider: "runninghub",
+  capabilities: ["video.text_to_video", "video.image_to_video", "video.digital_human"],
   isConfigured(input: ProviderConfigContext) {
     return isRunningHubConfiguredForTarget("ai-video", input.runtimeContext?.runningHubConfig)
   },

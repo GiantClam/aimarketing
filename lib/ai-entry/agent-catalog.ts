@@ -85,8 +85,8 @@ const CORE_AGENTS: AiEntryAgentCatalogItem[] = [
     category: "executive",
     name: { zh: "演讲型 PPT 助手", en: "Presentation PPT Assistant" },
     description: {
-      zh: "通过对话生成适合演讲展示的 HTML 演示稿，强调叙事节奏、现场表达与视觉张力。",
-      en: "Use conversation to generate a presentation-first HTML deck optimized for live delivery, narrative flow, and visual momentum.",
+      zh: "由 OpenCode 调用 Dashi 原生 skill，多轮协作生成可演讲、可下载的 PPTX，强调叙事节奏、现场表达与视觉张力。",
+      en: "Use OpenCode and the native Dashi skill to co-create downloadable PPTX decks through multi-turn conversation, optimized for live delivery, narrative flow, and visual momentum.",
     },
   },
   {

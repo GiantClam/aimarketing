@@ -284,6 +284,12 @@ export function WorkflowRunResultsPage({
           edgeCount: "条连线",
           workItemCount: "个作品记录",
           inputPayload: "已记录输入载荷",
+          revision: "运行版本",
+          iterations: "迭代",
+          attempts: "尝试",
+          retries: "重试",
+          warnings: "警告",
+          noWarnings: "无警告",
           panelTitle: "当前运行结果",
           dismiss: "关闭结果面板",
       }
@@ -324,6 +330,12 @@ export function WorkflowRunResultsPage({
           edgeCount: "edges",
           workItemCount: "work items",
           inputPayload: "Input payload recorded",
+          revision: "Run revision",
+          iterations: "Iterations",
+          attempts: "Attempts",
+          retries: "Retries",
+          warnings: "Warnings",
+          noWarnings: "No warnings",
           panelTitle: "Current run results",
           dismiss: "Close results panel",
         }
@@ -496,6 +508,11 @@ export function WorkflowRunResultsPage({
                 <div className="dashboard-chip rounded-[4px] px-3 py-2">
                   Finished: {formatTimestamp(locale, detail.run.finishedAt)}
                 </div>
+                {detail.snapshot ? (
+                  <div className="dashboard-chip rounded-[4px] px-3 py-2">
+                    {copy.revision}: {detail.snapshot.revisionId}
+                  </div>
+                ) : null}
               </div>
             </article>
 
@@ -561,6 +578,22 @@ export function WorkflowRunResultsPage({
                       : nodeMeta?.title || execution.nodeKey
                   const nodeOutput = sanitizeWorkflowNodeOutputPayloadForDisplay(nodeMeta?.type, execution.outputPayload)
                   const isRetrying = retrying?.nodeKey === execution.nodeKey
+                  const nodeIterations = (detail.iterations ?? []).filter(
+                    (iteration) => iteration.scopeNodeKey === execution.nodeKey,
+                  )
+                  const nodeAttempts = (detail.attempts ?? []).filter(
+                    (attempt) => attempt.nodeExecutionId === execution.id,
+                  )
+                  const retryCount = nodeAttempts.reduce(
+                    (highest, attempt) => Math.max(highest, Math.max(0, attempt.attemptNumber - 1)),
+                    0,
+                  )
+                  const warningMessages = Array.from(
+                    new Set([
+                      ...nodeIterations.flatMap((iteration) => iteration.warnings ?? []),
+                      ...nodeAttempts.flatMap((attempt) => attempt.warnings ?? []),
+                    ]),
+                  )
 
                   return (
                     <section
@@ -662,6 +695,65 @@ export function WorkflowRunResultsPage({
                         <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85 md:col-span-2">
                           Task run: {execution.taskRunId ?? copy.none}
                         </div>
+                        {nodeIterations.length > 0 ? (
+                          <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                            {copy.iterations}: {nodeIterations.length}
+                          </div>
+                        ) : null}
+                        {nodeAttempts.length > 0 ? (
+                          <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                            {copy.attempts}: {nodeAttempts.length} · {copy.retries}: {retryCount}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {nodeIterations.length > 0 ? (
+                        <div className="mt-3 rounded-[10px] border border-border/70 bg-background/80 p-3">
+                          <div className="dashboard-kicker text-muted-foreground">{copy.iterations}</div>
+                          <div className="mt-2 space-y-2">
+                            {nodeIterations.map((iteration) => (
+                              <div
+                                key={iteration.id}
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-border/60 bg-card/70 px-3 py-2 text-xs"
+                              >
+                                <span className="font-semibold text-foreground">
+                                  #{iteration.iterationIndex + 1} · {iteration.iterationKey}
+                                </span>
+                                <Badge className={cn("rounded-[6px] border px-2 py-1 text-[10px]", getStatusTone(iteration.status))}>
+                                  {getStatusLabel(locale, iteration.status)}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {nodeAttempts.length > 0 ? (
+                        <div className="mt-3 rounded-[10px] border border-border/70 bg-background/80 p-3">
+                          <div className="dashboard-kicker text-muted-foreground">{copy.attempts}</div>
+                          <div className="mt-2 space-y-2">
+                            {nodeAttempts.map((attempt) => (
+                              <div
+                                key={attempt.id}
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-border/60 bg-card/70 px-3 py-2 text-xs"
+                              >
+                                <span className="text-foreground">
+                                  #{attempt.attemptNumber} · {attempt.providerTaskId || attempt.providerRequestId || copy.none}
+                                </span>
+                                <Badge className={cn("rounded-[6px] border px-2 py-1 text-[10px]", getStatusTone(attempt.status))}>
+                                  {getStatusLabel(locale, attempt.status)}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="mt-3 rounded-[10px] border border-border/70 bg-background/80 p-3 text-xs">
+                        <div className="dashboard-kicker text-muted-foreground">{copy.warnings}</div>
+                        <div className="mt-2 text-muted-foreground">
+                          {warningMessages.length > 0 ? warningMessages.join(" · ") : copy.noWarnings}
+                        </div>
                       </div>
 
                       {execution.inputPayload ? (
@@ -682,6 +774,7 @@ export function WorkflowRunResultsPage({
                               status={execution.status}
                               outputPayload={nodeOutput}
                               errorMessage={execution.errorMessage}
+                              warnings={warningMessages}
                             />
                           </div>
                           <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words text-xs leading-6 text-foreground/80">
@@ -697,6 +790,7 @@ export function WorkflowRunResultsPage({
                               status={execution.status}
                               outputPayload={null}
                               errorMessage={execution.errorMessage}
+                              warnings={warningMessages}
                             />
                           </div>
                         </div>

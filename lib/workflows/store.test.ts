@@ -34,6 +34,74 @@ test("workflow store persists nodes and edges for one workflow", async () => {
   assert.equal(loaded?.slug, "workflow")
 })
 
+test("workflow store round-trips semantic ports without re-inferring them", async () => {
+  const store = createInMemoryWorkflowStore()
+  const created = await createWorkflowDefinition(
+    {
+      enterpriseId: 101,
+      ownerUserId: 1,
+      title: "Semantic frame routing",
+      nodes: [
+        { nodeKey: "image", type: "image_generate", title: "Image", positionX: 0, positionY: 0, config: {} },
+        { nodeKey: "video", type: "video_generate", title: "Video", positionX: 240, positionY: 0, config: {} },
+      ],
+      edges: [
+        {
+          edgeKey: "image-to-first-frame",
+          sourceNodeKey: "image",
+          sourcePortId: "image",
+          targetNodeKey: "video",
+          targetPortId: "images",
+          inputName: "image",
+        },
+        {
+          edgeKey: "image-to-last-frame",
+          sourceNodeKey: "image",
+          sourcePortId: "image",
+          targetNodeKey: "video",
+          targetPortId: "image.last_frame",
+          inputName: "image",
+        },
+      ],
+    },
+    store,
+  )
+
+  assert.deepEqual(
+    created.edges.map((edge) => [edge.edgeKey, edge.sourcePortId, edge.targetPortId]),
+    [
+      ["image-to-first-frame", "image", "images"],
+      ["image-to-last-frame", "image", "image.last_frame"],
+    ],
+  )
+
+  const loaded = await getWorkflowDefinition(created.id, 101, store)
+  assert.deepEqual(
+    loaded?.edges.map((edge) => [edge.edgeKey, edge.sourcePortId, edge.targetPortId]),
+    [
+      ["image-to-first-frame", "image", "images"],
+      ["image-to-last-frame", "image", "image.last_frame"],
+    ],
+  )
+
+  const updated = await updateWorkflowDefinition(
+    {
+      workflowId: created.id,
+      enterpriseId: 101,
+      expectedRevision: created.revision,
+      edges: loaded?.edges,
+    },
+    store,
+  )
+  assert.deepEqual(
+    updated.edges.map((edge) => [edge.edgeKey, edge.sourcePortId, edge.targetPortId]),
+    [
+      ["image-to-first-frame", "image", "images"],
+      ["image-to-last-frame", "image", "image.last_frame"],
+    ],
+  )
+})
+
 test("workflow store migrates legacy text-to-asset-library edges through a file node", async () => {
   const store = createInMemoryWorkflowStore()
 
@@ -427,4 +495,49 @@ test("workflow store deletes a workflow definition by enterprise scope", async (
   assert.equal(loaded, null)
   const listed = await listWorkflowDefinitionsForEnterprise(15, store)
   assert.deepEqual(listed, [])
+})
+
+test("workflow v2 revisions use optimistic concurrency and do not advance for an identical hash", async () => {
+  const store = createInMemoryWorkflowStore()
+  const created = await createWorkflowDefinition({ enterpriseId: 90, ownerUserId: 7, title: "Revisioned" }, store)
+  assert.equal(created.revision, 1)
+  const unchanged = await updateWorkflowDefinition({
+    workflowId: created.id,
+    enterpriseId: created.enterpriseId,
+    expectedRevision: 1,
+    title: created.title,
+    nodes: created.nodes,
+    edges: created.edges,
+  }, store)
+  assert.equal(unchanged.revision, 1)
+
+  const updated = await updateWorkflowDefinition({
+    workflowId: created.id,
+    enterpriseId: created.enterpriseId,
+    expectedRevision: 1,
+    title: "Revisioned v2",
+  }, store)
+  assert.equal(updated.revision, 2)
+  await assert.rejects(
+    () => updateWorkflowDefinition({ workflowId: created.id, enterpriseId: created.enterpriseId, expectedRevision: 1, title: "stale" }, store),
+    (error: unknown) => {
+      assert.equal((error as Error).message, "workflow_revision_conflict")
+      assert.equal((error as { currentRevision?: number }).currentRevision, 2)
+      return true
+    },
+  )
+})
+
+test("workflow v2 definition payload rejects ambiguous legacy fields", async () => {
+  const store = createInMemoryWorkflowStore()
+  const created = await createWorkflowDefinition({ enterpriseId: 91, ownerUserId: 7, title: "Definition" }, store)
+  await assert.rejects(
+    () => updateWorkflowDefinition({
+      workflowId: created.id,
+      enterpriseId: created.enterpriseId,
+      definition: { schemaVersion: 2, nodes: [], edges: [] },
+      nodes: [],
+    }, store),
+    /ambiguous_workflow_definition_payload/,
+  )
 })

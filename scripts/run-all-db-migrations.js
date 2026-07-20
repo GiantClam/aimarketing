@@ -26,6 +26,9 @@ async function main() {
   await runStep("billing subscription migration", "scripts/run-billing-subscription-migration.js")
   await runStep("billing plan change migration", "scripts/run-billing-plan-change-migration.js")
   await runStep("billing stripe migration", "scripts/run-billing-stripe-migration.js")
+  await runStep("OpenCode Runtime V2 migration", "scripts/run-opencode-runtime-v2-migration.js")
+  await runStep("Workflow Definition V2 migration", "scripts/run-workflow-v2-migration.js")
+  await runStep("Workflow Iteration/Attempt migration", "scripts/run-workflow-iteration-migration.js")
   console.log("All database migrations completed successfully")
 }
 

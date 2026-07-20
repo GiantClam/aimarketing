@@ -75,6 +75,39 @@ test("buildGovernedAiEntryModelCatalog keeps only account-visible runtime models
   ])
 })
 
+test("buildGovernedAiEntryModelCatalog exposes PPToken Grok when its dedicated account is configured", () => {
+  const previous = {
+    pptoken: process.env.AI_ENTRY_PPTOKEN_API_KEY,
+    grok: process.env.AI_ENTRY_PPTOKEN_GROK_API_KEY,
+    grokBaseUrl: process.env.AI_ENTRY_PPTOKEN_GROK_BASE_URL,
+  }
+  process.env.AI_ENTRY_PPTOKEN_API_KEY = "pptoken-gpt-key"
+  process.env.AI_ENTRY_PPTOKEN_GROK_API_KEY = "pptoken-grok-key"
+  process.env.AI_ENTRY_PPTOKEN_GROK_BASE_URL = "https://grok.pptoken.example/v1"
+
+  try {
+    const catalog = buildGovernedAiEntryModelCatalog({
+      user: {
+        id: 11,
+        enterpriseId: 2,
+        enterpriseRole: "member",
+        enterpriseStatus: "active",
+      },
+      runtimeProviders,
+      assignments: [],
+    })
+
+    assert.equal(catalog.models.some((item) => item.providerId === "pptoken" && item.modelId === "grok-4.5"), true)
+  } finally {
+    if (previous.pptoken === undefined) delete process.env.AI_ENTRY_PPTOKEN_API_KEY
+    else process.env.AI_ENTRY_PPTOKEN_API_KEY = previous.pptoken
+    if (previous.grok === undefined) delete process.env.AI_ENTRY_PPTOKEN_GROK_API_KEY
+    else process.env.AI_ENTRY_PPTOKEN_GROK_API_KEY = previous.grok
+    if (previous.grokBaseUrl === undefined) delete process.env.AI_ENTRY_PPTOKEN_GROK_BASE_URL
+    else process.env.AI_ENTRY_PPTOKEN_GROK_BASE_URL = previous.grokBaseUrl
+  }
+})
+
 test("buildGovernedAiEntryModelCatalog falls back when requested provider is not accessible", () => {
   const catalog = buildGovernedAiEntryModelCatalog({
     user: {

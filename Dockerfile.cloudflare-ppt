@@ -1,0 +1,68 @@
+FROM node:22-bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  git \
+  curl \
+  make \
+  g++ \
+  python3 \
+  python3-pip \
+  python3-venv \
+  fontconfig \
+  fonts-dejavu-core \
+  fonts-dejavu-extra \
+  fonts-liberation \
+  fonts-noto-cjk \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY package.json ./package.json
+COPY package-lock.json ./package-lock.json
+COPY tsconfig.json ./tsconfig.json
+
+RUN npm ci --legacy-peer-deps
+
+COPY lib ./lib
+COPY infra/railway/ppt-master-worker ./infra/railway/ppt-master-worker
+
+# The source is reused by the Cloudflare Container profile, but the image is
+# no longer deployed or addressed as a Railway service.
+RUN ! grep -q "ppt_master_template_selection_required" lib/lead-tools/generation-ppt-fixed.ts
+
+RUN for attempt in 1 2 3; do \
+    rm -rf /opt/ppt-master /tmp/ppt-master-src /tmp/ppt-master.tar.gz; \
+    curl --fail --location --retry 3 --retry-all-errors --connect-timeout 30 --max-time 180 \
+      https://codeload.github.com/hugohe3/ppt-master/tar.gz/refs/heads/main \
+      --output /tmp/ppt-master.tar.gz \
+      && mkdir -p /tmp/ppt-master-src \
+      && tar -xzf /tmp/ppt-master.tar.gz -C /tmp/ppt-master-src --strip-components=1 \
+      && mv /tmp/ppt-master-src /opt/ppt-master \
+      && break; \
+    if [ "$attempt" = "3" ]; then exit 1; fi; \
+    sleep 8; \
+  done \
+  && test -d /opt/ppt-master/examples/ppt169_glassmorphism_demo \
+  && test -f /opt/ppt-master/examples/ppt169_glassmorphism_demo/design_spec.md \
+  && mkdir -p /tmp/ppt-master-examples \
+  && cp -a /opt/ppt-master/examples/ppt169_glassmorphism_demo /tmp/ppt-master-examples/ \
+  && rm -rf /opt/ppt-master/examples \
+  && mkdir -p /opt/ppt-master/examples \
+  && mv /tmp/ppt-master-examples/ppt169_glassmorphism_demo /opt/ppt-master/examples/ \
+  && rm -rf /tmp/ppt-master-examples /tmp/ppt-master.tar.gz
+
+RUN python3 -m venv /opt/ppt-master-venv \
+  && for attempt in 1 2 3; do \
+    /opt/ppt-master-venv/bin/pip install --no-cache-dir --retries 10 --timeout 120 -r /opt/ppt-master/requirements.txt && exit 0; \
+    if [ "$attempt" = "3" ]; then exit 1; fi; \
+    sleep 5; \
+  done
+
+ENV PATH=/opt/ppt-master-venv/bin:${PATH}
+ENV PPT_MASTER_REPO_DIR=/opt/ppt-master
+ENV PPT_MASTER_PYTHON_BIN=/opt/ppt-master-venv/bin/python
+ENV PPT_WORKER_RUNTIME_PROFILE=cloudflare-linux
+
+RUN npx tsc -p infra/railway/ppt-master-worker/tsconfig.json --noEmit
+
+CMD ["npx", "tsx", "infra/railway/ppt-master-worker/src/server.ts"]

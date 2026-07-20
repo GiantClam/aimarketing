@@ -272,3 +272,13 @@ test("validation_result 失败时会标记 failed 并保留检查信息", () => 
   assert.equal(findTaskStep(parts, "validation:tc6")?.status, "failed")
   assert.equal(findTaskStep(parts, "validation:tc6")?.detail, "bad")
 })
+
+test("persists resolved Skills separately from actual Skill invocation", () => {
+  let parts = applySseEvent([], { event: "agent_resolved", agent_id: "business-content-growth" })
+  parts = applySseEvent(parts, { event: "skill_selected", skill_id: "longform-writing" })
+  parts = applySseEvent(parts, { event: "skill_activated", skill_id: "longform-writing" })
+  parts = applySseEvent(parts, { event: "skill_completed", skill_id: "longform-writing" })
+  assert.equal(findTaskStep(parts, "agent_resolved")?.detail, "business-content-growth")
+  assert.equal(findTaskStep(parts, "skill-resolved:longform-writing")?.status, "info")
+  assert.equal(findTaskStep(parts, "skill-invocation:longform-writing")?.status, "completed")
+})

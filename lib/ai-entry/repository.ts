@@ -2,6 +2,7 @@ import { and, desc, eq, lt, sql } from "drizzle-orm"
 
 import {
   applyAiEntryConversationStateDelta,
+  appendAiEntryRuntimeArtifactContext,
   createEmptyAiEntryConversationState,
   mergeAiEntryConversationState,
   type AiEntryConversationState,
@@ -226,7 +227,36 @@ async function findAiEntryPendingTaskSummary(input: {
         startedAt: row.startedAt,
       })
     : null
-  return summary && (summary.status === "pending" || summary.status === "running") ? summary : null
+  if (summary && (summary.status === "pending" || summary.status === "running")) return summary
+
+  try {
+    const runtimeResult = await withAiEntryDbRetry("find-ai-entry-pending-opencode-task-summary", () =>
+      db.execute(sql`
+        SELECT id, status, input_payload as "inputPayload", normalized_result as "normalizedResult",
+          created_at as "createdAt", updated_at as "updatedAt", started_at as "startedAt"
+        FROM "AI_MARKETING_platform_task_runs"
+        WHERE user_id = ${input.userId} AND item_type = 'ai_entry_opencode'
+          AND status IN ('queued', 'running')
+          AND input_payload::jsonb ->> 'conversationId' = ${input.conversationId}
+          ${input.agentId ? sql`AND input_payload::jsonb ->> 'agentId' = ${input.agentId}` : sql``}
+        ORDER BY created_at DESC, id DESC LIMIT 1
+      `),
+    )
+    const row = (runtimeResult.rows || [])[0] as Record<string, unknown> | undefined
+    if (!row) return null
+    return parseAiEntryTaskRunSummary({
+      id: row.id,
+      status: row.status,
+      payload: { kind: "opencode_runtime", ...(row.inputPayload as Record<string, unknown> || {}), input: row.inputPayload || null },
+      result: row.normalizedResult,
+      createdAt: row.createdAt as Date | string | number | null,
+      updatedAt: row.updatedAt as Date | string | number | null,
+      startedAt: row.startedAt as Date | string | number | null,
+    })
+  } catch (error) {
+    console.warn("ai-entry.opencode.pending-task.lookup.failed", { message: error instanceof Error ? error.message : String(error) })
+    return null
+  }
 }
 
 async function findAiEntryRecoverableTaskSummary(input: {
@@ -348,7 +378,7 @@ async function listAiEntryTaskRunSummaries(input: {
     `),
   )
 
-  return ((result.rows || []) as Array<{
+  const legacy = ((result.rows || []) as Array<{
     id?: unknown
     status?: unknown
     payload?: unknown
@@ -369,6 +399,41 @@ async function listAiEntryTaskRunSummaries(input: {
       }),
     )
     .filter((item): item is AiEntryTaskRunSummary => Boolean(item))
+
+  let runtime: AiEntryTaskRunSummary[] = []
+  try {
+    if (legacy.length === 0) {
+    const runtimeResult = await withAiEntryDbRetry("list-ai-entry-opencode-task-run-summaries", () =>
+      db.execute(sql`
+        SELECT id, status, input_payload as "inputPayload", normalized_result as "normalizedResult",
+          created_at as "createdAt", updated_at as "updatedAt", started_at as "startedAt"
+        FROM "AI_MARKETING_platform_task_runs"
+        WHERE user_id = ${input.userId}
+          AND item_type = 'ai_entry_opencode'
+          AND input_payload::jsonb ->> 'conversationId' = ${input.conversationId}
+          ${input.agentId ? sql`AND input_payload::jsonb ->> 'agentId' = ${input.agentId}` : sql``}
+        ORDER BY created_at DESC, id DESC LIMIT ${safeLimit}
+      `),
+    )
+    runtime = ((runtimeResult.rows || []) as Array<Record<string, unknown>>)
+      .map((row) => parseAiEntryTaskRunSummary({
+        id: row.id,
+        status: row.status,
+        payload: { kind: "opencode_runtime", ...(row.inputPayload as Record<string, unknown> || {}), input: row.inputPayload || null },
+        result: row.normalizedResult,
+        createdAt: row.createdAt as Date | string | number | null,
+        updatedAt: row.updatedAt as Date | string | number | null,
+        startedAt: row.startedAt as Date | string | number | null,
+      }))
+      .filter((item): item is AiEntryTaskRunSummary => Boolean(item))
+    }
+  } catch (error) {
+    console.warn("ai-entry.opencode.task-runs.lookup.failed", { message: error instanceof Error ? error.message : String(error) })
+  }
+
+  return [...legacy, ...runtime]
+    .sort((left, right) => right.updated_at - left.updated_at)
+    .slice(0, safeLimit)
 }
 
 function stripTitlePrefix(title: string) {
@@ -1187,4 +1252,35 @@ export async function listAiEntryMessages(
       },
     ),
   }
+}
+
+export async function recordAiEntryRuntimeArtifactContext(input: {
+  userId: number
+  conversationId: string
+  artifact: {
+    artifactId: number
+    title: string
+    kind: string
+    summary: string
+  }
+  scope?: AiEntryConversationScope
+  agentId?: string | null
+}) {
+  const conversation = await getAiEntryConversation(input.userId, input.conversationId, input.scope || "chat", input.agentId)
+  if (!conversation) return null
+  const metadata = normalizeConversationMetadata(conversation.metadata) || {}
+  const previousState = normalizeConversationMetadata(metadata.aiEntryConversationState)
+  const nextState = appendAiEntryRuntimeArtifactContext({
+    previousState,
+    artifact: input.artifact,
+  })
+  await withAiEntryDbRetry("update-ai-entry-runtime-artifact-context", () =>
+    db.update(conversations).set({
+      metadata: {
+        ...metadata,
+        aiEntryConversationState: nextState,
+      },
+    }).where(eq(conversations.id, conversation.id)),
+  )
+  return nextState
 }

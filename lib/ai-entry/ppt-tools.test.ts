@@ -268,7 +268,7 @@ test("editable ppt template recommendations are accepted only as exact catalog i
   }
 
   const recommendation = await tools.recommend_ppt_templates.execute({
-    templateIds: ["ppt169_global_ai_capital_2026", "ppt169_building_effective_agents"],
+    templateIds: ["ppt169_global_ai_capital_2026"],
   })
 
   assert.equal(recommendation.ok, true)
@@ -277,6 +277,15 @@ test("editable ppt template recommendations are accepted only as exact catalog i
     "ppt169_global_ai_capital_2026",
   )
   assert.match(String(recommendation.message), /ai-entry-ppt-template-recommendations:/u)
+
+  const multiple = await tools.recommend_ppt_templates.execute({
+    templateIds: ["ppt169_global_ai_capital_2026", "ppt169_building_effective_agents"],
+  })
+  assert.equal(multiple.ok, false)
+  assert.equal(
+    (multiple.error as { code?: unknown }).code,
+    "ppt_template_recommendation_requires_single_template",
+  )
 
   const invalid = await tools.recommend_ppt_templates.execute({ templateIds: ["not-a-ppt-master-template"] })
   assert.equal(invalid.ok, false)
@@ -986,7 +995,7 @@ test("presentation ppt agent pins frontend runtime and accepts html export artif
   assert.equal(exported.contentType, "text/html; charset=utf-8")
 })
 
-test("presentation ppt agent does not forward editable-model routing into frontend-slides preview generation", async () => {
+test("presentation ppt agent forwards the selected model routing into frontend-slides preview generation", async () => {
   mockedDownloadDeckPreviewEngine = "frontend-slides-html"
   mockedDownloadContentType = "text/html; charset=utf-8"
   mockedDownloadFileName = "ai-marketing-workbench.html"
@@ -1012,8 +1021,8 @@ test("presentation ppt agent does not forward editable-model routing into fronte
       enterpriseId: 3,
     } as never,
     agentId: "executive-presentation-ppt",
-    selectedPreviewModel: "deepseek-v4-pro",
-    selectedPreviewProviderId: "enterprise-openai-compatible",
+    selectedPreviewModel: "gpt-5.4",
+    selectedPreviewProviderId: "pptoken",
   }) as unknown as TestToolSet
 
   const preview = await tools.preview_ppt_deck.execute({
@@ -1026,8 +1035,8 @@ test("presentation ppt agent does not forward editable-model routing into fronte
 
   assert.equal(preview.ok, true)
   assert.equal(previewInputs[0]?.previewRuntime, "frontend-slides-agent")
-  assert.equal("model" in (previewInputs[0] || {}), false)
-  assert.equal("preferredProviderId" in (previewInputs[0] || {}), false)
+  assert.equal(previewInputs[0]?.model, "gpt-5.4")
+  assert.equal(previewInputs[0]?.preferredProviderId, "pptoken")
 })
 
 test("editable ppt agent rejects frontend-slides html sessions during export", async () => {

@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getSessionUser } from "@/lib/auth/session"
 import {
-  serializePlatformWorkflowRun,
   serializePlatformWorkflowRunStatus,
 } from "@/lib/platform/workflow-runner"
 import { runWorkflowTaskRecoveryPass } from "@/lib/workflows/task-runner"
+import { serializeWorkflowRunDetail } from "@/lib/workflows/run-detail-serialization"
 import {
   getWorkflowRunDetail,
   getWorkflowRunStatusDetail,
@@ -67,7 +67,11 @@ export async function GET(
         return NextResponse.json({ error: "workflow_run_not_found" }, { status: 404 })
       }
 
-      if (statusDetail.run.status === "running") {
+      if (
+        statusDetail.run.status === "queued" ||
+        statusDetail.run.status === "running" ||
+        statusDetail.run.status === "cancel_requested"
+      ) {
         void runWorkflowTaskRecoveryPass({
           runId: numericRunId,
           requestOrigin: new URL(request.url).origin,
@@ -96,11 +100,30 @@ export async function GET(
       return NextResponse.json({ error: "workflow_run_not_found" }, { status: 404 })
     }
 
+    // Full detail polling is the primary browser path. Kick the durable
+    // runner here as well as on the lightweight status path so a process
+    // restart cannot leave a run permanently `running` with queued nodes.
+    if (
+      detail.run.status === "queued" ||
+      detail.run.status === "running" ||
+      detail.run.status === "cancel_requested"
+    ) {
+      void runWorkflowTaskRecoveryPass({
+        runId: numericRunId,
+        requestOrigin: new URL(request.url).origin,
+        waitForCompletion: false,
+      }).catch((error) => {
+        console.error("workflow.run.detail-kick.failed", {
+          runId: numericRunId,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      })
+    }
+
+    const serialized = serializeWorkflowRunDetail(detail)
     return NextResponse.json({
       data: {
-        run: serializePlatformWorkflowRun(detail.run),
-        workflow: detail.workflow,
-        nodeExecutions: detail.nodeExecutions,
+        ...serialized,
         detailPath: `/api/workflows/runs/${numericRunId}`,
         statusPath: `/api/workflows/runs/${numericRunId}?mode=status`,
       },

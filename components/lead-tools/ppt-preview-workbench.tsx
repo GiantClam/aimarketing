@@ -265,6 +265,10 @@ async function parseApiError(response: Response, fallbackMessage: string) {
   }
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
 function getVariantSlideIndex(slideIndexByVariant: Record<string, number>, variantKey: string, slideCount: number) {
   const raw = slideIndexByVariant[variantKey] ?? 0
   return Math.max(0, Math.min(raw, Math.max(slideCount - 1, 0)))
@@ -731,24 +735,46 @@ export function PptPreviewWorkbench({
     setStatusMessage(null)
 
     try {
+      const previewRequest = {
+        prompt,
+        scenario,
+        language,
+        model,
+        templateMode: effectiveTemplateMode,
+        templateId: effectiveTemplateMode === "single-template" ? templateId : undefined,
+        pageCount: requestedPageCount ?? undefined,
+      }
       const response = await fetch(getLeadToolEndpoint(toolSlug, "preview"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         credentials: "include",
-        body: JSON.stringify({
-          prompt,
-          scenario,
-          language,
-          model,
-          templateMode: effectiveTemplateMode,
-          templateId: effectiveTemplateMode === "single-template" ? templateId : undefined,
-          pageCount: requestedPageCount ?? undefined,
-        }),
+        body: JSON.stringify(previewRequest),
       })
 
-      const data = (await response.json()) as { error?: string; deck?: PptPreviewDeck; previewSessionId?: string }
+      let data = (await response.json()) as {
+        error?: string
+        deck?: PptPreviewDeck
+        previewSessionId?: string
+        jobId?: string
+        status?: string
+      }
+
+      if (response.ok && data.jobId && !data.deck) {
+        const deadline = Date.now() + 90 * 60 * 1000
+        while (Date.now() < deadline && (data.status === "queued" || data.status === "running")) {
+          await sleep(2500)
+          const statusResponse = await fetch(`/api/tools/${toolSlug}/preview-status`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ jobId: data.jobId, input: previewRequest }),
+          })
+          data = (await statusResponse.json()) as typeof data
+          if (!statusResponse.ok) break
+        }
+      }
 
       if (!response.ok || !data.deck) {
         throw new Error(data.error || copy.previewFailed)

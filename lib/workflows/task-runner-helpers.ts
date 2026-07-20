@@ -1,13 +1,15 @@
 export type WorkflowRetryRequest = {
-  mode: "node" | "branch"
+  mode: "node" | "branch" | "iteration"
   nodeKey: string
+  iterationKey?: string
+  attemptNumber?: number
 }
 
 export type RecoverableWorkflowRun = {
   id: number
   userId: number
   enterpriseId: number
-  status: "queued" | "running" | "succeeded" | "failed" | "cancelled"
+  status: "queued" | "running" | "cancel_requested" | "succeeded" | "failed" | "cancelled"
   createdAt: Date
   updatedAt: Date
   normalizedResult: Record<string, unknown> | null
@@ -26,13 +28,20 @@ export function parseWorkflowRetryRequest(value: Record<string, unknown> | null 
 
   const mode = pendingRetry?.mode
   const nodeKey = pendingRetry?.nodeKey
-  if ((mode !== "node" && mode !== "branch") || typeof nodeKey !== "string" || !nodeKey.trim()) {
+  if ((mode !== "node" && mode !== "branch" && mode !== "iteration") || typeof nodeKey !== "string" || !nodeKey.trim()) {
     return null
   }
+
+  const iterationKey = pendingRetry?.iterationKey
+  if (mode === "iteration" && (typeof iterationKey !== "string" || !iterationKey.trim())) return null
+  const attemptNumber = pendingRetry?.attemptNumber
+  if (mode === "iteration" && attemptNumber !== undefined && (typeof attemptNumber !== "number" || !Number.isInteger(attemptNumber) || attemptNumber < 2)) return null
 
   return {
     mode,
     nodeKey: nodeKey.trim(),
+    ...(mode === "iteration" ? { iterationKey: (iterationKey as string).trim() } : {}),
+    ...(mode === "iteration" && typeof attemptNumber === "number" ? { attemptNumber } : {}),
   }
 }
 

@@ -1,0 +1,8 @@
+interface:
+  display_name: Canvas Design Execution
+  description: Turn an approved image brief into a polished generation or editing plan.
+  short_description: Execute approved image briefs
+  default_prompt: Use this skill to convert an approved brief into a production-ready image prompt.
+routing:
+  stage: execution
+  when_to_use: Use when the brief is complete and the assistant must generate or edit images while respecting references, constraints, and composition requirements.

@@ -2,7 +2,9 @@ export function shouldQueryAiEntryEnterpriseKnowledge(input: {
   canQueryEnterpriseKnowledge: boolean
   effectiveAgentId?: string | null
 }) {
-  return Boolean(input.canQueryEnterpriseKnowledge)
+  // Ordinary AI Chat should go directly to the model. Enterprise knowledge
+  // retrieval is opt-in through an Agent that explicitly requires it.
+  return Boolean(input.canQueryEnterpriseKnowledge && input.effectiveAgentId)
 }
 
 export function getAiEntryWebSearchSystemRule(input: {

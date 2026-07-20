@@ -1,23 +1,12 @@
 import { drizzle } from "drizzle-orm/node-postgres"
 import { Pool, type PoolConfig } from "pg"
+import { shouldFallbackToNextPostgresConnection } from "@/lib/db-connection-errors"
 
 const PLACEHOLDER_CONNECTION_STRING = "postgresql://user:password@localhost:5432/aimarketing"
 const DEFAULT_POOL_MAX = process.env.NODE_ENV === "development" ? 5 : 10
 const DEFAULT_CONNECTION_TIMEOUT_MS = 12_000
 const DEFAULT_IDLE_TIMEOUT_MS = 30_000
 const POOL_WARMUP_RETRY_DELAYS_MS = [1_000, 3_000]
-const FALLBACK_ERROR_TOKENS = [
-  "getaddrinfo enotfound",
-  "connection timeout",
-  "connect timeout",
-  "timeout exceeded when trying to connect",
-  "connection terminated due to connection timeout",
-  "connection terminated unexpectedly",
-  "econnrefused",
-  "econnreset",
-  "und_err_connect_timeout",
-  "fetch failed",
-] as const
 
 declare global {
   var __aimarketingPgPool: Pool | undefined
@@ -115,11 +104,6 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
-function shouldFallbackToNextCandidate(error: unknown) {
-  const message = getErrorMessage(error).toLowerCase()
-  return FALLBACK_ERROR_TOKENS.some((token) => message.includes(token))
-}
-
 function describeConnectionTarget(connectionString: string) {
   try {
     const parsed = new URL(connectionString)
@@ -157,6 +141,7 @@ let activePool =
     : createRawPool(activeConnectionString)
 
 let activeCandidateIndex = Math.max(0, connectionCandidates.indexOf(activeConnectionString))
+let activePoolRecoveryPromise: Promise<boolean> | null = null
 
 function persistActivePool(nextPool: Pool, nextConnectionString: string, nextCandidateIndex: number) {
   activePool = nextPool
@@ -194,6 +179,37 @@ async function advanceToNextPool(reason: string, error: unknown) {
   return true
 }
 
+async function recreateActivePool(reason: string, error: unknown) {
+  if (activePoolRecoveryPromise) return activePoolRecoveryPromise
+
+  const previousPool = activePool
+  const connectionString = activeConnectionString
+  activePoolRecoveryPromise = (async () => {
+    try {
+      const nextPool = createRawPool(connectionString)
+      persistActivePool(nextPool, connectionString, activeCandidateIndex)
+      console.warn("db.pool.reconnect", {
+        reason,
+        target: describeConnectionTarget(connectionString),
+        message: getErrorMessage(error),
+      })
+      await previousPool.end().catch(() => {})
+      return true
+    } catch (recoveryError) {
+      console.error("db.pool.reconnect.failed", {
+        reason,
+        target: describeConnectionTarget(connectionString),
+        message: getErrorMessage(recoveryError),
+      })
+      return false
+    } finally {
+      activePoolRecoveryPromise = null
+    }
+  })()
+
+  return activePoolRecoveryPromise
+}
+
 async function warmupActivePool(reason: string) {
   const targetPool = activePool
   const attempts = POOL_WARMUP_RETRY_DELAYS_MS.length + 1
@@ -222,7 +238,11 @@ async function warmupActivePool(reason: string) {
         continue
       }
 
-      if (targetPool === activePool && shouldFallbackToNextCandidate(error) && await advanceToNextPool("warmup", error)) {
+      if (
+        targetPool === activePool &&
+        shouldFallbackToNextPostgresConnection(error) &&
+        await advanceToNextPool("warmup", error)
+      ) {
         await warmupActivePool("fallback")
       }
     }
@@ -233,7 +253,12 @@ async function runWithPoolFallback<T>(reason: string, operation: (pool: Pool) =>
   try {
     return await operation(activePool)
   } catch (error) {
-    if (!shouldFallbackToNextCandidate(error) || !await advanceToNextPool(reason, error)) {
+    if (!shouldFallbackToNextPostgresConnection(error)) {
+      throw error
+    }
+
+    const switched = await advanceToNextPool(reason, error)
+    if (!switched && !await recreateActivePool(reason, error)) {
       throw error
     }
 

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 
 import type { AuthUser } from "@/lib/auth/session"
 import { db } from "@/lib/db"
@@ -21,11 +21,13 @@ type WorkflowRunPersistence = Pick<
   | "savePlatformArtifact"
   | "promotePlatformArtifactToWorkItem"
 > & {
-  patchPlatformTaskRun?: (runId: number, patch: PlatformWorkflowRunPatch) => Promise<void>
+  patchPlatformTaskRun?: (runId: number, patch: PlatformWorkflowRunPatch) => Promise<boolean | void>
 }
 
 export type PlatformWorkflowRunPatch = {
   status?: PlatformTaskRunStatus
+  /** Optional compare-and-set guard used by retry/cancel orchestration. */
+  expectedStatus?: PlatformTaskRunStatus | readonly PlatformTaskRunStatus[]
   normalizedResult?: Record<string, unknown> | null
   externalSystem?: string | null
   externalRunId?: string | null
@@ -93,7 +95,33 @@ async function patchPlatformWorkflowRunRecord(runId: number, patch: PlatformWork
   if (patch.startedAt !== undefined) nextValues.startedAt = patch.startedAt
   if (patch.finishedAt !== undefined) nextValues.finishedAt = patch.finishedAt
 
-  await db.update(platformTaskRuns).set(nextValues).where(eq(platformTaskRuns.id, runId))
+  const terminalStatus = patch.status === "succeeded" || patch.status === "failed" || patch.status === "cancelled"
+  const allowedStatuses = patch.status === "cancelled"
+    ? ["queued", "running", "cancel_requested"] as const
+    : terminalStatus
+      ? ["queued", "running"] as const
+      : null
+  const expectedStatuses = patch.expectedStatus === undefined
+    ? null
+    : Array.isArray(patch.expectedStatus)
+      ? patch.expectedStatus
+      : [patch.expectedStatus]
+  // An explicit expectedStatus is a caller-owned compare-and-set contract.
+  // Never replace it with the broad terminal transition guard: doing so lets a
+  // late worker completion overwrite a cancellation request.  The default
+  // allowedStatuses guard remains for legacy callers that do not provide CAS.
+  const statusPredicate = expectedStatuses
+    ? inArray(platformTaskRuns.status, expectedStatuses)
+    : allowedStatuses
+      ? inArray(platformTaskRuns.status, allowedStatuses)
+      : null
+  const [updated] = await db
+    .update(platformTaskRuns)
+    .set(nextValues)
+    .where(statusPredicate ? and(eq(platformTaskRuns.id, runId), statusPredicate) : eq(platformTaskRuns.id, runId))
+    .returning({ id: platformTaskRuns.id })
+  if (!updated && patch.expectedStatus !== undefined) return false
+  return true
 }
 
 function assertEnterpriseUser(currentUser: AuthUser): asserts currentUser is EnterpriseAuthUser {
@@ -346,7 +374,8 @@ export async function updatePlatformWorkflowRun(input: UpdatePlatformWorkflowRun
   const store = resolveWorkflowRunStore(input.store)
   const patchRun = store.patchPlatformTaskRun ?? patchPlatformWorkflowRunRecord
 
-  await patchRun(input.runId, input.patch)
+  const patched = await patchRun(input.runId, input.patch)
+  if (patched === false) throw new Error("workflow_run_transition_conflict")
   if (input.event) {
     await store.appendPlatformRunEvent(input.runId, input.event)
   }
@@ -371,6 +400,7 @@ export async function recordPlatformWorkflowProxyResult(input: RecordPlatformWor
     store: input.store,
     patch: {
       status: nextStatus,
+      expectedStatus: ["queued", "running"],
       externalRunId,
       externalSystem: inferExternalSystem(input.target),
       normalizedResult: {
@@ -448,6 +478,7 @@ export async function recordPlatformWorkflowProxyFailure(input: RecordPlatformWo
     store: input.store,
     patch: {
       status: "failed",
+      expectedStatus: ["queued", "running"],
       externalSystem: inferExternalSystem(input.target),
       normalizedResult: {
         ok: false,

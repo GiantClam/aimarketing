@@ -24,6 +24,69 @@ test("ppt master runtime prefers explicit python env and falls back to python3",
   }
 })
 
+test("ppt master runtime resolves a bounded script timeout", () => {
+  const previous = process.env.PPT_MASTER_SCRIPT_TIMEOUT_MS
+
+  try {
+    process.env.PPT_MASTER_SCRIPT_TIMEOUT_MS = "12345"
+    assert.equal(__testables__.getPptMasterScriptTimeoutMs(), 12345)
+
+    process.env.PPT_MASTER_SCRIPT_TIMEOUT_MS = "invalid"
+    assert.equal(__testables__.getPptMasterScriptTimeoutMs(), 300_000)
+  } finally {
+    if (previous === undefined) delete process.env.PPT_MASTER_SCRIPT_TIMEOUT_MS
+    else process.env.PPT_MASTER_SCRIPT_TIMEOUT_MS = previous
+  }
+})
+
+test("ppt master runtime terminates scripts that exceed the configured timeout", async () => {
+  const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "ppt-master-runtime-timeout-"))
+  const scriptDir = path.join(projectDir, "skills", "ppt-master", "scripts")
+  const previousPython = process.env.PPT_MASTER_PYTHON_BIN
+  const previousTimeout = process.env.PPT_MASTER_SCRIPT_TIMEOUT_MS
+
+  try {
+    await fs.mkdir(scriptDir, { recursive: true })
+    await fs.writeFile(path.join(scriptDir, "hang.py"), "setTimeout(() => {}, 1000)\n", "utf8")
+    process.env.PPT_MASTER_PYTHON_BIN = process.execPath
+    process.env.PPT_MASTER_SCRIPT_TIMEOUT_MS = "20"
+
+    await assert.rejects(
+      __testables__.runPythonScript(projectDir, "hang.py", []),
+      /ppt_master_script_timeout:hang\.py/u,
+    )
+  } finally {
+    await fs.rm(projectDir, { recursive: true, force: true })
+    if (previousPython === undefined) delete process.env.PPT_MASTER_PYTHON_BIN
+    else process.env.PPT_MASTER_PYTHON_BIN = previousPython
+    if (previousTimeout === undefined) delete process.env.PPT_MASTER_SCRIPT_TIMEOUT_MS
+    else process.env.PPT_MASTER_SCRIPT_TIMEOUT_MS = previousTimeout
+  }
+})
+
+test("runtime adds explicit pptx structure metadata to legacy template contracts", () => {
+  const normalized = __testables__.ensurePptxStructureMode(
+    "# Legacy design contract\n\n- Canvas: PPT 16:9\n",
+    "structured",
+    "ppt169_glassmorphism_demo",
+  )
+
+  assert.match(normalized, /## pptx_structure/u)
+  assert.match(normalized, /- mode: structured/u)
+  assert.match(normalized, /- template: ppt169_glassmorphism_demo/u)
+
+  const existing = __testables__.ensurePptxStructureMode("## pptx_structure\n- mode: flat\n", "structured")
+  assert.match(existing, /- mode: flat/u)
+  assert.match(existing, /- mode: structured/u)
+
+  const legacyStructured = __testables__.ensurePptxStructureMode(
+    "## pptx_structure\n- mode: structured\n- template: ppt169_glassmorphism_demo\n",
+    "flat",
+  )
+  assert.match(legacyStructured, /- mode: flat/u)
+  assert.doesNotMatch(legacyStructured, /- mode: structured/u)
+})
+
 test("runtime repo candidates skip project cache on production and vercel builds", () => {
   const mutableEnv = process.env as Record<string, string | undefined>
   const previousNodeEnv = mutableEnv.NODE_ENV
@@ -91,6 +154,10 @@ test("runtime resolves official template sources across layout deck and example 
     repoDir,
     "ppt169_building_effective_agents",
   )
+  const glassmorphismSource = await __testables__.resolveOfficialTemplateSource(
+    repoDir,
+    "ppt169_glassmorphism_demo",
+  )
 
   assert.equal(layoutSource?.kind, "layout")
   assert.match(layoutSource?.sourcePathLabel ?? "", /layouts\/academic_defense\/$/u)
@@ -98,6 +165,8 @@ test("runtime resolves official template sources across layout deck and example 
   assert.match(deckSource?.sourcePathLabel ?? "", /decks\/招商银行\/$/u)
   assert.equal(exampleSource?.kind, "example")
   assert.match(exampleSource?.sourcePathLabel ?? "", /examples\/ppt169_building_effective_agents\/$/u)
+  assert.equal(glassmorphismSource?.kind, "example")
+  assert.match(glassmorphismSource?.sourcePathLabel ?? "", /examples\/ppt169_glassmorphism_demo\/$/u)
 })
 
 test("runtime exposes the official ppt-master design contract for editable planning", async () => {
@@ -107,6 +176,69 @@ test("runtime exposes the official ppt-master design contract for editable plann
   assert.match(reference.designSpecContent ?? "", /# Building Effective Agents - Design Spec/u)
   assert.match(reference.specLockContent ?? "", /- bg: #0F1117/u)
   assert.match(reference.specLockContent ?? "", /- accent: #5B9BD5/u)
+})
+
+test("runtime loads modern nested brand contracts and keeps ai_ops requests compatible", async () => {
+  const repoDir = await fs.mkdtemp(path.join(os.tmpdir(), "ppt-master-modern-fixture-"))
+  const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "ppt-master-modern-project-"))
+  const googleDir = path.join(repoDir, "skills", "ppt-master", "templates", "brands", "google")
+  const layoutDir = path.join(repoDir, "skills", "ppt-master", "templates", "layouts", "presentation_core")
+  const powerChinaDir = path.join(repoDir, "skills", "ppt-master", "templates", "brands", "中国电建")
+  const catarcDir = path.join(repoDir, "skills", "ppt-master", "templates", "brands", "中汽研")
+
+  try {
+    await fs.mkdir(path.join(googleDir, "templates"), { recursive: true })
+    await fs.mkdir(path.join(googleDir, "images"), { recursive: true })
+    await fs.mkdir(path.join(layoutDir, "templates"), { recursive: true })
+    await fs.mkdir(path.join(powerChinaDir, "templates"), { recursive: true })
+    await fs.mkdir(path.join(catarcDir, "templates"), { recursive: true })
+    await fs.mkdir(path.join(projectDir, "templates"), { recursive: true })
+    await fs.mkdir(path.join(projectDir, "images"), { recursive: true })
+    await fs.writeFile(
+      path.join(googleDir, "templates", "design_spec.md"),
+      "# Google Brand Specification\n\n| Role | HEX |\n|---|---|\n| primary | `#4285F4` |\n| text | `#202124` |\n| bg | `#FFFFFF` |\n",
+      "utf8",
+    )
+    await fs.writeFile(path.join(googleDir, "images", "google_g_logo.svg"), "<svg/>\n", "utf8")
+    await fs.writeFile(path.join(layoutDir, "templates", "01_title_slide.svg"), "<svg/>\n", "utf8")
+    await fs.writeFile(path.join(powerChinaDir, "templates", "design_spec.md"), "# PowerChina\n", "utf8")
+    await fs.writeFile(path.join(catarcDir, "templates", "design_spec.md"), "# CATARC\n", "utf8")
+
+    const google = await __testables__.loadPptMasterTemplateReferenceFromRepo(repoDir, "google")
+    const legacyLayout = await __testables__.loadPptMasterTemplateReferenceFromRepo(repoDir, "ai_ops")
+    const materialized = await __testables__.materializeOfficialTemplateAssets(repoDir, projectDir, "google")
+
+    assert.equal(google.kind, "brand")
+    assert.match(google.designSpecContent ?? "", /Google Brand Specification/u)
+    assert.equal(legacyLayout.kind, "layout")
+    assert.match(legacyLayout.sourcePathLabel, /layouts\/presentation_core\/$/u)
+    assert.equal(legacyLayout.designSpecContent, null)
+    for (const legacyId of [
+      "academic_defense",
+      "government_blue",
+      "government_red",
+      "medical_university",
+      "pixel_retro",
+      "psychology_attachment",
+      "招商银行",
+      "重庆大学",
+      "中国电建_常规",
+      "中国电建_现代",
+      "中汽研_商务",
+      "中汽研_常规",
+      "中汽研_现代",
+    ]) {
+      assert.ok(await __testables__.resolveOfficialTemplateSource(repoDir, legacyId), legacyId)
+    }
+    assert.match(materialized?.designSpecContent ?? "", /Google Brand Specification/u)
+    assert.equal(
+      await fs.readFile(path.join(projectDir, "templates", "images", "google_g_logo.svg"), "utf8"),
+      "<svg/>\n",
+    )
+  } finally {
+    await fs.rm(repoDir, { recursive: true, force: true })
+    await fs.rm(projectDir, { recursive: true, force: true })
+  }
 })
 
 test("runtime materializes official deck templates into project templates and images", async () => {

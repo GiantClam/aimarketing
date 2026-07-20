@@ -154,6 +154,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 
   if (request === "@/lib/platform/minimax-audio") {
     return {
+      isMiniMaxAudioConfigured: () => true,
       queryMiniMaxAudioTask: async () => ({ taskId: "1", status: "SUCCESS", results: [] }),
     }
   }
@@ -166,18 +167,21 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 
   if (request === "@/lib/platform/model-runtime") {
     return {
-      resolveModelIdFromRun: () => "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
+      resolveModelIdFromRun: (input: { run?: { itemSlug?: string } }) =>
+        input.run?.itemSlug === "voice-synthesis"
+          ? "minimax:audio:speech-2.8-hd"
+          : "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
       queryMediaCapabilityTask: async (input: Record<string, unknown>) => {
         queryMediaCapabilityTaskCalls.push(input)
         return {
           status: "succeeded",
           provider: "minimax",
-          modelId: "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
+          modelId: input.modelId,
           outputs: [],
           payload: {
-            taskId: "7",
+            taskId: String(input.runId),
             provider: "minimax",
-            requestedTarget: "text-to-video",
+            requestedTarget: String(input.modelId).startsWith("minimax:audio:") ? "voice-synthesis" : "text-to-video",
             status: "SUCCESS",
             results: [],
           },
@@ -199,6 +203,16 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
               },
               normalizedResult: null,
             })
+          : runId === 8
+            ? ({
+                id: 8,
+                itemSlug: "voice-synthesis",
+                externalSystem: "minimax",
+                inputPayload: {
+                  model: "minimax:audio:speech-2.8-hd",
+                },
+                normalizedResult: null,
+              })
           : null,
     }
   }
@@ -302,4 +316,21 @@ test("platform media video task query uses the unified runtime facade", async ()
   assert.equal(queryMediaCapabilityTaskCalls[0]?.runId, 7)
   assert.equal(queryMediaCapabilityTaskCalls[0]?.modelId, "minimax:video:text-to-video:MiniMax-Hailuo-2.3")
   assert.equal(response.body?.data?.taskId, "7")
+})
+
+test("platform media audio task query falls back to the shared MiniMax audio config", async () => {
+  const response = await GET(
+    {
+      url: "http://localhost:3000/api/platform/media/tasks/8?target=ai-music",
+    },
+    {
+      params: Promise.resolve({ taskId: "8" }),
+    },
+  )
+
+  assert.equal(response.status, 200)
+  assert.equal(queryMediaCapabilityTaskCalls.length, 1)
+  assert.equal(queryMediaCapabilityTaskCalls[0]?.runId, 8)
+  assert.equal(queryMediaCapabilityTaskCalls[0]?.modelId, "minimax:audio:speech-2.8-hd")
+  assert.equal(response.body?.data?.taskId, "8")
 })

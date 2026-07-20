@@ -351,6 +351,10 @@ function shouldRetryAdvisorUpstreamError(message: string) {
     normalized.includes("max retries exceeded") ||
     normalized.includes("connection reset") ||
     normalized.includes("econnreset") ||
+    normalized.includes("connection terminated") ||
+    normalized.includes("terminating connection") ||
+    normalized.includes("connection reset") ||
+    normalized.includes("administrator command") ||
     normalized.includes("etimedout") ||
     normalized.includes("timed out") ||
     normalized.includes("temporarily unavailable")
@@ -1221,8 +1225,9 @@ function buildDurablePptPreviewRequest(
       : undefined
   const pageCount =
     typeof input.pageCount === "number" && Number.isInteger(input.pageCount) ? input.pageCount : undefined
-  const templateId = requestedTemplateId
-  if (!templateId) {
+  const templateMode = input.templateMode === "auto-4" ? "auto-4" : "single-template"
+  const templateId = requestedTemplateId || (templateMode === "single-template" ? "ppt169_swiss_grid_systems" : null)
+  if (templateMode === "single-template" && !templateId) {
     throw new Error("ppt_master_template_selection_required")
   }
 
@@ -1235,9 +1240,9 @@ function buildDurablePptPreviewRequest(
     scenario,
     language,
     ...(typeof input.model === "string" && input.model.trim() ? { model: input.model.trim() } : {}),
-    templateMode: "single-template",
-    templateId,
-    narrativeAngle: narrativeAngle || "executive-brief",
+    templateMode,
+    ...(templateId ? { templateId } : {}),
+    ...(narrativeAngle ? { narrativeAngle } : {}),
     ...(pageCount ? { pageCount } : {}),
     ...(Array.isArray(input.images) ? { images: input.images as PptWorkerPreviewRequest["images"] } : {}),
     allowMockFallback: false,
@@ -1533,6 +1538,35 @@ async function handleAiEntryPptPreviewTask(
       const current = parseTask(await getTaskById(taskId))
       const result = current?.parsedResult || {}
       const events = readTaskProgressEvents(result.events)
+
+      if (isRetryableAiEntryPptPreviewError(errorMessage)) {
+        pushTaskProgressEvent(events, {
+          type: "background_generation_retry",
+          label: payload.isZh === false ? "Remote worker temporarily unavailable; retrying" : "远端渲染暂时不可用，稍后自动重试",
+          detail: errorMessage,
+          status: "running",
+          at: Date.now(),
+        })
+        await updateTaskStatus(taskId, {
+          status: "running",
+          releaseLease: true,
+          result: {
+            ...result,
+            conversation_id: payload.conversationId,
+            stage: "variant_generating",
+            stageLabel: payload.isZh === false ? "Waiting for remote render retry" : "等待远端渲染重试",
+            progressCurrent: 2,
+            progressTotal: 5,
+            lastHeartbeatAt: Math.floor(Date.now() / 1000),
+            errorCode: null,
+            errorMessage: null,
+            error: null,
+            events,
+          },
+        })
+        return
+      }
+
       pushTaskProgressEvent(events, {
         type: "background_generation_finished",
         label: payload.isZh === false ? "Background generation failed" : "后台生成失败",

@@ -299,6 +299,7 @@ export function normalizeWorkflowImageConfig(input: Record<string, unknown>): No
   const resolution = normalizeIncomingResolution(input.resolution)
   const imageOutputFormat = normalizeGptImage2OutputFormat(input.imageOutputFormat)
   const hasExplicitImageQuality = normalizeOptionalText(input.imageQuality) !== null
+  const explicitImageSize = normalizeOptionalText(input.imageSize)
 
   return {
     providerLock,
@@ -309,7 +310,9 @@ export function normalizeWorkflowImageConfig(input: Record<string, unknown>): No
     resolution,
     imageSize:
       modelKind === "gpt-image-2"
-        ? normalizeGptImage2Size(input.imageSize)
+        ? explicitImageSize && explicitImageSize.toLowerCase() !== "auto"
+          ? normalizeGptImage2Size(explicitImageSize)
+          : mapGptImage2Size(sizePreset, resolution)
         : modelKind === "runninghub-seedream"
           ? normalizeRunningHubSeedreamSize(input.imageSize)
           : DEFAULT_GPT_IMAGE_2_SIZE,

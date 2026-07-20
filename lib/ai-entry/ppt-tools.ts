@@ -82,8 +82,8 @@ const recommendPptTemplatesInputSchema = z.object({
   templateIds: z
     .array(z.string().trim().min(1))
     .min(1)
-    .max(4)
-    .describe("One to four exact template ids from the complete ppt-master catalog in the system prompt."),
+    .max(1)
+    .describe("Exactly one exact template id from the complete ppt-master catalog in the system prompt."),
 })
 
 const editablePreviewPptDeckInputSchema = z
@@ -823,7 +823,7 @@ export function buildAiEntryPptTools(input: {
         ? "Generate a presentation-first HTML deck through frontend-slides. Use this for live delivery, speaking flow, and stage-ready narrative decks."
         : "Generate a PPT preview deck from a conversation brief. Use this when the user wants a slide deck, PPT, pitch deck, training deck, or presentation draft."
   const recommendTemplatesDescription =
-    "Recommend one to four exact editable ppt-master template ids from the complete catalog in the system prompt. Use the complete brief and conversation context to make the semantic recommendation; do not infer by keyword in code. Call this before preview when the user has confirmed the brief but has not selected a template."
+    "Recommend exactly one exact editable ppt-master template id from the complete catalog in the system prompt. Use the complete brief and conversation context to make the semantic recommendation; do not infer by keyword in code. Call this before preview when the user has confirmed the brief but has not selected a template. The editable PPT assistant renders one template and one variant per conversation turn; never return alternatives."
   const exportDescription =
     toolFlow === "editable"
       ? "Export a downloadable editable PPTX artifact from a ppt-master preview session."
@@ -907,6 +907,16 @@ export function buildAiEntryPptTools(input: {
               const templateIds = Array.isArray(requestedIds)
                 ? [...new Set(requestedIds.filter((value): value is string => typeof value === "string"))]
                 : []
+              if (templateIds.length !== 1) {
+                return {
+                  ok: false,
+                  error: {
+                    code: "ppt_template_recommendation_requires_single_template",
+                    message: "The editable PPT assistant requires exactly one recommended template per turn.",
+                  },
+                  catalog,
+                }
+              }
               const selectedTemplates = templateIds
                 .map((templateId) => catalogById.get(templateId.trim()))
                 .filter((template): template is (typeof catalog)[number] => Boolean(template))
@@ -1044,12 +1054,12 @@ export function buildAiEntryPptTools(input: {
             effectiveTemplateMode === "single-template" && effectiveTemplateId
               ? DEFAULT_SINGLE_TEMPLATE_NARRATIVE_ANGLE
               : undefined
-          const effectiveModel =
-            toolFlow === "editable" ? model?.trim() || input.selectedPreviewModel?.trim() || undefined : undefined
+          // The selected chat model is part of the user-facing PPT contract for
+          // every PPT flow. Presentation decks used to silently drop it and
+          // fall back to the enterprise default provider.
+          const effectiveModel = model?.trim() || input.selectedPreviewModel?.trim() || undefined
           const effectivePreferredProviderId =
-            toolFlow === "editable"
-              ? preferredProviderId?.trim() || input.selectedPreviewProviderId?.trim() || undefined
-              : undefined
+            preferredProviderId?.trim() || input.selectedPreviewProviderId?.trim() || undefined
           const effectiveRuntimeSlideModel = toolFlow === "editable" ? runtimeSlideModel?.trim() || undefined : undefined
           const effectiveRuntimeSlideProvider =
             toolFlow === "editable" ? runtimeSlideProvider?.trim() || undefined : undefined

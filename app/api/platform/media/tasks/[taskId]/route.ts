@@ -7,6 +7,7 @@ import {
   resolveEnterpriseVideoRuntimeForUser,
 } from "@/lib/platform/enterprise-runtime-config"
 import { normalizePlatformMediaExecutionPayload } from "@/lib/platform/execute"
+import { isMiniMaxAudioConfigured } from "@/lib/platform/minimax-audio"
 import { isMiniMaxVideoConfigured } from "@/lib/platform/minimax-video"
 import {
   queryMediaCapabilityTask,
@@ -91,11 +92,7 @@ export async function GET(
     const enterpriseAudioRuntime = await resolveEnterpriseAudioRuntimeForUser({
       user: currentUser,
     })
-    if (
-      currentUser.enterpriseStatus === "active" &&
-      typeof currentUser.enterpriseId === "number" &&
-      !enterpriseAudioRuntime
-    ) {
+    if (!enterpriseAudioRuntime && !isMiniMaxAudioConfigured()) {
       return NextResponse.json({ error: "minimax_not_configured" }, { status: 503 })
     }
 

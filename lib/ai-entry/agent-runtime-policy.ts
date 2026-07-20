@@ -12,7 +12,7 @@ export type AiEntryAgentRuntimePolicy = {
 }
 
 const DEFAULT_AGENT_RUNTIME_MS = 5 * 60 * 1000
-const PPT_AGENT_RUNTIME_MS = 20 * 60 * 1000
+const PPT_AGENT_RUNTIME_MS = 60 * 60 * 1000
 
 function getApprovedMcpServerIds() {
   return getAiEntryMcpServerDefinitions()
@@ -51,10 +51,12 @@ export function resolveAiEntryAgentRuntimePolicy(input: {
     effectiveAgentId === "executive-ppt" ||
     effectiveAgentId === "executive-presentation-ppt"
   ) {
+    const isConversationalPresentation = effectiveAgentId === "executive-presentation-ppt"
     return {
       ...policy,
-      allowedSkillIds: ["ppt-master", "executive-consulting"],
-      allowedToolIds: ["web_search", "preview_ppt_deck", "export_ppt_deck", "update_ppt_brief", "recommend_ppt_templates"],
+      allowedSkillIds: isConversationalPresentation ? ["dashiai-ppt", "executive-consulting"] : ["ppt-master", "executive-consulting"],
+      allowedToolIds: isConversationalPresentation ? [] : ["web_search", "preview_ppt_deck", "export_ppt_deck", "update_ppt_brief", "recommend_ppt_templates"],
+      allowedMcpServerIds: isConversationalPresentation ? [] : policy.allowedMcpServerIds,
       maxRuntimeMs: PPT_AGENT_RUNTIME_MS,
       canCreateArtifacts: true,
     }
@@ -84,4 +86,12 @@ export function resolveAiEntryAgentRuntimePolicy(input: {
 export function filterAllowedAiEntrySkillIds(skillIds: string[], policy: AiEntryAgentRuntimePolicy) {
   const allowed = new Set(policy.allowedSkillIds)
   return skillIds.filter((skillId) => allowed.has(skillId))
+}
+
+/** Reserve one model step for the final synthesis after tool results. */
+export function resolveAiEntryMaxStepCount(
+  policy: Pick<AiEntryAgentRuntimePolicy, "maxToolCalls">,
+  hasTools: boolean,
+) {
+  return hasTools ? Math.max(1, policy.maxToolCalls + 1) : 1
 }

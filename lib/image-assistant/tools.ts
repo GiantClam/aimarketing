@@ -481,7 +481,9 @@ function looksLikeChinese(text: string) {
 }
 
 function truncate(value: string, max = 180) {
-  return value.length > max ? `${value.slice(0, max - 1).trim()}...` : value
+  if (value.length <= max) return value
+  if (max <= 3) return value.slice(0, max)
+  return `${value.slice(0, max - 3).trimEnd()}...`
 }
 
 function isLowSignalBriefReply(value: string) {
@@ -1479,7 +1481,7 @@ async function composePromptFromApprovedBrief(input: {
     lines.push("Editing requirement: keep untouched areas as stable as possible, focus the changes on the requested region, and do not return a cropped patch.")
   }
 
-  return lines.filter(Boolean).join("\n")
+  return truncate(lines.filter(Boolean).join("\n"), 2000)
 }
 
 function buildToolTraces(input: {

@@ -2,27 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
-  AudioLines,
-  Archive,
-  Bot,
   ArrowDownToLine,
   Copy,
-  FileText,
-  FileUp,
-  Film,
-  ImageIcon,
   Link2,
-  Mic,
   Minus,
-  Music,
-  PanelsTopLeft,
-  PenSquare,
   Plus,
   RotateCcw,
-  Sparkles,
   Trash2,
-  Type,
-  UserRound,
   X,
 } from "lucide-react"
 
@@ -30,15 +16,23 @@ import { Button } from "@/components/ui/button"
 import type { WorkflowBuiltinAgentOption, WorkflowCustomAgentOption } from "@/components/workflows/workflow-agent-options"
 import { WorkflowNodeEditorFields } from "@/components/workflows/workflow-node-editor-fields"
 import { WorkflowNodeOutputPreview } from "@/components/workflows/workflow-node-output-preview"
+import { getWorkflowNodeVisual } from "@/components/workflows/workflow-node-registry-ui"
 import { cn } from "@/lib/utils"
 import { sanitizeWorkflowNodeOutputPayloadForDisplay } from "@/lib/workflows/output-display"
 import { buildWorkflowImagePromptReferenceEntries, buildWorkflowImagePromptReferenceTokens } from "@/lib/workflows/image-prompt-references"
-import { resolveClickConnectInputName } from "@/lib/workflows/connect"
+import {
+  areWorkflowPortsCompatible,
+  getWorkflowPortLabel,
+  isWorkflowPortCreatable,
+  resolveClickConnectPorts,
+  resolveWorkflowPortConnection,
+} from "@/lib/workflows/connect"
+import type { WorkflowFeatures } from "@/lib/workflows/features"
 import {
   canWorkflowNodeConnectValueKind,
-  getAllowedWorkflowTargetInputKinds,
   getDefaultWorkflowNodeTitle,
   getWorkflowNodeOutputKinds,
+  getWorkflowNodeDefinition,
   resolveWorkflowNodeTitle,
   type WorkflowDefinitionEdge,
   type WorkflowDefinitionNode,
@@ -59,99 +53,10 @@ const CONNECTION_SNAP_RADIUS = 44
 const MIN_CANVAS_SCALE = 0.3
 const MAX_CANVAS_SCALE = 1.6
 
-const NODE_VISUALS: Record<
-  WorkflowNodeType,
-  {
-    icon: typeof FileUp
-    accentClassName: string
-    glowClassName: string
-  }
-> = {
-  upload: {
-    icon: FileUp,
-    accentClassName: "border-amber-300/80 bg-amber-100 text-amber-800",
-    glowClassName: "from-amber-200/80 via-amber-100/20 to-transparent",
-  },
-  text_input: {
-    icon: Type,
-    accentClassName: "border-sky-300/80 bg-sky-100 text-sky-800",
-    glowClassName: "from-sky-200/80 via-sky-100/20 to-transparent",
-  },
-  file_create: {
-    icon: FileText,
-    accentClassName: "border-lime-300/80 bg-lime-100 text-lime-800",
-    glowClassName: "from-lime-200/80 via-lime-100/20 to-transparent",
-  },
-  writer: {
-    icon: PenSquare,
-    accentClassName: "border-indigo-300/80 bg-indigo-100 text-indigo-800",
-    glowClassName: "from-indigo-200/80 via-indigo-100/20 to-transparent",
-  },
-  llm_generate: {
-    icon: Sparkles,
-    accentClassName: "border-fuchsia-300/80 bg-fuchsia-100 text-fuchsia-800",
-    glowClassName: "from-fuchsia-200/80 via-fuchsia-100/20 to-transparent",
-  },
-  image_generate: {
-    icon: ImageIcon,
-    accentClassName: "border-emerald-300/80 bg-emerald-100 text-emerald-800",
-    glowClassName: "from-emerald-200/80 via-emerald-100/20 to-transparent",
-  },
-  video_generate: {
-    icon: Film,
-    accentClassName: "border-rose-300/80 bg-rose-100 text-rose-800",
-    glowClassName: "from-rose-200/80 via-rose-100/20 to-transparent",
-  },
-  digital_human: {
-    icon: UserRound,
-    accentClassName: "border-orange-300/80 bg-orange-100 text-orange-800",
-    glowClassName: "from-orange-200/80 via-orange-100/20 to-transparent",
-  },
-  music_generate: {
-    icon: Music,
-    accentClassName: "border-cyan-300/80 bg-cyan-100 text-cyan-800",
-    glowClassName: "from-cyan-200/80 via-cyan-100/20 to-transparent",
-  },
-  voice_synthesis: {
-    icon: Mic,
-    accentClassName: "border-teal-300/80 bg-teal-100 text-teal-800",
-    glowClassName: "from-teal-200/80 via-teal-100/20 to-transparent",
-  },
-  audio_generate: {
-    icon: AudioLines,
-    accentClassName: "border-cyan-300/80 bg-cyan-100 text-cyan-800",
-    glowClassName: "from-cyan-200/80 via-cyan-100/20 to-transparent",
-  },
-  ppt_generate: {
-    icon: PanelsTopLeft,
-    accentClassName: "border-violet-300/80 bg-violet-100 text-violet-800",
-    glowClassName: "from-violet-200/80 via-violet-100/20 to-transparent",
-  },
-  knowledge_retrieve: {
-    icon: Link2,
-    accentClassName: "border-sky-300/80 bg-sky-100 text-sky-800",
-    glowClassName: "from-sky-200/80 via-sky-100/20 to-transparent",
-  },
-  knowledge_write: {
-    icon: ArrowDownToLine,
-    accentClassName: "border-emerald-300/80 bg-emerald-100 text-emerald-800",
-    glowClassName: "from-emerald-200/80 via-emerald-100/20 to-transparent",
-  },
-  agent_execute: {
-    icon: Bot,
-    accentClassName: "border-amber-400/80 bg-amber-100 text-amber-900",
-    glowClassName: "from-amber-200/80 via-amber-100/20 to-transparent",
-  },
-  product_store: {
-    icon: Archive,
-    accentClassName: "border-slate-300/80 bg-slate-100 text-slate-800",
-    glowClassName: "from-slate-200/80 via-slate-100/20 to-transparent",
-  },
-}
-
 type WorkflowCanvasProps = {
   className?: string
   locale: "zh" | "en"
+  features?: WorkflowFeatures
   nodes: WorkflowDefinitionNode[]
   edges: WorkflowDefinitionEdge[]
   assets: {
@@ -205,10 +110,10 @@ type WorkflowCanvasProps = {
   onSelectNode: (nodeKey: string | null) => void
   onMoveNode: (nodeKey: string, position: { x: number; y: number }) => void
   onDeleteNode: (nodeKey: string) => void
-  onDeleteEdge: (sourceNodeKey: string, targetNodeKey: string, inputName: string) => void
+  onDeleteEdge: (sourceNodeKey: string, targetNodeKey: string, sourcePortId: string, targetPortId: string) => void
   onDuplicateNode: (nodeKey: string) => void
   onStartConnection: (nodeKey: string) => void
-  onConnect: (sourceNodeKey: string, targetNodeKey: string, inputName: string) => void
+  onConnect: (sourceNodeKey: string, targetNodeKey: string, sourcePortId: string, targetPortId: string) => void
   onCancelConnection: () => void
   onAddNodeAtPoint: (type: WorkflowNodeType, position: { x: number; y: number }) => void
   onUpdateNode: (nodeKey: string, patch: Partial<WorkflowDefinitionNode>) => void
@@ -249,13 +154,16 @@ type ConnectionDragState = {
 
 type ConnectionTargetState = {
   targetNodeKey: string
+  sourcePortId: string
+  targetPortId: string
   kind: WorkflowValueKind
 }
 
 type EdgeInteractionState = {
   sourceNodeKey: string
   targetNodeKey: string
-  inputName: string
+  sourcePortId: string
+  targetPortId: string
 }
 
 type CanvasPoint = {
@@ -263,48 +171,8 @@ type CanvasPoint = {
   y: number
 }
 
-function buildEdgeKey(edge: WorkflowDefinitionEdge) {
-  return `${edge.sourceNodeKey}:${edge.targetNodeKey}:${normalizeEdgeInputName(edge)}`
-}
-
-function normalizeEdgeInputName(edge: Pick<WorkflowDefinitionEdge, "inputName">) {
-  return edge.inputName || "input"
-}
-
-function kindToInputName(kind: WorkflowValueKind) {
-  if (kind === "text") return "text"
-  if (kind === "asset") return "assets"
-  if (kind === "image") return "images"
-  if (kind === "video") return "videos"
-  if (kind === "audio") return "audios"
-  return "presentations"
-}
-
-function inputNameToKind(inputName: string): WorkflowValueKind {
-  if (inputName === "text") return "text"
-  if (inputName === "assets") return "asset"
-  if (inputName === "images") return "image"
-  if (inputName === "videos") return "video"
-  if (inputName === "audios") return "audio"
-  return "ppt"
-}
-
-function getPortKindLabel(locale: "zh" | "en", kind: WorkflowValueKind) {
-  if (locale === "zh") {
-    if (kind === "text") return "文本"
-    if (kind === "asset") return "文件"
-    if (kind === "image") return "图片"
-    if (kind === "video") return "视频"
-    if (kind === "audio") return "音频"
-    return "PPT"
-  }
-
-  if (kind === "text") return "Text"
-  if (kind === "asset") return "File"
-  if (kind === "image") return "Image"
-  if (kind === "video") return "Video"
-  if (kind === "audio") return "Audio"
-  return "PPT"
+function buildEdgeKey(edge: WorkflowDefinitionEdge, sourcePortId = edge.sourcePortId || "output", targetPortId = edge.targetPortId || "input") {
+  return edge.edgeKey || `${edge.sourceNodeKey}:${edge.targetNodeKey}:${sourcePortId}:${targetPortId}`
 }
 
 function getUnifiedInputPortLabel(locale: "zh" | "en") {
@@ -400,6 +268,7 @@ function shouldIgnoreCanvasPanTarget(target: EventTarget | null) {
 export function WorkflowCanvas({
   className,
   locale,
+  features,
   nodes,
   edges,
   assets,
@@ -476,16 +345,23 @@ export function WorkflowCanvas({
     if (!selectedEdge) return
 
     const edgeExists = edges.some(
-      (edge) =>
-        edge.sourceNodeKey === selectedEdge.sourceNodeKey &&
-        edge.targetNodeKey === selectedEdge.targetNodeKey &&
-        normalizeEdgeInputName(edge) === selectedEdge.inputName,
+      (edge) => {
+        const source = nodeMap.get(edge.sourceNodeKey)
+        const target = nodeMap.get(edge.targetNodeKey)
+        const connection = source && target
+          ? resolveWorkflowPortConnection(source.type, target.type, edge.sourcePortId, edge.targetPortId, edge.inputName)
+          : null
+        return edge.sourceNodeKey === selectedEdge.sourceNodeKey &&
+          edge.targetNodeKey === selectedEdge.targetNodeKey &&
+          connection?.sourcePortId === selectedEdge.sourcePortId &&
+          connection?.targetPortId === selectedEdge.targetPortId
+      },
     )
 
     if (!edgeExists) {
       setSelectedEdge(null)
     }
-  }, [edges, selectedEdge])
+  }, [edges, nodeMap, selectedEdge])
 
   const connectionSourceNode = pendingConnectionSourceKey ? nodeMap.get(pendingConnectionSourceKey) ?? null : null
   const connectionOutputKinds = connectionSourceNode ? getWorkflowNodeOutputKinds(connectionSourceNode.type) : []
@@ -608,7 +484,7 @@ export function WorkflowCanvas({
     })
   }
 
-  const getInputPortCenter = (node: WorkflowDefinitionNode, kind: WorkflowValueKind) => {
+  const getInputPortCenter = (node: WorkflowDefinitionNode, portIdOrKind: string | WorkflowValueKind) => {
     if (hasUnifiedInputPort(node.type)) {
       return {
         x: node.positionX + INPUT_PORT_CENTER_X,
@@ -616,18 +492,22 @@ export function WorkflowCanvas({
       }
     }
 
-    const acceptedKinds = getAllowedWorkflowTargetInputKinds(node.type)
-    const index = Math.max(acceptedKinds.indexOf(kind), 0)
+    const ports = getWorkflowNodeDefinition(node.type).inputs
+    const indexById = ports.findIndex((port) => port.id === portIdOrKind)
+    const indexByKind = ports.findIndex((port) => port.valueKind === portIdOrKind)
+    const index = Math.max(indexById >= 0 ? indexById : indexByKind, 0)
     return {
       x: node.positionX + INPUT_PORT_CENTER_X,
       y: node.positionY + PORT_PANEL_TOP + PORT_ITEM_START_Y + index * PORT_ITEM_GAP,
     }
   }
 
-  const getOutputPortCenter = (node: WorkflowDefinitionNode) => {
+  const getOutputPortCenter = (node: WorkflowDefinitionNode, portId?: string | null) => {
+    const outputPorts = getWorkflowNodeDefinition(node.type).outputs
+    const outputIndex = Math.max(outputPorts.findIndex((port) => port.id === portId), 0)
     return {
       x: node.positionX + OUTPUT_PORT_CENTER_X,
-      y: node.positionY + PORT_PANEL_TOP + PORT_ITEM_START_Y,
+      y: node.positionY + PORT_PANEL_TOP + PORT_ITEM_START_Y + outputIndex * PORT_ITEM_GAP,
     }
   }
 
@@ -658,12 +538,18 @@ export function WorkflowCanvas({
     for (const node of nodes) {
       if (node.nodeKey === sourceNodeKey) continue
 
-      for (const kind of getAllowedWorkflowTargetInputKinds(node.type)) {
-        if (!outputKinds.some((outputKind) => canWorkflowNodeConnectValueKind(node.type, outputKind) && (outputKind === kind || outputKind === "asset"))) {
+      const sourceDefinition = getWorkflowNodeDefinition(sourceNode.type)
+      const targetDefinition = getWorkflowNodeDefinition(node.type)
+      for (const targetPort of targetDefinition.inputs) {
+        if (!isWorkflowPortCreatable(targetPort, features)) continue
+        const sourcePort = sourceDefinition.outputs.find(
+          (candidate) => isWorkflowPortCreatable(candidate, features) && areWorkflowPortsCompatible(candidate, targetPort),
+        )
+        if (!sourcePort) {
           continue
         }
 
-        const portCenter = getInputPortCenter(node, kind)
+        const portCenter = getInputPortCenter(node, targetPort.id)
         const deltaX = point.x - portCenter.x
         const deltaY = point.y - portCenter.y
         const distanceSquared = deltaX * deltaX + deltaY * deltaY
@@ -673,13 +559,15 @@ export function WorkflowCanvas({
         nearestDistanceSquared = distanceSquared
         nearestTarget = {
           targetNodeKey: node.nodeKey,
-          kind,
+          sourcePortId: sourcePort.id,
+          targetPortId: targetPort.id,
+          kind: targetPort.valueKind,
         }
       }
     }
 
     return nearestTarget
-  }, [nodeMap, nodes])
+  }, [features, nodeMap, nodes])
 
   const buildConnectionPath = (startX: number, startY: number, endX: number, endY: number) => {
     const curve = Math.max(72, Math.abs(endX - startX) * 0.45)
@@ -722,7 +610,8 @@ export function WorkflowCanvas({
         onConnect(
           connectionDrag.sourceNodeKey,
           dropTarget.targetNodeKey,
-          kindToInputName(dropTarget.kind),
+          dropTarget.sourcePortId,
+          dropTarget.targetPortId,
         )
       } else {
         onCancelConnection()
@@ -764,21 +653,28 @@ export function WorkflowCanvas({
   const activeConnectionSourceKey = activeConnectionDrag?.sourceNodeKey ?? null
 
   const handleEdgeSelect = (edge: WorkflowDefinitionEdge) => {
+    const source = nodeMap.get(edge.sourceNodeKey)
+    const target = nodeMap.get(edge.targetNodeKey)
+    if (!source || !target) return
+    const connection = resolveWorkflowPortConnection(source.type, target.type, edge.sourcePortId, edge.targetPortId, edge.inputName)
+    if (!connection) return
     setSelectedEdge({
       sourceNodeKey: edge.sourceNodeKey,
       targetNodeKey: edge.targetNodeKey,
-      inputName: normalizeEdgeInputName(edge),
+      sourcePortId: connection.sourcePortId,
+      targetPortId: connection.targetPortId,
     })
     onSelectNode(null)
   }
 
   const handleEdgeDelete = (edge: EdgeInteractionState) => {
-    onDeleteEdge(edge.sourceNodeKey, edge.targetNodeKey, edge.inputName)
+    onDeleteEdge(edge.sourceNodeKey, edge.targetNodeKey, edge.sourcePortId, edge.targetPortId)
     setSelectedEdge((current) =>
       current &&
       current.sourceNodeKey === edge.sourceNodeKey &&
       current.targetNodeKey === edge.targetNodeKey &&
-      current.inputName === edge.inputName
+      current.sourcePortId === edge.sourcePortId &&
+      current.targetPortId === edge.targetPortId
         ? null
         : current,
     )
@@ -823,17 +719,19 @@ export function WorkflowCanvas({
               const target = nodeMap.get(edge.targetNodeKey)
               if (!source || !target) return null
 
-              const inputName = normalizeEdgeInputName(edge)
-              const sourcePort = getOutputPortCenter(source)
-              const targetPort = getInputPortCenter(target, inputNameToKind(inputName))
+              const connection = resolveWorkflowPortConnection(source.type, target.type, edge.sourcePortId, edge.targetPortId, edge.inputName)
+              if (!connection) return null
+              const sourcePort = getOutputPortCenter(source, connection.sourcePortId)
+              const targetPort = getInputPortCenter(target, connection.targetPortId)
               const path = buildConnectionPath(sourcePort.x, sourcePort.y, targetPort.x, targetPort.y)
               const isHighlighted =
                 pendingConnectionSourceKey === edge.sourceNodeKey || pendingConnectionSourceKey === edge.targetNodeKey
-              const edgeKey = buildEdgeKey(edge)
+              const edgeKey = buildEdgeKey(edge, connection.sourcePortId, connection.targetPortId)
               const isSelected =
                 selectedEdge?.sourceNodeKey === edge.sourceNodeKey &&
                 selectedEdge?.targetNodeKey === edge.targetNodeKey &&
-                selectedEdge?.inputName === inputName
+                selectedEdge?.sourcePortId === connection.sourcePortId &&
+                selectedEdge?.targetPortId === connection.targetPortId
 
               return (
                 <g key={edgeKey}>
@@ -890,13 +788,13 @@ export function WorkflowCanvas({
                     hoveredConnectionTarget && nodeMap.has(hoveredConnectionTarget.targetNodeKey)
                       ? getInputPortCenter(
                           nodeMap.get(hoveredConnectionTarget.targetNodeKey)!,
-                          hoveredConnectionTarget.kind,
+                          hoveredConnectionTarget.targetPortId,
                         ).x
                       : connectionDrag.currentX,
                     hoveredConnectionTarget && nodeMap.has(hoveredConnectionTarget.targetNodeKey)
                       ? getInputPortCenter(
                           nodeMap.get(hoveredConnectionTarget.targetNodeKey)!,
-                          hoveredConnectionTarget.kind,
+                          hoveredConnectionTarget.targetPortId,
                         ).y
                       : connectionDrag.currentY,
                   )}
@@ -909,12 +807,12 @@ export function WorkflowCanvas({
                 <circle
                   cx={
                     hoveredConnectionTarget && nodeMap.has(hoveredConnectionTarget.targetNodeKey)
-                      ? getInputPortCenter(nodeMap.get(hoveredConnectionTarget.targetNodeKey)!, hoveredConnectionTarget.kind).x
+                      ? getInputPortCenter(nodeMap.get(hoveredConnectionTarget.targetNodeKey)!, hoveredConnectionTarget.targetPortId).x
                       : connectionDrag.currentX
                   }
                   cy={
                     hoveredConnectionTarget && nodeMap.has(hoveredConnectionTarget.targetNodeKey)
-                      ? getInputPortCenter(nodeMap.get(hoveredConnectionTarget.targetNodeKey)!, hoveredConnectionTarget.kind).y
+                      ? getInputPortCenter(nodeMap.get(hoveredConnectionTarget.targetNodeKey)!, hoveredConnectionTarget.targetPortId).y
                       : connectionDrag.currentY
                   }
                   r="5"
@@ -931,8 +829,8 @@ export function WorkflowCanvas({
             const target = nodeMap.get(selectedEdge.targetNodeKey)
             if (!source || !target) return null
 
-            const sourcePort = getOutputPortCenter(source)
-            const targetPort = getInputPortCenter(target, inputNameToKind(selectedEdge.inputName))
+            const sourcePort = getOutputPortCenter(source, selectedEdge.sourcePortId)
+            const targetPort = getInputPortCenter(target, selectedEdge.targetPortId)
             const midX = (sourcePort.x + targetPort.x) / 2
             const midY = (sourcePort.y + targetPort.y) / 2
 
@@ -980,11 +878,12 @@ export function WorkflowCanvas({
           ) : null}
 
           {nodes.map((node) => {
-            const acceptedKinds = getAllowedWorkflowTargetInputKinds(node.type)
+            const inputPorts = getWorkflowNodeDefinition(node.type).inputs
             const rendersUnifiedInputPort = hasUnifiedInputPort(node.type)
-            const displayInputKinds = rendersUnifiedInputPort ? acceptedKinds.slice(0, 1) : acceptedKinds
-            const outputKinds = getWorkflowNodeOutputKinds(node.type)
-            const portPanelHeight = getPortPanelHeight(displayInputKinds.length, outputKinds.length)
+            const displayInputPorts = rendersUnifiedInputPort ? inputPorts.slice(0, 1) : inputPorts
+            const outputPorts = getWorkflowNodeDefinition(node.type).outputs
+            const outputKinds = outputPorts.map((port) => port.valueKind)
+            const portPanelHeight = getPortPanelHeight(displayInputPorts.length, outputPorts.length)
             const incomingEdges = nodeConnections.get(node.nodeKey) ?? []
             const selected = selectedNodeKey === node.nodeKey
             const isConnectionSource = pendingConnectionSourceKey === node.nodeKey
@@ -992,8 +891,15 @@ export function WorkflowCanvas({
             const isClickConnectTarget =
               clickConnectMode &&
               !isConnectionSource &&
-              connectionOutputKinds.some((outputKind) => canWorkflowNodeConnectValueKind(node.type, outputKind))
-            const visual = NODE_VISUALS[node.type]
+              (() => {
+                if (!connectionSourceNode) return false
+                const connection = resolveClickConnectPorts(connectionSourceNode.type, node.type)
+                if (!connection) return false
+                const sourcePort = getWorkflowNodeDefinition(connectionSourceNode.type).outputs.find((port) => port.id === connection.sourcePortId)
+                const targetPort = getWorkflowNodeDefinition(node.type).inputs.find((port) => port.id === connection.targetPortId)
+                return Boolean(sourcePort && targetPort && isWorkflowPortCreatable(sourcePort, features) && isWorkflowPortCreatable(targetPort, features))
+              })()
+            const visual = getWorkflowNodeVisual(node.type)
             const displayTitle = resolveWorkflowNodeTitle(node.type, node.title, locale)
             const NodeIcon = visual.icon
             const executionSnapshot = nodeExecutionMap.get(node.nodeKey) ?? null
@@ -1068,9 +974,12 @@ export function WorkflowCanvas({
                   startNodeDrag(event, node)
                 }}
               >
-                {displayInputKinds.map((kind, index) => {
+                {displayInputPorts.map((port, index) => {
+                  const kind = port.valueKind
+                  const portCreatable = isWorkflowPortCreatable(port, features)
                   const active =
                   Boolean(activeConnectionDrag) &&
+                  portCreatable &&
                   activeConnectionSourceKey !== node.nodeKey &&
                   (rendersUnifiedInputPort
                       ? connectionOutputKinds.some((outputKind) => canWorkflowNodeConnectValueKind(node.type, outputKind))
@@ -1081,12 +990,12 @@ export function WorkflowCanvas({
 
                   return (
                     <div
-                      key={`${node.nodeKey}-${kind}-port`}
+                      key={`${node.nodeKey}-${port.id}-port`}
                       data-node-no-drag="true"
-                      data-agent-input-port={`${node.nodeKey}:${kind}`}
+                      data-agent-input-port={`${node.nodeKey}:${port.id}`}
                       className={cn(
                         "absolute z-20 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 bg-background shadow-sm transition",
-                        active ? "border-primary bg-primary/95" : "border-border/90",
+                        !portCreatable ? "border-border/50 bg-muted/40 opacity-50" : active ? "border-primary bg-primary/95" : "border-border/90",
                         hovered ? "scale-110 border-primary bg-[rgb(255,208,0)]" : "",
                   )}
                       style={{
@@ -1095,9 +1004,15 @@ export function WorkflowCanvas({
                       }}
                       onPointerEnter={() => {
                         if (!active) return
+                        const connection = connectionSourceNode
+                          ? resolveClickConnectPorts(connectionSourceNode.type, node.type)
+                          : null
+                        if (!connection) return
                         setHoveredConnectionTarget({
                           targetNodeKey: node.nodeKey,
-                          kind: rendersUnifiedInputPort ? connectionOutputKinds[0] ?? kind : kind,
+                          sourcePortId: connection.sourcePortId,
+                          targetPortId: port.id,
+                          kind,
                         })
                       }}
                       onPointerLeave={() => {
@@ -1110,7 +1025,7 @@ export function WorkflowCanvas({
                   )
                 })}
 
-                {outputKinds.length > 0 ? (
+                {outputPorts.length > 0 ? (
                   <button
                     type="button"
                     className={cn(
@@ -1211,9 +1126,16 @@ export function WorkflowCanvas({
                             return
                           }
                           if (isClickConnectTarget && pendingConnectionSourceKey && connectionSourceNode) {
-                            const inputName = resolveClickConnectInputName(connectionSourceNode.type, node.type)
-                            if (inputName) {
-                              onConnect(pendingConnectionSourceKey, node.nodeKey, inputName)
+                            const connection = resolveClickConnectPorts(connectionSourceNode.type, node.type)
+                            const sourcePort = connection && getWorkflowNodeDefinition(connectionSourceNode.type).outputs.find((port) => port.id === connection.sourcePortId)
+                            const targetPort = connection && getWorkflowNodeDefinition(node.type).inputs.find((port) => port.id === connection.targetPortId)
+                            if (connection && sourcePort && targetPort && isWorkflowPortCreatable(sourcePort, features) && isWorkflowPortCreatable(targetPort, features)) {
+                              onConnect(
+                                pendingConnectionSourceKey,
+                                node.nodeKey,
+                                connection.sourcePortId,
+                                connection.targetPortId,
+                              )
                               return
                             }
                           }
@@ -1262,22 +1184,22 @@ export function WorkflowCanvas({
                 </div>
 
                 <div className="relative border-b border-border/70 bg-background/68 px-3" style={{ height: portPanelHeight }}>
-                  {displayInputKinds.map((kind, index) => (
+                  {displayInputPorts.map((port, index) => (
                     <div
-                      key={`${node.nodeKey}-${kind}-input-label`}
+                      key={`${node.nodeKey}-${port.id}-input-label`}
                       className="pointer-events-none absolute left-8 text-[10px] font-medium text-muted-foreground"
                       style={{ top: PORT_ITEM_START_Y - 7 + index * PORT_ITEM_GAP }}
                     >
-                      {rendersUnifiedInputPort ? getUnifiedInputPortLabel(locale) : getPortKindLabel(locale, kind)}
+                      {rendersUnifiedInputPort ? getUnifiedInputPortLabel(locale) : getWorkflowPortLabel(locale, port)}
                     </div>
                   ))}
-                  {outputKinds.map((kind, index) => (
+                  {outputPorts.map((port, index) => (
                     <div
-                      key={`${node.nodeKey}-${kind}-output-label`}
+                      key={`${node.nodeKey}-${port.id}-output-label`}
                       className="pointer-events-none absolute right-8 text-right text-[10px] font-medium text-muted-foreground"
                       style={{ top: PORT_ITEM_START_Y - 7 + index * PORT_ITEM_GAP }}
                     >
-                      {getPortKindLabel(locale, kind)}
+                      {getWorkflowPortLabel(locale, port)}
                     </div>
                   ))}
                 </div>

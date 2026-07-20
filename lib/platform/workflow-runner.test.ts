@@ -51,7 +51,7 @@ function createWorkflowRunHarness() {
     | "savePlatformArtifact"
     | "promotePlatformArtifactToWorkItem"
   > & {
-    patchPlatformTaskRun(runId: number, patch: Record<string, unknown>): Promise<void>
+    patchPlatformTaskRun(runId: number, patch: Record<string, unknown>): Promise<boolean>
   } = {
     createPlatformTaskRun: baseStore.createPlatformTaskRun,
     appendPlatformRunEvent: baseStore.appendPlatformRunEvent,
@@ -67,12 +67,46 @@ function createWorkflowRunHarness() {
     },
     async patchPlatformTaskRun(runId, patch) {
       const current = patches.get(runId) ?? {}
+      const currentStatus = (current.status as string | undefined) ?? "queued"
+      const expectedStatus = patch.expectedStatus
+      if (expectedStatus !== undefined) {
+        const expected = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus]
+        if (!expected.includes(currentStatus)) return false
+      }
       patches.set(runId, { ...current, ...patch, updatedAt: new Date() })
+      return true
     },
   }
 
   return { store }
 }
+
+test("workflow run compare-and-set does not let a late success overwrite cancellation", async () => {
+  const { store } = createWorkflowRunHarness()
+  const run = await createPlatformWorkflowRun({ currentUser: buildUser(), slug: "cancel-race", store })
+
+  await updatePlatformWorkflowRun({
+    runId: run.id,
+    store,
+    patch: { status: "running", expectedStatus: ["queued"] },
+  })
+  await updatePlatformWorkflowRun({
+    runId: run.id,
+    store,
+    patch: { status: "cancelled", expectedStatus: ["queued", "running", "cancel_requested"] },
+  })
+
+  await assert.rejects(
+    () => updatePlatformWorkflowRun({
+      runId: run.id,
+      store,
+      patch: { status: "succeeded", expectedStatus: ["queued", "running"] },
+    }),
+    /workflow_run_transition_conflict/,
+  )
+  const detail = await store.getPlatformTaskRun(run.id)
+  assert.equal(detail?.status, "cancelled")
+})
 
 test("createPlatformWorkflowRun creates a local queued workflow run with a detail path", async () => {
   const { store } = createWorkflowRunHarness()

@@ -1,0 +1,4 @@
+{"type":"step_start","timestamp":1700000000000,"sessionID":"ses_fixture","part":{"type":"step-start"}}
+{"type":"text","timestamp":1700000000100,"sessionID":"ses_fixture","part":{"type":"text","text":"fixture-ok"}}
+{"type":"tool_use","timestamp":1700000000200,"sessionID":"ses_fixture","part":{"tool":"read","state":{"status":"completed"},"input":{"path":"/workspace/private.txt"}}}
+{"type":"step_finish","timestamp":1700000000300,"sessionID":"ses_fixture","part":{"tokens":{"input":12,"output":4},"cost":0.001}}

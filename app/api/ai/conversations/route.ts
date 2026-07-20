@@ -8,11 +8,12 @@ import {
   type AiEntryConversationScope,
 } from "@/lib/ai-entry/repository"
 import {
+  AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT,
+  AI_ENTRY_AGENT_DEFAULT_MODEL_HINT,
   AI_ENTRY_CONSULTING_DEFAULT_EXECUTIVE_AGENT_ID,
-  AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT,
-  pickConsultingModelId,
+  isConsultingAdvisorEntryMode,
+  pickAgentDefaultModelId,
   resolveConsultingModelMode,
-  shouldLockConsultingAdvisorModel,
   type AiEntryConsultingModelMode,
 } from "@/lib/ai-entry/model-policy"
 import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
@@ -42,7 +43,7 @@ async function resolveCreateConversationModelId(
   scope: AiEntryConversationScope,
   agentId: string | null,
   options?: {
-    forceConsultingModel?: boolean
+    preferAgentDefaultModel?: boolean
     consultingModelMode?: AiEntryConsultingModelMode
   },
 ) {
@@ -87,21 +88,21 @@ async function resolveCreateConversationModelId(
     }
   }
 
-  if (options?.forceConsultingModel) {
+  if (requestedModelId) return await resolveRequestedFromCatalog()
+
+  if (options?.preferAgentDefaultModel) {
     try {
       const catalog = await getGovernedAiEntryModelCatalogForUser({ user })
-      const consultingModelId = pickConsultingModelId(catalog.models)
-      if (consultingModelId) return consultingModelId
+      const agentModelId = pickAgentDefaultModelId(catalog.models)
+      if (agentModelId) return agentModelId
     } catch (error) {
       console.warn("ai-entry.conversation.create.locked-model.resolve.failed", {
         message: error instanceof Error ? error.message : String(error),
       })
     }
 
-    return AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
+    return AI_ENTRY_AGENT_DEFAULT_MODEL_HINT
   }
-
-  if (requestedModelId) return await resolveRequestedFromCatalog()
 
   try {
     const catalog = await getGovernedAiEntryModelCatalogForUser({ user })
@@ -115,7 +116,8 @@ async function resolveCreateConversationModelId(
   const latestModelId = await getLatestAiEntryConversationModelId(user.id, scope, agentId)
   if (latestModelId) return latestModelId
 
-  return AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
+  if (scope === "consulting" || agentId) return AI_ENTRY_AGENT_DEFAULT_MODEL_HINT
+  return AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT
 }
 
 export async function GET(request: NextRequest) {
@@ -128,9 +130,9 @@ export async function GET(request: NextRequest) {
   const limit = parseLimit(searchParams.get("limit"), 20)
   const cursor = searchParams.get("cursor")
   const agentId = parseAgentId(searchParams.get("agent"))
-  const conversationScope: AiEntryConversationScope = shouldLockConsultingAdvisorModel({
-    entryMode: searchParams.get("entryMode"),
-  })
+  const conversationScope: AiEntryConversationScope = isConsultingAdvisorEntryMode(
+    searchParams.get("entryMode"),
+  )
     ? "consulting"
     : "chat"
 
@@ -170,11 +172,8 @@ export async function POST(request: NextRequest) {
     typeof body.agentId === "string" && body.agentId.trim()
       ? body.agentId.trim()
       : null
-  const shouldLockModel = shouldLockConsultingAdvisorModel({
-    entryMode: body.entryMode,
-    agentId: rawAgentId,
-  })
-  const conversationScope: AiEntryConversationScope = shouldLockModel
+  const isConsultingEntry = isConsultingAdvisorEntryMode(body.entryMode)
+  const conversationScope: AiEntryConversationScope = isConsultingEntry
     ? "consulting"
     : "chat"
   const consultingModelMode = resolveConsultingModelMode()
@@ -186,12 +185,12 @@ export async function POST(request: NextRequest) {
       conversationScope,
       rawAgentId,
       {
-        forceConsultingModel: shouldLockModel,
+        preferAgentDefaultModel: isConsultingEntry || Boolean(rawAgentId),
         consultingModelMode,
       },
     )
 
-    if (shouldLockModel) {
+    if (isConsultingEntry) {
       // Warm consulting skill docs when creating a new consulting conversation,
       // so first message can use cached skill context.
       try {
