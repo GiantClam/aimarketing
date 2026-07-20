@@ -63,6 +63,7 @@ test("keeps Railway opt-in scoped to the editable PPT profile", () => {
   assert.equal(profile.provider, "opencode")
   assert.equal(profile.backend, "railway-opencode")
   assert.equal(profile.deploymentMode, "saas-railway")
+  assert.equal(profile.asyncEnabled, true)
 })
 
 test("resolves the Railway profile for every business Agent", () => {

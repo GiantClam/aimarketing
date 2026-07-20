@@ -163,6 +163,16 @@ function isGrokModel(modelId: string) {
   return /(?:^|\/)grok[-_.]4[-_.]5$/iu.test(modelId.trim())
 }
 
+function isPptokenRoutingModel(modelId: string) {
+  if (isOpenAiFamilyModel(modelId)) return true
+
+  // pptoken exposes Grok 4.5 through the same OpenAI-compatible endpoint.
+  return (
+    isGrokModel(modelId) ||
+    canonicalModelFingerprint(stripProviderPrefix(modelId)) === "grok45"
+  )
+}
+
 function buildEquivalentModelVariants(modelId: string) {
   const raw = normalizeText(modelId)
   if (!raw) return []
@@ -672,7 +682,7 @@ async function buildProviderRuntimes(
   if (configs.length === 0) return []
 
   const routingModel = preferredModel || getAiEntryDefaultModel()
-  const allowPptoken = isOpenAiFamilyModel(routingModel) || isGrokModel(routingModel)
+  const allowPptoken = isPptokenRoutingModel(routingModel)
   const allowOpenrouter = preferredProviderId === "openrouter"
   configs = configs.filter((item) =>
     (allowPptoken || item.id !== "pptoken") && (allowOpenrouter || item.id !== "openrouter"),

@@ -97,7 +97,7 @@ export function resolveEditablePptRailwayRuntimeProfile(
   const enabled = readBoolean(env.AI_ENTRY_PPT_RAILWAY_ENABLED, false) && readBoolean(env.AI_ENTRY_SAAS_OPENCODE_ENABLED, false)
   const runnerUrl = normalizeUrl(env.RAILWAY_OPENCODE_RUNTIME_URL)
   const hasRunnerSecret = Boolean(env.RAILWAY_OPENCODE_RUNTIME_TOKEN?.trim())
-  return buildProfile({
+  const profile = buildProfile({
     env,
     backend: "railway-opencode",
     deploymentMode: "saas-railway",
@@ -105,6 +105,9 @@ export function resolveEditablePptRailwayRuntimeProfile(
     runnerUrl,
     hasRunnerSecret,
   })
+  // Editable PPT generation can outlive the web request. Always use the
+  // durable task path when this Railway profile is active.
+  return profile.enabled ? { ...profile, asyncEnabled: true } : profile
 }
 
 /**
