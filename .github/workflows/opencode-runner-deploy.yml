@@ -45,7 +45,7 @@ jobs:
         working-directory: infra/cloudflare/opencode-runner
         run: >-
           npx wrangler containers build .
-          --tag registry.cloudflare.com/${CLOUDFLARE_ACCOUNT_ID}/aimarketing-opencode-runner-pptmastercontainer:ppt-dashi-v0.4.4-fdbb145
+          --tag registry.cloudflare.com/${CLOUDFLARE_ACCOUNT_ID}/aimarketing-opencode-runner-pptmastercontainer:ppt-dashi-v0.4.4-fdbb145-20260720
           --push
       - name: Deploy Cloudflare Worker
         working-directory: infra/cloudflare/opencode-runner

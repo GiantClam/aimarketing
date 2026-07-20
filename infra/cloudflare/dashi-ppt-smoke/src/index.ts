@@ -17,6 +17,8 @@ type OpenCodeModelConfig = {
 // an older container filesystem for a new benchmark deck.
 const SANDBOX_ID = "dashi-ppt-research-20260713"
 const LEGACY_SANDBOX_ID = "dashi-ppt-smoke"
+const DASHI_PPT_VERSION = "0.4.4"
+const DASHI_PPT_COMMIT = "fdbb145517ea0e289000aef9b7906bcb3e0cd19a"
 const SMOKE_DIR = "/workspace/dashi-smoke"
 const PPTX_PATH = `${SMOKE_DIR}/dashi-cloudflare-smoke.pptx`
 const BENCHMARK_DIR = "/workspace/dashi-benchmark-10"
@@ -164,7 +166,13 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
     if (request.method === "GET" && url.pathname === "/health") {
-      return Response.json({ ok: true, service: "dashi-ppt-smoke", instanceType: "standard-4", dashiVersion: "0.3.1" })
+      return Response.json({
+        ok: true,
+        service: "dashi-ppt-smoke",
+        instanceType: "standard-4",
+        dashiVersion: DASHI_PPT_VERSION,
+        dashiCommit: DASHI_PPT_COMMIT,
+      })
     }
     if (!authorized(request, env)) return new Response("Unauthorized", { status: 401 })
 
