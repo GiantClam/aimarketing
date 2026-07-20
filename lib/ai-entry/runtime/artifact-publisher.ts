@@ -108,9 +108,10 @@ export async function publishRuntimeArtifact(input: {
     artifact: {
       artifactId: artifact.id,
       title: artifact.title,
-      kind: validated.kind,
+      kind: published.kind,
       summary: `${validated.fileName} (${validated.mimeType})`,
     },
+    ...(published.kind === "pptx" ? { exportContext: { previewSessionId: input.runId } } : {}),
   }).catch((error) => {
     console.warn("ai-entry.opencode.artifact_context.persist_failed", {
       conversationId: input.conversationId,
@@ -180,9 +181,10 @@ export async function publishRuntimeArtifactReference(input: {
     artifact: {
       artifactId: artifact.id,
       title: artifact.title,
-      kind: validated.kind,
+      kind: published.kind,
       summary: `${validated.fileName} (${validated.mimeType})`,
     },
+    ...(published.kind === "pptx" ? { exportContext: { previewSessionId: input.runId } } : {}),
   }).catch((error) => {
     console.warn("ai-entry.opencode.artifact_reference_context.persist_failed", {
       conversationId: input.conversationId,

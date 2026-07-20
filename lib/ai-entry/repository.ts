@@ -1265,6 +1265,10 @@ export async function recordAiEntryRuntimeArtifactContext(input: {
     kind: string
     summary: string
   }
+  exportContext?: {
+    previewSessionId: string
+    selectedVariantKey?: string | null
+  }
   scope?: AiEntryConversationScope
   agentId?: string | null
 }) {
@@ -1275,6 +1279,7 @@ export async function recordAiEntryRuntimeArtifactContext(input: {
   const nextState = appendAiEntryRuntimeArtifactContext({
     previousState,
     artifact: input.artifact,
+    exportContext: input.exportContext,
   })
   await withAiEntryDbRetry("update-ai-entry-runtime-artifact-context", () =>
     db.update(conversations).set({

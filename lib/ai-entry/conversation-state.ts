@@ -175,10 +175,33 @@ export function applyAiEntryConversationStateDelta(input: {
 export function appendAiEntryRuntimeArtifactContext(input: {
   previousState?: unknown
   artifact: AiEntryRuntimeArtifactContext
+  exportContext?: {
+    previewSessionId: string
+    selectedVariantKey?: string | null
+  }
 }) {
   const previousState = normalizeAiEntryConversationState(input.previousState)
-  const artifacts = [...(previousState.artifacts || []).filter((item) => item.artifactId !== input.artifact.artifactId), input.artifact].slice(-10)
-  return withArtifacts({ ppt: previousState.ppt, projectSnapshot: previousState.projectSnapshot }, artifacts)
+  const merged = [...(previousState.artifacts || []).filter((item) => item.artifactId !== input.artifact.artifactId), input.artifact]
+  const primaryArtifacts = merged
+    .filter((item) => ["pptx", "html", "pdf"].includes(item.kind.toLowerCase()))
+    .slice(-4)
+  const secondaryLimit = Math.max(0, 10 - primaryArtifacts.length)
+  const secondaryArtifacts = merged
+    .filter((item) => !["pptx", "html", "pdf"].includes(item.kind.toLowerCase()))
+    .slice(-secondaryLimit)
+  const artifacts = [...secondaryArtifacts, ...primaryArtifacts]
+  const ppt = input.exportContext
+    ? {
+        latestPreview: previousState.ppt.latestPreview,
+        latestExport: {
+          previewSessionId: input.exportContext.previewSessionId,
+          selectedVariantKey: input.exportContext.selectedVariantKey ?? null,
+          artifactId: input.artifact.artifactId,
+        },
+        phase: "exported" as const,
+      }
+    : previousState.ppt
+  return withArtifacts({ ppt, projectSnapshot: previousState.projectSnapshot }, artifacts)
 }
 
 export function setAiEntryRuntimeProjectSnapshot(input: {

@@ -3,6 +3,7 @@ import test from "node:test"
 
 import {
   applyAiEntryConversationStateDelta,
+  appendAiEntryRuntimeArtifactContext,
   mergeAiEntryConversationState,
   normalizeAiEntryConversationState,
   resolveAiEntryConversationStateFromContents,
@@ -142,4 +143,47 @@ test("conversation state preserves a valid ppt-master snapshot and rejects overs
     ppt: { latestPreview: null, latestExport: null, phase: "idle" },
     projectSnapshot: { schemaVersion: 1, projectKind: "ppt-master", state: { content: "x".repeat(128 * 1024) } },
   }).projectSnapshot, undefined)
+})
+
+test("runtime artifact context keeps PPTX artifacts ahead of internal files", () => {
+  const state = Array.from({ length: 9 }, (_, index) => ({
+    artifactId: index + 1,
+    title: `internal-${index}.json`,
+    kind: "report",
+    summary: "internal runtime file",
+  }))
+  const next = appendAiEntryRuntimeArtifactContext({
+    previousState: {
+      ppt: { latestPreview: null, latestExport: null, phase: "idle" },
+      artifacts: state,
+    },
+    artifact: {
+      artifactId: 10,
+      title: "AI-营销工作台.pptx",
+      kind: "pptx",
+      summary: "AI-营销工作台.pptx (application/vnd.openxmlformats-officedocument.presentationml.presentation)",
+    },
+  })
+
+  assert.equal(next.artifacts?.length, 10)
+  assert.equal(next.artifacts?.at(-1)?.artifactId, 10)
+  assert.equal(next.artifacts?.at(-1)?.kind, "pptx")
+})
+
+test("runtime PPTX publication marks the conversation as exported", () => {
+  const next = appendAiEntryRuntimeArtifactContext({
+    previousState: { ppt: { latestPreview: null, latestExport: null, phase: "idle" } },
+    artifact: { artifactId: 42, title: "deck.pptx", kind: "pptx", summary: "deck.pptx" },
+    exportContext: { previewSessionId: "runtime-run-42" },
+  })
+
+  assert.deepEqual(next.ppt, {
+    latestPreview: null,
+    latestExport: {
+      previewSessionId: "runtime-run-42",
+      selectedVariantKey: null,
+      artifactId: 42,
+    },
+    phase: "exported",
+  })
 })
