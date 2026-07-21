@@ -97,9 +97,9 @@ export function getR2PublicUrl(storageKey: string) {
   return `${publicBase}/${storageKey}`
 }
 
-export async function getR2Object(storageKey: string) {
+export async function getR2Object(storageKey: string, options?: { bucketName?: string }) {
   const client = getR2Client()
-  const bucketName = getR2BucketName()
+  const bucketName = normalizeR2EnvValue(options?.bucketName) || getR2BucketName()
   if (!client || !bucketName || !storageKey) return null
 
   const object = await client.send(new GetObjectCommand({ Bucket: bucketName, Key: storageKey }))

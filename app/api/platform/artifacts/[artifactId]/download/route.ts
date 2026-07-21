@@ -68,7 +68,18 @@ export async function GET(
     headers.set("Cache-Control", "private, no-store")
 
     if (artifact.storageKey) {
-      const object = await getR2Object(artifact.storageKey).catch(() => null)
+      const artifactBucket = process.env.PLATFORM_ARTIFACT_R2_BUCKET
+      let object: Awaited<ReturnType<typeof getR2Object>> = null
+      try {
+        object = await getR2Object(artifact.storageKey, { bucketName: artifactBucket })
+      } catch (error) {
+        console.warn("platform_artifact_r2_read_failed", {
+          artifactId: numericArtifactId,
+          storageKey: artifact.storageKey,
+          bucket: artifactBucket || "default",
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
       if (object) {
         headers.set(
           "Content-Type",
