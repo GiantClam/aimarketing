@@ -246,7 +246,7 @@ async function syncRailwayTask(input: { runtimeRunId: string; status: OpenCodeRu
   await updatePlatformTaskRun(runtimeRun.taskRunId, {
     status: platformTaskStatusFromRailway(input.status),
     normalizedResult: nextResult,
-    startedAt: input.status === "running" ? new Date() : undefined,
+    startedAt: input.status === "running" && !platformRun.startedAt ? new Date() : undefined,
     finishedAt: terminalNow ? new Date() : undefined,
   })
 }

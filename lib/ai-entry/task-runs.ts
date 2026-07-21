@@ -214,6 +214,30 @@ function resolveStageProgress(stage: AiEntryTaskRunStage) {
   return { current: 4, total: 5 }
 }
 
+function resolveProgress(input: {
+  status: AiEntryTaskRunStatus
+  stage: AiEntryTaskRunStage
+  result: Record<string, unknown> | null
+}) {
+  const stageProgress = resolveStageProgress(input.stage)
+  const progressTotal =
+    typeof input.result?.progressTotal === "number" && Number.isFinite(input.result.progressTotal)
+      ? Math.max(1, Math.floor(input.result.progressTotal))
+      : stageProgress.total
+  if (input.status === "success") {
+    return { current: progressTotal, total: progressTotal }
+  }
+
+  const progressCurrent =
+    typeof input.result?.progressCurrent === "number" && Number.isFinite(input.result.progressCurrent)
+      ? Math.max(0, Math.floor(input.result.progressCurrent))
+      : stageProgress.current
+  return {
+    current: Math.min(progressTotal, progressCurrent),
+    total: progressTotal,
+  }
+}
+
 function normalizeLegacyStage(value: string | null) {
   if (!value) return null
   if (value === "brief_validating" || value === "story_planning" || value === "variant_generating" || value === "preview_rendering" || value === "session_persisting" || value === "runtime_queued" || value === "runtime_running" || value === "runtime_checkpointing" || value === "runtime_publishing") {
@@ -259,7 +283,7 @@ export function parseAiEntryOpenCodeTaskRunSummary(source: TaskRunSource): AiEnt
   const updatedAt = toEpochSeconds(source.updatedAt)
   const finishedAt = status === "success" || status === "failed" ? updatedAt : null
   const errorMessage = normalizeText(result?.errorMessage) || normalizeText(result?.error)
-  const progress = resolveStageProgress(stage)
+  const progress = resolveProgress({ status, stage, result })
   return {
     task_id: String(taskId),
     status,
@@ -271,8 +295,8 @@ export function parseAiEntryOpenCodeTaskRunSummary(source: TaskRunSource): AiEnt
     started_at: source.startedAt ? toEpochSeconds(source.startedAt) : null,
     stage,
     stage_label: normalizeText(result?.stageLabel) || (status === "failed" ? (isZh ? "智能体任务失败" : "Agent task failed") : status === "success" ? (isZh ? "智能体任务已完成" : "Agent task completed") : resolveStageLabel(stage, isZh)),
-    progress_current: typeof result?.progressCurrent === "number" && Number.isFinite(result.progressCurrent) ? Math.max(0, Math.floor(result.progressCurrent)) : progress.current,
-    progress_total: typeof result?.progressTotal === "number" && Number.isFinite(result.progressTotal) ? Math.max(1, Math.floor(result.progressTotal)) : status === "success" ? progress.total : progress.total,
+    progress_current: progress.current,
+    progress_total: progress.total,
     last_heartbeat_at: typeof result?.lastHeartbeatAt === "number" && Number.isFinite(result.lastHeartbeatAt) ? Math.floor(result.lastHeartbeatAt) : updatedAt,
     finished_at: typeof result?.finishedAt === "number" && Number.isFinite(result.finishedAt) ? Math.floor(result.finishedAt) : finishedAt,
     preview_session_id: null,
@@ -320,7 +344,7 @@ export function parseAiEntryTaskRunSummary(source: TaskRunSource): AiEntryTaskRu
   const events = normalizeEvents(result?.events)
   const stage = resolveStage({ status, result, events })
   const isZh = payload?.isZh === false ? false : true
-  const progress = resolveStageProgress(stage)
+  const progress = resolveProgress({ status, stage, result })
   const previewSessionId =
     normalizeText(result?.previewSessionId) ||
     normalizeText((result?.toolResult as Record<string, unknown> | undefined)?.previewSessionId)
@@ -364,16 +388,8 @@ export function parseAiEntryTaskRunSummary(source: TaskRunSource): AiEntryTaskRu
             ? "预览已生成"
             : "Preview generated"
           : resolveStageLabel(stage, isZh)),
-    progress_current:
-      typeof result?.progressCurrent === "number" && Number.isFinite(result.progressCurrent)
-        ? Math.max(0, Math.floor(result.progressCurrent))
-        : progress.current,
-    progress_total:
-      typeof result?.progressTotal === "number" && Number.isFinite(result.progressTotal)
-        ? Math.max(1, Math.floor(result.progressTotal))
-        : status === "success"
-          ? 5
-          : progress.total,
+    progress_current: progress.current,
+    progress_total: progress.total,
     last_heartbeat_at:
       typeof result?.lastHeartbeatAt === "number" && Number.isFinite(result.lastHeartbeatAt)
         ? Math.floor(result.lastHeartbeatAt)

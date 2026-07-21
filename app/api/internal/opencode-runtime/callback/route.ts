@@ -396,6 +396,6 @@ export async function POST(request: NextRequest) {
     lastHeartbeatAt: Math.floor(Date.now() / 1000),
   }
   await updateOpenCodeRuntimeRun(payload.runId, { status: payload.status === "succeeded" ? "succeeded" : payload.status === "cancelled" ? "cancelled" : payload.status === "timed_out" ? "timed_out" : payload.status === "failed" ? "failed" : "running", workspaceBackup: payload.checkpoint || undefined, clearLease: ["succeeded", "failed", "cancelled", "timed_out"].includes(payload.status), finishedAt: ["succeeded", "failed", "cancelled", "timed_out"].includes(payload.status) ? new Date() : undefined })
-  await updatePlatformTaskRun(runtimeRun.taskRunId, { status: taskStatus(payload.status), normalizedResult: nextResult, startedAt: payload.status === "running" ? new Date() : undefined, finishedAt: ["succeeded", "failed", "cancelled", "timed_out"].includes(payload.status) ? new Date() : undefined })
+  await updatePlatformTaskRun(runtimeRun.taskRunId, { status: taskStatus(payload.status), normalizedResult: nextResult, startedAt: payload.status === "running" && !platformRun.startedAt ? new Date() : undefined, finishedAt: ["succeeded", "failed", "cancelled", "timed_out"].includes(payload.status) ? new Date() : undefined })
   return NextResponse.json({ ok: true, runtimeRunId: payload.runId, status: payload.status })
 }

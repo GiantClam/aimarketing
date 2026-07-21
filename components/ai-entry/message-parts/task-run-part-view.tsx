@@ -50,10 +50,13 @@ export function TaskRunPartView({ part, isZh }: { part: TaskRunPart; isZh: boole
   const { taskRun } = part
   const isOpenCodeTask = taskRun.task_type === "opencode_agent_run"
   const [nowMs, setNowMs] = useState(() => Date.now())
-  const percent = Math.max(
-    0,
-    Math.min(100, Math.round((taskRun.progress_current / Math.max(1, taskRun.progress_total)) * 100)),
-  )
+  const percent =
+    taskRun.status === "success"
+      ? 100
+      : Math.max(
+          0,
+          Math.min(100, Math.round((taskRun.progress_current / Math.max(1, taskRun.progress_total)) * 100)),
+        )
   const isRunning = taskRun.status === "pending" || taskRun.status === "running"
   const isHeartbeatStale = isAiEntryTaskHeartbeatStale(taskRun, nowMs)
   const elapsedLabel = formatElapsedSeconds(

@@ -662,7 +662,14 @@ export async function updatePlatformTaskRun(runId: number, input: { status?: Pla
       .set({
         ...(input.status === undefined ? {} : { status: input.status }),
         ...(input.normalizedResult === undefined ? {} : { normalizedResult: input.normalizedResult }),
-        ...(input.startedAt === undefined ? {} : { startedAt: input.startedAt }),
+        ...(input.startedAt === undefined
+          ? {}
+          : {
+              startedAt:
+                input.startedAt === null
+                  ? null
+                  : sql`COALESCE(${platformTaskRuns.startedAt}, ${input.startedAt})`,
+            }),
         ...(input.finishedAt === undefined ? {} : { finishedAt: input.finishedAt }),
         updatedAt: new Date(),
       })
@@ -1140,7 +1147,14 @@ export function createInMemoryPlatformTaskRunStore(): PlatformTaskRunStore {
         ...current,
         ...(input.status === undefined ? {} : { status: input.status }),
         ...(input.normalizedResult === undefined ? {} : { normalizedResult: input.normalizedResult }),
-        ...(input.startedAt === undefined ? {} : { startedAt: input.startedAt }),
+        ...(input.startedAt === undefined
+          ? {}
+          : {
+              startedAt:
+                input.startedAt === null || current.startedAt === null
+                  ? input.startedAt
+                  : current.startedAt,
+            }),
         ...(input.finishedAt === undefined ? {} : { finishedAt: input.finishedAt }),
         updatedAt: new Date(),
       }

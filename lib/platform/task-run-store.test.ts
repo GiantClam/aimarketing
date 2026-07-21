@@ -84,6 +84,27 @@ test("createPlatformTaskRun saves a queued run and appendPlatformRunEvent adds a
   assert.equal(hydrated.events[0]?.message, "workflow_queued")
 })
 
+test("platform task start time is written once", async () => {
+  const store = createInMemoryPlatformTaskRunStore()
+  const run = await store.createPlatformTaskRun({
+    enterpriseId: 4,
+    userId: 8,
+    kind: "agent",
+    itemType: "ai_entry_opencode",
+    itemSlug: "start-time",
+  })
+  const firstStartedAt = new Date("2026-07-21T09:00:00.000Z")
+  const secondStartedAt = new Date("2026-07-21T09:05:00.000Z")
+
+  await store.updatePlatformTaskRun(run.id, { status: "running", startedAt: firstStartedAt })
+  const updated = await store.updatePlatformTaskRun(run.id, {
+    status: "running",
+    startedAt: secondStartedAt,
+  })
+
+  assert.equal(updated?.startedAt?.toISOString(), firstStartedAt.toISOString())
+})
+
 test("listRecentWorkflowTaskRunsForEnterprise limits results to workflow runs", async () => {
   const store = createInMemoryPlatformTaskRunStore()
 

@@ -26,6 +26,29 @@ test("parseAiEntryTaskRunSummary normalizes a queued OpenCode runtime task", () 
   assert.equal(summary?.conversation_id, "conversation-1")
 })
 
+test("successful OpenCode runtime tasks are normalized to complete progress", () => {
+  const summary = parseAiEntryTaskRunSummary({
+    id: 2049,
+    status: "succeeded",
+    payload: {
+      kind: "opencode_runtime",
+      conversationId: "conversation-2",
+    },
+    result: {
+      stage: "runtime_publishing",
+      progressCurrent: 3,
+      progressTotal: 4,
+    },
+    createdAt: 1710000000,
+    updatedAt: 1710000010,
+    startedAt: 1710000002,
+  })
+
+  assert.equal(summary?.status, "success")
+  assert.equal(summary?.progress_current, 4)
+  assert.equal(summary?.progress_total, 4)
+})
+
 test("parseAiEntryTaskRunSummary normalizes a running PPT preview task", () => {
   const summary = parseAiEntryTaskRunSummary({
     id: 901,
@@ -91,4 +114,23 @@ test("parseAiEntryTaskRunSummary infers a failed terminal stage", () => {
   assert.equal(summary?.stage_label, "Preview failed")
   assert.equal(summary?.progress_current, 2)
   assert.equal(summary?.error, "ppt_preview_failed")
+})
+
+test("successful PPT preview tasks are normalized to complete progress", () => {
+  const summary = parseAiEntryTaskRunSummary({
+    id: 903,
+    status: "success",
+    payload: { kind: "ai_entry_ppt_preview", isZh: true },
+    result: {
+      stage: "session_persisting",
+      progressCurrent: 4,
+      progressTotal: 5,
+    },
+    createdAt: 1710000000,
+    updatedAt: 1710000010,
+    startedAt: 1710000002,
+  })
+
+  assert.equal(summary?.progress_current, 5)
+  assert.equal(summary?.progress_total, 5)
 })

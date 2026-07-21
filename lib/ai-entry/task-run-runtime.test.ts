@@ -50,7 +50,7 @@ test("task elapsed seconds uses started time for running tasks", () => {
   )
 })
 
-test("task elapsed seconds prefer backend finished time when available", () => {
+test("terminal task elapsed seconds stay fixed at backend finished time", () => {
   assert.equal(
     getAiEntryTaskElapsedSeconds(
       {
@@ -58,7 +58,23 @@ test("task elapsed seconds prefer backend finished time when available", () => {
         started_at: 110,
         updated_at: 9_999,
         finished_at: 150,
-        status: "running",
+        status: "success",
+      },
+      999_000,
+    ),
+    40,
+  )
+})
+
+test("terminal task elapsed seconds fall back to updated time", () => {
+  assert.equal(
+    getAiEntryTaskElapsedSeconds(
+      {
+        created_at: 100,
+        started_at: 110,
+        updated_at: 150,
+        finished_at: null,
+        status: "failed",
       },
       999_000,
     ),

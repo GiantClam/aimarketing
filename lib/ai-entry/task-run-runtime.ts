@@ -26,12 +26,11 @@ export function getAiEntryTaskElapsedSeconds(
   taskRun: Pick<AiEntryTaskRunSummary, "created_at" | "started_at" | "updated_at" | "finished_at" | "status">,
   nowMs = Date.now(),
 ) {
-  const startedAt = taskRun.started_at || taskRun.created_at
-  const terminalAt =
-    taskRun.finished_at ||
-    (taskRun.status === "success" || taskRun.status === "failed"
-      ? taskRun.updated_at
-      : Math.floor(nowMs / 1000))
+  const startedAt = taskRun.started_at ?? taskRun.created_at
+  const isTerminal = taskRun.status === "success" || taskRun.status === "failed"
+  const terminalAt = isTerminal
+    ? taskRun.finished_at ?? taskRun.updated_at
+    : Math.floor(nowMs / 1000)
 
   return Math.max(0, terminalAt - startedAt)
 }
