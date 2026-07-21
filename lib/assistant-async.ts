@@ -2418,6 +2418,10 @@ export async function ensureImageAssistantSessionForTask(params: {
   let sessionId = params.sessionId || null
   let session = sessionId ? await getImageAssistantSession(params.userId, sessionId) : null
 
+  if (sessionId && !session) {
+    throw new Error("image_assistant_session_not_found")
+  }
+
   if (!session) {
     const created = await createImageAssistantSession({
       userId: params.userId,

@@ -45,6 +45,7 @@ import { hasCustomImageModelSelection } from "@/lib/platform/shared-credits-poli
 import { IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS } from "@/lib/image-assistant/skills"
 import {
   buildWorkflowImageRuntimeTurn,
+  buildImageAssistantConversationContext,
   buildImageAssistantTurnContent,
   extractLatestImageAssistantOrchestration,
   planImageAssistantTurn,
@@ -378,6 +379,10 @@ async function ensureImageAssistantSession(params: {
 }) {
   let sessionId = params.sessionId || null
   let session = sessionId ? await getImageAssistantSession(params.userId, sessionId) : null
+
+  if (sessionId && !session) {
+    throw new Error("image_assistant_session_not_found")
+  }
 
   if (!session) {
     const created = await createImageAssistantSession({
@@ -1042,7 +1047,7 @@ export async function runImageAssistantConversationTurn(params: {
   })
 
   const [messages, { referencedAssets, referenceUrls }] = await Promise.all([
-    listImageAssistantMessages(params.userId, sessionId, { skipSessionValidation: true }),
+    listImageAssistantMessages(params.userId, sessionId, { skipSessionValidation: true, limit: 100 }),
     resolveReferenceAssets({
       userId: params.userId,
       sessionId,
@@ -1061,6 +1066,7 @@ export async function runImageAssistantConversationTurn(params: {
   const isFirstUserTurn = !messages.some((message) => message.role === "user")
 
   const previousState = extractLatestImageAssistantOrchestration(messages)
+  const conversationContext = buildImageAssistantConversationContext(messages)
   const latestPromptQuestionContext = getLatestPromptQuestionContext(messages)
   const guidedSelection = normalizeGuidedSelection(params.guidedSelection)
   const invocationMode = params.invocationMode === "workflow_runtime" ? "workflow_runtime" : "assistant"
@@ -1124,6 +1130,7 @@ export async function runImageAssistantConversationTurn(params: {
           prompt: params.prompt,
           currentBrief: params.brief,
           previousState,
+          conversationContext,
           taskType: params.taskType,
           sizePreset: effectiveSizePreset,
           resolution: effectiveResolution,

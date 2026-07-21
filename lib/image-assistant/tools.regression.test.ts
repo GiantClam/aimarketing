@@ -78,9 +78,10 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 
 let planImageAssistantTurn: (...args: any[]) => Promise<any>
 let buildWorkflowImageRuntimeTurn: (...args: any[]) => Promise<any>
+let buildImageAssistantConversationContext: (...args: any[]) => string
 
 test.before(async () => {
-  ;({ planImageAssistantTurn, buildWorkflowImageRuntimeTurn } = await import("./tools"))
+  ;({ planImageAssistantTurn, buildWorkflowImageRuntimeTurn, buildImageAssistantConversationContext } = await import("./tools"))
 })
 
 test.beforeEach(() => {
@@ -322,6 +323,66 @@ test("guided brief can auto-complete style fallback and continue to generation",
   assert.equal(result.orchestration.ready_for_generation, true)
   assert.equal(result.orchestration.selected_skill.id, "enterprise-ad-image")
   assert.ok(typeof result.orchestration.generated_prompt === "string" && result.orchestration.generated_prompt.length > 0)
+})
+
+test("planner recovers the latest subject from raw conversation context for continuation prompts", async () => {
+  mockedPlannerResponse = JSON.stringify({
+    brief_delta: {},
+    missing_fields: [],
+    conflicts: [],
+    confidence: 0.8,
+    next_question: "",
+    ready_for_generation: true,
+  })
+
+  const conversationContext = buildImageAssistantConversationContext([
+    {
+      id: "message-1",
+      session_id: "session-1",
+      role: "user",
+      message_type: "prompt",
+      task_type: "generate",
+      content: "User request: 生成美女图片\nRequested mode: generate",
+      created_version_id: null,
+      request_payload: null,
+      response_payload: null,
+      created_at: 1,
+    },
+    {
+      id: "message-2",
+      session_id: "session-1",
+      role: "assistant",
+      message_type: "note",
+      task_type: "generate",
+      content: "请确认画幅和风格。",
+      created_version_id: null,
+      request_payload: null,
+      response_payload: null,
+      created_at: 2,
+    },
+  ])
+
+  const result = await planImageAssistantTurn({
+    prompt: "继续生成",
+    currentBrief: {
+      usage_preset: "social_cover",
+      usage_label: "社媒封面 4:5",
+      orientation: "portrait",
+      resolution: "2K",
+      size_preset: "4:5",
+      ratio_confirmed: true,
+    },
+    previousState: null,
+    conversationContext,
+    taskType: "generate",
+    sizePreset: "4:5",
+    resolution: "2K",
+    referenceCount: 0,
+  })
+
+  assert.equal(result.orchestration.ready_for_generation, true)
+  assert.match(result.orchestration.brief.subject, /美女/)
+  assert.match(result.orchestration.generated_prompt || "", /美女/)
 })
 
 test("completed ad brief routes to enterprise-ad-image", async () => {

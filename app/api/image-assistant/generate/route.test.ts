@@ -36,6 +36,7 @@ type ConversationTurnParams = {
 let runTurnCalls: ConversationTurnParams[] = []
 let enqueueCalls: Array<{ workflowName: string; payload: ConversationTurnParams & { kind: string } }> = []
 let shouldFailSessionDetail = false
+let shouldFailSessionValidation = false
 let listVersionsCalls = 0
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
@@ -58,10 +59,15 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   }
   if (request === "@/lib/assistant-async") {
     return {
-      ensureImageAssistantSessionForTask: async () => ({
-        sessionId: "s-1",
-        session: { current_version_id: "v-current" },
-      }),
+      ensureImageAssistantSessionForTask: async () => {
+        if (shouldFailSessionValidation) {
+          throw new Error("image_assistant_session_not_found")
+        }
+        return {
+          sessionId: "s-1",
+          session: { current_version_id: "v-current" },
+        }
+      },
       enqueueAssistantTask: async (input: { workflowName: string; payload: ConversationTurnParams & { kind: string } }) => {
         enqueueCalls.push(input)
         return { id: "task-1" }
@@ -156,6 +162,7 @@ test.beforeEach(() => {
   runTurnCalls = []
   enqueueCalls = []
   shouldFailSessionDetail = false
+  shouldFailSessionValidation = false
   listVersionsCalls = 0
 })
 
@@ -177,6 +184,21 @@ test("generate route defaults to async queue execution when preferAsync is omitt
   assert.equal(enqueueCalls.length, 1)
   assert.equal(response.body?.data?.accepted, true)
   assert.equal(typeof response.body?.data?.task_id, "string")
+})
+
+test("generate route rejects a missing session instead of creating a replacement", async () => {
+  shouldFailSessionValidation = true
+
+  const response = await POST({
+    json: async () => ({
+      prompt: "继续生成",
+      sessionId: "492",
+    }),
+  })
+
+  assert.equal(response.status, 404)
+  assert.equal(response.body?.error, "Not found")
+  assert.equal(enqueueCalls.length, 0)
 })
 
 test("generate route syncs explicit prompt resolution and ratio into async payload", async () => {

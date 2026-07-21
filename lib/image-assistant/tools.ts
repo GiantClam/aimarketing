@@ -59,6 +59,7 @@ const BRIEF_PLANNER_MAX_MODEL_ATTEMPTS =
   Number.parseInt(process.env.IMAGE_ASSISTANT_PLANNER_MAX_MODEL_ATTEMPTS || "", 10) || 3
 const BRIEF_EXTRACT_SCHEMA_VERSION = "image_assistant_brief_extract.v1"
 const BRIEF_PROMPT_VERSION = "image_assistant_prompt_compose.v1"
+const IMAGE_ASSISTANT_CONVERSATION_CONTEXT_MAX_CHARS = 6_000
 
 const USAGE_PRESET_DEFINITIONS: Record<
   ImageAssistantUsagePresetId,
@@ -1004,6 +1005,7 @@ function applyBriefSemanticValidation(input: {
 
 async function extractBriefWithSchema(input: {
   prompt: string
+  conversationContext?: string | null
   priorState: ImageAssistantOrchestrationState | null
   mergedBrief: ImageAssistantBrief
   missingFields: ImageAssistantBriefField[]
@@ -1039,6 +1041,7 @@ async function extractBriefWithSchema(input: {
       ? "If guided options are still available, keep reply_to_user short and point to the next guided question."
       : null,
     "Do not generate an image prompt in this stage.",
+    "Use conversation_context as additional history when the current prompt is a continuation. Prefer explicit current instructions over older context.",
     "Return strict JSON only. No markdown.",
     `Schema version: ${BRIEF_EXTRACT_SCHEMA_VERSION}.`,
     `Output JSON schema (must be exact): ${getBriefExtractionSchemaSpec()}`,
@@ -1059,6 +1062,7 @@ async function extractBriefWithSchema(input: {
         previous_brief: input.priorState?.brief || EMPTY_BRIEF,
         current_brief: input.mergedBrief,
         current_prompt: input.prompt,
+        conversation_context: input.conversationContext || "",
         current_missing_fields: input.missingFields,
         schema_version: BRIEF_EXTRACT_SCHEMA_VERSION,
       }
@@ -1072,6 +1076,7 @@ async function extractBriefWithSchema(input: {
         previous_brief: input.priorState?.brief || EMPTY_BRIEF,
         current_brief: input.mergedBrief,
         current_prompt: input.prompt,
+        conversation_context: input.conversationContext || "",
         current_missing_fields: input.missingFields,
         schema_version: BRIEF_EXTRACT_SCHEMA_VERSION,
       }
@@ -1599,10 +1604,50 @@ export function buildImageAssistantTurnContent(input: {
   return sections.filter(Boolean).join("\n")
 }
 
+function getConversationMessageText(message: ImageAssistantMessage) {
+  const content = normalizeText(message.content)
+  if (!content) return ""
+  if (message.role !== "user") return content
+
+  const requestMatch = /(?:^|\s)User request:\s*(.+?)(?=\s+(?:Usage|Orientation|Quality|Ratio|Objective|Subject|Style|Composition|Constraints|Requested mode):|$)/iu.exec(
+    content,
+  )
+  return normalizeText(requestMatch?.[1] || content)
+}
+
+export function buildImageAssistantConversationContext(messages: ImageAssistantMessage[]) {
+  const lines = messages
+    .slice(-16)
+    .map((message) => {
+      const text = getConversationMessageText(message)
+      if (!text) return ""
+      return `${message.role === "user" ? "User" : "Assistant"}: ${truncate(text, 700)}`
+    })
+    .filter(Boolean)
+
+  return truncate(lines.join("\n"), IMAGE_ASSISTANT_CONVERSATION_CONTEXT_MAX_CHARS)
+}
+
+function getLatestUserRequestFromConversationContext(context: string) {
+  const matches = Array.from(context.matchAll(/(?:^|\n)User:\s*(.+)/giu))
+  return normalizeText(matches.at(-1)?.[1] || "")
+}
+
+function isLowSignalContinuationPrompt(prompt: string) {
+  const normalized = normalizeText(prompt)
+  return (
+    isLowSignalBriefReply(normalized) ||
+    /^(?:继续(?:生成|出图)?|生成|确认(?:生成)?|按(?:刚才|上面|之前)|continue(?: generating)?|generate|go ahead)$/iu.test(
+      normalized,
+    )
+  )
+}
+
 export async function planImageAssistantTurn(input: {
   prompt: string
   currentBrief?: Partial<ImageAssistantBrief> | null
   previousState: ImageAssistantOrchestrationState | null
+  conversationContext?: string | null
   taskType: ImageAssistantTaskType
   sizePreset: ImageAssistantSizePreset
   resolution: string
@@ -1615,6 +1660,12 @@ export async function planImageAssistantTurn(input: {
     referenceCount: input.referenceCount,
   })
   const activePromptQuestion = input.previousState?.prompt_questions?.[0] || null
+  const normalizedConversationContext = normalizeText(input.conversationContext)
+  const contextPrompt =
+    normalizedConversationContext && isLowSignalContinuationPrompt(input.prompt)
+      ? getLatestUserRequestFromConversationContext(normalizedConversationContext)
+      : ""
+  const promptForInference = contextPrompt || input.prompt
   const promptOptionBrief = inferBriefFromPromptQuestionOption({
     prompt: input.prompt,
     previousState: input.previousState,
@@ -1628,7 +1679,7 @@ export async function planImageAssistantTurn(input: {
   const inferred = isGuidedOptionTurn
     ? { ...EMPTY_BRIEF }
     : inferBriefFromPrompt({
-        prompt: input.prompt,
+        prompt: promptForInference,
         taskType: input.taskType,
         sizePreset: input.sizePreset,
         referenceCount: input.referenceCount,
@@ -1658,6 +1709,7 @@ export async function planImageAssistantTurn(input: {
     ? null
     : await extractBriefWithSchema({
         prompt: input.prompt,
+        conversationContext: input.conversationContext,
         priorState: input.previousState,
         mergedBrief,
         missingFields: initialMissingFields,
