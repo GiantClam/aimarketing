@@ -338,9 +338,16 @@ function toAsciiDownloadFileName(fileName: string, contentType?: string | null) 
   return `${safeBase}${extension || extensionFromContentType(contentType) || ".bin"}`
 }
 
+function ensureDownloadFileNameExtension(fileName: string, contentType?: string | null) {
+  const { extension } = splitFileNameExtension(fileName)
+  if (extension) return fileName
+  return `${fileName}${extensionFromContentType(contentType) || ".bin"}`
+}
+
 function buildContentDisposition(dispositionType: "attachment" | "inline", fileName: string, contentType?: string | null) {
-  const asciiFileName = toAsciiDownloadFileName(fileName, contentType)
-  return `${dispositionType}; filename="${asciiFileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`
+  const resolvedFileName = ensureDownloadFileNameExtension(fileName, contentType)
+  const asciiFileName = toAsciiDownloadFileName(resolvedFileName, contentType)
+  return `${dispositionType}; filename="${asciiFileName}"; filename*=UTF-8''${encodeURIComponent(resolvedFileName)}`
 }
 
 export function buildAttachmentContentDisposition(fileName: string, contentType?: string | null) {

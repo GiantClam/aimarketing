@@ -33,6 +33,17 @@ function getHttpSourceUrl(value: string | null | undefined) {
   }
 }
 
+function getArtifactDownloadFileName(artifact: Awaited<ReturnType<typeof getPlatformArtifact>>) {
+  const payload = artifact?.payload && typeof artifact.payload === "object" && !Array.isArray(artifact.payload)
+    ? (artifact.payload as Record<string, unknown>)
+    : null
+  const payloadFileName = typeof payload?.fileName === "string" ? payload.fileName.trim() : ""
+  if (payloadFileName) return payloadFileName
+
+  const storageFileName = artifact?.storageKey?.split("/").pop()?.trim() || ""
+  return storageFileName || artifact.title
+}
+
 function readEmbeddedArtifactContent(
   artifact: Awaited<ReturnType<typeof getPlatformArtifact>>,
 ): { bytes: Uint8Array; contentType: string } | null {
@@ -78,12 +89,13 @@ export async function GET(
 
     const artifact = assertArtifactEnterpriseAccess(currentUser, await getPlatformArtifact(numericArtifactId))
     const forceDownload = new URL(request.url).searchParams.get("download") === "1"
+    const downloadFileName = getArtifactDownloadFileName(artifact)
     const headers = new Headers()
     headers.set(
       "Content-Disposition",
       forceDownload
-        ? buildAttachmentContentDisposition(artifact.title, artifact.mimeType)
-        : buildInlineContentDisposition(artifact.title, artifact.mimeType),
+        ? buildAttachmentContentDisposition(downloadFileName, artifact.mimeType)
+        : buildInlineContentDisposition(downloadFileName, artifact.mimeType),
     )
     headers.set("Cache-Control", "private, no-store")
 

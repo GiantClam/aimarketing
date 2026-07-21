@@ -247,6 +247,40 @@ test("artifact download prefers the persisted external URL for runtime files", a
   assert.equal(Buffer.from((response as any).body as Uint8Array).toString("utf8"), "pptx-bytes")
 })
 
+test("artifact download uses the payload file name when the display title has no extension", async () => {
+  const externalUrl = "https://s.aimarketingsite.com/platform-artifacts/final-deck.pptx"
+  artifact = {
+    ...artifact,
+    kind: "file",
+    title: "屿算智能公司及产品介绍",
+    mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    externalUrl,
+    payload: {
+      source: "opencode",
+      fileName: "yusuan-ai-intro.pptx",
+    },
+  }
+
+  globalThis.fetch = async () =>
+    ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": artifact.mimeType }),
+      body: Buffer.from("pptx-bytes"),
+    }) as any
+
+  const response = await GET(
+    new Request("http://localhost:3000/api/platform/artifacts/145/download?download=1") as any,
+    { params: Promise.resolve({ artifactId: "145" }) },
+  )
+
+  assert.equal((response as any).status, 200)
+  assert.equal(
+    (response as any).headers.get("content-disposition"),
+    'attachment; filename="yusuan-ai-intro.pptx"',
+  )
+})
+
 test("artifact download falls back from the runtime bucket to the upload bucket", async () => {
   process.env.PLATFORM_ARTIFACT_R2_BUCKET = "aimarketing-opencode-runtime"
   artifact = {

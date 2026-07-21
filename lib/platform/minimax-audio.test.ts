@@ -115,6 +115,12 @@ test("attachment content disposition infers html extension from content type whe
   assert.match(header, /filename\*=UTF-8''/)
 })
 
+test("attachment content disposition adds the inferred extension to the UTF-8 filename", () => {
+  const header = buildAttachmentContentDisposition("屿算智能公司及产品介绍", "application/vnd.openxmlformats-officedocument.presentationml.presentation")
+  assert.match(header, /filename="[^"]+\.pptx"/)
+  assert.match(header, /filename\*=UTF-8''[^;]+\.pptx/)
+})
+
 test("minimax audio stored download file name keeps the human title", () => {
   assert.equal(buildDownloadFileName("品牌发布曲，暖场版", "mp3"), "品牌发布曲，暖场版.mp3")
 })
