@@ -387,6 +387,69 @@ test("planner recovers the latest subject from raw conversation context for cont
   assert.match(result.assistantReply || "", /style|风格/i)
 })
 
+test("low-signal continuation reuses the previous creative brief instead of the latest style answer", async () => {
+  mockedPlannerResponse = JSON.stringify({
+    brief_delta: {
+      goal: "Outdoor cafe lifestyle photo",
+      subject: "A woman using a phone at a cafe table",
+      style: "Candid photography",
+      composition: "Natural lifestyle framing",
+      constraints: "",
+    },
+    missing_fields: [],
+    conflicts: [],
+    confidence: 0.9,
+    next_question: "",
+    ready_for_generation: true,
+  })
+
+  const result = await planImageAssistantTurn({
+    prompt: "继续生成",
+    currentBrief: null,
+    previousState: {
+      brief: {
+        usage_preset: "social_cover",
+        usage_label: "社媒封面 4:5",
+        orientation: "portrait",
+        resolution: "2K",
+        size_preset: "4:5",
+        ratio_confirmed: true,
+        goal: "Generate a woman portrait on a sunny beach",
+        subject: "A woman standing on a sunny beach by the sea",
+        style: "Candid photography",
+        composition: "Front-facing portrait with the beach visible behind the subject",
+        constraints: "Keep the sea and sand clearly visible",
+      },
+      missing_fields: [],
+      turn_count: 2,
+      max_turns: 5,
+      ready_for_generation: true,
+      planner_strategy: "text_model",
+      selected_skill: { id: "graphic-design-brief", label: "Graphic Design Brief", stage: "execution" },
+      tool_traces: [],
+      reference_count: 0,
+      recommended_mode: "generate",
+      follow_up_question: "",
+      prompt_questions: [],
+      generated_prompt: null,
+    },
+    conversationContext: [
+      "User: 生成一张海边沙滩上的美女正面肖像",
+      "Assistant: 请补充摄影风格。",
+      "User: 摄影抓拍感觉",
+    ].join("\n"),
+    taskType: "generate",
+    sizePreset: "4:5",
+    resolution: "2K",
+    referenceCount: 0,
+  })
+
+  assert.equal(result.orchestration.ready_for_generation, true)
+  assert.equal(result.orchestration.brief.subject, "A woman standing on a sunny beach by the sea")
+  assert.match(result.orchestration.generated_prompt || "", /sunny beach|sea|sand/i)
+  assert.doesNotMatch(result.orchestration.generated_prompt || "", /cafe table/i)
+})
+
 test("style continuation preserves the previous creative subject", async () => {
   mockedPlannerResponse = JSON.stringify({
     brief_delta: {
