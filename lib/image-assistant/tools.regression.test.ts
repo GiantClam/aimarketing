@@ -445,6 +445,71 @@ test("style continuation preserves the previous creative subject", async () => {
   assert.doesNotMatch(result.orchestration.generated_prompt || "", /facial serum bottle/i)
 })
 
+test("Chinese style follow-up preserves the previous subject over a stale brief", async () => {
+  mockedPlannerResponse = JSON.stringify({
+    brief_delta: {
+      goal: "Outdoor cafe lifestyle photo",
+      subject: "A woman using a phone at a cafe table",
+      style: "Candid photography",
+      composition: "Natural lifestyle framing",
+      constraints: "",
+    },
+    missing_fields: [],
+    conflicts: [],
+    confidence: 0.9,
+    next_question: "",
+    ready_for_generation: true,
+  })
+
+  const result = await planImageAssistantTurn({
+    prompt: "摄影抓拍感觉",
+    currentBrief: {
+      goal: "Outdoor cafe lifestyle photo",
+      subject: "A woman using a phone at a cafe table",
+      style: "",
+      composition: "Natural lifestyle framing",
+    },
+    previousState: {
+      brief: {
+        usage_preset: "social_cover",
+        usage_label: "Social cover 4:5",
+        orientation: "portrait",
+        resolution: "2K",
+        size_preset: "4:5",
+        ratio_confirmed: true,
+        goal: "Generate a bikini woman playing beach volleyball",
+        subject: "A bikini woman playing beach volleyball on a sunny beach",
+        style: "",
+        composition: "Portrait action shot with the player as the focal point",
+        constraints: "",
+      },
+      missing_fields: ["style"],
+      turn_count: 1,
+      max_turns: 5,
+      ready_for_generation: false,
+      planner_strategy: "text_model",
+      selected_skill: { id: "graphic-design-brief", label: "Graphic Design Brief", stage: "briefing" },
+      tool_traces: [],
+      reference_count: 0,
+      recommended_mode: "generate",
+      follow_up_question: "What style do you want?",
+      prompt_questions: [],
+      generated_prompt: null,
+    },
+    taskType: "generate",
+    sizePreset: "4:5",
+    resolution: "2K",
+    referenceCount: 0,
+  })
+
+  assert.equal(result.orchestration.ready_for_generation, true)
+  assert.equal(result.orchestration.brief.goal, "Generate a bikini woman playing beach volleyball")
+  assert.equal(result.orchestration.brief.subject, "A bikini woman playing beach volleyball on a sunny beach")
+  assert.match(result.orchestration.brief.style, /摄影抓拍感觉|Candid photography/)
+  assert.match(result.orchestration.generated_prompt || "", /beach volleyball/i)
+  assert.doesNotMatch(result.orchestration.generated_prompt || "", /cafe table/i)
+})
+
 test("completed ad brief routes to enterprise-ad-image", async () => {
   mockedPlannerResponse = JSON.stringify({
     brief_delta: {

@@ -1643,20 +1643,26 @@ function isLowSignalContinuationPrompt(prompt: string) {
   )
 }
 
-function isContextualStyleContinuationPrompt(prompt: string) {
+function isContextualStyleContinuationPrompt(
+  prompt: string,
+  previousState: ImageAssistantOrchestrationState | null = null,
+) {
   const normalized = normalizeText(prompt)
   if (!normalized) return false
 
   const hasStyleContinuationSignal =
-    /(?:高级极简|premium minimalist|minimalist brand visual|current image|key subject recognizable|mature brand asset|风格|氛围)/iu.test(
+    /(?:高级极简|premium minimalist|minimalist brand visual|current image|key subject recognizable|mature brand asset|风格|氛围|摄影抓拍|抓拍感|纪实摄影|杂志摄影|电影感|candid photography|documentary photography|editorial photography|cinematic)/iu.test(
       normalized,
     )
   const hasExplicitSubjectChange =
     /(?:换成|替换|改成|主体改为|change the subject|replace the subject|subject should be|make the subject)/iu.test(
       normalized,
     )
+  const isAnsweringCreativeDirectionQuestion =
+    Boolean(previousState?.missing_fields.length) &&
+    (previousState?.missing_fields || []).every((field) => field === "style" || field === "composition")
 
-  return hasStyleContinuationSignal && !hasExplicitSubjectChange
+  return (hasStyleContinuationSignal || isAnsweringCreativeDirectionQuestion) && !hasExplicitSubjectChange
 }
 
 function preservePreviousCreativeContext(input: {
@@ -1665,7 +1671,7 @@ function preservePreviousCreativeContext(input: {
   prompt: string
 }) {
   const previousBrief = input.previousState?.brief
-  if (!previousBrief || !isContextualStyleContinuationPrompt(input.prompt)) {
+  if (!previousBrief || !isContextualStyleContinuationPrompt(input.prompt, input.previousState)) {
     return input.brief
   }
 
