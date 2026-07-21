@@ -1,4 +1,4 @@
-import { DeleteObjectCommand, GetObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, S3Client } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
 let r2Client: S3Client | null = null
@@ -109,6 +109,28 @@ export async function getR2Object(storageKey: string, options?: { bucketName?: s
   return {
     bytes: await object.Body.transformToByteArray(),
     contentType: object.ContentType || null,
+  }
+}
+
+export async function headR2Object(storageKey: string, options?: { bucketName?: string }) {
+  const client = getR2Client()
+  const bucketName = normalizeR2EnvValue(options?.bucketName) || getR2BucketName()
+  if (!client || !bucketName || !storageKey) return null
+
+  try {
+    const object = await client.send(new HeadObjectCommand({ Bucket: bucketName, Key: storageKey }))
+    return {
+      contentType: object.ContentType || null,
+      contentLength: Number(object.ContentLength || 0),
+    }
+  } catch (error) {
+    const statusCode = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode
+    const name = error instanceof Error ? error.name : ""
+    const message = error instanceof Error ? error.message : String(error)
+    if (statusCode === 404 || /not[\s_-]?found|no such key|nosuchkey/iu.test(name) || /not[\s_-]?found|no such key/iu.test(message)) {
+      return null
+    }
+    throw error
   }
 }
 

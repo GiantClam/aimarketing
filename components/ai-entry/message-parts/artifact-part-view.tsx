@@ -14,7 +14,21 @@ type ArtifactPreviewContext = {
 
 type ArtifactDetailResponse = {
   data?: {
+    sourceUrl?: string | null
     previewContext?: ArtifactPreviewContext | null
+  }
+}
+
+function buildPptOnlinePreviewUrl(sourceUrl: string | null | undefined) {
+  const normalizedSourceUrl = sourceUrl?.trim() || ""
+  if (!normalizedSourceUrl) return null
+
+  try {
+    const parsed = new URL(normalizedSourceUrl)
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null
+    return `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(parsed.toString())}`
+  } catch {
+    return null
   }
 }
 
@@ -45,21 +59,15 @@ export function ArtifactPartView({
   agentId?: string | null
 }) {
   const [previewContext, setPreviewContext] = useState<ArtifactPreviewContext | null>(null)
+  const [pptOnlinePreviewUrl, setPptOnlinePreviewUrl] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
 
     async function loadPreviewContext() {
-      if (!part.artifactId || part.downloadUrl) {
+      if (!part.artifactId || part.artifactType !== "pptx") {
         setPreviewContext(null)
-        return
-      }
-
-      const looksLikePptPreview =
-        /ppt preview|PPT 预览|PPT preview generated|lead_tool_preview_deck/iu.test(part.title || "") ||
-        /ppt preview|PPT 预览|PPT preview generated|lead_tool_preview_deck/iu.test(part.fileName || "")
-      if (!looksLikePptPreview) {
-        setPreviewContext(null)
+        setPptOnlinePreviewUrl(null)
         return
       }
 
@@ -70,12 +78,16 @@ export function ArtifactPartView({
           cache: "no-store",
         })
         const data = (await response.json().catch(() => ({}))) as ArtifactDetailResponse
-        if (!cancelled && response.ok && data.data?.previewContext?.previewSessionId) {
-          setPreviewContext(data.data.previewContext)
+        if (!cancelled && response.ok) {
+          if (data.data?.previewContext?.previewSessionId) {
+            setPreviewContext(data.data.previewContext)
+          }
+          setPptOnlinePreviewUrl(buildPptOnlinePreviewUrl(data.data?.sourceUrl))
         }
       } catch {
         if (!cancelled) {
           setPreviewContext(null)
+          setPptOnlinePreviewUrl(null)
         }
       }
     }
@@ -84,7 +96,7 @@ export function ArtifactPartView({
     return () => {
       cancelled = true
     }
-  }, [part.artifactId, part.downloadUrl, part.fileName, part.title])
+  }, [part.artifactId, part.artifactType])
 
   if (previewContext?.previewSessionId) {
     return (
@@ -109,8 +121,13 @@ export function ArtifactPartView({
         <div className="artifact-title-text">{part.title || part.fileName || (isZh ? "生成产物" : "Generated artifact")}</div>
         <div className="artifact-subtitle">{part.fileName || (isZh ? "可预览 / 下载 / 进入作品库" : "Ready to preview, download, or open in works")}</div>
         <div className="artifact-card-actions">
-          {part.previewUrl ? (
-            <a className="artifact-action" href={part.previewUrl} target="_blank" rel="noreferrer">
+          {(part.artifactType === "pptx" ? pptOnlinePreviewUrl : part.previewUrl) ? (
+            <a
+              className="artifact-action"
+              href={part.artifactType === "pptx" ? pptOnlinePreviewUrl || undefined : part.previewUrl || undefined}
+              target="_blank"
+              rel="noreferrer"
+            >
               <Eye className="h-3.5 w-3.5" />
               {isZh ? "预览" : "Preview"}
             </a>

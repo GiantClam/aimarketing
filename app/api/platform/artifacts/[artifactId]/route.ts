@@ -67,6 +67,7 @@ export async function GET(
           mimeType: serialized.mimeType,
           createdAt: serialized.createdAt,
         },
+        sourceUrl: serialized.externalUrl || null,
         previewContext: buildArtifactPreviewContext(serialized),
       },
     })
