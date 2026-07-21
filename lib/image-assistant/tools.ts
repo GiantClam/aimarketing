@@ -1643,6 +1643,39 @@ function isLowSignalContinuationPrompt(prompt: string) {
   )
 }
 
+function isContextualStyleContinuationPrompt(prompt: string) {
+  const normalized = normalizeText(prompt)
+  if (!normalized) return false
+
+  const hasStyleContinuationSignal =
+    /(?:高级极简|premium minimalist|minimalist brand visual|current image|key subject recognizable|mature brand asset|风格|氛围)/iu.test(
+      normalized,
+    )
+  const hasExplicitSubjectChange =
+    /(?:换成|替换|改成|主体改为|change the subject|replace the subject|subject should be|make the subject)/iu.test(
+      normalized,
+    )
+
+  return hasStyleContinuationSignal && !hasExplicitSubjectChange
+}
+
+function preservePreviousCreativeContext(input: {
+  brief: ImageAssistantBrief
+  previousState: ImageAssistantOrchestrationState | null
+  prompt: string
+}) {
+  const previousBrief = input.previousState?.brief
+  if (!previousBrief || !isContextualStyleContinuationPrompt(input.prompt)) {
+    return input.brief
+  }
+
+  return normalizeBrief({
+    ...input.brief,
+    ...(previousBrief.goal ? { goal: previousBrief.goal } : {}),
+    ...(previousBrief.subject ? { subject: previousBrief.subject } : {}),
+  })
+}
+
 export async function planImageAssistantTurn(input: {
   prompt: string
   currentBrief?: Partial<ImageAssistantBrief> | null
@@ -1725,8 +1758,13 @@ export async function planImageAssistantTurn(input: {
   const rawBrief = useEditShortcut
     ? applyReferenceEditDefaults(extraction?.brief || mergedBrief, input.prompt)
     : extraction?.brief || mergedBrief
-  const briefWithFallbacks = applyBriefProgressionFallbacks({
+  const contextPreservedBrief = preservePreviousCreativeContext({
     brief: rawBrief,
+    previousState: input.previousState,
+    prompt: input.prompt,
+  })
+  const briefWithFallbacks = applyBriefProgressionFallbacks({
+    brief: contextPreservedBrief,
     userPrompt: input.prompt,
     turnCount,
     maxTurns: IMAGE_ASSISTANT_MAX_BRIEF_TURNS,

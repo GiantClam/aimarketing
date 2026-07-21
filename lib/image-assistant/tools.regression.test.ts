@@ -385,6 +385,66 @@ test("planner recovers the latest subject from raw conversation context for cont
   assert.match(result.orchestration.generated_prompt || "", /美女/)
 })
 
+test("style continuation preserves the previous creative subject", async () => {
+  mockedPlannerResponse = JSON.stringify({
+    brief_delta: {
+      goal: "Premium serum product visual",
+      subject: "A premium facial serum bottle",
+      style: "Premium minimalist brand visual",
+      composition: "Centered product with generous whitespace",
+      constraints: "",
+    },
+    missing_fields: [],
+    conflicts: [],
+    confidence: 0.9,
+    next_question: "",
+    ready_for_generation: true,
+  })
+
+  const result = await planImageAssistantTurn({
+    prompt: "Transform the current image into a premium minimalist brand visual. Keep the key subject recognizable.",
+    currentBrief: null,
+    previousState: {
+      brief: {
+        usage_preset: "social_cover",
+        usage_label: "Social cover 4:5",
+        orientation: "portrait",
+        resolution: "2K",
+        size_preset: "4:5",
+        ratio_confirmed: true,
+        goal: "Generate a bikini woman playing beach volleyball",
+        subject: "A bikini woman playing beach volleyball on a sunny beach",
+        style: "",
+        composition: "Portrait action shot with the player as the focal point",
+        constraints: "",
+      },
+      missing_fields: ["style"],
+      turn_count: 1,
+      max_turns: 5,
+      ready_for_generation: false,
+      planner_strategy: "text_model",
+      selected_skill: { id: "graphic-design-brief", label: "Graphic Design Brief", stage: "briefing" },
+      tool_traces: [],
+      reference_count: 0,
+      recommended_mode: "generate",
+      follow_up_question: "What style do you want?",
+      prompt_questions: [],
+      generated_prompt: null,
+    },
+    taskType: "generate",
+    sizePreset: "4:5",
+    resolution: "2K",
+    referenceCount: 0,
+  })
+
+  assert.equal(result.orchestration.ready_for_generation, true)
+  assert.equal(result.orchestration.brief.goal, "Generate a bikini woman playing beach volleyball")
+  assert.equal(result.orchestration.brief.subject, "A bikini woman playing beach volleyball on a sunny beach")
+  assert.match(result.orchestration.brief.style, /Premium minimalist/i)
+  assert.match(result.orchestration.generated_prompt || "", /bikini woman playing beach volleyball/i)
+  assert.doesNotMatch(result.orchestration.generated_prompt || "", /facial serum bottle/i)
+})
+
 test("completed ad brief routes to enterprise-ad-image", async () => {
   mockedPlannerResponse = JSON.stringify({
     brief_delta: {
