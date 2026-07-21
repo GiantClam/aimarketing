@@ -1,5 +1,5 @@
 import type { ArtifactPart } from "./message-parts/types"
-import { dedupeRuntimeArtifacts } from "./runtime/artifact-detector"
+import { dedupeRuntimeArtifacts, displayRuntimeArtifactFileName } from "./runtime/artifact-detector"
 
 export type AiEntryConversationArtifact = {
   artifactId: number
@@ -18,7 +18,7 @@ function artifactType(input: AiEntryConversationArtifact): ArtifactPart["artifac
 
 function artifactFileName(input: AiEntryConversationArtifact) {
   const summaryFileName = input.summary?.match(/^(.+?)\s+\([^)]*\)$/u)?.[1]?.trim()
-  return summaryFileName || input.title
+  return displayRuntimeArtifactFileName(summaryFileName || input.title)
 }
 
 export function buildConversationArtifactParts(value: unknown): ArtifactPart[] {
@@ -28,7 +28,7 @@ export function buildConversationArtifactParts(value: unknown): ArtifactPart[] {
     if (!item || typeof item !== "object") return parts
     const record = item as Partial<AiEntryConversationArtifact>
     const artifactId = typeof record.artifactId === "number" && Number.isInteger(record.artifactId) && record.artifactId > 0 ? record.artifactId : null
-    const title = typeof record.title === "string" ? record.title.trim() : ""
+    const title = typeof record.title === "string" ? displayRuntimeArtifactFileName(record.title.trim()) : ""
     if (!artifactId || !title || seen.has(artifactId)) return parts
     seen.add(artifactId)
     const kind = typeof record.kind === "string" ? record.kind : ""
