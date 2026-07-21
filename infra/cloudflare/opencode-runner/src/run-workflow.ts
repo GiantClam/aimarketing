@@ -11,7 +11,7 @@ export class AgentRunWorkflow extends WorkflowEntrypoint<SessionRunnerEnv, Cloud
       async () => {
         const request = await readRuntimeDispatchEnvelope(this.env.BACKUP_BUCKET, event.payload.runId)
         if (!request) throw new Error("runtime_dispatch_envelope_missing")
-        const namespace = this.env.SessionCoordinator as DurableObjectNamespace
+        const namespace = this.env.SessionCoordinatorV2 as DurableObjectNamespace
         const stub = namespace.getByName(event.payload.sessionKey)
         const response = await stub.fetch(new Request("https://session.internal/internal/execute", {
           method: "POST",

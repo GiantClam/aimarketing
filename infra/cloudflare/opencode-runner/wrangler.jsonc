@@ -51,13 +51,14 @@
     "bindings": [
       { "class_name": "SandboxV2", "name": "Sandbox" },
       { "class_name": "AgentRunCoordinator", "name": "AgentRunCoordinator" },
-      { "class_name": "SessionCoordinator", "name": "SessionCoordinator" }
+      { "class_name": "SessionCoordinatorV2", "name": "SessionCoordinatorV2" }
     ]
   },
   "migrations": [
     { "new_sqlite_classes": ["Sandbox", "AgentRunCoordinator"], "tag": "v1" },
     { "new_sqlite_classes": ["SessionCoordinator"], "tag": "v2" },
     { "new_sqlite_classes": ["PptMasterContainer"], "tag": "v3" },
-    { "new_sqlite_classes": ["SandboxV2", "PptMasterContainerV2"], "tag": "v4" }
+    { "new_sqlite_classes": ["SandboxV2", "PptMasterContainerV2"], "tag": "v4" },
+    { "new_sqlite_classes": ["SessionCoordinatorV2"], "tag": "v5" }
   ]
 }

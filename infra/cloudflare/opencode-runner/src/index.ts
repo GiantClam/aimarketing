@@ -14,14 +14,21 @@ export { Sandbox, Sandbox as SandboxV2 } from "@cloudflare/sandbox"
 export { ContainerProxy }
 // PptMaster exports remain for historical migration compatibility; production
 // traffic uses the Railway URL and has no PptMaster Container binding.
-export { AgentRunCoordinator, AgentRunWorkflow, PptMasterContainer, PptMasterContainer as PptMasterContainerV2, SessionCoordinator }
+export {
+  AgentRunCoordinator,
+  AgentRunWorkflow,
+  PptMasterContainer,
+  PptMasterContainer as PptMasterContainerV2,
+  SessionCoordinator,
+  SessionCoordinator as SessionCoordinatorV2,
+}
 
 type Env = RunnerEnv & SessionRunnerEnv & {
   AgentRunCoordinator: DurableObjectNamespace
   /** Optional Railway backend for editable PPT rendering. */
   PPT_WORKER_RAILWAY_BASE_URL?: string
   PPT_WORKER_RAILWAY_TOKEN?: string
-  SessionCoordinator: SessionCoordinatorNamespace
+  SessionCoordinatorV2: SessionCoordinatorNamespace
   AGENT_RUN_WORKFLOW: { create(options: { id: string; params: CloudflareSessionQueueMessage }): Promise<unknown> }
 }
 
@@ -37,16 +44,33 @@ async function sessionKeyForRun(env: Env, runId: string) {
 }
 
 async function routeToSession(request: Request, env: Env, sessionKey: string) {
-  const id = env.SessionCoordinator.idFromName(sessionKey)
-  const stub = env.SessionCoordinator.get(id)
-  return stub.fetch(request)
+  const id = env.SessionCoordinatorV2.idFromName(sessionKey)
+  const stub = env.SessionCoordinatorV2.get(id)
+  try {
+    return await stub.fetch(request)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.log(JSON.stringify({ event: "session_coordinator_fetch_failed", sessionKey, message }))
+    return jsonResponse({ error: "session_coordinator_fetch_failed", message: message.slice(0, 1024) }, 500)
+  }
 }
 
 export default {
   async fetch(request: Request, env: Env) {
     const url = new URL(request.url)
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Authorization,Content-Type,Last-Event-ID,X-Agent-Runner-Timestamp,X-Agent-Runner-Nonce,X-Agent-Runner-Body-SHA256,X-Agent-Runner-Signature,X-Idempotency-Key", "Access-Control-Max-Age": "600" } })
-    if (request.method === "GET" && url.pathname === "/health") return jsonResponse({ ok: true, service: "opencode-runner", opencode: "1.17.13", sandbox: "0.12.3", runtime: "v2" })
+    if (request.method === "GET" && url.pathname === "/health") return jsonResponse({
+      ok: true,
+      service: "opencode-runner",
+      opencode: "1.17.13",
+      sandbox: "0.12.3",
+      runtime: "v2",
+      bindings: {
+        sandbox: Boolean(env.Sandbox),
+        agentRunCoordinator: Boolean(env.AgentRunCoordinator),
+        sessionCoordinatorV2: Boolean(env.SessionCoordinatorV2),
+      },
+    })
 
     if (url.pathname.startsWith("/ppt/")) {
       const containerPath = url.pathname.replace(/^\/ppt/u, "") || "/health"

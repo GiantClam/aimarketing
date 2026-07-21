@@ -61,8 +61,9 @@ export async function createBackgroundOpenCodeRun(input: {
       await enqueueRailwaySessionRun(request)
     }
   } catch (error) {
-    await updateOpenCodeRuntimeRun(request.runId, { status: "failed", lastErrorCode: "dispatch_failed", lastErrorMessage: error instanceof Error ? error.message : String(error), finishedAt: new Date(), clearLease: true })
-    await updatePlatformTaskRun(taskRun.id, { status: "failed", normalizedResult: { error: "dispatch_failed" }, finishedAt: new Date() })
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    await updateOpenCodeRuntimeRun(request.runId, { status: "failed", lastErrorCode: "dispatch_failed", lastErrorMessage: errorMessage, finishedAt: new Date(), clearLease: true })
+    await updatePlatformTaskRun(taskRun.id, { status: "failed", normalizedResult: { error: "dispatch_failed", errorMessage: errorMessage.slice(0, 1024) }, finishedAt: new Date() })
     throw error
   }
   return { taskRunId: taskRun.id, runtimeRunId: request.runId, sessionKey, status: "queued" as const }

@@ -11,8 +11,8 @@ import { createSessionWorkspaceBackup, prepareSessionWorkspace } from "./workspa
 import { createRuntimeCallbackHeaders } from "../../../../lib/ai-entry/runtime/callback-signature"
 
 export type SessionRunnerEnv = {
-  SandboxV2: unknown
-  SessionCoordinator: SessionCoordinatorNamespace
+  Sandbox: unknown
+  SessionCoordinatorV2: SessionCoordinatorNamespace
   AGENT_RUN_QUEUE: Queue<unknown>
   BACKUP_BUCKET: R2Bucket
   ARTIFACT_BUCKET: R2Bucket
@@ -164,7 +164,7 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
       return json({ error: "runtime_session_agent_mismatch" }, 409)
     }
     const checkpoint = runtimeInput.checkpoint || (await this.ctx.storage.get<RuntimeCheckpointRef>("latestCheckpoint")) || null
-    const sandbox = getSandbox(this.env.SandboxV2 as Parameters<typeof getSandbox>[0], requestInput.sessionKey, {
+    const sandbox = getSandbox(this.env.Sandbox as Parameters<typeof getSandbox>[0], requestInput.sessionKey, {
       // Workflow -> Durable Object -> Sandbox RPC can lose its Cap'n Web
       // session during the first default-session operation. Dashi executes a
       // self-contained CLI turn, so use the HTTP transport for that path.
@@ -228,7 +228,7 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
     }
     const sessionKey = input.sessionKey
     await stage("sandbox_acquire", "started")
-    const sandbox = getSandbox(this.env.SandboxV2 as Parameters<typeof getSandbox>[0], sessionKey, {
+    const sandbox = getSandbox(this.env.Sandbox as Parameters<typeof getSandbox>[0], sessionKey, {
       transport: "rpc",
       // Every turn uses absolute workspace paths and an explicit OpenCode
       // server/process. The deprecated implicit shell can exit after a backup

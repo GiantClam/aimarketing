@@ -11,7 +11,7 @@ TARGET_DLQ_QUEUE="aimarketing-opencode-runs-dlq"
 PRODUCTION_URL="https://www.aimarketingsite.com"
 RUNNER_URL="https://${WORKER_NAME}.liulanggoukk.workers.dev"
 PPT_RUNNER_URL="https://ppt-master-worker-production.up.railway.app"
-RAILWAY_OPENCODE_URL="${RAILWAY_OPENCODE_RUNTIME_URL:-https://opencode-runtime-production.up.railway.app}"
+RAILWAY_OPENCODE_URL="${RAILWAY_OPENCODE_RUNTIME_URL:-https://ppt-master-worker-production.up.railway.app}"
 
 load_env_file() {
   local file="$1"
@@ -165,13 +165,14 @@ else
 fi
 put_secret_if_missing PLATFORM_CALLBACK_SECRET "$CALLBACK_SECRET"
 
-vercel_set AI_ENTRY_RUNTIME_MODE opencode-cloudflare-sandbox
+vercel_set AI_ENTRY_RUNTIME_MODE opencode-railway
 vercel_set AI_ENTRY_SAAS_OPENCODE_ENABLED true
-vercel_set AI_ENTRY_OPENCODE_BACKEND cloudflare-sandbox-exec
+vercel_set AI_ENTRY_OPENCODE_BACKEND railway-opencode
 vercel_set AI_ENTRY_OPENCODE_FALLBACK disabled
 vercel_set AI_ENTRY_OPENCODE_ASYNC_ENABLED false
 vercel_set AI_ENTRY_OPENCODE_SESSION_ENABLED true
 vercel_set AI_ENTRY_BUSINESS_AGENT_RAILWAY_ENABLED true
+vercel_set AI_ENTRY_PPT_RAILWAY_ENABLED true
 vercel_set RAILWAY_OPENCODE_RUNTIME_URL "$RAILWAY_OPENCODE_URL"
 vercel_set RAILWAY_OPENCODE_RUNTIME_TOKEN "$RAILWAY_OPENCODE_RUNTIME_TOKEN" secret
 vercel_set CLOUDFLARE_OPENCODE_RUNNER_URL "$RUNNER_URL"
