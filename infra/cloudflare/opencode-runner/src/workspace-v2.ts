@@ -60,7 +60,11 @@ export async function prepareSessionWorkspace(sandbox: SessionSandbox, input: Ag
   }
   await sandbox.writeFile(`${sessionDir}/turns/${input.runId}/input.json`, JSON.stringify(input))
   await sandbox.writeFile(`${sessionDir}/turns/${input.runId}/system.md`, buildOpenCodeSystemPrompt(input))
-  await sandbox.writeFile(`${sessionDir}/turns/${input.runId}/prompt.md`, buildOpenCodeUserPrompt(input))
+  // Cloudflare Dashi turns use the CLI continuation path, which cannot be
+  // relied on to restore the application conversation after a container
+  // sleep/restore. Keep the system prompt separate, but provide the ordered
+  // history in the native user prompt so follow-up turns retain their brief.
+  await sandbox.writeFile(`${sessionDir}/turns/${input.runId}/prompt.md`, buildOpenCodeUserPrompt(input, { includeConversationHistory: true }))
   return { sessionDir, ...(sharedSkillSet ? { sharedSkillSet } : {}) }
 }
 

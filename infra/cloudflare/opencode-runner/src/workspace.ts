@@ -17,6 +17,6 @@ export async function prepareRunWorkspace(sandbox: SandboxFileApi, input: AgentR
   await sandbox.exec(`mkdir -p ${runDir}/artifacts ${runDir}/tmp`, { cwd: "/workspace" })
   await sandbox.writeFile(`${runDir}/input.json`, JSON.stringify(input))
   await sandbox.writeFile(`${runDir}/system.md`, promptRuntime.buildOpenCodeSystemPrompt(input))
-  await sandbox.writeFile(`${runDir}/prompt.md`, promptRuntime.buildOpenCodeUserPrompt(input))
+  await sandbox.writeFile(`${runDir}/prompt.md`, promptRuntime.buildOpenCodeUserPrompt(input, { includeConversationHistory: true }))
   return runDir
 }

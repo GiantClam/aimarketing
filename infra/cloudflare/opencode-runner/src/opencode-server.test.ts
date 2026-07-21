@@ -9,3 +9,8 @@ test("recreates the OpenCode client when a restored session receives a new Sandb
   assert.match(source, /this\.result!\.server\.close\(\)/u)
   assert.match(source, /providerRuntimeKey\(provider\.providerId\)/u)
 })
+
+test("Cloudflare workspace prompts include application conversation history", async () => {
+  const source = await readFile(resolve(import.meta.dirname, "workspace-v2.ts"), "utf8")
+  assert.match(source, /buildOpenCodeUserPrompt\(input, \{ includeConversationHistory: true \}\)/u)
+})
