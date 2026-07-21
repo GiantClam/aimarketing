@@ -35,6 +35,7 @@ const residentOpenCode = new OpenCodeServeManager({
   hostname: process.env.OPENCODE_SERVER_HOST?.trim() || "127.0.0.1",
 })
 const activeRuns = new Map<string, { sessionId: string; abort: () => Promise<boolean> }>()
+const runtimeStateWriteChains = new Map<string, Promise<void>>()
 
 type RuntimeRunRecord = {
   runId: string
@@ -81,12 +82,19 @@ const compatibilityJobs = new Map<string, CompatibilityJob>()
 
 async function persistRuntimeState(input: { runId: string; event?: AgentRuntimeEvent; status?: "queued" | "running" | "waiting" | "succeeded" | "failed" | "cancelled" | "timed_out"; error?: string | null }) {
   if (!runtimeStateUrl || !runtimeStateToken) return
-  await fetch(runtimeStateUrl, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${runtimeStateToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-    signal: AbortSignal.timeout(5_000),
-  }).catch((error) => console.warn(JSON.stringify({ event: "opencode_runtime_state_write_failed", runId: input.runId, message: error instanceof Error ? error.message : String(error) })))
+  const previous = runtimeStateWriteChains.get(input.runId) || Promise.resolve()
+  const next = previous.then(async () => {
+    await fetch(runtimeStateUrl, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${runtimeStateToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+      signal: AbortSignal.timeout(15_000),
+    }).catch((error) => console.warn(JSON.stringify({ event: "opencode_runtime_state_write_failed", runId: input.runId, message: error instanceof Error ? error.message : String(error) })))
+  })
+  runtimeStateWriteChains.set(input.runId, next)
+  await next.finally(() => {
+    if (runtimeStateWriteChains.get(input.runId) === next) runtimeStateWriteChains.delete(input.runId)
+  })
 }
 
 function resolveProviderForRun(provider: OpenCodeProviderConfig): OpenCodeProviderConfig {
