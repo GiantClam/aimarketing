@@ -20,6 +20,7 @@ import type { WorkflowFeatures } from "@/lib/workflows/features"
 import { WorkflowCanvas } from "@/components/workflows/workflow-canvas"
 import { WorkflowNodeConfigPanel } from "@/components/workflows/workflow-node-config-panel"
 import { WorkflowNodePalette } from "@/components/workflows/workflow-node-palette"
+import { createWorkflowSaveCoordinator } from "@/components/workflows/workflow-save-coordinator"
 import { type WorkflowRunResultsDetail } from "@/components/workflows/workflow-run-results-page"
 import { getWorkflowImageDefaultSize, resolveWorkflowImageModelKind } from "@/lib/image-assistant/model-options"
 import { getDefaultModelId } from "@/lib/ai-runtime/model-registry"
@@ -217,6 +218,16 @@ function buildSnapshot(workflow: SerializedWorkflowDefinition) {
     nodes: workflow.nodes,
     edges: workflow.edges,
   })
+}
+
+function humanizeWorkflowBuilderErrorMessage(locale: WorkflowLocale, message: string) {
+  if (message === "workflow_revision_conflict") {
+    return locale === "zh"
+      ? "工作流已被其他保存操作更新。请刷新到最新版本后再重试。"
+      : "The workflow was updated by another save. Refresh the latest version and try again."
+  }
+
+  return message
 }
 
 function serializeWorkflowDefinition(
@@ -617,6 +628,7 @@ export function WorkflowBuilderPage({
   const [savedSnapshot, setSavedSnapshot] = useState(() => buildSnapshot(initialWorkflow))
   const [presetEditors, setPresetEditors] = useState<Record<string, EnterprisePresetEditorState>>({})
   const latestRunRequestInFlightRef = useRef(false)
+  const saveCoordinatorRef = useRef(createWorkflowSaveCoordinator<SerializedWorkflowDefinition>())
   const assetCandidatesRequestedRef = useRef(false)
   const latestRunInitialFetchRequestedRef = useRef(false)
   const presetCopy =
@@ -1477,34 +1489,54 @@ export function WorkflowBuilderPage({
   }
 
   async function saveWorkflow(currentWorkflow: SerializedWorkflowDefinition) {
-    if (buildSnapshot(currentWorkflow) === savedSnapshot) {
+    const snapshot = buildSnapshot(currentWorkflow)
+    if (snapshot === savedSnapshot) {
       return currentWorkflow
     }
 
-    const response = await fetch(`/api/workflows/${currentWorkflow.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({
-        title: currentWorkflow.title,
-        description: currentWorkflow.description,
-        status: currentWorkflow.status,
-        metadata: currentWorkflow.metadata,
-        expectedRevision: currentWorkflow.revision ?? 1,
-        nodes: currentWorkflow.nodes,
-        edges: currentWorkflow.edges,
-      }),
-    })
-    const payload = await response.json().catch(() => null)
-    if (!response.ok || !payload?.data) {
-      throw new Error(typeof payload?.error === "string" ? payload.error : "workflow_save_failed")
-    }
+    return saveCoordinatorRef.current.run(snapshot, async () => {
+      const response = await fetch(`/api/workflows/${currentWorkflow.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          title: currentWorkflow.title,
+          description: currentWorkflow.description,
+          status: currentWorkflow.status,
+          metadata: currentWorkflow.metadata,
+          expectedRevision: currentWorkflow.revision ?? 1,
+          nodes: currentWorkflow.nodes,
+          edges: currentWorkflow.edges,
+        }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (response.status === 409 && payload?.error === "workflow_revision_conflict") {
+        const latestResponse = await fetch(`/api/workflows/${currentWorkflow.id}`, {
+          credentials: "same-origin",
+          cache: "no-store",
+        }).catch(() => null)
+        const latestPayload = latestResponse?.ok
+          ? ((await latestResponse.json().catch(() => null)) as { data?: WorkflowDefinition } | null)
+          : null
+        if (latestPayload?.data) {
+          const serialized = serializeWorkflowDefinition(latestPayload.data)
+          if (buildSnapshot(serialized) === snapshot) {
+            setWorkflow(serialized)
+            setSavedSnapshot(buildSnapshot(serialized))
+            return serialized
+          }
+        }
+      }
+      if (!response.ok || !payload?.data) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : "workflow_save_failed")
+      }
 
-    const saved = payload.data as WorkflowDefinition
-    const serialized = serializeWorkflowDefinition(saved)
-    setWorkflow(serialized)
-    setSavedSnapshot(buildSnapshot(serialized))
-    return serialized
+      const saved = payload.data as WorkflowDefinition
+      const serialized = serializeWorkflowDefinition(saved)
+      setWorkflow(serialized)
+      setSavedSnapshot(buildSnapshot(serialized))
+      return serialized
+    })
   }
 
   const handleSave = async () => {
@@ -1516,7 +1548,7 @@ export function WorkflowBuilderPage({
       await saveWorkflow(workflow)
       setMessage(copy.savedMessage)
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "workflow_save_failed")
+      setErrorMessage(humanizeWorkflowBuilderErrorMessage(locale, error instanceof Error ? error.message : "workflow_save_failed"))
     } finally {
       setSaving(false)
     }
@@ -1593,7 +1625,7 @@ export function WorkflowBuilderPage({
           : copy.runStarted,
       )
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "workflow_run_failed")
+      setErrorMessage(humanizeWorkflowBuilderErrorMessage(locale, error instanceof Error ? error.message : "workflow_run_failed"))
     } finally {
       setRunActionPending(false)
     }
