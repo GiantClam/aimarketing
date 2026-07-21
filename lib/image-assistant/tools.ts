@@ -1637,6 +1637,27 @@ function isLowSignalContinuationPrompt(prompt: string) {
   )
 }
 
+function getContinuationContextPrompt(input: {
+  previousState: ImageAssistantOrchestrationState | null
+  conversationContext: string
+  taskType: ImageAssistantTaskType
+}) {
+  if (input.previousState?.generated_prompt) {
+    return input.previousState.generated_prompt
+  }
+
+  const previousBrief = input.previousState?.brief
+  if (previousBrief && (previousBrief.goal || previousBrief.subject || previousBrief.style || previousBrief.composition)) {
+    return buildImageAssistantTurnContent({
+      prompt: "",
+      brief: previousBrief,
+      taskType: input.taskType,
+    })
+  }
+
+  return getLatestUserRequestFromConversationContext(input.conversationContext)
+}
+
 function isContextualStyleContinuationPrompt(
   prompt: string,
   previousState: ImageAssistantOrchestrationState | null = null,
@@ -1666,14 +1687,16 @@ function preservePreviousCreativeContext(input: {
   followUpBrief: Partial<ImageAssistantBrief>
 }) {
   const previousBrief = input.previousState?.brief
-  if (!previousBrief || !isContextualStyleContinuationPrompt(input.prompt, input.previousState)) {
+  const isLowSignalContinuation = isLowSignalContinuationPrompt(input.prompt)
+  const isStyleContinuation = isContextualStyleContinuationPrompt(input.prompt, input.previousState)
+  if (!previousBrief || (!isLowSignalContinuation && !isStyleContinuation)) {
     return input.brief
   }
 
   return normalizeBrief({
     ...previousBrief,
-    ...(input.followUpBrief.style ? { style: input.followUpBrief.style } : {}),
-    ...(input.followUpBrief.composition ? { composition: input.followUpBrief.composition } : {}),
+    ...(isStyleContinuation && input.followUpBrief.style ? { style: input.followUpBrief.style } : {}),
+    ...(isStyleContinuation && input.followUpBrief.composition ? { composition: input.followUpBrief.composition } : {}),
   })
 }
 
@@ -1697,7 +1720,11 @@ export async function planImageAssistantTurn(input: {
   const normalizedConversationContext = normalizeText(input.conversationContext)
   const contextPrompt =
     normalizedConversationContext && isLowSignalContinuationPrompt(input.prompt)
-      ? getLatestUserRequestFromConversationContext(normalizedConversationContext)
+      ? getContinuationContextPrompt({
+          previousState: input.previousState,
+          conversationContext: normalizedConversationContext,
+          taskType: input.taskType,
+        })
       : ""
   const promptForInference = contextPrompt || input.prompt
   const promptOptionBrief = inferBriefFromPromptQuestionOption({

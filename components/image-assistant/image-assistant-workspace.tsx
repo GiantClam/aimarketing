@@ -259,6 +259,13 @@ const IMAGE_ASSISTANT_STANDARD_PARAMETER_IDS = new Set([
   "n",
 ])
 
+const IMAGE_ASSISTANT_HIDDEN_PARAMETER_IDS = new Set([
+  "provider",
+  "responseFormat",
+  "outputCompression",
+  "moderation",
+])
+
 function findImageParameter(schema: ModelParameterDefinition[], ids: string[]) {
   return schema.find((field) => ids.includes(field.id)) || null
 }
@@ -2023,7 +2030,11 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   )
   const hasModelParameterSchema = selectedModelParameterSchema.length > 0
   const modelExtraParameters = useMemo(
-    () => selectedModelParameterSchema.filter((field) => !IMAGE_ASSISTANT_STANDARD_PARAMETER_IDS.has(field.id)),
+    () => selectedModelParameterSchema.filter(
+      (field) =>
+        !IMAGE_ASSISTANT_STANDARD_PARAMETER_IDS.has(field.id) &&
+        !IMAGE_ASSISTANT_HIDDEN_PARAMETER_IDS.has(field.id),
+    ),
     [selectedModelParameterSchema],
   )
   const effectiveModelParameters = useMemo(() => {
