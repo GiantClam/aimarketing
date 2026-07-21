@@ -12,7 +12,6 @@
     "SHARED_AGENT_PREWARM_ENABLED": "false",
     "OPENCODE_EVENT_ALLOWED_ORIGINS": "http://localhost:3000,http://localhost:3100,https://www.aimarketingsite.com,https://aimarketingsite.com",
     "PLATFORM_CALLBACK_URL": "https://www.aimarketingsite.com/api/internal/opencode-runtime/callback",
-    "PPT_WORKER_RAILWAY_BASE_URL": "https://ppt-master-worker-editable-production.up.railway.app"
   },
   "r2_buckets": [
     { "binding": "BACKUP_BUCKET", "bucket_name": "aimarketing-opencode-runtime" },
@@ -42,29 +41,23 @@
   ],
   "containers": [
     {
-      "class_name": "Sandbox",
+      "class_name": "SandboxV2",
       "image": "registry.cloudflare.com/9630806d5a588fc350ee64c395005cfa/aimarketing-opencode-runner-sandbox:dashi-v0.4.5-ff3a733-20260720",
       "instance_type": "standard-4",
       "max_instances": 50
     },
-    {
-      "class_name": "PptMasterContainer",
-      "image": "registry.cloudflare.com/9630806d5a588fc350ee64c395005cfa/aimarketing-opencode-runner-pptmastercontainer:ppt-dashi-v0.4.5-ff3a733-20260720",
-      "instance_type": "standard-2",
-      "max_instances": 5
-    }
   ],
   "durable_objects": {
     "bindings": [
-      { "class_name": "Sandbox", "name": "Sandbox" },
+      { "class_name": "SandboxV2", "name": "Sandbox" },
       { "class_name": "AgentRunCoordinator", "name": "AgentRunCoordinator" },
-      { "class_name": "PptMasterContainer", "name": "PPT_MASTER_CONTAINER" },
       { "class_name": "SessionCoordinator", "name": "SessionCoordinator" }
     ]
   },
   "migrations": [
     { "new_sqlite_classes": ["Sandbox", "AgentRunCoordinator"], "tag": "v1" },
     { "new_sqlite_classes": ["SessionCoordinator"], "tag": "v2" },
-    { "new_sqlite_classes": ["PptMasterContainer"], "tag": "v3" }
+    { "new_sqlite_classes": ["PptMasterContainer"], "tag": "v3" },
+    { "new_sqlite_classes": ["SandboxV2", "PptMasterContainerV2"], "tag": "v4" }
   ]
 }

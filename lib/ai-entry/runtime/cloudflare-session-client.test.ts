@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import type { AgentRuntimeEvent } from "@/lib/ai-runtime/contracts"
-import { getCloudflareSessionEventTicket, subscribeCloudflareSessionRun } from "./cloudflare-session-client"
+import { getCloudflareSessionEventTicket, prepareCloudflareSession, subscribeCloudflareSessionRun } from "./cloudflare-session-client"
 
 test("retries transient runner connection resets before returning the event ticket", async () => {
   let attempts = 0
@@ -42,4 +42,25 @@ test("gets a scoped event ticket and resumes event stream", async () => {
     lastEventId: "1",
   })) events.push(event)
   assert.deepEqual(events.map((event) => event.event), ["text_delta", "done"])
+})
+
+test("surfaces non-JSON runner error bodies instead of reporting null", async () => {
+  await assert.rejects(
+    () =>
+      prepareCloudflareSession(
+        {
+          runId: "33333333-3333-4333-8333-333333333333",
+          sessionKey: "sess-3333333333333333333333333333333333333333",
+          input: {} as never,
+          deadlineMs: 3_600_000,
+          provider: {} as never,
+        },
+        {
+          runnerUrl: "https://runner.example.com",
+          secret: "secret",
+          fetchImpl: async () => new Response("error code: 1042", { status: 404, statusText: "Not Found" }),
+        },
+      ),
+    /opencode_runner_http_404:error code: 1042/,
+  )
 })

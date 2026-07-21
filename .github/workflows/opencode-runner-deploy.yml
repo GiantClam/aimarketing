@@ -47,12 +47,6 @@ jobs:
           npx wrangler containers build .
           --tag registry.cloudflare.com/${CLOUDFLARE_ACCOUNT_ID}/aimarketing-opencode-runner-sandbox:dashi-v0.4.5-ff3a733-20260720
           --push
-      - name: Build and publish ppt-master container
-        working-directory: infra/cloudflare/opencode-runner
-        run: >-
-          npx wrangler containers build .
-          --tag registry.cloudflare.com/${CLOUDFLARE_ACCOUNT_ID}/aimarketing-opencode-runner-pptmastercontainer:ppt-dashi-v0.4.5-ff3a733-20260720
-          --push
       - name: Build and publish Dashi smoke container
         working-directory: infra/cloudflare/dashi-ppt-smoke
         run: >-

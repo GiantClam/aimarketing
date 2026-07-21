@@ -73,8 +73,24 @@ function endpoint(options: CloudflareSessionClientOptions) {
 }
 
 async function parseJson<T>(response: Response) {
-  const value = await response.json().catch(() => null)
-  if (!response.ok) throw new Error(`opencode_runner_http_${response.status}:${JSON.stringify(value).slice(0, 512)}`)
+  const text = await response.text().catch(() => "")
+  let value: unknown = null
+  if (text) {
+    try {
+      value = JSON.parse(text) as unknown
+    } catch {
+      value = text
+    }
+  }
+  if (!response.ok) {
+    const detailSource =
+      typeof value === "string"
+        ? value
+        : value === null
+          ? response.statusText || "empty_response"
+          : JSON.stringify(value)
+    throw new Error(`opencode_runner_http_${response.status}:${detailSource.slice(0, 512)}`)
+  }
   return value as T
 }
 

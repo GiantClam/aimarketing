@@ -5,17 +5,19 @@ import { jsonResponse } from "./sse"
 import { runtimeDispatchKey } from "./runtime-envelope"
 import { AgentRunCoordinator, type RunnerEnv } from "./run-coordinator"
 import { AgentRunWorkflow } from "./run-workflow"
-import { PptMasterCanaryContainer, PptMasterContainer } from "./ppt-master-container"
+import { PptMasterContainer } from "./ppt-master-container"
 import { SessionCoordinator, type SessionCoordinatorNamespace, type SessionRunnerEnv } from "./session-coordinator"
 
-// Export the SDK class directly, matching the verified Dashi smoke worker.
-export { Sandbox } from "@cloudflare/sandbox"
+// Keep the old export for compatibility while production uses fresh class
+// names because the orphaned application has a different DO namespace.
+export { Sandbox, Sandbox as SandboxV2 } from "@cloudflare/sandbox"
 export { ContainerProxy }
-export { AgentRunCoordinator, AgentRunWorkflow, PptMasterCanaryContainer, PptMasterContainer, SessionCoordinator }
+// PptMaster exports remain for historical migration compatibility; production
+// traffic uses the Railway URL and has no PptMaster Container binding.
+export { AgentRunCoordinator, AgentRunWorkflow, PptMasterContainer, PptMasterContainer as PptMasterContainerV2, SessionCoordinator }
 
 type Env = RunnerEnv & SessionRunnerEnv & {
   AgentRunCoordinator: DurableObjectNamespace
-  PPT_MASTER_CONTAINER: DurableObjectNamespace
   /** Optional Railway backend for editable PPT rendering. */
   PPT_WORKER_RAILWAY_BASE_URL?: string
   PPT_WORKER_RAILWAY_TOKEN?: string
@@ -55,9 +57,7 @@ export default {
         if (env.PPT_WORKER_RAILWAY_TOKEN) headers.set("Authorization", `Bearer ${env.PPT_WORKER_RAILWAY_TOKEN}`)
         return fetch(new Request(target, { method: request.method, headers, body: request.body, redirect: request.redirect }))
       }
-      const container = env.PPT_MASTER_CONTAINER.getByName("shared-ppt-master")
-      const target = new URL(containerPath + url.search, request.url)
-      return container.fetch(new Request(target, request))
+      return jsonResponse({ error: "ppt_runner_not_configured" }, 503)
     }
 
     // Keep the V1 contract available during the in-place migration. The V2

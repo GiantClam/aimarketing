@@ -7,3 +7,9 @@ test("shared session coordination avoids the deprecated implicit Sandbox shell",
   const source = await readFile(resolve(import.meta.dirname, "session-coordinator.ts"), "utf8")
   assert.doesNotMatch(source, /enableDefaultSession:\s*true/u)
 })
+
+test("session endpoints convert signature failures into 401 responses", async () => {
+  const source = await readFile(resolve(import.meta.dirname, "session-coordinator.ts"), "utf8")
+  assert.match(source, /authenticateOrReject/u)
+  assert.match(source, /if \(rejected\) return rejected/u)
+})

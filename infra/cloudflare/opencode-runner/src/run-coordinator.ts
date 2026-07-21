@@ -8,7 +8,7 @@ import { jsonResponse, sseEvent } from "./sse"
 import { prepareRunWorkspace } from "./workspace"
 
 export type RunnerEnv = {
-  Sandbox: unknown
+  SandboxV2: unknown
   AGENT_RUNNER_HMAC_SECRET: string
 }
 
@@ -71,7 +71,7 @@ export class AgentRunCoordinator {
           try {
             console.log(JSON.stringify({ event: "runner_start", runId: input.runId }))
             emit({ event: "runtime_started", runId: input.runId })
-            sandbox = getSandbox(this.env.Sandbox as Parameters<typeof getSandbox>[0], `run-${input.runId}`, {
+            sandbox = getSandbox(this.env.SandboxV2 as Parameters<typeof getSandbox>[0], `run-${input.runId}`, {
               transport: "rpc",
               enableDefaultSession: true,
               sleepAfter: "1m",

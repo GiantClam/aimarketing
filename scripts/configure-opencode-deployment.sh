@@ -10,7 +10,7 @@ TARGET_RUN_QUEUE="aimarketing-opencode-runs"
 TARGET_DLQ_QUEUE="aimarketing-opencode-runs-dlq"
 PRODUCTION_URL="https://www.aimarketingsite.com"
 RUNNER_URL="https://${WORKER_NAME}.liulanggoukk.workers.dev"
-PPT_RUNNER_URL="${RUNNER_URL}/ppt"
+PPT_RUNNER_URL="https://ppt-master-worker-production.up.railway.app"
 RAILWAY_OPENCODE_URL="${RAILWAY_OPENCODE_RUNTIME_URL:-https://opencode-runtime-production.up.railway.app}"
 
 load_env_file() {
@@ -188,7 +188,7 @@ vercel_set SHARED_AGENT_SKILL_R2_BUCKET "$TARGET_SHARED_AGENT_R2_BUCKET"
 vercel_set PLATFORM_ARTIFACT_R2_BUCKET "$TARGET_R2_BUCKET"
 vercel_set PPT_WORKER_BASE_URL "$PPT_RUNNER_URL"
 vercel_set PPT_WORKER_INTERNAL_TOKEN "$PPT_MASTER_TOKEN" secret
-vercel_set PPT_WORKER_RUNTIME_PROFILE cloudflare-linux
+vercel_set PPT_WORKER_RUNTIME_PROFILE railway-linux
 vercel_set LEAD_TOOLS_PPT_EXECUTION_TRANSPORT remote-worker
 vercel_set LEAD_TOOLS_PPT_PREVIEW_RUNTIME ppt-master-agent
 

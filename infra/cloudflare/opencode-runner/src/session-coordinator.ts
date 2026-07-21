@@ -11,7 +11,7 @@ import { createSessionWorkspaceBackup, prepareSessionWorkspace } from "./workspa
 import { createRuntimeCallbackHeaders } from "../../../../lib/ai-entry/runtime/callback-signature"
 
 export type SessionRunnerEnv = {
-  Sandbox: unknown
+  SandboxV2: unknown
   SessionCoordinator: SessionCoordinatorNamespace
   AGENT_RUN_QUEUE: Queue<unknown>
   BACKUP_BUCKET: R2Bucket
@@ -123,8 +123,18 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
     return verifyRunnerSignature(request, body, this.env.AGENT_RUNNER_HMAC_SECRET, nonceStore)
   }
 
+  private async authenticateOrReject(request: Request, body: string) {
+    try {
+      await this.authenticate(request, body)
+      return null
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : "runner_unauthorized" }, 401)
+    }
+  }
+
   private async acceptRun(request: Request, body: string) {
-    await this.authenticate(request, body)
+    const rejected = await this.authenticateOrReject(request, body)
+    if (rejected) return rejected
     const input = parseSessionRunRequest(body)
     const existing = await this.getRun(input.runId)
     if (existing) return existing.sessionKey === input.sessionKey ? json({ accepted: true, runId: input.runId, sessionKey: input.sessionKey, status: existing.status }) : json({ error: "run_payload_conflict" }, 409)
@@ -137,7 +147,8 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
   }
 
   private async prepareSession(request: Request, body: string) {
-    await this.authenticate(request, body)
+    const rejected = await this.authenticateOrReject(request, body)
+    if (rejected) return rejected
     const requestInput = parseSessionRunRequest(body)
     const runtimeInput = requestInput.input
     if (runtimeInput.sharedSkillSetSelection) {
@@ -153,7 +164,7 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
       return json({ error: "runtime_session_agent_mismatch" }, 409)
     }
     const checkpoint = runtimeInput.checkpoint || (await this.ctx.storage.get<RuntimeCheckpointRef>("latestCheckpoint")) || null
-    const sandbox = getSandbox(this.env.Sandbox as Parameters<typeof getSandbox>[0], requestInput.sessionKey, {
+    const sandbox = getSandbox(this.env.SandboxV2 as Parameters<typeof getSandbox>[0], requestInput.sessionKey, {
       // Workflow -> Durable Object -> Sandbox RPC can lose its Cap'n Web
       // session during the first default-session operation. Dashi executes a
       // self-contained CLI turn, so use the HTTP transport for that path.
@@ -217,7 +228,7 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
     }
     const sessionKey = input.sessionKey
     await stage("sandbox_acquire", "started")
-    const sandbox = getSandbox(this.env.Sandbox as Parameters<typeof getSandbox>[0], sessionKey, {
+    const sandbox = getSandbox(this.env.SandboxV2 as Parameters<typeof getSandbox>[0], sessionKey, {
       transport: "rpc",
       // Every turn uses absolute workspace paths and an explicit OpenCode
       // server/process. The deprecated implicit shell can exit after a backup
@@ -283,7 +294,8 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
   }
 
   private async eventTicket(request: Request, runId: string, body: string) {
-    await this.authenticate(request, body)
+    const rejected = await this.authenticateOrReject(request, body)
+    if (rejected) return rejected
     const token = await createEventTicket({ runId, secret: this.env.OPENCODE_EVENT_TICKET_SECRET, ttlSeconds: 3_600 })
     return json({ eventsUrl: `${new URL(request.url).origin}/v2/runs/${runId}/events`, eventToken: token, expiresAt: new Date(Date.now() + 3_600_000).toISOString() })
   }
@@ -329,7 +341,8 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
     if (request.method === "GET" && url.pathname.endsWith("/events") && runId) return this.eventStream(request, runId)
     if (request.method === "POST" && url.pathname.endsWith("/cancel") && runId) {
       const body = await request.text()
-      await this.authenticate(request, body)
+      const rejected = await this.authenticateOrReject(request, body)
+      if (rejected) return rejected
       await this.ctx.storage.put(`run:${runId}`, { ...(await this.getRun(runId)), runId, status: "cancelled", updatedAt: new Date().toISOString() })
       await this.runtime.abort().catch(() => undefined)
       // A cancelled turn must explicitly release its session container; otherwise a

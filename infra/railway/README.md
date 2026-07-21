@@ -77,7 +77,7 @@ If the preview planning stage itself is unstable, set `LEAD_TOOLS_PPT_PREVIEW_PR
 - Supabase remains the canonical conversation context. The app attaches the last bounded context window, immutable Skill bundle, and request-scoped provider configuration on every turn.
 - Attachments are intentionally implemented with the OpenCode HTTP session API; the interactive `opencode attach <url>` terminal command is not suitable for the backend SSE path.
 - Session workspaces are temporary under `/data/sessions`; a Railway volume is optional for runtime scratch space and is not the source of truth for editable PPT continuity. The next PPT turn rebuilds `./workspace/ppt-master` from the conversation snapshot.
-- The app selects this service for `executive-ppt`/`ppt-master` when `AI_ENTRY_PPT_RAILWAY_ENABLED=true`, and for every `business-*` Agent when `AI_ENTRY_BUSINESS_AGENT_RAILWAY_ENABLED=true`. Plain AI Chat stays on the direct AI SDK/Provider path. All OpenCode Agent/PPT/Workflow execution is Railway-only; Cloudflare Runner is retired and must not receive new traffic.
+- The app selects this service for `executive-ppt`/`ppt-master` when `AI_ENTRY_PPT_RAILWAY_ENABLED=true`, and for every `business-*` Agent when `AI_ENTRY_BUSINESS_AGENT_RAILWAY_ENABLED=true`. The speaker-style `executive-presentation-ppt` path uses the pinned `dashi-ppt-skill` in the Cloudflare Sandbox session runner. Plain AI Chat stays on the direct AI SDK/Provider path.
 
 ### Business Agent runtime
 
