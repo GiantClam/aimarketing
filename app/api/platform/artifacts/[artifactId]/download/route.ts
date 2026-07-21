@@ -8,6 +8,7 @@ import {
 } from "@/lib/platform/artifact-actions"
 import { buildAttachmentContentDisposition, buildInlineContentDisposition } from "@/lib/platform/minimax-audio"
 import { getPlatformArtifact } from "@/lib/platform/task-run-store"
+import { getR2Object } from "@/lib/r2"
 import { toUint8Array } from "@/lib/utils/binary"
 
 export const runtime = "nodejs"
@@ -66,7 +67,21 @@ export async function GET(
     )
     headers.set("Cache-Control", "private, no-store")
 
-    const sourceUrl = resolvePlatformArtifactSourceUrl(artifact)
+    if (artifact.storageKey) {
+      const object = await getR2Object(artifact.storageKey).catch(() => null)
+      if (object) {
+        headers.set(
+          "Content-Type",
+          normalizePlatformArtifactContentType(artifact.mimeType || object.contentType || "application/octet-stream"),
+        )
+        return new NextResponse(Buffer.from(object.bytes), {
+          status: 200,
+          headers,
+        })
+      }
+    }
+
+    const sourceUrl = artifact.storageKey ? null : resolvePlatformArtifactSourceUrl(artifact)
     if (sourceUrl) {
       const response = await fetch(sourceUrl, {
         cache: "no-store",

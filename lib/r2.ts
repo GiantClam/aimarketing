@@ -1,4 +1,4 @@
-import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import { DeleteObjectCommand, GetObjectCommand, S3Client } from "@aws-sdk/client-s3"
 
 let r2Client: S3Client | null = null
 let r2ClientSignature = ""
@@ -95,6 +95,20 @@ export function getR2PublicUrl(storageKey: string) {
   }
 
   return `${publicBase}/${storageKey}`
+}
+
+export async function getR2Object(storageKey: string) {
+  const client = getR2Client()
+  const bucketName = getR2BucketName()
+  if (!client || !bucketName || !storageKey) return null
+
+  const object = await client.send(new GetObjectCommand({ Bucket: bucketName, Key: storageKey }))
+  if (!object.Body) return null
+
+  return {
+    bytes: await object.Body.transformToByteArray(),
+    contentType: object.ContentType || null,
+  }
 }
 
 export async function deleteR2Object(storageKey: string) {
