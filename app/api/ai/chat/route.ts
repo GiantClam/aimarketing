@@ -1424,7 +1424,7 @@ export async function POST(request: NextRequest) {
     const preparedSharedSkillSetSelection = isOpenCodeRuntimeDecision(runtimeDecision)
       ? await prepareSharedSkillSet()
       : null
-    if (sharedSkillSetSelection && !preparedSharedSkillSetSelection && runtimeProfile.backend === "railway-opencode") {
+    if (isOpenCodeRuntimeDecision(runtimeDecision) && sharedSkillSetSelection && !preparedSharedSkillSetSelection && runtimeProfile.backend === "railway-opencode") {
       throw new Error("shared_agent_bundle_unavailable")
     }
     // The resolved shared selection includes the Agent's governed base Skill

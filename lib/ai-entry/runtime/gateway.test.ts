@@ -87,6 +87,19 @@ test("ordinary fixed PPT tools stay on native runtime", () => withOpenCodeEnv(()
   assert.equal(decision.kind, "native-tool")
 }))
 
+test("workflow business Agents stay platform-owned", () => withOpenCodeEnv(() => {
+  process.env.AI_ENTRY_BUSINESS_AGENT_RAILWAY_ENABLED = "true"
+  process.env.RAILWAY_OPENCODE_RUNTIME_URL = "https://opencode-runtime.example.com"
+  process.env.RAILWAY_OPENCODE_RUNTIME_TOKEN = "business-token"
+  const decision = resolveAiEntryRuntimeDecision({
+    latestUserPrompt: "生成 SEO 复用 brief",
+    agentId: "business-seo-repurpose",
+    executionContext: "workflow",
+    selectedToolIds: [],
+  })
+  assert.equal(decision.kind, "native-tool")
+}))
+
 test("speaker PPT stays fully OpenCode-owned even when prompt asks for current research", () => withOpenCodeEnv(() => {
   process.env.AI_ENTRY_RUNTIME_MODE = "opencode-cloudflare-sandbox"
   process.env.AI_ENTRY_OPENCODE_BACKEND = "cloudflare-sandbox-exec"
