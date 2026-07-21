@@ -42,11 +42,13 @@ test("successful OpenCode runtime tasks are normalized to complete progress", ()
     createdAt: 1710000000,
     updatedAt: 1710000010,
     startedAt: 1710000002,
+    finishedAt: 1710000008,
   })
 
   assert.equal(summary?.status, "success")
   assert.equal(summary?.progress_current, 4)
   assert.equal(summary?.progress_total, 4)
+  assert.equal(summary?.finished_at, 1710000008)
 })
 
 test("parseAiEntryTaskRunSummary normalizes a running PPT preview task", () => {

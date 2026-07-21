@@ -59,6 +59,7 @@ type TaskRunSource = {
   createdAt?: Date | string | number | null
   updatedAt?: Date | string | number | null
   startedAt?: Date | string | number | null
+  finishedAt?: Date | string | number | null
 }
 
 function safeParseRecord(value: unknown) {
@@ -281,7 +282,12 @@ export function parseAiEntryOpenCodeTaskRunSummary(source: TaskRunSource): AiEnt
   const stage = resolveRuntimeStage(status, result, events)
   const isZh = payload?.isZh === false ? false : true
   const updatedAt = toEpochSeconds(source.updatedAt)
-  const finishedAt = status === "success" || status === "failed" ? updatedAt : null
+  const finishedAt =
+    status === "success" || status === "failed"
+      ? source.finishedAt
+        ? toEpochSeconds(source.finishedAt)
+        : updatedAt
+      : null
   const errorMessage = normalizeText(result?.errorMessage) || normalizeText(result?.error)
   const progress = resolveProgress({ status, stage, result })
   return {
@@ -355,7 +361,12 @@ export function parseAiEntryTaskRunSummary(source: TaskRunSource): AiEntryTaskRu
     null
   const errorCode = normalizeText(result?.errorCode) || errorMessage || null
   const updatedAt = toEpochSeconds(source.updatedAt)
-  const finishedAt = status === "success" || status === "failed" ? updatedAt : null
+  const finishedAt =
+    status === "success" || status === "failed"
+      ? source.finishedAt
+        ? toEpochSeconds(source.finishedAt)
+        : updatedAt
+      : null
   const resultSummary =
     normalizeText(result?.resultSummary) ||
     normalizeText(result?.assistantMessage) ||

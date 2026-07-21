@@ -235,7 +235,7 @@ async function findAiEntryPendingTaskSummary(input: {
     const runtimeResult = await withAiEntryDbRetry("find-ai-entry-pending-opencode-task-summary", () =>
       db.execute(sql`
         SELECT id, status, input_payload as "inputPayload", normalized_result as "normalizedResult",
-          created_at as "createdAt", updated_at as "updatedAt", started_at as "startedAt"
+          created_at as "createdAt", updated_at as "updatedAt", started_at as "startedAt", finished_at as "finishedAt"
         FROM "AI_MARKETING_platform_task_runs"
         WHERE user_id = ${input.userId} AND item_type = 'ai_entry_opencode'
           AND status IN ('queued', 'running')
@@ -254,6 +254,7 @@ async function findAiEntryPendingTaskSummary(input: {
       createdAt: row.createdAt as Date | string | number | null,
       updatedAt: row.updatedAt as Date | string | number | null,
       startedAt: row.startedAt as Date | string | number | null,
+      finishedAt: row.finishedAt as Date | string | number | null,
     })
   } catch (error) {
     console.warn("ai-entry.opencode.pending-task.lookup.failed", { message: error instanceof Error ? error.message : String(error) })
@@ -408,7 +409,7 @@ async function listAiEntryTaskRunSummaries(input: {
     const runtimeResult = await withAiEntryDbRetry("list-ai-entry-opencode-task-run-summaries", () =>
       db.execute(sql`
         SELECT id, status, input_payload as "inputPayload", normalized_result as "normalizedResult",
-          created_at as "createdAt", updated_at as "updatedAt", started_at as "startedAt"
+          created_at as "createdAt", updated_at as "updatedAt", started_at as "startedAt", finished_at as "finishedAt"
         FROM "AI_MARKETING_platform_task_runs"
         WHERE user_id = ${input.userId}
           AND item_type = 'ai_entry_opencode'
@@ -426,6 +427,7 @@ async function listAiEntryTaskRunSummaries(input: {
         createdAt: row.createdAt as Date | string | number | null,
         updatedAt: row.updatedAt as Date | string | number | null,
         startedAt: row.startedAt as Date | string | number | null,
+        finishedAt: row.finishedAt as Date | string | number | null,
       }))
       .filter((item): item is AiEntryTaskRunSummary => Boolean(item))
     }

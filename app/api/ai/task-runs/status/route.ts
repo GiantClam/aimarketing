@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
               createdAt: task.createdAt,
               updatedAt: task.updatedAt,
               startedAt: task.startedAt,
+              finishedAt: task.finishedAt,
             })
           : null,
       )
@@ -77,6 +78,7 @@ export async function POST(request: NextRequest) {
         createdAt: task.createdAt,
         updatedAt: task.updatedAt,
         startedAt: task.startedAt,
+        finishedAt: task.finishedAt,
       }))
       .filter(Boolean)
 
