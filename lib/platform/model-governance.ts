@@ -280,6 +280,7 @@ export async function resolveGovernedImageAssistantSelectionForUser(params: {
       (requestedModelOptionId
         ? enterpriseOptions.find((item) => item.selectionId === requestedModelOptionId) || null
         : null) ||
+      enterpriseOptions.find((item) => item.active && item.runtime.kind !== "runninghub") ||
       (enterpriseOptions.some((item) => item.runtime.kind === "runninghub")
         ? enterpriseOptions.find(
             (item) => item.runtime.kind === "runninghub" && item.runtime.routeMode === preferredRunningHubMode,
