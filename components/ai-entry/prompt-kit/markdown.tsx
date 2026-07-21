@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm"
 import { ChevronRight, FileText, Quote } from "lucide-react"
 
 import { CodeBlock } from "@/components/chat/CodeBlock"
+import { isPublishedR2ArtifactUrl } from "@/lib/ai-entry/runtime/r2-artifact-url"
 import { cn } from "@/lib/utils"
 
 type MarkdownProps = {
@@ -183,6 +184,7 @@ function MarkdownComponent({ children, className }: MarkdownProps) {
             const label = stringifyChildren(children) || href || "link"
             const fileLink = buildFileLinkMeta(href, label)
             if (fileLink && href) {
+              if (!isPublishedR2ArtifactUrl(href)) return null
               return <FileLinkCard href={href} title={fileLink.fileName} description={fileLink.host ? `${fileLink.extension} · ${fileLink.host}` : fileLink.extension} />
             }
             return (
@@ -192,7 +194,9 @@ function MarkdownComponent({ children, className }: MarkdownProps) {
             )
           },
           img({ src, alt, title }) {
-            return typeof src === "string" ? <InlineImageCard src={src} alt={alt} title={title} /> : null
+            return typeof src === "string" && isPublishedR2ArtifactUrl(src)
+              ? <InlineImageCard src={src} alt={alt} title={title} />
+              : null
           },
           blockquote({ children }) {
             return <CalloutBlockquote>{children}</CalloutBlockquote>
