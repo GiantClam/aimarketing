@@ -281,7 +281,7 @@ test("hard reference edit shortcut still bypasses the planner model", async () =
   assert.equal(result.orchestration.selected_skill.id, "canvas-design-execution")
 })
 
-test("guided brief can auto-complete style fallback and continue to generation", async () => {
+test("guided brief keeps asking when style is still missing", async () => {
   mockedPlannerResponse = JSON.stringify({
     brief_delta: {
       goal: "Ad poster 4:3",
@@ -319,10 +319,10 @@ test("guided brief can auto-complete style fallback and continue to generation",
   })
 
   assert.equal(plannerCalls, 1)
-  assert.equal(result.orchestration.missing_fields.includes("style"), false)
-  assert.equal(result.orchestration.ready_for_generation, true)
-  assert.equal(result.orchestration.selected_skill.id, "enterprise-ad-image")
-  assert.ok(typeof result.orchestration.generated_prompt === "string" && result.orchestration.generated_prompt.length > 0)
+  assert.equal(result.orchestration.missing_fields.includes("style"), true)
+  assert.equal(result.orchestration.ready_for_generation, false)
+  assert.equal(result.orchestration.generated_prompt, null)
+  assert.match(result.assistantReply || "", /style|风格/i)
 })
 
 test("planner recovers the latest subject from raw conversation context for continuation prompts", async () => {
@@ -380,9 +380,11 @@ test("planner recovers the latest subject from raw conversation context for cont
     referenceCount: 0,
   })
 
-  assert.equal(result.orchestration.ready_for_generation, true)
+  assert.equal(result.orchestration.ready_for_generation, false)
+  assert.equal(result.orchestration.missing_fields.includes("style"), true)
   assert.match(result.orchestration.brief.subject, /美女/)
-  assert.match(result.orchestration.generated_prompt || "", /美女/)
+  assert.equal(result.orchestration.generated_prompt, null)
+  assert.match(result.assistantReply || "", /style|风格/i)
 })
 
 test("style continuation preserves the previous creative subject", async () => {

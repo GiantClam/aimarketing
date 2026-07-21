@@ -1252,12 +1252,6 @@ function applyBriefProgressionFallbacks(input: {
     patch.subject = truncate(input.userPrompt, 140)
   }
 
-  if (hasDeliverySkeleton && !normalizeText(base.style)) {
-    patch.style = isZh
-      ? "整体保持商业级视觉质感，突出主体识别，色彩与光影统一，风格简洁高级并可直接用于投放。"
-      : "Use a polished commercial visual style with clear subject identity, cohesive lighting and color, and production-ready quality."
-  }
-
   if (hasDeliverySkeleton && !normalizeText(base.composition)) {
     patch.composition = isZh
       ? `按 ${base.size_preset || "1:1"} 画幅组织画面，保留主视觉焦点，并预留可放标题与卖点文案的安全区域。`
@@ -1669,6 +1663,7 @@ function preservePreviousCreativeContext(input: {
   brief: ImageAssistantBrief
   previousState: ImageAssistantOrchestrationState | null
   prompt: string
+  followUpBrief: Partial<ImageAssistantBrief>
 }) {
   const previousBrief = input.previousState?.brief
   if (!previousBrief || !isContextualStyleContinuationPrompt(input.prompt, input.previousState)) {
@@ -1676,9 +1671,9 @@ function preservePreviousCreativeContext(input: {
   }
 
   return normalizeBrief({
-    ...input.brief,
-    ...(previousBrief.goal ? { goal: previousBrief.goal } : {}),
-    ...(previousBrief.subject ? { subject: previousBrief.subject } : {}),
+    ...previousBrief,
+    ...(input.followUpBrief.style ? { style: input.followUpBrief.style } : {}),
+    ...(input.followUpBrief.composition ? { composition: input.followUpBrief.composition } : {}),
   })
 }
 
@@ -1768,6 +1763,7 @@ export async function planImageAssistantTurn(input: {
     brief: rawBrief,
     previousState: input.previousState,
     prompt: input.prompt,
+    followUpBrief: mergeBrief(promptOptionBrief, contextual),
   })
   const briefWithFallbacks = applyBriefProgressionFallbacks({
     brief: contextPreservedBrief,
