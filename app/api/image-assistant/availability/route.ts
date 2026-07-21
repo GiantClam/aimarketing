@@ -28,6 +28,14 @@ function toRuntimeProviderConfig(selection: Awaited<ReturnType<typeof resolveGov
     }
   }
 
+  if (runtime.kind === "bailian") {
+    return {
+      kind: "bailian",
+      config: runtime.config,
+      model: runtime.model,
+    }
+  }
+
   return {
     kind: "openai-compatible",
     provider: "pptoken",

@@ -78,6 +78,82 @@ const SEEDANCE_VIDEO_RESOLUTION_OPTIONS = [
 
 const models: ModelDefinition[] = [
   {
+    id: "bailian:image:qwen-image-3.0-pro",
+    provider: "bailian",
+    capability: "image.text_to_image",
+    label: "Qwen Image 3.0 Pro Text to Image",
+    async: false,
+    outputKind: "image",
+    parameterSchema: [
+      { id: "prompt", label: "Prompt", type: "textarea", required: true },
+      selectParameter("size", "Size", "1024*1024", [
+        { label: "Auto", value: "auto" },
+        { label: "1024*1024", value: "1024*1024" },
+        { label: "1536*1024", value: "1536*1024" },
+        { label: "1024*1536", value: "1024*1536" },
+        { label: "2048*2048", value: "2048*2048" },
+      ]),
+      { id: "referenceImages", label: "Reference images", type: "image" },
+      { id: "negativePrompt", label: "Negative prompt", type: "textarea" },
+      { id: "n", label: "Candidates", type: "number", defaultValue: 1, min: 1, max: 6 },
+      selectParameter("promptExtend", "Prompt extension", "true", [{ label: "On", value: "true" }, { label: "Off", value: "false" }]),
+      selectParameter("watermark", "Watermark", "false", [{ label: "Off", value: "false" }, { label: "On", value: "true" }]),
+    ],
+    providerMetadata: { nativeModel: "qwen-image-3.0-pro" },
+  },
+  {
+    id: "bailian:image:qwen-image-3.0-pro-edit",
+    provider: "bailian",
+    capability: "image.image_to_image",
+    label: "Qwen Image 3.0 Pro Image to Image",
+    async: false,
+    outputKind: "image",
+    parameterSchema: [
+      { id: "prompt", label: "Prompt", type: "textarea", required: true },
+      { id: "referenceImages", label: "Reference images", type: "image", required: true },
+      selectParameter("size", "Size", "auto", [{ label: "Auto", value: "auto" }, { label: "1024*1024", value: "1024*1024" }, { label: "2048*2048", value: "2048*2048" }]),
+      { id: "negativePrompt", label: "Negative prompt", type: "textarea" },
+      { id: "n", label: "Candidates", type: "number", defaultValue: 1, min: 1, max: 6 },
+    ],
+    providerMetadata: { nativeModel: "qwen-image-3.0-pro" },
+  },
+  {
+    id: "bailian:image:qwen-image-2.7",
+    provider: "bailian",
+    capability: "image.text_to_image",
+    label: "Qwen Image 2.7 Text to Image",
+    async: false,
+    outputKind: "image",
+    parameterSchema: [{ id: "prompt", label: "Prompt", type: "textarea", required: true }, { id: "referenceImages", label: "Reference images", type: "image" }, selectParameter("size", "Size", "1024*1024", [{ label: "Auto", value: "auto" }, { label: "1024*1024", value: "1024*1024" }, { label: "2048*2048", value: "2048*2048" }])],
+    providerMetadata: { nativeModel: "qwen-image-2.7" },
+  },
+  {
+    id: "bailian:image:qwen-image-2.7-edit",
+    provider: "bailian",
+    capability: "image.image_to_image",
+    label: "Qwen Image 2.7 Image to Image",
+    async: false,
+    outputKind: "image",
+    parameterSchema: [{ id: "prompt", label: "Prompt", type: "textarea", required: true }, { id: "referenceImages", label: "Reference images", type: "image", required: true }, selectParameter("size", "Size", "auto", [{ label: "Auto", value: "auto" }, { label: "1024*1024", value: "1024*1024" }, { label: "2048*2048", value: "2048*2048" }])],
+    providerMetadata: { nativeModel: "qwen-image-2.7" },
+  },
+  {
+    id: "bailian:video:happyhorse-1.1-t2v",
+    provider: "bailian",
+    capability: "video.text_to_video",
+    label: "HappyHorse 1.1 Text to Video",
+    async: true,
+    outputKind: "video",
+    defaultTimeoutMs: 30 * 60_000,
+    parameterSchema: [
+      { id: "prompt", label: "Prompt", type: "textarea", required: true },
+      selectParameter("resolution", "Resolution", "1080P", [{ label: "720P", value: "720P" }, { label: "1080P", value: "1080P" }]),
+      selectParameter("ratio", "Aspect ratio", "16:9", [{ label: "16:9", value: "16:9" }, { label: "9:16", value: "9:16" }, { label: "1:1", value: "1:1" }, { label: "4:3", value: "4:3" }, { label: "3:4", value: "3:4" }, { label: "21:9", value: "21:9" }, { label: "9:21", value: "9:21" }]),
+      { id: "duration", label: "Duration", type: "number", defaultValue: 5, min: 3, max: 15, step: 1 },
+    ],
+    providerMetadata: { nativeModel: "happyhorse-1.1-t2v", featureId: "text-to-video" },
+  },
+  {
     id: "openai:text:gpt-5.4-mini",
     provider: "openai_compatible",
     capability: "text.generate",
@@ -146,6 +222,35 @@ const models: ModelDefinition[] = [
     ],
     providerMetadata: {
       nativeModel: "gpt-image-2",
+    },
+  },
+  {
+    id: "google:image:nanobanana2",
+    provider: "google_official",
+    capability: "image.text_to_image",
+    label: "Nanobanana2",
+    async: false,
+    outputKind: "image",
+    parameterSchema: [
+      { id: "prompt", label: "Prompt", type: "textarea", required: true },
+      selectParameter("size", "Aspect ratio", "1:1", [
+        { label: "1:1", value: "1:1" },
+        { label: "4:5", value: "4:5" },
+        { label: "3:4", value: "3:4" },
+        { label: "4:3", value: "4:3" },
+        { label: "16:9", value: "16:9" },
+        { label: "9:16", value: "9:16" },
+      ]),
+      selectParameter("resolution", "Resolution", "2K", [
+        { label: "1K", value: "1K" },
+        { label: "2K", value: "2K" },
+        { label: "4K", value: "4K" },
+      ]),
+      { id: "referenceImages", label: "Reference images", type: "image" },
+    ],
+    providerMetadata: {
+      nativeModel: "gemini-2.5-flash-image",
+      aliases: ["Nanobanana2", "nanobanana2"],
     },
   },
   {
@@ -570,6 +675,10 @@ export function findModelByCapabilityAndAlias(input: {
   return (
     listModels({ capability: input.capability }).find((model) => model.id === normalized) ||
     listModels({ capability: input.capability }).find((model) => model.providerMetadata?.nativeModel === normalized) ||
+    listModels({ capability: input.capability }).find((model) =>
+      Array.isArray(model.providerMetadata?.aliases) &&
+      model.providerMetadata.aliases.some((alias) => alias === normalized),
+    ) ||
     listModels({ capability: input.capability }).find((model) => model.label === normalized) ||
     null
   )

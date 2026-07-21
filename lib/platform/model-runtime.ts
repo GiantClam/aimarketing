@@ -94,6 +94,8 @@ export function buildRuntimeContext(input: {
 }): CapabilityRuntimeContext {
   return {
     minimaxAudioConfig: input.audioRuntime?.config,
+    bailianConfig:
+      input.videoRuntime?.kind === "bailian" ? input.videoRuntime.config : undefined,
     minimaxVideoConfig: input.videoRuntime?.kind === "minimax" ? input.videoRuntime.config : undefined,
     runningHubConfig: input.videoRuntime?.kind === "runninghub" ? input.videoRuntime.config : undefined,
   }
@@ -172,7 +174,7 @@ export function resolveModelIdFromRun(input: {
     if (model) return model.id
   }
 
-  if (input.run.externalSystem === "minimax" || input.run.externalSystem === "runninghub") {
+  if (input.run.externalSystem === "minimax" || input.run.externalSystem === "runninghub" || input.run.externalSystem === "bailian") {
     return getDefaultModelId(capability)
   }
   return null

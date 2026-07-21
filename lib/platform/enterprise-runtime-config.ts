@@ -15,6 +15,8 @@ import { getMiniMaxVideoConfig } from "@/lib/platform/minimax-video"
 import { DEFAULT_MINIMAX_VIDEO_MODEL } from "@/lib/platform/minimax-video-options"
 import type { RunningHubConfig } from "@/lib/platform/runninghub"
 import { getRunningHubConfig } from "@/lib/platform/runninghub"
+import type { BailianConfig } from "@/lib/platform/bailian"
+import { getBailianConfig } from "@/lib/platform/bailian"
 import {
   getCustomerGovernanceSettings,
   type CustomerGovernanceSettings,
@@ -45,6 +47,13 @@ export type EnterpriseTextRuntimeProviderId = Extract<
 >
 
 export type EnterpriseImageRuntimeConfig =
+  | {
+      kind: "bailian"
+      providerId: "bailian_official"
+      label: string
+      model: string
+      config: BailianConfig
+    }
   | {
       kind: "openai-compatible"
       providerId: EnterpriseImageModelProviderId
@@ -79,6 +88,10 @@ export type EnterpriseVideoRuntimeConfig = {
   | {
       kind: "minimax"
       config: MiniMaxVideoConfig
+    }
+  | {
+      kind: "bailian"
+      config: BailianConfig
     }
   | {
       kind: "runninghub"
@@ -193,6 +206,7 @@ function getEnterpriseImageBaseUrl(provider: EnterpriseModelProviderConfig) {
     return getRunningHubConfig().baseUrl
   }
   if (provider.providerId === "openai_official") return DEFAULT_OPENAI_BASE_URL
+  if (provider.providerId === "bailian_official") return getBailianConfig().baseUrl
   return ""
 }
 
@@ -202,6 +216,7 @@ function getEnterpriseVideoBaseUrl(provider: EnterpriseModelProviderConfig) {
   if (provider.providerId === "minimax_official") {
     return getMiniMaxVideoConfig().baseUrl
   }
+  if (provider.providerId === "bailian_official") return getBailianConfig().baseUrl
   if (provider.providerId === "runninghub") {
     return getRunningHubConfig().baseUrl
   }
@@ -224,6 +239,10 @@ function getEnterpriseMiniMaxApiKey(provider: EnterpriseModelProviderConfig) {
   const explicit = normalizeText(provider.apiKey)
   if (explicit) return explicit
   return normalizeText(getMiniMaxVideoConfig().apiKey)
+}
+
+function getEnterpriseBailianApiKey(provider: EnterpriseModelProviderConfig) {
+  return normalizeText(provider.apiKey) || normalizeText(getBailianConfig().apiKey)
 }
 
 export function buildEnterpriseImageRuntimeSelectionId(input: {
@@ -340,13 +359,15 @@ function buildEnterpriseTextProviderCatalogEntry(provider: EnterpriseModelProvid
 function buildEnterpriseImageRuntime(
   provider: EnterpriseModelProviderConfig,
 ): EnterpriseImageRuntimeConfig | null {
-  const apiKey = normalizeText(provider.apiKey)
+  const apiKey = normalizeText(provider.apiKey) || (provider.providerId === "bailian_official" ? normalizeText(getBailianConfig().apiKey) : "")
   const label = normalizeText(provider.label) || provider.providerId
   const model =
     normalizeText(provider.modelId) ||
     (provider.providerId === "google_official"
       ? DEFAULT_GOOGLE_IMAGE_MODEL
-      : DEFAULT_OPENAI_IMAGE_MODEL)
+      : provider.providerId === "bailian_official"
+        ? "qwen-image-3.0-pro"
+        : DEFAULT_OPENAI_IMAGE_MODEL)
   if (!provider.enabled || !apiKey) {
     return null
   }
@@ -368,6 +389,19 @@ function buildEnterpriseImageRuntime(
   const baseUrl = getEnterpriseImageBaseUrl(provider)
   if (!baseUrl) {
     return null
+  }
+
+  if (provider.providerId === "bailian_official") {
+    return {
+      kind: "bailian",
+      providerId: "bailian_official",
+      label,
+      model,
+      config: {
+        baseUrl,
+        apiKey,
+      },
+    }
   }
 
   return {
@@ -459,6 +493,18 @@ function buildEnterpriseVideoRuntime(
         baseUrl,
         apiKey,
       },
+    }
+  }
+
+  if (provider.providerId === "bailian_official") {
+    const apiKey = getEnterpriseBailianApiKey(provider)
+    if (!apiKey) return null
+    return {
+      kind: "bailian",
+      providerId: "bailian_official",
+      label: normalizeText(provider.label) || provider.providerId,
+      model: normalizeText(provider.modelId) || "happyhorse-1.1-t2v",
+      config: { baseUrl, apiKey },
     }
   }
 

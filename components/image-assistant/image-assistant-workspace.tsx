@@ -83,6 +83,7 @@ import type {
   ImageAssistantSizePreset,
   ImageAssistantVersionSummary,
 } from "@/lib/image-assistant/types"
+import type { ModelParameterDefinition } from "@/lib/ai-runtime/types"
 import { cn } from "@/lib/utils"
 
 type Availability = {
@@ -101,6 +102,7 @@ type Availability = {
     providerLabel: string
     modelId: string
     source: "workspace" | "enterprise"
+    parameterSchema?: ModelParameterDefinition[]
   }>
 }
 
@@ -219,6 +221,88 @@ const RESOLUTION_DISPLAY: Record<ImageAssistantResolution, { zh: string; en: str
   "1K": { zh: "高清 1K", en: "High 1K" },
   "2K": { zh: "超清 2K", en: "Ultra 2K" },
   "4K": { zh: "超高清 4K", en: "Ultra HD 4K" },
+}
+
+type ImageAssistantQuality = "auto" | "low" | "medium" | "high"
+
+const IMAGE_ASSISTANT_QUALITY_OPTIONS: Array<{ value: ImageAssistantQuality; zh: string; en: string }> = [
+  { value: "auto", zh: "自动质量", en: "Auto quality" },
+  { value: "low", zh: "低质量", en: "Low quality" },
+  { value: "medium", zh: "标准质量", en: "Standard quality" },
+  { value: "high", zh: "高质量", en: "High quality" },
+]
+
+const IMAGE_ASSISTANT_SIZE_OPTIONS: Array<{ value: ImageAssistantSizePreset; zh: string; en: string }> = [
+  { value: "1:1", zh: "1:1 方图", en: "1:1 Square" },
+  { value: "4:5", zh: "4:5 竖图", en: "4:5 Portrait" },
+  { value: "3:4", zh: "3:4 竖图", en: "3:4 Portrait" },
+  { value: "4:3", zh: "4:3 横图", en: "4:3 Landscape" },
+  { value: "16:9", zh: "16:9 横幅", en: "16:9 Landscape" },
+  { value: "9:16", zh: "9:16 长图", en: "9:16 Portrait" },
+]
+
+const IMAGE_ASSISTANT_COUNT_OPTIONS: Array<{ value: string; count: number; zh: string; en: string }> = [
+  { value: "1", count: 1, zh: "1 张", en: "1 image" },
+  { value: "4", count: 4, zh: "4 张", en: "4 images" },
+  { value: "9", count: 9, zh: "9 张", en: "9 images" },
+]
+
+const IMAGE_ASSISTANT_STANDARD_PARAMETER_IDS = new Set([
+  "prompt",
+  "referenceImages",
+  "quality",
+  "imageQuality",
+  "resolution",
+  "imageSize",
+  "size",
+  "candidateCount",
+  "n",
+])
+
+function findImageParameter(schema: ModelParameterDefinition[], ids: string[]) {
+  return schema.find((field) => ids.includes(field.id)) || null
+}
+
+function isRatioParameter(field: ModelParameterDefinition | null) {
+  return Boolean(field?.options?.length && field.options.every((option) => ["1:1", "4:5", "3:4", "4:3", "16:9", "9:16"].includes(option.value)))
+}
+
+function getModelParameterLabel(field: ModelParameterDefinition, isEnglish: boolean) {
+  if (field.id === "quality" || field.id === "imageQuality") return isEnglish ? "Image quality" : "图片质量"
+  if (field.id === "resolution" || field.id === "imageSize") return isEnglish ? "Clarity" : "清晰度"
+  if (field.id === "size") return isEnglish ? "Image size" : "图片尺寸"
+  if (field.id === "candidateCount" || field.id === "n") return isEnglish ? "Image count" : "图片张数"
+  const labels: Record<string, { zh: string; en: string }> = {
+    provider: { zh: "服务商", en: "Provider" },
+    background: { zh: "背景", en: "Background" },
+    outputFormat: { zh: "输出格式", en: "Output format" },
+    outputCompression: { zh: "压缩质量", en: "Compression" },
+    moderation: { zh: "内容审核", en: "Moderation" },
+    responseFormat: { zh: "响应格式", en: "Response format" },
+    negativePrompt: { zh: "负面提示词", en: "Negative prompt" },
+    promptExtend: { zh: "提示词扩展", en: "Prompt extension" },
+    watermark: { zh: "水印", en: "Watermark" },
+  }
+  return labels[field.id]?.[isEnglish ? "en" : "zh"] || field.label
+}
+
+function getModelParameterOptionLabel(field: ModelParameterDefinition, value: string, label: string, isEnglish: boolean) {
+  if (field.id === "quality" || field.id === "imageQuality") {
+    return IMAGE_ASSISTANT_QUALITY_OPTIONS.find((option) => option.value === value)?.[isEnglish ? "en" : "zh"] || label
+  }
+  if (field.id === "resolution" || field.id === "imageSize") {
+    return RESOLUTION_DISPLAY[value as ImageAssistantResolution]?.[isEnglish ? "en" : "zh"] || label
+  }
+  if (field.id === "size") {
+    return IMAGE_ASSISTANT_SIZE_OPTIONS.find((option) => option.value === value)?.[isEnglish ? "en" : "zh"] || label
+  }
+  return label
+}
+
+function getModelParameterDefaultValue(field: ModelParameterDefinition) {
+  if (field.defaultValue !== undefined && field.defaultValue !== null) return field.defaultValue
+  if (field.type === "select") return field.options?.[0]?.value || ""
+  return ""
 }
 
 type CanvasSelectionBounds = {
@@ -1603,6 +1687,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const [prompt, setPrompt] = useState("")
   const [sizePreset, setSizePreset] = useState<ImageAssistantSizePreset>("4:5")
   const [resolution, setResolution] = useState<ImageAssistantResolution>(DEFAULT_IMAGE_RESOLUTION)
+  const [imageQuality, setImageQuality] = useState<ImageAssistantQuality>("medium")
+  const [candidateCount, setCandidateCount] = useState(9)
+  const [modelParameterValues, setModelParameterValues] = useState<Record<string, unknown>>({})
+  const [briefControlsTouched, setBriefControlsTouched] = useState(false)
   const [isBusy, setIsBusy] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [, setIsLoadingSession] = useState(false)
@@ -1877,14 +1965,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     if (!latestAssistantMessage || !latestAssistantPromptQuestionId) return null
     return latestAssistantMessage.id
   }, [latestAssistantMessage, latestAssistantPromptQuestionId])
-  const currentUsageDisplay = latestOrchestration?.brief.usage_label || "Use + ratio pending"
-  const currentResolutionDisplay = latestOrchestration?.brief.resolution
-    ? isEnglish
-      ? RESOLUTION_DISPLAY[latestOrchestration.brief.resolution].en
-      : RESOLUTION_DISPLAY[latestOrchestration.brief.resolution].zh
-    : isEnglish
-      ? RESOLUTION_DISPLAY[resolution].en
-      : RESOLUTION_DISPLAY[resolution].zh
   const versionById = useMemo(
     () => new Map((detail?.versions || []).map((version) => [version.id, version])),
     [detail?.versions],
@@ -1921,13 +2001,59 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       null
     )
   }, [accessibleModelOptions, availability?.selectedModelOptionId, selectedModelOptionId])
-  const configuredImageModelName =
-    selectedAvailabilityModelOption?.label ||
+  const selectedModelParameterSchema = useMemo(
+    () => selectedAvailabilityModelOption?.parameterSchema || [],
+    [selectedAvailabilityModelOption],
+  )
+  const modelQualityParameter = useMemo(
+    () => findImageParameter(selectedModelParameterSchema, ["quality", "imageQuality"]),
+    [selectedModelParameterSchema],
+  )
+  const modelResolutionParameter = useMemo(
+    () => findImageParameter(selectedModelParameterSchema, ["resolution", "imageSize"]),
+    [selectedModelParameterSchema],
+  )
+  const modelSizeParameter = useMemo(
+    () => findImageParameter(selectedModelParameterSchema, ["size"]),
+    [selectedModelParameterSchema],
+  )
+  const modelCountParameter = useMemo(
+    () => findImageParameter(selectedModelParameterSchema, ["candidateCount", "n"]),
+    [selectedModelParameterSchema],
+  )
+  const hasModelParameterSchema = selectedModelParameterSchema.length > 0
+  const modelExtraParameters = useMemo(
+    () => selectedModelParameterSchema.filter((field) => !IMAGE_ASSISTANT_STANDARD_PARAMETER_IDS.has(field.id)),
+    [selectedModelParameterSchema],
+  )
+  const effectiveModelParameters = useMemo(() => {
+    if (!hasModelParameterSchema) return {}
+
+    const next = { ...modelParameterValues }
+    if (modelQualityParameter) next[modelQualityParameter.id] = imageQuality
+    if (modelResolutionParameter) next[modelResolutionParameter.id] = resolution
+    if (modelSizeParameter && isRatioParameter(modelSizeParameter)) next[modelSizeParameter.id] = sizePreset
+    if (modelCountParameter) next[modelCountParameter.id] = candidateCount
+    return next
+  }, [
+    candidateCount,
+    hasModelParameterSchema,
+    imageQuality,
+    modelCountParameter,
+    modelParameterValues,
+    modelQualityParameter,
+    modelResolutionParameter,
+    modelSizeParameter,
+    resolution,
+    sizePreset,
+  ])
+  const configuredImageModelId =
+    selectedAvailabilityModelOption?.modelId ||
     availability?.models?.highQuality ||
     availability?.models?.lowCost ||
     null
-  const currentImageModelDisplay =
-    latestAssistantModelName || configuredImageModelName || availability?.provider || chatComposerCopy.modelPending
+  const currentImageModelIdDisplay =
+    latestAssistantModelName || configuredImageModelId || chatComposerCopy.modelPending
   const clarificationCarryoverReferenceAssetIds = useMemo(
     () => getClarificationCarryoverReferenceAssetIds(detail?.messages || []),
     [detail?.messages],
@@ -2425,6 +2551,58 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   }, [availability])
 
   useEffect(() => {
+    const schema = selectedAvailabilityModelOption?.parameterSchema || []
+    if (!schema.length) {
+      setModelParameterValues({})
+      return
+    }
+
+    const nextValues: Record<string, unknown> = {}
+    for (const field of schema) {
+      const currentValue = modelParameterValues[field.id]
+      const hasValidSelectValue =
+        field.type !== "select" ||
+        !field.options?.length ||
+        field.options.some((option) => option.value === String(currentValue ?? ""))
+      const numericValue = typeof currentValue === "number" ? currentValue : Number(currentValue)
+      const hasValidNumberValue =
+        field.type !== "number" ||
+        currentValue === undefined ||
+        (Number.isFinite(numericValue) &&
+          (field.min === undefined || numericValue >= field.min) &&
+          (field.max === undefined || numericValue <= field.max))
+      nextValues[field.id] = hasValidSelectValue && hasValidNumberValue
+        ? currentValue
+        : getModelParameterDefaultValue(field)
+    }
+    setModelParameterValues(nextValues)
+
+    const qualityValue = nextValues[modelQualityParameter?.id || ""]
+    if (qualityValue === "auto" || qualityValue === "low" || qualityValue === "medium" || qualityValue === "high") {
+      setImageQuality(qualityValue)
+    }
+
+    const resolutionValue = nextValues[modelResolutionParameter?.id || ""]
+    if (isImageAssistantResolution(resolutionValue)) {
+      setResolution(resolutionValue)
+    }
+
+    const sizeValue = nextValues[modelSizeParameter?.id || ""]
+    if (isRatioParameter(modelSizeParameter) && typeof sizeValue === "string" && ["1:1", "4:5", "3:4", "4:3", "16:9", "9:16"].includes(sizeValue)) {
+      setSizePreset(sizeValue as ImageAssistantSizePreset)
+    }
+
+    const countValue = nextValues[modelCountParameter?.id || ""]
+    const parsedCount = Number(countValue)
+    if (Number.isFinite(parsedCount) && parsedCount > 0) {
+      setCandidateCount(Math.trunc(parsedCount))
+    }
+    // The selected model is the source of truth for defaults and supported fields.
+    setBriefControlsTouched(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAvailabilityModelOption?.id, selectedAvailabilityModelOption?.parameterSchema])
+
+  useEffect(() => {
     modeRef.current = mode
     detailRef.current = detail
     canvasRef.current = canvas
@@ -2805,6 +2983,16 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     }
   }, [latestOrchestration])
 
+  const composerBriefPatch = useMemo<Partial<ImageAssistantBrief> | null>(() => {
+    if (!briefControlsTouched) return null
+
+    return {
+      size_preset: sizePreset,
+      ratio_confirmed: true,
+      resolution,
+    }
+  }, [briefControlsTouched, resolution, sizePreset])
+
   const createSession = async (title?: string, options?: { navigate?: boolean; activate?: boolean }) => {
     const json = await requestJson("/api/image-assistant/sessions", {
       method: "POST",
@@ -2838,6 +3026,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     briefPatch?: Partial<ImageAssistantBrief> | null
     sizePreset?: ImageAssistantSizePreset | null
     resolution?: ImageAssistantResolution | null
+    imageQuality?: ImageAssistantQuality | null
+    candidateCount?: number | null
   }) => {
     const effectiveBrief = {
       ...(latestOrchestration?.brief || {}),
@@ -2846,20 +3036,20 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     const effectivePrompt = options?.prompt ?? prompt.trim()
     const effectiveSizePreset = options?.sizePreset || effectiveBrief.size_preset || sizePreset
     const effectiveResolution = options?.resolution || effectiveBrief.resolution || resolution
+    const effectiveQuality = options?.imageQuality || imageQuality
+    const effectiveCandidateCount = options?.candidateCount || candidateCount
     const effectiveResolutionLabel = isImageAssistantResolution(effectiveResolution)
       ? (isEnglish ? RESOLUTION_DISPLAY[effectiveResolution].en : RESOLUTION_DISPLAY[effectiveResolution].zh)
       : effectiveResolution
+    const effectiveQualityLabel =
+      IMAGE_ASSISTANT_QUALITY_OPTIONS.find((option) => option.value === effectiveQuality)?.[isEnglish ? "en" : "zh"] || effectiveQuality
     const sections = [
       effectivePrompt || (composerAttachmentCount ? chatComposerCopy.imageOnlyPromptFallback : null),
       `Requested mode: ${composerModeLabel}`,
-      effectiveBrief.usage_label ? `Usage: ${effectiveBrief.usage_label}` : null,
-      effectiveBrief.orientation
-        ? `Orientation: ${effectiveBrief.orientation === "landscape" ? "Landscape" : "Portrait"}`
-        : null,
-      effectiveBrief.size_preset
-        ? `Ratio: ${effectiveBrief.usage_label ? `${effectiveBrief.usage_label}` : effectiveBrief.size_preset}`
-        : null,
-      `Output spec: ${(effectiveBrief.usage_label && effectiveBrief.size_preset) ? effectiveBrief.usage_label : effectiveSizePreset} / ${effectiveResolutionLabel}`,
+      !hasModelParameterSchema || modelQualityParameter ? `Quality: ${effectiveQualityLabel}` : null,
+      !hasModelParameterSchema || modelResolutionParameter ? `Clarity: ${effectiveResolutionLabel}` : null,
+      !hasModelParameterSchema || modelSizeParameter ? `Size: ${effectiveSizePreset}` : null,
+      !hasModelParameterSchema || modelCountParameter ? `Images: ${effectiveCandidateCount}` : null,
     ]
 
     return sections.filter(Boolean).join("\n")
@@ -2867,8 +3057,15 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     chatComposerCopy.imageOnlyPromptFallback,
     composerAttachmentCount,
     composerModeLabel,
+    candidateCount,
+    hasModelParameterSchema,
     isEnglish,
+    imageQuality,
     latestOrchestration?.brief,
+    modelCountParameter,
+    modelQualityParameter,
+    modelResolutionParameter,
+    modelSizeParameter,
     prompt,
     resolution,
     sizePreset,
@@ -3192,9 +3389,22 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     }
 
     const submissionPrompt = typeof options?.prompt === "string" ? options.prompt : prompt.trim()
-    const submissionBrief = options?.briefPatch || null
+    const submissionBrief = composerBriefPatch || options?.briefPatch
+      ? { ...(composerBriefPatch || {}), ...(options?.briefPatch || {}) }
+      : null
     const submissionSizePreset = options?.sizePreset || latestOrchestration?.brief.size_preset || sizePreset
     const submissionResolution = options?.resolution || latestOrchestration?.brief.resolution || resolution
+    const submissionQuality = hasModelParameterSchema
+      ? modelQualityParameter
+        ? imageQuality
+        : null
+      : imageQuality
+    const requestResolution = hasModelParameterSchema
+      ? modelResolutionParameter
+        ? submissionResolution
+        : null
+      : submissionResolution
+    const previewCandidateCount = kind === "generate" ? candidateCount : 1
     const submissionGuidedSelection = options?.guidedSelection || null
     const submissionGuidedSelectionKey = getPromptQuestionSelectionKey({
       sourceMessageId: submissionGuidedSelection?.source_message_id,
@@ -3212,6 +3422,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       briefPatch: submissionBrief,
       sizePreset: submissionSizePreset,
       resolution: submissionResolution,
+      imageQuality: submissionQuality,
+      candidateCount: previewCandidateCount,
     })
     if (!optimisticPrompt) return
     const currentAttachments = [...pendingAttachments]
@@ -3225,6 +3437,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       fallbackReferenceCount: fallbackReferenceAssetIds.length,
     })
     const effectiveKind: ImageAssistantRunKind = shouldPromoteToEdit ? "edit" : kind
+    const submissionCandidateCount = effectiveKind === "generate" && (!hasModelParameterSchema || modelCountParameter)
+      ? candidateCount
+      : 1
+    const submissionImageSize = modelSizeParameter && !isRatioParameter(modelSizeParameter)
+      ? String(effectiveModelParameters[modelSizeParameter.id] || "") || null
+      : null
 
     const abortController = new AbortController()
     activeJobAbortRef.current = abortController
@@ -3299,9 +3517,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             patchBounds: null,
             canvasWidth: shouldUseCanvasSnapshotEdit ? canvasAttachment?.width || null : null,
             canvasHeight: shouldUseCanvasSnapshotEdit ? canvasAttachment?.height || null : null,
-            candidateCount: effectiveKind === "generate" ? 9 : 1,
+            candidateCount: submissionCandidateCount,
             sizePreset: canvasPatchSizePreset,
-            resolution: submissionResolution,
+            resolution: requestResolution,
+            imageQuality: submissionQuality,
+            imageSize: submissionImageSize,
+            modelParameters: effectiveModelParameters,
             parentVersionId: detail?.session.current_version_id || null,
             guidedSelection: submissionGuidedSelection,
           }),
@@ -4728,6 +4949,116 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     )
   }
 
+  const updateModelParameter = (fieldId: string, value: unknown) => {
+    setModelParameterValues((current) => ({ ...current, [fieldId]: value }))
+    setBriefControlsTouched(true)
+  }
+
+  const renderModelSelect = (field: ModelParameterDefinition, value: string, onValueChange: (value: string) => void, testId?: string) => (
+    <Select value={value} onValueChange={onValueChange}>
+      <SelectTrigger
+        className="h-8 min-w-[104px] max-w-[220px] rounded-[6px] border-border bg-background px-2.5 text-[11px] text-foreground"
+        aria-label={getModelParameterLabel(field, isEnglish)}
+        data-testid={testId}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {(field.options || []).map((option) => (
+          <SelectItem key={option.value} value={option.value} className="text-xs">
+            {getModelParameterOptionLabel(field, option.value, option.label, isEnglish)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+
+  const renderBriefModelParameter = (field: ModelParameterDefinition) => {
+    const value = effectiveModelParameters[field.id]
+    const fieldLabel = getModelParameterLabel(field, isEnglish)
+
+    if (field.id === "candidateCount" || field.id === "n") {
+      const max = Math.max(1, Math.min(9, Math.trunc(field.max || 9)))
+      const countOptions = [...new Set([1, 4, max])]
+        .filter((count) => count <= max)
+        .map((count) => ({ label: isEnglish ? `${count} image${count === 1 ? "" : "s"}` : `${count} 张`, value: String(count) }))
+      return renderModelSelect(
+        { ...field, type: "select", options: countOptions },
+        String(value || 1),
+        (nextValue) => {
+          const nextCount = Number(nextValue)
+          if (!Number.isFinite(nextCount)) return
+          setCandidateCount(nextCount)
+          updateModelParameter(field.id, nextCount)
+        },
+        "image-brief-count-select",
+      )
+    }
+
+    if (field.type === "select") {
+      return renderModelSelect(
+        field,
+        String(value ?? getModelParameterDefaultValue(field)),
+        (nextValue) => {
+          updateModelParameter(field.id, nextValue)
+          if (field.id === "quality" || field.id === "imageQuality") {
+            setImageQuality(nextValue as ImageAssistantQuality)
+          }
+          if (field.id === "resolution" || field.id === "imageSize") {
+            if (isImageAssistantResolution(nextValue)) setResolution(nextValue)
+          }
+          if (field.id === "size" && isRatioParameter(field) && ["1:1", "4:5", "3:4", "4:3", "16:9", "9:16"].includes(nextValue)) {
+            setSizePreset(nextValue as ImageAssistantSizePreset)
+          }
+        },
+        field.id === "quality" || field.id === "imageQuality"
+          ? "image-brief-quality-select"
+          : field.id === "resolution" || field.id === "imageSize"
+            ? "image-brief-resolution-select"
+            : field.id === "size"
+              ? "image-brief-size-select"
+              : field.id === "candidateCount" || field.id === "n"
+                ? "image-brief-count-select"
+                : undefined,
+      )
+    }
+
+    if (field.type === "number") {
+      return (
+        <label key={field.id} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+          <span className="dashboard-kicker">{fieldLabel}</span>
+          <input
+            className="h-8 w-20 rounded-[6px] border border-border bg-background px-2 text-[11px] text-foreground outline-none focus:ring-1 focus:ring-primary"
+            type="number"
+            min={field.min}
+            max={field.max}
+            step={field.step || 1}
+            value={value === undefined || value === null ? "" : String(value)}
+            onChange={(event) => updateModelParameter(field.id, event.target.value)}
+            aria-label={fieldLabel}
+          />
+        </label>
+      )
+    }
+
+    if (field.type === "textarea" || field.type === "text") {
+      return (
+        <label key={field.id} className="flex min-w-[180px] flex-1 items-center gap-1.5 text-[10px] text-muted-foreground">
+          <span className="dashboard-kicker shrink-0">{fieldLabel}</span>
+          <Textarea
+            className="min-h-8 h-8 resize-none rounded-[6px] border-border bg-background px-2 py-1.5 text-[11px] text-foreground"
+            value={value === undefined || value === null ? "" : String(value)}
+            onChange={(event) => updateModelParameter(field.id, event.target.value)}
+            placeholder={field.placeholder}
+            aria-label={fieldLabel}
+          />
+        </label>
+      )
+    }
+
+    return null
+  }
+
   return (
     <>
       <div className="dashboard-shell flex h-full min-h-0 flex-col">
@@ -5202,43 +5533,156 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                         </>
                       }
                       bodyClassName="px-0"
+                      footerClassName="flex-col items-stretch gap-2 sm:flex-row sm:items-center"
                       footer={
                         <>
-                          <p className="text-[11px] leading-5 text-muted-foreground">
-                            {composerAttachmentCount
-                              ? imageCopy.imagesAttached.replace("{count}", String(composerAttachmentCount))
-                              : imageCopy.noImageAttached}
-                            {" / "}
-                            {currentUsageDisplay}
-                            {" / "}
-                            {currentResolutionDisplay}
-                          </p>
-                          <div className="flex flex-wrap items-center gap-2 text-[11px] leading-5 text-muted-foreground">
-                            <span>{chatComposerCopy.currentModelLabel}:</span>
+                          <div
+                            className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-[11px] leading-5 text-muted-foreground"
+                            data-testid="image-brief-controls"
+                          >
+                            <span className="dashboard-kicker mr-1 text-[10px] font-medium text-muted-foreground">
+                              {isEnglish ? "Brief" : "生图参数"}
+                            </span>
+                            {hasModelParameterSchema ? (
+                              <>
+                                {modelQualityParameter ? renderBriefModelParameter(modelQualityParameter) : null}
+                                {modelResolutionParameter ? renderBriefModelParameter(modelResolutionParameter) : null}
+                                {modelSizeParameter ? renderBriefModelParameter(modelSizeParameter) : null}
+                                {modelCountParameter ? renderBriefModelParameter(modelCountParameter) : null}
+                                {modelExtraParameters.map((field) => (
+                                  <div key={field.id} className="flex min-w-0 items-center gap-1.5">
+                                    {field.type === "select" ? (
+                                      <span className="dashboard-kicker text-[10px] font-medium text-muted-foreground">
+                                        {getModelParameterLabel(field, isEnglish)}
+                                      </span>
+                                    ) : null}
+                                    {renderBriefModelParameter(field)}
+                                  </div>
+                                ))}
+                              </>
+                            ) : (
+                              <>
+                                <Select
+                                  value={imageQuality}
+                                  onValueChange={(value) => {
+                                    setImageQuality(value as ImageAssistantQuality)
+                                    setBriefControlsTouched(true)
+                                  }}
+                                >
+                                  <SelectTrigger
+                                    className="h-8 min-w-[122px] rounded-[6px] border-border bg-background px-2.5 text-[11px] text-foreground"
+                                    aria-label={isEnglish ? "Image quality" : "图片质量"}
+                                    data-testid="image-brief-quality-select"
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {IMAGE_ASSISTANT_QUALITY_OPTIONS.map((option) => (
+                                      <SelectItem key={option.value} value={option.value} className="text-xs">
+                                        {isEnglish ? option.en : option.zh}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Select
+                                  value={resolution}
+                                  onValueChange={(value) => {
+                                    setResolution(value as ImageAssistantResolution)
+                                    setBriefControlsTouched(true)
+                                  }}
+                                >
+                                  <SelectTrigger
+                                    className="h-8 min-w-[98px] rounded-[6px] border-border bg-background px-2.5 text-[11px] text-foreground"
+                                    aria-label={isEnglish ? "Resolution" : "清晰度"}
+                                    data-testid="image-brief-resolution-select"
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {(Object.keys(RESOLUTION_DISPLAY) as ImageAssistantResolution[]).map((value) => (
+                                      <SelectItem key={value} value={value} className="text-xs">
+                                        {isEnglish ? RESOLUTION_DISPLAY[value].en : RESOLUTION_DISPLAY[value].zh}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Select
+                                  value={sizePreset}
+                                  onValueChange={(value) => {
+                                    setSizePreset(value as ImageAssistantSizePreset)
+                                    setBriefControlsTouched(true)
+                                  }}
+                                >
+                                  <SelectTrigger
+                                    className="h-8 min-w-[106px] rounded-[6px] border-border bg-background px-2.5 text-[11px] text-foreground"
+                                    aria-label={isEnglish ? "Image size" : "图片尺寸"}
+                                    data-testid="image-brief-size-select"
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {IMAGE_ASSISTANT_SIZE_OPTIONS.map((option) => (
+                                      <SelectItem key={option.value} value={option.value} className="text-xs">
+                                        {isEnglish ? option.en : option.zh}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Select
+                                  value={String(candidateCount)}
+                                  onValueChange={(value) => {
+                                    const nextCount = IMAGE_ASSISTANT_COUNT_OPTIONS.find((option) => option.value === value)?.count
+                                    if (!nextCount) return
+                                    setCandidateCount(nextCount)
+                                    setBriefControlsTouched(true)
+                                  }}
+                                >
+                                  <SelectTrigger
+                                    className="h-8 min-w-[80px] rounded-[6px] border-border bg-background px-2.5 text-[11px] text-foreground"
+                                    aria-label={isEnglish ? "Image count" : "图片张数"}
+                                    data-testid="image-brief-count-select"
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {IMAGE_ASSISTANT_COUNT_OPTIONS.map((option) => (
+                                      <SelectItem key={option.value} value={option.value} className="text-xs">
+                                        {isEnglish ? option.en : option.zh}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </>
+                            )}
+                            <span className="dashboard-kicker mr-1 text-[10px] font-medium text-muted-foreground">
+                              {isEnglish ? "Model" : "模型"}
+                            </span>
                             {accessibleModelOptions.length > 0 ? (
                               <Select
                                 value={selectedAvailabilityModelOption?.id || undefined}
                                 onValueChange={setSelectedModelOptionId}
                                 disabled={accessibleModelOptions.length <= 1}
                               >
-                                <SelectTrigger className="h-7 min-w-[220px] max-w-full rounded-[6px] border-border bg-background px-2.5 text-[11px] text-foreground">
+                                <SelectTrigger
+                                  className="h-8 min-w-[190px] max-w-full rounded-[6px] border-border bg-background px-2.5 text-[11px] text-foreground"
+                                  aria-label={isEnglish ? "Image model" : "生图模型"}
+                                  data-testid="image-model-select"
+                                >
                                   <SelectValue placeholder={chatComposerCopy.modelPending} />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {accessibleModelOptions.map((option) => (
                                     <SelectItem key={option.id} value={option.id} className="text-xs">
-                                      {option.label}
+                                      {option.modelId}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
                             ) : (
-                              <span className="font-medium text-foreground">{currentImageModelDisplay}</span>
+                              <span className="font-medium text-foreground">{currentImageModelIdDisplay}</span>
                             )}
-                            <span>/</span>
-                            <span>{extraCopy.uploadLimit}</span>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex shrink-0 items-center justify-end gap-2">
                             <span className="text-[11px] text-muted-foreground">Ctrl/Cmd + Enter</span>
                             {isBusy ? (
                               <Button size="sm" variant="outline" className="dashboard-button-secondary h-8 px-3 text-[11px]" disabled>

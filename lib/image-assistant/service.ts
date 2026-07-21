@@ -118,6 +118,14 @@ function toRuntimeProviderConfig(
     }
   }
 
+  if (runtime.kind === "bailian") {
+    return {
+      kind: "bailian",
+      config: runtime.config,
+      model: runtime.model,
+    }
+  }
+
   return {
     kind: "openai-compatible",
     provider: "pptoken",
@@ -583,6 +591,7 @@ export async function runImageAssistantJob(params: {
   modelOptionId?: string | null
   providerLock?: "pptoken" | "aiberm" | "crazyroute" | null
   model?: string | null
+  modelParameters?: Record<string, unknown> | null
   candidateCount?: number
   sizePreset?: string | null
   resolution?: string | null
@@ -623,13 +632,14 @@ export async function runImageAssistantJob(params: {
     hasSnapshot: Boolean(params.snapshotAssetId),
   })
   const normalizedImageConfig = normalizeWorkflowImageConfig({
+    ...(params.modelParameters || {}),
     selectedProviderId: governedSelection.providerLock,
     selectedModelId: governedSelection.model,
     candidateCount: params.candidateCount,
     sizePreset: params.sizePreset,
-    resolution: params.resolution,
-    imageSize: params.imageSize,
-    imageQuality: params.imageQuality,
+    resolution: params.resolution ?? params.modelParameters?.resolution,
+    imageSize: params.imageSize ?? params.modelParameters?.size ?? params.modelParameters?.imageSize,
+    imageQuality: params.imageQuality ?? params.modelParameters?.quality ?? params.modelParameters?.imageQuality,
     imageBackground: params.imageBackground,
     imageOutputFormat: params.imageOutputFormat,
     imageOutputCompression: params.imageOutputCompression,
@@ -742,6 +752,7 @@ export async function runImageAssistantJob(params: {
       imageOutputCompression: normalizedImageConfig.imageOutputCompression,
       imageModeration: normalizedImageConfig.imageModeration,
       imageResponseFormat: normalizedImageConfig.imageResponseFormat,
+      modelParameters: params.modelParameters || null,
       referenceImages,
       providerLock: normalizedImageConfig.providerLock,
       runtimeProviderConfig,
@@ -824,6 +835,7 @@ export async function runImageAssistantJob(params: {
           imageOutputCompression: normalizedImageConfig.imageOutputCompression,
           imageModeration: normalizedImageConfig.imageModeration,
           imageResponseFormat: normalizedImageConfig.imageResponseFormat,
+          modelParameters: params.modelParameters || null,
           ...(params.requestPayload || {}),
         },
       })
@@ -958,6 +970,7 @@ export async function runImageAssistantConversationTurn(params: {
   modelOptionId?: string | null
   providerLock?: "pptoken" | "aiberm" | "crazyroute" | null
   model?: string | null
+  modelParameters?: Record<string, unknown> | null
   candidateCount?: number
   sizePreset?: string | null
   resolution?: string | null
@@ -995,13 +1008,14 @@ export async function runImageAssistantConversationTurn(params: {
     hasSnapshot: Boolean(params.snapshotAssetId),
   })
   const normalizedImageConfig = normalizeWorkflowImageConfig({
+    ...(params.modelParameters || {}),
     selectedProviderId: governedSelection.providerLock,
     selectedModelId: governedSelection.model,
     candidateCount: params.candidateCount,
     sizePreset: params.sizePreset,
-    resolution: params.resolution,
-    imageSize: params.imageSize,
-    imageQuality: params.imageQuality,
+    resolution: params.resolution ?? params.modelParameters?.resolution,
+    imageSize: params.imageSize ?? params.modelParameters?.size ?? params.modelParameters?.imageSize,
+    imageQuality: params.imageQuality ?? params.modelParameters?.quality ?? params.modelParameters?.imageQuality,
     imageBackground: params.imageBackground,
     imageOutputFormat: params.imageOutputFormat,
     imageOutputCompression: params.imageOutputCompression,
@@ -1039,6 +1053,7 @@ export async function runImageAssistantConversationTurn(params: {
     taskType: params.taskType,
     referenceAssetCount: (params.referenceAssetIds?.length || 0) + (params.referenceUrls?.length || 0),
     model: normalizedImageConfig.modelId,
+    modelParameters: params.modelParameters || null,
     modelOptionId: governedSelection.modelOptionId,
     providerId: governedSelection.providerId,
     imageSize: normalizedImageConfig.imageSize,
@@ -1156,6 +1171,7 @@ export async function runImageAssistantConversationTurn(params: {
     referenceUrls: (params.referenceUrls || []).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS),
     providerLock: normalizedImageConfig.providerLock,
     model: normalizedImageConfig.modelId,
+    modelParameters: params.modelParameters || null,
     candidateCount: normalizedImageConfig.candidateCount,
     imageSize: normalizedImageConfig.imageSize,
     imageQuality: normalizedImageConfig.imageQuality,

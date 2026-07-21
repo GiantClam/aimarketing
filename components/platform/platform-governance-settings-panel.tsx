@@ -134,8 +134,8 @@ function getCopy(locale: AppLocale): Copy {
       },
       categoryDescriptions: {
         text_generation: "支持 OpenAI Compatible、Qwen、MiniMax、GLM、火山引擎（Doubao / DeepSeek）官方接口；其中 PPToken、硅基流动等可作为默认兼容路由，OpenRouter 需由企业在 OpenAI Compatible 中手动配置接入。",
-        image_generation: "支持 Google Nanobanana2、OpenAI gpt-image-2、OpenAI Compatible 图片接口，以及 RunningHub 文生图 / 图生图工作流。",
-        video_generation: "支持 MiniMax 海螺、Gemini Veo 3.1、Seedance 官方接口，以及 RunningHub API。",
+        image_generation: "支持阿里云百炼 Qwen Image 3.0 / 2.7、Google Nanobanana2、OpenAI gpt-image-2、OpenAI Compatible 图片接口，以及 RunningHub 文生图 / 图生图工作流。",
+        video_generation: "支持阿里云百炼 HappyHorse、MiniMax 海螺、Gemini Veo 3.1、Seedance 官方接口，以及 RunningHub API。",
         audio_generation: "支持 MiniMax 官方音频接口，用于 AI 配乐、语音合成与声音克隆。",
       },
       supportedModels: "支持模型",
@@ -207,8 +207,8 @@ function getCopy(locale: AppLocale): Copy {
     },
     categoryDescriptions: {
       text_generation: "Supports OpenAI Compatible plus official Qwen, MiniMax, GLM, and Volcengine (Doubao / DeepSeek) APIs. OpenRouter is supported as a manually configured OpenAI-compatible provider rather than a platform default.",
-      image_generation: "Supports Google Nanobanana2, OpenAI gpt-image-2, OpenAI Compatible image APIs, and RunningHub text-to-image / image-to-image workflows.",
-      video_generation: "Supports official MiniMax Hailuo, Gemini Veo 3.1, Seedance, and RunningHub APIs.",
+        image_generation: "Supports Alibaba Cloud Bailian Qwen Image 3.0 / 2.7, Google Nanobanana2, OpenAI gpt-image-2, OpenAI Compatible image APIs, and RunningHub text-to-image / image-to-image workflows.",
+        video_generation: "Supports Alibaba Cloud Bailian HappyHorse, official MiniMax Hailuo, Gemini Veo 3.1, Seedance, and RunningHub APIs.",
       audio_generation: "Supports the official MiniMax audio runtime for music generation, speech synthesis, and voice cloning.",
     },
     supportedModels: "Supported models",

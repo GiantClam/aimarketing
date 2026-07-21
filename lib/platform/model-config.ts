@@ -12,12 +12,14 @@ export type EnterpriseTextModelProviderId =
   | "volcengine_official"
 
 export type EnterpriseImageModelProviderId =
+  | "bailian_official"
   | "google_official"
   | "openai_official"
   | "openai_compatible"
   | "runninghub"
 
 export type EnterpriseVideoModelProviderId =
+  | "bailian_official"
   | "minimax_official"
   | "gemini_official"
   | "seedance_official"
@@ -115,6 +117,12 @@ const SUPPORTED_MODEL_CARDS: Record<EnterpriseModelCategory, SupportedModelDescr
   ],
   image_generation: [
     {
+      providerId: "bailian_official",
+      providerLabel: "阿里云百炼",
+      integrationLabel: "Bailian API",
+      models: ["qwen-image-3.0-pro", "qwen-image-2.7"],
+    },
+    {
       providerId: "google_official",
       providerLabel: "Google",
       integrationLabel: "Official API",
@@ -140,6 +148,12 @@ const SUPPORTED_MODEL_CARDS: Record<EnterpriseModelCategory, SupportedModelDescr
     },
   ],
   video_generation: [
+    {
+      providerId: "bailian_official",
+      providerLabel: "阿里云百炼",
+      integrationLabel: "Bailian API",
+      models: ["happyhorse-1.1-t2v"],
+    },
     {
       providerId: "minimax_official",
       providerLabel: "MiniMax 海螺",

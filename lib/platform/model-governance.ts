@@ -23,6 +23,8 @@ import type {
   EnterpriseModelRouteAssignment,
 } from "@/lib/platform/model-config"
 import { getPlatformRuntimeSnapshot } from "@/lib/platform/runtime"
+import { findModelByCapabilityAndAlias } from "@/lib/ai-runtime/model-registry"
+import type { ModelParameterDefinition } from "@/lib/ai-runtime/types"
 
 export { buildGovernedAiEntryModelCatalog, buildGovernedWorkflowImageProviderOptions, canUserAccessAssignedRoute }
 export type { ModelGovernanceUser }
@@ -37,6 +39,24 @@ export type GovernedImageAssistantModelOption = {
   providerLabel: string
   modelId: string
   source: ImageAssistantOptionSource
+  parameterSchema: ModelParameterDefinition[]
+}
+
+function getImageAssistantParameterSchema(input: {
+  modelId: string
+  taskType?: string | null
+  providerId?: string | null
+}) {
+  const capability = input.taskType === "edit" || input.providerId === "runninghub"
+    ? "image.image_to_image"
+    : "image.text_to_image"
+  const model =
+    findModelByCapabilityAndAlias({ capability, value: input.modelId }) ||
+    findModelByCapabilityAndAlias({
+      capability: capability === "image.image_to_image" ? "image.text_to_image" : "image.image_to_image",
+      value: input.modelId,
+    })
+  return model?.parameterSchema || []
 }
 
 export type GovernedImageAssistantSelection = {
@@ -244,6 +264,11 @@ export async function resolveGovernedImageAssistantSelectionForUser(params: {
       providerLabel: item.runtime.kind === "runninghub" ? item.runtime.providerLabel : item.runtime.label,
       modelId: item.runtime.model,
       source: "enterprise" as const,
+      parameterSchema: getImageAssistantParameterSchema({
+        modelId: item.runtime.model,
+        providerId: item.runtime.providerId,
+        taskType: item.runtime.kind === "runninghub" ? item.runtime.routeMode === "img2img" ? "edit" : "generate" : null,
+      }),
     }))
     const preferredRunningHubMode = resolveRunningHubRouteModePreference({
       taskType: params.taskType,
@@ -298,6 +323,10 @@ export async function resolveGovernedImageAssistantSelectionForUser(params: {
       providerLabel: provider.label,
       modelId: model.modelId,
       source: "workspace" as const,
+      parameterSchema: getImageAssistantParameterSchema({
+        modelId: model.modelId,
+        providerId: provider.providerId,
+      }),
     })),
   )
   const selectedModelOption =

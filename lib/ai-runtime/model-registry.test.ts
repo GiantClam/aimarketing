@@ -3,6 +3,7 @@ import test from "node:test"
 
 import {
   getDefaultModelId,
+  findModelByCapabilityAndAlias,
   getModelDefinition,
   listModels,
   validateAndNormalizeModelInput,
@@ -82,6 +83,42 @@ test("model registry exposes RunningHub seedance mini video models", () => {
   assert.equal(imageModel?.provider, "runninghub")
   assert.equal(imageModel?.capability, "video.image_to_video")
   assert.equal(imageModel?.providerMetadata?.nativeModel, "seedance-mini-image-to-video")
+})
+
+test("model registry exposes Bailian Qwen Image and HappyHorse models", () => {
+  const qwenText = getModelDefinition("bailian:image:qwen-image-3.0-pro")
+  const qwenEdit = getModelDefinition("bailian:image:qwen-image-2.7-edit")
+  const happyHorse = getModelDefinition("bailian:video:happyhorse-1.1-t2v")
+
+  assert.equal(qwenText?.provider, "bailian")
+  assert.equal(qwenText?.capability, "image.text_to_image")
+  assert.equal(qwenText?.providerMetadata?.nativeModel, "qwen-image-3.0-pro")
+  assert.equal(qwenEdit?.capability, "image.image_to_image")
+  assert.equal(qwenEdit?.providerMetadata?.nativeModel, "qwen-image-2.7")
+  assert.equal(happyHorse?.capability, "video.text_to_video")
+  assert.equal(happyHorse?.providerMetadata?.nativeModel, "happyhorse-1.1-t2v")
+})
+
+test("image model aliases resolve the parameter schema used by the assistant", () => {
+  const nanobanana = findModelByCapabilityAndAlias({
+    capability: "image.text_to_image",
+    value: "Nanobanana2",
+  })
+  const seedream = findModelByCapabilityAndAlias({
+    capability: "image.text_to_image",
+    value: "seedream-v5-text-to-image",
+  })
+  const qwen = findModelByCapabilityAndAlias({
+    capability: "image.text_to_image",
+    value: "qwen-image-3.0-pro",
+  })
+
+  assert.equal(nanobanana?.id, "google:image:nanobanana2")
+  assert.ok(nanobanana?.parameterSchema.some((field) => field.id === "resolution"))
+  assert.equal(seedream?.id, "runninghub:image:seedream-v5-text-to-image")
+  assert.ok(seedream?.parameterSchema.some((field) => field.id === "size"))
+  assert.equal(qwen?.id, "bailian:image:qwen-image-3.0-pro")
+  assert.ok(qwen?.parameterSchema.some((field) => field.id === "negativePrompt"))
 })
 
 test("OpenAI image model and adapter are opt-in behind the workflow feature flag", async () => {

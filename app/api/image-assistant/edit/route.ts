@@ -181,6 +181,7 @@ export async function POST(req: NextRequest) {
         imageOutputCompression: Number.isFinite(body?.imageOutputCompression) ? Number(body.imageOutputCompression) : null,
         imageModeration: typeof body?.imageModeration === "string" ? body.imageModeration : null,
         imageResponseFormat: typeof body?.imageResponseFormat === "string" ? body.imageResponseFormat : null,
+        modelParameters: body?.modelParameters && typeof body.modelParameters === "object" ? body.modelParameters : null,
         parentVersionId: typeof body?.parentVersionId === "string" ? body.parentVersionId : null,
         guidedSelection: normalizeGuidedSelection(body?.guidedSelection),
       })
@@ -246,6 +247,7 @@ export async function POST(req: NextRequest) {
         imageOutputCompression: Number.isFinite(body?.imageOutputCompression) ? Number(body.imageOutputCompression) : null,
         imageModeration: typeof body?.imageModeration === "string" ? body.imageModeration : null,
         imageResponseFormat: typeof body?.imageResponseFormat === "string" ? body.imageResponseFormat : null,
+        modelParameters: body?.modelParameters && typeof body.modelParameters === "object" ? body.modelParameters : null,
         parentVersionId: typeof body?.parentVersionId === "string" ? body.parentVersionId : null,
         guidedSelection: normalizeGuidedSelection(body?.guidedSelection),
       },

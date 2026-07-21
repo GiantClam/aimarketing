@@ -6,6 +6,8 @@ import {
   type GoogleImageRuntimeConfig,
   type ImageAssistantFileReference,
 } from "@/lib/image-assistant/google"
+import { generateBailianImages } from "@/lib/ai-runtime/adapters/bailian-image"
+import type { BailianConfig } from "@/lib/platform/bailian"
 import {
   generateImagesWithOpenAiCompatibleProvider,
   getOpenAiCompatibleImageProviderConfig,
@@ -35,6 +37,11 @@ type InlineReferenceImage = OpenAiCompatibleInlineImage
 type FileReferenceImage = ImageAssistantFileReference & { assetId?: string | null }
 type ReferenceImageInput = InlineReferenceImage | FileReferenceImage
 export type ImageAssistantRuntimeProviderConfig =
+  | {
+      kind: "bailian"
+      config: BailianConfig
+      model?: string | null
+    }
   | {
       kind: "openai-compatible"
       provider: OpenAiCompatibleImageProviderId
@@ -295,6 +302,19 @@ export function getImageAssistantAvailability(params?: {
       enabled: true,
       reason: null,
       provider: "google",
+      models: {
+        highQuality: model,
+        lowCost: model,
+      },
+    }
+  }
+
+  if (params?.runtimeProviderConfig?.kind === "bailian") {
+    const model = params.runtimeProviderConfig.model || "qwen-image-3.0-pro"
+    return {
+      enabled: Boolean(params.runtimeProviderConfig.config.apiKey),
+      reason: params.runtimeProviderConfig.config.apiKey ? null : "bailian_not_configured",
+      provider: "bailian",
       models: {
         highQuality: model,
         lowCost: model,
@@ -737,6 +757,7 @@ export async function generateOrEditImages(params: {
   resolution: ImageAssistantResolution
   taskType?: ImageAssistantTaskType
   model?: string | null
+  modelParameters?: Record<string, unknown> | null
   sizePreset?: ImageAssistantSizePreset | null
   imageSize?: string | null
   imageQuality?: GptImage2Quality | null
@@ -819,6 +840,30 @@ export async function generateOrEditImages(params: {
       provider: "google",
       model: result.model,
       textSummary: result.textSummary,
+      images: result.images,
+    }
+  }
+
+  if (params.runtimeProviderConfig?.kind === "bailian") {
+    const bailianReferenceImages = (params.referenceImages || []).map((image) =>
+      image.kind === "inline"
+        ? image
+        : { url: image.fileUri },
+    )
+    const result = await generateBailianImages({
+      config: params.runtimeProviderConfig.config,
+      model: params.model || params.runtimeProviderConfig.model || "qwen-image-3.0-pro",
+      prompt: params.prompt,
+      referenceImages: bailianReferenceImages,
+      size: params.imageSize,
+      candidateCount,
+      modelParameters: params.modelParameters,
+      signal: params.signal,
+    })
+    return {
+      provider: "bailian",
+      model: result.model,
+      textSummary: "Generated images with Alibaba Cloud Bailian.",
       images: result.images,
     }
   }

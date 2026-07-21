@@ -1,5 +1,7 @@
 import { minimaxAudioAdapter } from "@/lib/ai-runtime/adapters/minimax-audio"
 import { minimaxVideoAdapter } from "@/lib/ai-runtime/adapters/minimax-video"
+import { bailianImageAdapter } from "@/lib/ai-runtime/adapters/bailian-image"
+import { bailianVideoAdapter } from "@/lib/ai-runtime/adapters/bailian-video"
 import { openAiCompatibleImageAdapter } from "@/lib/ai-runtime/adapters/openai-compatible-image"
 import { runninghubVideoAdapter } from "@/lib/ai-runtime/adapters/runninghub-video"
 import {
@@ -12,6 +14,8 @@ import type { ModelProviderId, ProviderAdapter } from "@/lib/ai-runtime/types"
 import { resolveWorkflowFeatures } from "@/lib/workflows/features"
 
 const adapters: ProviderAdapter[] = [
+  bailianImageAdapter,
+  bailianVideoAdapter,
   minimaxAudioAdapter,
   minimaxVideoAdapter,
   runninghubVideoAdapter,

@@ -116,16 +116,17 @@ function readVideoResolution(params: Record<string, unknown>, payload: Record<st
   return typeof value === "string" ? value : null
 }
 
-function resolveVideoBillingProvider(modelId: string | null | undefined, fallback: "minimax" | "runninghub") {
+function resolveVideoBillingProvider(modelId: string | null | undefined, fallback: "minimax" | "runninghub" | "bailian") {
   if (modelId?.startsWith("runninghub:")) return "runninghub"
   if (modelId?.startsWith("minimax:")) return "minimax"
+  if (modelId?.startsWith("bailian:")) return "bailian"
   return fallback
 }
 
 async function reserveVideoCreditsForSubmission(input: {
   currentUser: MediaRouteUser
   featureId: string
-  provider: "minimax" | "runninghub"
+  provider: "minimax" | "runninghub" | "bailian"
   modelId?: string | null
   params: Record<string, unknown>
   payload: Record<string, unknown>
@@ -465,7 +466,14 @@ export async function POST(request: NextRequest) {
     const videoBilling = await reserveVideoCreditsForSubmission({
       currentUser,
       featureId,
-      provider: resolveVideoBillingProvider(modelId, enterpriseVideoRuntime?.kind === "runninghub" ? "runninghub" : "minimax"),
+      provider: resolveVideoBillingProvider(
+        modelId,
+        enterpriseVideoRuntime?.kind === "runninghub"
+          ? "runninghub"
+          : enterpriseVideoRuntime?.kind === "bailian"
+            ? "bailian"
+            : "minimax",
+      ),
       modelId,
       params,
       payload,

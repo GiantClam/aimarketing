@@ -1,10 +1,12 @@
 import type { MiniMaxAudioConfig } from "@/lib/platform/minimax-audio"
 import type { MiniMaxVideoConfig } from "@/lib/platform/minimax-video"
 import type { RunningHubConfig } from "@/lib/platform/runninghub"
+import type { BailianConfig } from "@/lib/platform/bailian"
 
 import type { ModelCapability } from "@/lib/ai-runtime/capabilities"
 
 export type ModelProviderId =
+  | "bailian"
   | "google_official"
   | "minimax"
   | "openai_compatible"
@@ -74,6 +76,7 @@ export type CapabilityRuntimeUser = {
 }
 
 export type CapabilityRuntimeContext = {
+  bailianConfig?: BailianConfig
   minimaxAudioConfig?: MiniMaxAudioConfig
   minimaxVideoConfig?: MiniMaxVideoConfig
   runningHubConfig?: RunningHubConfig

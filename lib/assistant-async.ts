@@ -119,6 +119,7 @@ type ImageTurnTaskPayload = {
   modelOptionId?: string | null
   providerLock?: "pptoken" | "aiberm" | "crazyroute" | null
   model?: string | null
+  modelParameters?: Record<string, unknown> | null
   candidateCount?: number
   sizePreset?: string | null
   resolution?: string | null
@@ -802,6 +803,7 @@ async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
       enterpriseStatus: payload.enterpriseStatus || null,
       providerLock: payload.providerLock || null,
       model: payload.model || null,
+      modelParameters: payload.modelParameters || null,
       candidateCount: payload.candidateCount,
       sizePreset: payload.sizePreset,
       resolution: payload.resolution,
