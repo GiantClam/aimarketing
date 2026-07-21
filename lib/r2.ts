@@ -1,4 +1,5 @@
 import { DeleteObjectCommand, GetObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
 let r2Client: S3Client | null = null
 let r2ClientSignature = ""
@@ -109,6 +110,31 @@ export async function getR2Object(storageKey: string, options?: { bucketName?: s
     bytes: await object.Body.transformToByteArray(),
     contentType: object.ContentType || null,
   }
+}
+
+export async function getR2SignedUrl(
+  storageKey: string,
+  options?: {
+    bucketName?: string
+    contentDisposition?: string
+    contentType?: string
+    expiresIn?: number
+  },
+) {
+  const client = getR2Client()
+  const bucketName = normalizeR2EnvValue(options?.bucketName) || getR2BucketName()
+  if (!client || !bucketName || !storageKey) return null
+
+  return getSignedUrl(
+    client,
+    new GetObjectCommand({
+      Bucket: bucketName,
+      Key: storageKey,
+      ...(options?.contentDisposition ? { ResponseContentDisposition: options.contentDisposition } : {}),
+      ...(options?.contentType ? { ResponseContentType: options.contentType } : {}),
+    }),
+    { expiresIn: options?.expiresIn || 300 },
+  )
 }
 
 export async function deleteR2Object(storageKey: string) {

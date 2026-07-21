@@ -8,7 +8,7 @@ import {
 } from "@/lib/platform/artifact-actions"
 import { buildAttachmentContentDisposition, buildInlineContentDisposition } from "@/lib/platform/minimax-audio"
 import { getPlatformArtifact } from "@/lib/platform/task-run-store"
-import { getR2Object } from "@/lib/r2"
+import { getR2Object, getR2SignedUrl } from "@/lib/r2"
 import { toUint8Array } from "@/lib/utils/binary"
 
 export const runtime = "nodejs"
@@ -69,6 +69,27 @@ export async function GET(
 
     if (artifact.storageKey) {
       const artifactBucket = process.env.PLATFORM_ARTIFACT_R2_BUCKET
+      try {
+        const signedUrl = await getR2SignedUrl(artifact.storageKey, {
+          bucketName: artifactBucket,
+          contentDisposition: headers.get("Content-Disposition") || undefined,
+          contentType: normalizePlatformArtifactContentType(artifact.mimeType || "application/octet-stream"),
+        })
+        if (signedUrl) {
+          return NextResponse.redirect(signedUrl, {
+            status: 307,
+            headers: { "Cache-Control": "private, no-store" },
+          })
+        }
+      } catch (error) {
+        console.warn("platform_artifact_r2_sign_failed", {
+          artifactId: numericArtifactId,
+          storageKey: artifact.storageKey,
+          bucket: artifactBucket || "default",
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
+
       let object: Awaited<ReturnType<typeof getR2Object>> = null
       try {
         object = await getR2Object(artifact.storageKey, { bucketName: artifactBucket })
