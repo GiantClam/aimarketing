@@ -166,6 +166,45 @@ function buildImageAssistantModelOptionLabel(providerLabel: string, modelId: str
   return `${providerLabel} / ${modelId}`
 }
 
+function buildWorkspaceImageAssistantModelOptions(
+  providerOptions: Array<{
+    providerId: string
+    label: string
+    models: Array<{ modelId: string; label: string }>
+  }>,
+): GovernedImageAssistantModelOption[] {
+  return providerOptions.flatMap((provider) =>
+    provider.models.map((model) => ({
+      id: buildWorkspaceImageAssistantModelOptionId({
+        providerId: provider.providerId as OpenAiCompatibleImageProviderId,
+        modelId: model.modelId,
+      }),
+      label: buildImageAssistantModelOptionLabel(provider.label, model.modelId),
+      providerId: provider.providerId,
+      providerLabel: provider.label,
+      modelId: model.modelId,
+      source: "workspace" as const,
+      parameterSchema: getImageAssistantParameterSchema({
+        modelId: model.modelId,
+        providerId: provider.providerId,
+      }),
+    })),
+  )
+}
+
+function mergeImageAssistantModelOptions(params: {
+  enterpriseOptions: GovernedImageAssistantModelOption[]
+  workspaceOptions: GovernedImageAssistantModelOption[]
+}) {
+  const seenModelIds = new Set<string>()
+  return [...params.enterpriseOptions, ...params.workspaceOptions].filter((option) => {
+    const modelId = normalizeText(option.modelId)
+    if (!modelId || seenModelIds.has(modelId)) return false
+    seenModelIds.add(modelId)
+    return true
+  })
+}
+
 function resolveRunningHubRouteModePreference(params: {
   taskType?: string | null
   hasReferenceInput?: boolean
@@ -238,7 +277,7 @@ export async function getGovernedWorkflowImageProviderOptionsForUser(
     user,
     providers,
     assignments: getCategoryAssignments(settings, "image_generation"),
-  })
+  }) as WorkflowImageProviderOption[]
 }
 
 export async function resolveGovernedImageAssistantSelectionForUser(params: {
@@ -253,83 +292,103 @@ export async function resolveGovernedImageAssistantSelectionForUser(params: {
 }) {
   const requestedModelOptionId = normalizeText(params.modelOptionId)
   const enterpriseOptions = await listEnterpriseImageRuntimeOptionsForUser(params.user)
-  if (enterpriseOptions.length > 0) {
-    const modelOptions = enterpriseOptions.map((item) => ({
-      id: item.selectionId,
-      label:
-        item.runtime.kind === "runninghub"
-          ? `${item.runtime.label} / ${item.runtime.model}`
-          : buildImageAssistantModelOptionLabel(item.runtime.label, item.runtime.model),
-      providerId: item.runtime.providerId,
-      providerLabel: item.runtime.kind === "runninghub" ? item.runtime.providerLabel : item.runtime.label,
+  const providerOptions = await getGovernedWorkflowImageProviderOptionsForUser(params.user)
+  const enterpriseModelOptions = enterpriseOptions.map((item) => ({
+    id: item.selectionId,
+    label:
+      item.runtime.kind === "runninghub"
+        ? `${item.runtime.label} / ${item.runtime.model}`
+        : buildImageAssistantModelOptionLabel(item.runtime.label, item.runtime.model),
+    providerId: item.runtime.providerId,
+    providerLabel: item.runtime.kind === "runninghub" ? item.runtime.providerLabel : item.runtime.label,
+    modelId: item.runtime.model,
+    source: "enterprise" as const,
+    parameterSchema: getImageAssistantParameterSchema({
       modelId: item.runtime.model,
-      source: "enterprise" as const,
-      parameterSchema: getImageAssistantParameterSchema({
-        modelId: item.runtime.model,
-        providerId: item.runtime.providerId,
-        taskType: item.runtime.kind === "runninghub" ? item.runtime.routeMode === "img2img" ? "edit" : "generate" : null,
-      }),
-    }))
+      providerId: item.runtime.providerId,
+      taskType: item.runtime.kind === "runninghub" ? item.runtime.routeMode === "img2img" ? "edit" : "generate" : null,
+    }),
+  }))
+  const workspaceModelOptions = buildWorkspaceImageAssistantModelOptions(providerOptions)
+  const modelOptions = mergeImageAssistantModelOptions({
+    enterpriseOptions: enterpriseModelOptions,
+    workspaceOptions: workspaceModelOptions,
+  })
+
+  if (enterpriseOptions.length > 0) {
     const preferredRunningHubMode = resolveRunningHubRouteModePreference({
       taskType: params.taskType,
       hasReferenceInput: params.hasReferenceInput,
       hasMask: params.hasMask,
       hasSnapshot: params.hasSnapshot,
     })
+    const findEnterpriseModelOption = (
+      predicate: (item: (typeof enterpriseOptions)[number]) => boolean,
+    ) => {
+      const enterpriseOption = enterpriseOptions.find(predicate)
+      return enterpriseOption
+        ? enterpriseModelOptions.find((option) => option.id === enterpriseOption.selectionId) || null
+        : null
+    }
     const selectedOption =
       (requestedModelOptionId
-        ? enterpriseOptions.find((item) => item.selectionId === requestedModelOptionId) || null
+        ? modelOptions.find((item) => item.id === requestedModelOptionId) || null
         : null) ||
-      enterpriseOptions.find((item) => item.active && item.runtime.kind !== "runninghub") ||
+      findEnterpriseModelOption((item) => item.active && item.runtime.kind !== "runninghub") ||
       (enterpriseOptions.some((item) => item.runtime.kind === "runninghub")
-        ? enterpriseOptions.find(
+        ? findEnterpriseModelOption(
             (item) => item.runtime.kind === "runninghub" && item.runtime.routeMode === preferredRunningHubMode,
-          ) || null
+          )
         : null) ||
       (normalizeText(params.model)
-        ? enterpriseOptions.find((item) => item.runtime.model === normalizeText(params.model)) || null
+        ? enterpriseModelOptions.find((item) => item.modelId === normalizeText(params.model)) ||
+          workspaceModelOptions.find((item) => item.modelId === normalizeText(params.model)) ||
+          null
         : null) ||
-      enterpriseOptions[0] ||
+      enterpriseModelOptions[0] ||
       null
 
     if (!selectedOption) {
       throw new Error("image_assistant_model_unavailable_for_user")
     }
 
+    const selectedModelOption = modelOptions.find((item) => item.id === selectedOption.id)
+    if (selectedModelOption?.source === "workspace") {
+      const selectedProvider = providerOptions.find((provider) => provider.providerId === selectedModelOption.providerId)
+      if (!selectedProvider) {
+        throw new Error("image_assistant_model_unavailable_for_user")
+      }
+      return {
+        source: "workspace" as const,
+        modelOptionId: selectedModelOption.id,
+        model: selectedModelOption.modelId,
+        providerId: selectedModelOption.providerId,
+        providerLabel: selectedModelOption.providerLabel,
+        providerLock: selectedProvider.providerId as OpenAiCompatibleImageProviderId,
+        modelOptions,
+        providerOptions,
+        enterpriseRuntime: null,
+      } satisfies GovernedImageAssistantSelection
+    }
+
+    const selectedEnterpriseOption =
+      enterpriseOptions.find((item) => item.selectionId === selectedModelOption?.id) || enterpriseOptions[0]
     return {
       source: "enterprise" as const,
-      modelOptionId: selectedOption.selectionId,
-      model: selectedOption.runtime.model,
-      providerId: selectedOption.runtime.providerId,
+      modelOptionId: selectedEnterpriseOption.selectionId,
+      model: selectedEnterpriseOption.runtime.model,
+      providerId: selectedEnterpriseOption.runtime.providerId,
       providerLabel:
-        selectedOption.runtime.kind === "runninghub"
-          ? selectedOption.runtime.providerLabel
-          : selectedOption.runtime.label,
+        selectedEnterpriseOption.runtime.kind === "runninghub"
+          ? selectedEnterpriseOption.runtime.providerLabel
+          : selectedEnterpriseOption.runtime.label,
       providerLock: null,
       modelOptions,
-      providerOptions: [],
-      enterpriseRuntime: selectedOption.runtime,
+      providerOptions,
+      enterpriseRuntime: selectedEnterpriseOption.runtime,
     } satisfies GovernedImageAssistantSelection
   }
 
-  const providerOptions = await getGovernedWorkflowImageProviderOptionsForUser(params.user)
-  const modelOptions = providerOptions.flatMap((provider) =>
-    provider.models.map((model) => ({
-      id: buildWorkspaceImageAssistantModelOptionId({
-        providerId: provider.providerId as OpenAiCompatibleImageProviderId,
-        modelId: model.modelId,
-      }),
-      label: buildImageAssistantModelOptionLabel(provider.label, model.modelId),
-      providerId: provider.providerId,
-      providerLabel: provider.label,
-      modelId: model.modelId,
-      source: "workspace" as const,
-      parameterSchema: getImageAssistantParameterSchema({
-        modelId: model.modelId,
-        providerId: provider.providerId,
-      }),
-    })),
-  )
   const selectedModelOption =
     (requestedModelOptionId
       ? modelOptions.find((item) => item.id === requestedModelOptionId) || null
