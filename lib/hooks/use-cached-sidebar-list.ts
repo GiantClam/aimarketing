@@ -65,6 +65,7 @@ export function useCachedSidebarList<TItem>({
   const mergeItemsRef = useRef(mergeItems)
   const getItemIdRef = useRef(getItemId)
   const legacyKeysRef = useRef(legacyKeys)
+  const cacheGenerationRef = useRef(0)
 
   useEffect(() => {
     fetchPageRef.current = fetchPage
@@ -133,6 +134,7 @@ export function useCachedSidebarList<TItem>({
   }, [persistCache])
 
   const fetchItems = useCallback(async ({ append = false, cursor, background = false }: { append?: boolean; cursor?: string | null; background?: boolean } = {}) => {
+    const requestGeneration = cacheGenerationRef.current
     if (append) {
       setIsLoadingMore(true)
     } else if (!background) {
@@ -141,6 +143,7 @@ export function useCachedSidebarList<TItem>({
 
     try {
       const page = await fetchPageRef.current({ cursor })
+      if (requestGeneration !== cacheGenerationRef.current) return page
       const pageItems = normalizeItems(page.items)
       let resolvedItems = pageItems
       setItems((current) => {
@@ -163,8 +166,19 @@ export function useCachedSidebarList<TItem>({
   }, [persistCache])
 
   useEffect(() => {
+    cacheGenerationRef.current += 1
+  }, [cacheKey])
+
+  useEffect(() => {
     const cached = readCache()
-    if (!cached) return
+    hasLoadedOnceRef.current = false
+    exhaustedActiveItemIdRef.current = null
+    if (!cached) {
+      setItems([])
+      setHasMore(false)
+      setNextCursor(null)
+      return
+    }
     setItems(normalizeItems(cached.items))
     setHasMore(cached.hasMore)
     setNextCursor(cached.nextCursor)

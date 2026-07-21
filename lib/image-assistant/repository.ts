@@ -78,7 +78,6 @@ type ImageAssistantSessionDetailOptions = {
 
 type ImageSessionAccessScope = {
   enterpriseId: number | null
-  isEnterpriseAdmin: boolean
 }
 
 function isMissingColumnError(error: unknown, columnName: string) {
@@ -166,8 +165,6 @@ async function resolveImageSessionAccessScope(userId: number): Promise<ImageSess
     db
       .select({
         enterpriseId: users.enterpriseId,
-        enterpriseRole: users.enterpriseRole,
-        enterpriseStatus: users.enterpriseStatus,
       })
       .from(users)
       .where(eq(users.id, userId))
@@ -178,11 +175,8 @@ async function resolveImageSessionAccessScope(userId: number): Promise<ImageSess
     typeof row?.enterpriseId === "number" && Number.isFinite(row.enterpriseId) && row.enterpriseId > 0
       ? row.enterpriseId
       : null
-  const isEnterpriseAdmin = row?.enterpriseRole === "admin" && row?.enterpriseStatus === "active"
-
   return {
     enterpriseId,
-    isEnterpriseAdmin: Boolean(isEnterpriseAdmin),
   }
 }
 
@@ -409,10 +403,10 @@ export async function listImageAssistantSessions(
           OR (${imageDesignSessions.updatedAt} = ${cursorTimestamp} AND ${imageDesignSessions.id} < ${cursorId})
         )`
       : undefined
-  const visibilityFilter =
-    accessScope.isEnterpriseAdmin && accessScope.enterpriseId
-      ? buildEnterpriseFilter(imageDesignSessions.enterpriseId, accessScope.enterpriseId)
-      : and(eq(imageDesignSessions.userId, userId), buildEnterpriseFilter(imageDesignSessions.enterpriseId, accessScope.enterpriseId))
+  const visibilityFilter = and(
+    eq(imageDesignSessions.userId, userId),
+    buildEnterpriseFilter(imageDesignSessions.enterpriseId, accessScope.enterpriseId),
+  )
   const baseWhere = and(visibilityFilter, sql`${imageDesignSessions.title} LIKE ${`${SESSION_PREFIX}%`}`, cursorFilter)
 
   let rows: Array<Record<string, unknown>>
@@ -478,14 +472,11 @@ export async function getImageAssistantSession(userId: number, sessionId: string
   const parsedId = parseDatabaseId(sessionId)
   if (!parsedId) return null
   const accessScope = await resolveImageSessionAccessScope(userId)
-  const sessionAccessFilter =
-    accessScope.isEnterpriseAdmin && accessScope.enterpriseId
-      ? and(eq(imageDesignSessions.id, parsedId), buildEnterpriseFilter(imageDesignSessions.enterpriseId, accessScope.enterpriseId))
-      : and(
-          eq(imageDesignSessions.id, parsedId),
-          eq(imageDesignSessions.userId, userId),
-          buildEnterpriseFilter(imageDesignSessions.enterpriseId, accessScope.enterpriseId),
-        )
+  const sessionAccessFilter = and(
+    eq(imageDesignSessions.id, parsedId),
+    eq(imageDesignSessions.userId, userId),
+    buildEnterpriseFilter(imageDesignSessions.enterpriseId, accessScope.enterpriseId),
+  )
 
   let rows: Array<Record<string, unknown>>
   try {

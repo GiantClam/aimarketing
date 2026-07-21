@@ -129,10 +129,16 @@ function writeStore(store: ImageAssistantSessionStore) {
   })
 }
 
-export function getImageAssistantSessionContentCache(sessionId: string | null) {
-  if (!sessionId) return null
+function getScopedSessionCacheKey(userId: number | null | undefined, sessionId: string | null) {
+  if (!userId || !Number.isInteger(userId) || userId <= 0 || !sessionId) return null
+  return `${userId}:${sessionId}`
+}
 
-  const inMemory = memoryCache.get(sessionId)
+export function getImageAssistantSessionContentCache(sessionId: string | null, userId: number | null | undefined) {
+  const cacheKey = getScopedSessionCacheKey(userId, sessionId)
+  if (!cacheKey) return null
+
+  const inMemory = memoryCache.get(cacheKey)
   if (inMemory) {
     return {
       ...inMemory,
@@ -141,32 +147,42 @@ export function getImageAssistantSessionContentCache(sessionId: string | null) {
   }
 
   const store = readStore()
-  const cached = store[sessionId]
+  const cached = store[cacheKey]
   if (!cached) return null
 
-  touchMemoryCache(sessionId, cached)
+  touchMemoryCache(cacheKey, cached)
   return {
     ...cached,
     detail: cloneDetail(cached.detail),
   } satisfies ImageAssistantSessionContentCache
 }
 
-export function saveImageAssistantSessionContentCache(sessionId: string, detail: ImageAssistantSessionDetail) {
+export function saveImageAssistantSessionContentCache(
+  sessionId: string,
+  userId: number | null | undefined,
+  detail: ImageAssistantSessionDetail,
+) {
+  const cacheKey = getScopedSessionCacheKey(userId, sessionId)
+  if (!cacheKey) return
+
   const nextCache = {
     detail: cloneDetail(detail),
     updatedAt: Date.now(),
   } satisfies ImageAssistantSessionContentCache
 
-  touchMemoryCache(sessionId, nextCache)
+  touchMemoryCache(cacheKey, nextCache)
   const store = readStore()
-  store[sessionId] = nextCache
+  store[cacheKey] = nextCache
   writeStore(store)
 }
 
-export function deleteImageAssistantSessionContentCache(sessionId: string) {
-  memoryCache.delete(sessionId)
+export function deleteImageAssistantSessionContentCache(sessionId: string, userId: number | null | undefined) {
+  const cacheKey = getScopedSessionCacheKey(userId, sessionId)
+  if (!cacheKey) return
+
+  memoryCache.delete(cacheKey)
   const store = readStore()
-  delete store[sessionId]
+  delete store[cacheKey]
   writeStore(store)
 }
 

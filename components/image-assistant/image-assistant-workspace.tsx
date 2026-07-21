@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from "react"
 import { useQueryClient } from "@tanstack/react-query"
+import { useRouter } from "next/navigation"
 import {
   Download,
   Eraser,
@@ -22,6 +23,7 @@ import {
 } from "lucide-react"
 
 import { useI18n } from "@/components/locale-provider"
+import { useAuth } from "@/components/auth-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
@@ -56,9 +58,11 @@ import {
   invalidateImageAssistantSessionQueries,
 } from "@/lib/query/workspace-cache"
 import {
+  removeImageAssistantConversationSummary,
   upsertImageAssistantConversationSummary,
 } from "@/lib/image-assistant/session-list-store"
 import {
+  deleteImageAssistantSessionContentCache,
   getImageAssistantSessionContentCache,
   saveImageAssistantSessionContentCache,
 } from "@/lib/image-assistant/session-store"
@@ -340,6 +344,10 @@ function hasDirectTurnMaterialized(params: {
 
 const DEFAULT_IMAGE_RESOLUTION: ImageAssistantResolution = "2K"
 const IMAGE_ASSISTANT_GLOBAL_RESOLUTION_KEY = "image-assistant:composer:resolution"
+
+function isMissingImageAssistantSessionError(error: unknown) {
+  return error instanceof Error && ["Not found", "http_404"].includes(error.message)
+}
 const INITIAL_MESSAGE_LIMIT = 12
 const INITIAL_VERSION_LIMIT = 6
 const MESSAGE_PAGE_SIZE = 12
@@ -1528,8 +1536,11 @@ const PROMPT_PRESETS: PromptPreset[] = [
 
 export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId: string | null }) {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const runSessionRecoveryBootstrap = useSessionRecoveryBootstrap()
   const { messages: i18n } = useI18n()
+  const { user } = useAuth()
+  const userId = user?.id ?? null
   const imageCopy = i18n.imageAssistant
   const isEnglish = imageCopy.assistantName === "Image design assistant"
   const extraCopy = useMemo(
@@ -1733,7 +1744,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             mode: loadMode,
             messageLimit: sections.messages && loadMode !== "full" ? effectiveMessageLimit : undefined,
             versionLimit: sections.versions && loadMode !== "full" ? effectiveVersionLimit : undefined,
-          }),
+          }, userId),
           queryFn: () => getImageAssistantSessionDetail(targetSessionId, {
             mode: loadMode,
             messageLimit: sections.messages && loadMode !== "full" ? effectiveMessageLimit : undefined,
@@ -1793,7 +1804,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         }
       }
     },
-    [queryClient, resetCanvasHistory],
+    [queryClient, resetCanvasHistory, userId],
   )
 
   const syncSessionRoute = useCallback((targetSessionId: string) => {
@@ -1951,7 +1962,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const resolveCarryoverReferenceAssetIds = useCallback(
     (targetSessionId?: string | null) => {
       const effectiveSessionId = targetSessionId || sessionId
-      const cache = getImageAssistantSessionContentCache(effectiveSessionId)
+      const cache = getImageAssistantSessionContentCache(effectiveSessionId, userId)
       const cachedIds = cache ? getLatestPromptReferenceAssetIds(cache.detail.messages || []) : []
       return mergeReferenceAssetIds(
         carryoverReferenceAssetIds,
@@ -1959,7 +1970,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         cachedIds,
       ).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS)
     },
-    [carryoverReferenceAssetIds, sessionId],
+    [carryoverReferenceAssetIds, sessionId, userId],
   )
 
   const hasMoreMessages = Boolean(detail?.meta.messages_has_more)
@@ -2494,10 +2505,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     if (sessionId) {
       pendingGuidedQuestionKeyRef.current = null
       setLocallyResolvedPromptQuestionKeys({})
-      const cachedDetail = getImageAssistantSessionContentCache(sessionId)
+      const shouldRefreshFromRoute = initialSessionId === sessionId
+      const cachedDetail = shouldRefreshFromRoute ? null : getImageAssistantSessionContentCache(sessionId, userId)
       const nextMessageLimit = Math.max(INITIAL_MESSAGE_LIMIT, cachedDetail?.detail.meta.messages_loaded || 0)
       const nextVersionLimit = Math.max(INITIAL_VERSION_LIMIT, cachedDetail?.detail.meta.versions_loaded || 0)
-      const shouldRefreshFromRoute = initialSessionId === sessionId
 
       setMessageLimit(nextMessageLimit)
       setVersionLimit(nextVersionLimit)
@@ -2530,6 +2541,19 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         },
         onReconcileError: (error) => {
           console.error("image-assistant.session-summary-load-failed", error)
+          if (!isMissingImageAssistantSessionError(error) || !userId) return
+
+          deleteImageAssistantSessionContentCache(sessionId, userId)
+          removeImageAssistantConversationSummary(userId, sessionId)
+          setDetail(null)
+          setSelectedVersionId(null)
+          resetCanvasHistory()
+          canvasRef.current = null
+          setCanvas(null)
+          setSelectedLayerId(null)
+          setEditingTextLayerId(null)
+          setMode("chat")
+          router.replace("/dashboard/image-assistant")
         },
       })
       return () => {
@@ -2557,13 +2581,13 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       setMessageLimit(INITIAL_MESSAGE_LIMIT)
       setVersionLimit(INITIAL_VERSION_LIMIT)
     }
-  }, [initialSessionId, refreshDetail, resetCanvasHistory, runSessionRecoveryBootstrap, sessionId])
+  }, [initialSessionId, refreshDetail, resetCanvasHistory, router, runSessionRecoveryBootstrap, sessionId, userId])
 
   useEffect(() => {
     if (!sessionId || !detail) return
-    saveImageAssistantSessionContentCache(sessionId, detail)
-    upsertImageAssistantConversationSummary(detail.session)
-  }, [detail, sessionId])
+    saveImageAssistantSessionContentCache(sessionId, userId, detail)
+    upsertImageAssistantConversationSummary(userId, detail.session)
+  }, [detail, sessionId, userId])
 
   useEffect(() => {
     const pendingTask = findImagePendingTask(sessionId) || findLatestImagePendingTask()
@@ -2649,7 +2673,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
               return null
             })
             if (refreshedDetail) {
-              saveImageAssistantSessionContentCache(targetSessionId, refreshedDetail)
+              saveImageAssistantSessionContentCache(targetSessionId, userId, refreshedDetail)
             }
             const shouldSyncTurn = !hasDirectTurnMaterialized({
               detail: refreshedDetail,
@@ -2668,7 +2692,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                   return null
                 })
                 if (retryDetail) {
-                  saveImageAssistantSessionContentCache(targetSessionId, retryDetail)
+                  saveImageAssistantSessionContentCache(targetSessionId, userId, retryDetail)
                 }
                 if (
                   hasDirectTurnMaterialized({
@@ -2737,7 +2761,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     return () => {
       cancelled = true
     }
-  }, [imageCopy, pendingTaskRefreshKey, pendingTurn?.id, queryClient, refreshDetail, rollbackPendingGuidedSelection, sessionId, syncSessionRoute])
+  }, [imageCopy, pendingTaskRefreshKey, pendingTurn?.id, queryClient, refreshDetail, rollbackPendingGuidedSelection, sessionId, syncSessionRoute, userId])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -3313,7 +3337,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
               return mergedDirectDetail?.session.current_version_id || mergedDirectDetail?.versions[0]?.id || null
             })
           }
-          saveImageAssistantSessionContentCache(directSessionId, mergedDirectDetail)
+          saveImageAssistantSessionContentCache(directSessionId, userId, mergedDirectDetail)
         }
 
         setPendingTurn(null)
@@ -3345,7 +3369,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                 return null
               })
               if (refreshedDetail) {
-                saveImageAssistantSessionContentCache(directSessionId, refreshedDetail)
+                saveImageAssistantSessionContentCache(directSessionId, userId, refreshedDetail)
               }
               if (
                 hasDirectTurnMaterialized({

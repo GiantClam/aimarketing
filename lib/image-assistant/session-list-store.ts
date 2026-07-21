@@ -10,8 +10,7 @@ type ImageAssistantConversationListCache = {
   updatedAt: number
 }
 
-const IMAGE_ASSISTANT_CONVERSATION_LIST_CACHE_KEY = "image-assistant-conversations-cache-v2"
-const IMAGE_ASSISTANT_CONVERSATION_LIST_LEGACY_KEYS = [{ area: "local" as const, key: "image-assistant-conversations-cache-v1" }]
+const IMAGE_ASSISTANT_CONVERSATION_LIST_CACHE_KEY = "image-assistant-conversations-cache-v3"
 
 function normalizeSessions(items: ImageAssistantConversationSummary[] | null | undefined) {
   return Array.isArray(items) ? items : []
@@ -33,25 +32,50 @@ export function mergeImageAssistantConversationSummaries(
   return merged
 }
 
-export function getImageAssistantConversationListCache() {
-  return readStorageJson<ImageAssistantConversationListCache>("session", IMAGE_ASSISTANT_CONVERSATION_LIST_CACHE_KEY)
+export function getImageAssistantConversationListCacheKey(userId: number | null | undefined) {
+  return userId && Number.isInteger(userId) && userId > 0 ? `${IMAGE_ASSISTANT_CONVERSATION_LIST_CACHE_KEY}:${userId}` : null
 }
 
-export function saveImageAssistantConversationListCache(cache: ImageAssistantConversationListCache) {
-  void writeStorageJson("session", IMAGE_ASSISTANT_CONVERSATION_LIST_CACHE_KEY, {
+export function getImageAssistantConversationListCache(userId: number | null | undefined) {
+  const cacheKey = getImageAssistantConversationListCacheKey(userId)
+  return cacheKey ? readStorageJson<ImageAssistantConversationListCache>("session", cacheKey) : null
+}
+
+export function saveImageAssistantConversationListCache(
+  userId: number | null | undefined,
+  cache: ImageAssistantConversationListCache,
+) {
+  const cacheKey = getImageAssistantConversationListCacheKey(userId)
+  if (!cacheKey) return
+
+  void writeStorageJson("session", cacheKey, {
     items: normalizeSessions(cache.items),
     hasMore: cache.hasMore,
     nextCursor: cache.nextCursor,
     updatedAt: cache.updatedAt,
-  } satisfies ImageAssistantConversationListCache, { legacyKeys: IMAGE_ASSISTANT_CONVERSATION_LIST_LEGACY_KEYS })
+  } satisfies ImageAssistantConversationListCache)
 }
 
-export function upsertImageAssistantConversationSummary(summary: ImageAssistantConversationSummary) {
-  const existing = getImageAssistantConversationListCache()
-  saveImageAssistantConversationListCache({
+export function upsertImageAssistantConversationSummary(
+  userId: number | null | undefined,
+  summary: ImageAssistantConversationSummary,
+) {
+  const existing = getImageAssistantConversationListCache(userId)
+  saveImageAssistantConversationListCache(userId, {
     items: mergeImageAssistantConversationSummaries(normalizeSessions(existing?.items), [summary]),
     hasMore: existing?.hasMore ?? true,
     nextCursor: existing?.nextCursor ?? null,
+    updatedAt: Date.now(),
+  })
+}
+
+export function removeImageAssistantConversationSummary(userId: number | null | undefined, sessionId: string) {
+  const existing = getImageAssistantConversationListCache(userId)
+  if (!existing) return
+
+  saveImageAssistantConversationListCache(userId, {
+    ...existing,
+    items: existing.items.filter((session) => session.id !== sessionId),
     updatedAt: Date.now(),
   })
 }

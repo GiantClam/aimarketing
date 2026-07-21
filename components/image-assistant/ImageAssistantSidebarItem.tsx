@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { Check, Edit2, ImageIcon, Loader2, Trash2, X } from "lucide-react"
 
 import { useI18n } from "@/components/locale-provider"
+import { useAuth } from "@/components/auth-provider"
 import { Button } from "@/components/ui/button"
 import {
   SidebarCreateLink,
@@ -19,7 +20,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input"
 import {
   getImageAssistantConversationListCache,
+  getImageAssistantConversationListCacheKey,
   mergeImageAssistantConversationSummaries,
+  removeImageAssistantConversationSummary,
   upsertImageAssistantConversationSummary,
 } from "@/lib/image-assistant/session-list-store"
 import {
@@ -42,8 +45,6 @@ import { normalizeRouteEntityId } from "@/lib/navigation/route-params"
 
 const IMAGE_ASSISTANT_CONVERSATION_CACHE_TTL_MS = 60_000
 const IMAGE_ASSISTANT_SESSION_PREFETCH_LIMIT = 0
-const IMAGE_ASSISTANT_CONVERSATION_LIST_CACHE_KEY = "image-assistant-conversations-cache-v2"
-
 export function ImageAssistantSidebarItem({
   title,
   icon: Icon,
@@ -52,6 +53,9 @@ export function ImageAssistantSidebarItem({
   icon: typeof ImageIcon
 }) {
   const { messages } = useI18n()
+  const { user } = useAuth()
+  const userId = user?.id ?? null
+  const conversationCacheKey = getImageAssistantConversationListCacheKey(userId) || "image-assistant-conversations-cache-v3:anonymous"
   const pathname = usePathname()
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -78,13 +82,16 @@ export function ImageAssistantSidebarItem({
     restoreSnapshot,
     handleListScroll,
   } = useCachedSidebarList<ImageAssistantConversationSummary>({
-    cacheKey: IMAGE_ASSISTANT_CONVERSATION_LIST_CACHE_KEY,
-    legacyKeys: [{ area: "local", key: "image-assistant-conversations-cache-v1" }],
+    cacheKey: conversationCacheKey,
     ttlMs: IMAGE_ASSISTANT_CONVERSATION_CACHE_TTL_MS,
     isExpanded,
     activeItemId: activeSessionId,
     autoFetchUntilActiveItemFound: false,
     fetchPage: async ({ cursor }) => {
+      if (!userId) {
+        return { items: [], hasMore: false, nextCursor: null }
+      }
+
       const params = new URLSearchParams({ limit: "20" })
       if (cursor) {
         params.set("cursor", cursor)
@@ -107,7 +114,7 @@ export function ImageAssistantSidebarItem({
   })
 
   const prefetchSessionDetail = useCallback(async (targetSessionId: string) => {
-    const cached = getImageAssistantSessionContentCache(targetSessionId)
+    const cached = getImageAssistantSessionContentCache(targetSessionId, userId)
     if (cached && isImageAssistantSessionContentCacheFresh(cached, IMAGE_ASSISTANT_SESSION_CACHE_TTL_MS)) {
       return
     }
@@ -117,7 +124,7 @@ export function ImageAssistantSidebarItem({
         mode: "content",
         messageLimit: 12,
         versionLimit: 6,
-      }),
+      }, userId),
       queryFn: () =>
         getImageAssistantSessionDetail(targetSessionId, {
           mode: "content",
@@ -126,8 +133,8 @@ export function ImageAssistantSidebarItem({
         }),
     })
 
-    saveImageAssistantSessionContentCache(targetSessionId, detail)
-  }, [queryClient])
+    saveImageAssistantSessionContentCache(targetSessionId, userId, detail)
+  }, [queryClient, userId])
   useEffect(() => {
     if (isImageAssistantRoute) {
       setIsOpen(true)
@@ -137,23 +144,31 @@ export function ImageAssistantSidebarItem({
   useSidebarListPreheat({
     enabled: isImageAssistantRoute,
     ttlMs: IMAGE_ASSISTANT_CONVERSATION_CACHE_TTL_MS,
-    readCache: getImageAssistantConversationListCache,
+    readCache: () => getImageAssistantConversationListCache(userId),
     fetchItems: fetchSessions,
   })
 
   useEffect(() => {
-    if (!isExpanded || !activeSessionId || sessions.some((session) => session.id === activeSessionId)) {
+    if (!isExpanded || !activeSessionId || !userId) {
       return
     }
 
     void getImageAssistantSessionDetail(activeSessionId, { mode: "summary", messageLimit: 1 })
       .then((detail) => {
         if (!detail?.session) return
-        upsertImageAssistantConversationSummary(detail.session)
+        upsertImageAssistantConversationSummary(userId, detail.session)
         updateList((current) => mergeImageAssistantConversationSummaries(current, [detail.session]))
       })
-      .catch(() => {})
-  }, [activeSessionId, isExpanded, sessions, updateList])
+      .catch((error) => {
+        if (!(error instanceof Error) || !["Not found", "http_404"].includes(error.message)) return
+        removeImageAssistantConversationSummary(userId, activeSessionId)
+        deleteImageAssistantSessionContentCache(activeSessionId, userId)
+        updateList((current) => current.filter((session) => session.id !== activeSessionId))
+        if (pathname === `/dashboard/image-assistant/${activeSessionId}`) {
+          router.replace("/dashboard/image-assistant")
+        }
+      })
+  }, [activeSessionId, isExpanded, pathname, router, updateList, userId])
 
   const { prefetchItem: warmSessionDetail } = useSidebarDetailPrefetch({
     items: sessions,
@@ -220,7 +235,8 @@ export function ImageAssistantSidebarItem({
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
-      deleteImageAssistantSessionContentCache(nextSessionId)
+      deleteImageAssistantSessionContentCache(nextSessionId, userId)
+      removeImageAssistantConversationSummary(userId, nextSessionId)
       setPendingDeleteSession(null)
       if (pathname === `/dashboard/image-assistant/${nextSessionId}`) {
         router.push("/dashboard/image-assistant")
@@ -255,7 +271,7 @@ export function ImageAssistantSidebarItem({
         throw new Error("image_session_create_missing_id")
       }
 
-      upsertImageAssistantConversationSummary(created)
+      upsertImageAssistantConversationSummary(userId, created)
       updateList((current) => mergeImageAssistantConversationSummaries(current, [created]))
       void fetchSessions().catch(() => {})
       void warmSessionDetail(created.id).catch(() => {})

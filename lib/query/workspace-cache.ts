@@ -90,11 +90,13 @@ export async function getAdvisorMessagesPage(
 export function getImageAssistantDetailQueryKey(
   sessionId: string,
   options?: ImageAssistantDetailOptions,
+  userId?: number | null,
 ) {
   return [
     "image-assistant",
     "session-detail",
     sessionId,
+    userId && userId > 0 ? userId : "anonymous",
     options?.mode || "full",
     options?.messageLimit || 0,
     options?.versionLimit || 0,
