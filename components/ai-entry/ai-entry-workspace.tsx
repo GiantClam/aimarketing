@@ -815,6 +815,9 @@ function normalizeMessageApiTaskRun(
           const type = typeof event.type === "string" ? event.type.trim() : ""
           const label = typeof event.label === "string" ? event.label.trim() : ""
           if (!type || !label) return events
+          // Older runtime records persisted model deltas as task events. They
+          // belong to the assistant message, never to the step trace.
+          if (type === "text_delta") return events
           events.push({
             type,
             label,

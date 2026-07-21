@@ -1,4 +1,5 @@
 import type { ArtifactPart } from "./message-parts/types"
+import { dedupeRuntimeArtifacts } from "./runtime/artifact-detector"
 
 export type AiEntryConversationArtifact = {
   artifactId: number
@@ -23,7 +24,7 @@ function artifactFileName(input: AiEntryConversationArtifact) {
 export function buildConversationArtifactParts(value: unknown): ArtifactPart[] {
   if (!Array.isArray(value)) return []
   const seen = new Set<number>()
-  return value.reduce<ArtifactPart[]>((parts, item) => {
+  const parts = value.reduce<ArtifactPart[]>((parts, item) => {
     if (!item || typeof item !== "object") return parts
     const record = item as Partial<AiEntryConversationArtifact>
     const artifactId = typeof record.artifactId === "number" && Number.isInteger(record.artifactId) && record.artifactId > 0 ? record.artifactId : null
@@ -50,4 +51,5 @@ export function buildConversationArtifactParts(value: unknown): ArtifactPart[] {
     })
     return parts
   }, [])
+  return dedupeRuntimeArtifacts(parts)
 }
