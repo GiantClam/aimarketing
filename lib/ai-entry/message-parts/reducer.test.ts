@@ -232,6 +232,35 @@ test("export_ppt_deck tool_result + artifact_created 会 upsert artifact part", 
   assert.equal(artifact?.workHref, "/dashboard/works")
 })
 
+test("同一 PPTX 的运行时前缀和 artifact id 不会产生两个卡片", () => {
+  let parts = applySseEvent([], {
+    event: "artifact_created",
+    artifact: {
+      kind: "pptx",
+      title: "result.pptx",
+      fileName: "0-result.pptx",
+      artifactId: 626,
+      downloadUrl: "/api/platform/artifacts/626/download?download=1",
+    },
+  })
+
+  parts = applySseEvent(parts, {
+    event: "artifact_created",
+    artifact: {
+      kind: "pptx",
+      title: "2026年全球经济展望.pptx",
+      fileName: "1-2026年全球经济展望.pptx",
+      artifactId: 628,
+      downloadUrl: "/api/platform/artifacts/628/download?download=1",
+    },
+  })
+
+  const artifacts = parts.filter((part): part is ArtifactPart => part.type === "artifact")
+  assert.equal(artifacts.length, 1)
+  assert.equal(artifacts[0]?.artifactId, 628)
+  assert.equal(artifacts[0]?.fileName, "1-2026年全球经济展望.pptx")
+})
+
 test("validation_result 产生 validation part（passed）和 progress step", () => {
   const parts = applySseEvent([], {
     event: "validation_result",

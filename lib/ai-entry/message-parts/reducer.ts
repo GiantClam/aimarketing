@@ -13,6 +13,7 @@ import type {
   ValidationPart,
 } from "./types"
 import type { PptTemplateRecommendationContext } from "@/lib/ai-entry/ppt-tool-result-message"
+import { isInternalRuntimeArtifact, normalizeRuntimeArtifactFileName } from "@/lib/ai-entry/runtime/artifact-detector"
 
 const REASONING_PART_ID = "reasoning"
 const TASK_PROGRESS_PART_ID = "task-progress"
@@ -68,6 +69,31 @@ function artifactTypeFromKind(kind: string | null | undefined): ArtifactPart["ar
   if (kind === "html") return "html"
   if (kind === "image") return "image"
   return "generic"
+}
+
+function artifactFileKey(part: Pick<ArtifactPart, "fileName" | "title">) {
+  return normalizeRuntimeArtifactFileName(part.fileName || part.title || "")
+}
+
+function upsertArtifactPart(parts: MessagePart[], artifact: ArtifactPart): MessagePart[] {
+  const key = artifactFileKey(artifact)
+  const incomingName = artifact.fileName || artifact.title || ""
+  const incomingIsNamedPptx = incomingName.toLowerCase().endsWith(".pptx") && !isInternalRuntimeArtifact(incomingName)
+  const withoutInternalPptx = incomingIsNamedPptx
+    ? parts.filter((part) => part.type !== "artifact" || !isInternalRuntimeArtifact(part.fileName || part.title || ""))
+    : parts
+  const matching = parts
+    .map((part, index) => ({ part, index }))
+    .filter(({ part }) => part.type === "artifact" && artifactFileKey(part) === key)
+  if (!key || !matching.length) return upsertPart(withoutInternalPptx, artifact)
+
+  const existing = matching[0].part as ArtifactPart
+  const existingName = existing.fileName || existing.title || ""
+  if (isInternalRuntimeArtifact(artifact.fileName || artifact.title || "") && !isInternalRuntimeArtifact(existingName)) return parts
+
+  const firstIndex = matching[0].index
+  const next = parts.map((part, index) => index === firstIndex ? artifact : part)
+  return next.filter((part, index) => part.type !== "artifact" || artifactFileKey(part) !== key || index === firstIndex)
 }
 
 function sourceIdForResult(namespace: string, index: number, result: AiEntryStreamSourceResult): string {
@@ -282,7 +308,7 @@ function applyToolResult(parts: MessagePart[], event: AiEntryStreamEvent): Messa
   if (toolName === "export_ppt_deck" && result?.ok !== false) {
     const fileName = optionalString(result?.fileName)
     const artifactId = typeof result?.artifactId === "number" ? result.artifactId : null
-    nextParts = upsertPart(nextParts, {
+    nextParts = upsertArtifactPart(nextParts, {
       type: "artifact",
       id: `artifact:${artifactId ?? fileName ?? "ppt"}`,
       artifactType: inferArtifactType(fileName),
@@ -539,7 +565,7 @@ export function applySseEvent(parts: MessagePart[], event: AiEntryStreamEvent): 
     const artifactId = typeof artifact.artifactId === "number" ? artifact.artifactId : null
     const id = `artifact:${artifactId ?? optionalString(artifact.fileName) ?? "artifact"}`
     const existing = getPartById<ArtifactPart>(parts, id, "artifact")
-    const nextParts = upsertPart(parts, {
+    const nextParts = upsertArtifactPart(parts, {
       type: "artifact",
       id,
       artifactType: artifactTypeFromKind(artifact.kind),

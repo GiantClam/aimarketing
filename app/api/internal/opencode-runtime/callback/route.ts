@@ -7,6 +7,8 @@ import { estimateTextCredits } from "@/lib/billing/costing"
 import { finalizeReservedCredits, releaseReservedCredits, type BillingReservation } from "@/lib/billing/runtime"
 import { appendPlatformRunEvent, getPlatformTaskRun, savePlatformArtifact, updatePlatformTaskRun } from "@/lib/platform/task-run-store"
 import { getOpenCodeRuntimeRunByRuntimeId, updateOpenCodeRuntimeRun } from "@/lib/platform/opencode-runtime-store"
+import { dedupeRuntimeArtifacts } from "@/lib/ai-entry/runtime/artifact-detector"
+import { filterTaskProgressEvents } from "@/lib/ai-entry/runtime/runtime-events"
 
 type CallbackPayload = {
   version: 1
@@ -41,14 +43,16 @@ export async function POST(request: NextRequest) {
     seenEventIds.add(item.id)
     newEvents.push(item)
     const event = item.event || {}
-    await appendPlatformRunEvent(runtimeRun.taskRunId, { level: event.event === "runtime_error" ? "error" : "info", message: typeof event.event === "string" ? event.event : "runtime_event", payload: event })
+    if (event.event !== "text_delta") {
+      await appendPlatformRunEvent(runtimeRun.taskRunId, { level: event.event === "runtime_error" ? "error" : "info", message: typeof event.event === "string" ? event.event : "runtime_event", payload: event })
+    }
   }
   const textDelta = newEvents.map((item) => item.event).filter((event) => event.event === "text_delta" && typeof event.delta === "string").map((event) => String(event.delta)).join("")
   const previousText = typeof previous.runtimeText === "string" ? previous.runtimeText : ""
   const text = `${previousText}${textDelta}`.slice(-200_000)
   const taskInput = (platformRun.inputPayload || {}) as Record<string, unknown>
   const conversationId = typeof taskInput.conversationId === "string" ? taskInput.conversationId : null
-  const artifacts = newEvents.map((item) => item.event).filter((event) => event.event === "artifact_reference" && event.artifact && typeof event.artifact === "object").map((event) => event.artifact as Record<string, unknown>)
+  const artifacts = dedupeRuntimeArtifacts(newEvents.map((item) => item.event).filter((event) => event.event === "artifact_reference" && event.artifact && typeof event.artifact === "object").map((event) => event.artifact as Record<string, unknown>))
   const assistantContent = buildRuntimeAssistantMessage(text, artifacts)
   let assistantMessagePersisted = previous.assistantMessagePersisted === true
   if (payload.status === "succeeded" && assistantContent && conversationId && !assistantMessagePersisted) {
@@ -87,8 +91,7 @@ export async function POST(request: NextRequest) {
     }
     billingFinalized = true
   }
-  const normalizedEvents = events.map((item) => {
-    const event = item.event || {}
+  const normalizedEvents = filterTaskProgressEvents(events.map((item) => item.event)).map((event) => {
     const type = typeof event.event === "string" ? event.event : "runtime_event"
     return {
       type,

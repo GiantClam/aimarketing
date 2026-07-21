@@ -23,6 +23,42 @@ export type ArtifactValidationLimits = {
 export type ValidatedRuntimeArtifact = RuntimeArtifactPayload & { fileName: string; extension: string }
 export type ValidatedRuntimeArtifactReference = RuntimeArtifactReference & { fileName: string; extension: string; storageKey: string }
 
+function baseArtifactFileName(value: string) {
+  return value.replaceAll("\\", "/").split("/").at(-1) || value
+}
+
+/** Removes the numeric prefix used when runtime manifests are merged. */
+export function displayRuntimeArtifactFileName(value: string) {
+  return baseArtifactFileName(value).replace(/^\d+-/u, "")
+}
+
+export function normalizeRuntimeArtifactFileName(value: string) {
+  return displayRuntimeArtifactFileName(value).trim().toLowerCase()
+}
+
+export function isInternalRuntimeArtifact(value: string) {
+  return normalizeRuntimeArtifactFileName(value) === "result.pptx"
+}
+
+export function dedupeRuntimeArtifacts<T extends { path?: unknown; fileName?: unknown; title?: unknown }>(items: T[]) {
+  const hasNamedPptx = items.some((item) => {
+    const name = typeof item.fileName === "string" ? item.fileName : typeof item.path === "string" ? item.path : typeof item.title === "string" ? item.title : ""
+    return normalizeRuntimeArtifactFileName(name).endsWith(".pptx") && !isInternalRuntimeArtifact(name)
+  })
+  const selected = new Map<string, T>()
+  for (const item of items) {
+    const rawName = typeof item.fileName === "string" ? item.fileName : typeof item.path === "string" ? item.path : typeof item.title === "string" ? item.title : ""
+    const normalizedName = normalizeRuntimeArtifactFileName(rawName)
+    if (!normalizedName) continue
+    if (hasNamedPptx && isInternalRuntimeArtifact(rawName)) continue
+    const previous = selected.get(normalizedName)
+    if (!previous || (typeof (previous.fileName || previous.path || previous.title) === "string" && isInternalRuntimeArtifact(String(previous.fileName || previous.path || previous.title)))) {
+      selected.set(normalizedName, item)
+    }
+  }
+  return [...selected.values()]
+}
+
 function safeFileName(path: string) {
   const normalized = path.replaceAll("\\", "/")
   if (!normalized.startsWith("artifacts/") || normalized.includes("../") || normalized.includes("/./") || normalized.endsWith("/")) return null
@@ -43,13 +79,14 @@ export function validateRuntimeArtifactPayload(payload: RuntimeArtifactPayload, 
   const buffer = Buffer.from(payload.contentBase64, "base64")
   if (buffer.byteLength !== payload.sizeBytes) throw new Error("runtime_artifact_size_mismatch")
   const mimeType = payload.mimeType?.trim() || MIME_BY_EXTENSION[extension] || "application/octet-stream"
+  const displayFileName = displayRuntimeArtifactFileName(fileName)
   return {
     ...payload,
-    path: `artifacts/${fileName}`,
-    title: payload.title.trim().slice(0, 255) || fileName,
+    path: `artifacts/${displayFileName}`,
+    title: displayRuntimeArtifactFileName(payload.title.trim()).slice(0, 255) || displayFileName,
     kind: payload.kind.trim().slice(0, 64) || "file",
     mimeType,
-    fileName,
+    fileName: displayFileName,
     extension,
   }
 }
@@ -67,12 +104,13 @@ export function validateRuntimeArtifactReference(reference: RuntimeArtifactRefer
   if (!Number.isInteger(reference.sizeBytes) || reference.sizeBytes < 0 || reference.sizeBytes > limits.maxArtifactBytes) throw new Error("runtime_artifact_size_exceeded")
   if (currentTotalBytes + reference.sizeBytes > limits.maxArtifactTotalBytes) throw new Error("runtime_artifact_total_size_exceeded")
   const mimeType = reference.mimeType?.trim() || MIME_BY_EXTENSION[extension] || "application/octet-stream"
+  const displayFileName = displayRuntimeArtifactFileName(fileName)
   return {
     ...reference,
-    title: reference.title.trim().slice(0, 255) || fileName,
+    title: displayRuntimeArtifactFileName(reference.title.trim()).slice(0, 255) || displayFileName,
     kind: reference.kind.trim().slice(0, 64) || "file",
     mimeType,
-    fileName,
+    fileName: displayFileName,
     extension,
     storageKey,
   }

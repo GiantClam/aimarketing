@@ -10,6 +10,8 @@ import { isValidRuntimeProjectSnapshot } from "@/lib/ai-runtime/contracts"
 import { estimateTextCredits } from "@/lib/billing/costing"
 import { finalizeReservedCredits, releaseReservedCredits, type BillingReservation } from "@/lib/billing/runtime"
 import { isPlatformArtifactR2Available, uploadPlatformArtifactBufferToR2 } from "@/lib/platform/artifact-storage"
+import { displayRuntimeArtifactFileName } from "@/lib/ai-entry/runtime/artifact-detector"
+import { filterTaskProgressEvents, isTaskProgressEvent } from "@/lib/ai-entry/runtime/runtime-events"
 import {
   appendRailwayOpenCodeRuntimeEvent,
   getOpenCodeRuntimeRunByRuntimeId,
@@ -63,7 +65,9 @@ function artifactReferenceEvent(artifact: Record<string, unknown>, reference: Re
       bucket: reference.bucket || "platform-artifacts",
       key: reference.key || `platform:${reference.artifactId || "unknown"}`,
       publicUrl: reference.publicUrl || null,
-      fileName: typeof artifact.path === "string" ? artifact.path.replace(/^artifacts\//u, "") : "artifact",
+      fileName: typeof artifact.path === "string"
+        ? displayRuntimeArtifactFileName(artifact.path.replace(/^artifacts\//u, ""))
+        : typeof artifact.title === "string" && artifact.title.trim() ? displayRuntimeArtifactFileName(artifact.title) : "artifact",
       title: typeof artifact.title === "string" ? artifact.title : "OpenCode artifact",
       kind: typeof artifact.kind === "string" ? artifact.kind : "file",
       mimeType: typeof artifact.mimeType === "string" ? artifact.mimeType : "application/octet-stream",
@@ -81,9 +85,11 @@ async function persistRailwayArtifact(input: {
 }) {
   if (!input.taskRun) throw new Error("opencode_runtime_task_run_not_found")
   const taskInput = asRecord(input.taskRun.inputPayload) || {}
+  const incomingFileName = typeof input.artifact.path === "string" ? input.artifact.path : ""
   const existing = input.taskRun.artifacts.find((item) => {
     const payload = asRecord(item.payload)
-    return payload?.runtimeRunId === input.runtimeRunId && payload.runtimePath === input.artifact.path
+    const existingName = typeof payload?.fileName === "string" ? payload.fileName : typeof payload?.runtimePath === "string" ? payload.runtimePath : ""
+    return payload?.runtimeRunId === input.runtimeRunId && (payload.runtimePath === input.artifact.path || displayRuntimeArtifactFileName(existingName).toLowerCase() === displayRuntimeArtifactFileName(incomingFileName).toLowerCase())
   })
   if (existing) return artifactReferenceEvent(input.artifact as unknown as Record<string, unknown>, {
     provider: existing.storageKey ? "r2" : "platform",
@@ -164,6 +170,7 @@ async function syncRailwayTask(input: { runtimeRunId: string; status: OpenCodeRu
   for (const item of newEvents) {
     seenSequences.add(item.sequence)
     const event = asRecord(item.event) || {}
+    if (!isTaskProgressEvent(event)) continue
     await appendPlatformRunEvent(runtimeRun.taskRunId, {
       level: event.event === "runtime_error" ? "error" : "info",
       message: typeof event.event === "string" ? event.event : "runtime_event",
@@ -196,7 +203,7 @@ async function syncRailwayTask(input: { runtimeRunId: string; status: OpenCodeRu
     }
     billingFinalized = true
   }
-  const normalizedEvents = allEvents.slice(-100).map((event) => {
+  const normalizedEvents = filterTaskProgressEvents(allEvents).slice(-100).map((event) => {
     const type = typeof event.event === "string" ? event.event : "runtime_event"
     return { type, label: type, detail: typeof event.message === "string" ? event.message : typeof event.delta === "string" ? event.delta.slice(0, 240) : undefined, status: type === "runtime_error" ? "failed" : ["done", "artifact_reference", "checkpoint_saved"].includes(type) ? "completed" : "running", at: typeof event.at === "number" ? event.at : Math.floor(Date.now() / 1000) }
   })

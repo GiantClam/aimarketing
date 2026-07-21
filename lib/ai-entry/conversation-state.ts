@@ -4,6 +4,7 @@ import {
   resolveLatestPptConversationState,
 } from "@/lib/ai-entry/ppt-tool-result-message"
 import { isValidRuntimeProjectSnapshot, type RuntimeProjectSnapshot } from "@/lib/ai-runtime/contracts"
+import { normalizeRuntimeArtifactFileName } from "@/lib/ai-entry/runtime/artifact-detector"
 
 export type AiEntryConversationState = {
   ppt: PptConversationState
@@ -21,7 +22,7 @@ export type AiEntryRuntimeArtifactContext = {
 function artifactFileName(value: Pick<AiEntryRuntimeArtifactContext, "title" | "summary">) {
   const summaryFileName = value.summary.match(/^(.+?)\s+\([^)]*\)$/u)?.[1]?.trim()
   const source = (summaryFileName || value.title).replaceAll("\\", "/")
-  return source.split("/").at(-1)?.trim().toLowerCase() || source.trim().toLowerCase()
+  return normalizeRuntimeArtifactFileName(source)
 }
 
 function dedupeArtifacts(items: AiEntryRuntimeArtifactContext[]) {

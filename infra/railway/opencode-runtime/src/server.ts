@@ -15,6 +15,7 @@ import {
 import { buildOpenCodeSystemPrompt, buildOpenCodeUserPrompt } from "../../../../lib/ai-runtime/opencode-prompt.js"
 import { OpenCodeServeManager } from "./opencode-serve-manager.js"
 import { parseRuntimeProjectSnapshot } from "./project-snapshot.js"
+import { displayArtifactName, selectPublishableArtifactRecords } from "./artifact-utils.js"
 
 const port = Number.parseInt(process.env.PORT || "3000", 10) || 3000
 const runtimeDir = process.env.OPENCODE_RUNTIME_DIR || "/data/sessions"
@@ -209,13 +210,18 @@ async function publishDiscoveredArtifacts(input: AgentRuntimeInput, sessionDir: 
     ...roots.map((root) => findFiles(root, ".svg")),
     ...roots.map((root) => findFiles(root, ".png")),
   ])).flat()
-  const unique = [...new Set(candidates)].slice(0, input.artifactContract.maxArtifacts)
-  if (!unique.length) return []
+  const unique = [...new Set(candidates)]
+  const selected = selectPublishableArtifactRecords(
+    unique.map((source) => ({ path: source, title: source.split("/").at(-1) || "artifact" })),
+    isRailwayPptMasterInput(input),
+  ).slice(0, input.artifactContract.maxArtifacts)
+  if (!selected.length) return []
   const artifactDir = join(runDir, "artifacts")
   await mkdir(artifactDir, { recursive: true })
   const manifest: Array<Record<string, string>> = []
-  for (const source of unique) {
-    const fileName = source.split("/").at(-1) || "artifact"
+  for (const record of selected) {
+    const source = record.path
+    const fileName = displayArtifactName(record.title || source.split("/").at(-1) || "artifact")
     const targetName = `${manifest.length}-${fileName}`
     await copyFile(source, join(artifactDir, targetName)).catch(() => undefined)
     const copied = await readFile(join(artifactDir, targetName)).catch(() => null)
@@ -230,7 +236,7 @@ async function publishDiscoveredArtifacts(input: AgentRuntimeInput, sessionDir: 
 async function readArtifacts(input: AgentRuntimeInput, runDir: string, sessionDir = runDir): Promise<RuntimeArtifactPayload[]> {
   const manifestPaths = [...new Set([join(runDir, "artifact-manifest.json"), ...(await findFiles(sessionDir, "artifact-manifest.json"))])]
   const allowed = new Set(input.artifactContract.allowedExtensions.map((item) => item.replace(/^\./u, "").toLowerCase()))
-  const artifacts: RuntimeArtifactPayload[] = []
+  const candidates: Array<{ record: Record<string, unknown>; fileName: string; bytes: Buffer }> = []
   let totalBytes = 0
   for (const manifestPath of manifestPaths) {
     let manifest: unknown
@@ -245,28 +251,48 @@ async function readArtifacts(input: AgentRuntimeInput, runDir: string, sessionDi
       if (!fileName || !allowed.has(ext)) continue
       const fullPath = join(manifestDir, fileName)
       const bytes = await readFile(fullPath).catch(() => null)
-      if (!bytes || bytes.byteLength > input.artifactContract.maxArtifactBytes || totalBytes + bytes.byteLength > input.artifactContract.maxArtifactTotalBytes) continue
-      totalBytes += bytes.byteLength
-      artifacts.push({
-        path: `artifacts/${fileName.slice("artifacts/".length)}`,
-        title: typeof record.title === "string" && record.title.trim() ? record.title.trim().slice(0, 255) : fileName,
-        kind: typeof record.kind === "string" && record.kind.trim() ? record.kind.trim().slice(0, 64) : "file",
-        mimeType: mimeType(fileName),
-        sizeBytes: bytes.byteLength,
-        contentBase64: bytes.toString("base64"),
-      })
+      if (!bytes || bytes.byteLength > input.artifactContract.maxArtifactBytes) continue
+      candidates.push({ record, fileName, bytes })
     }
+  }
+  const selected = selectPublishableArtifactRecords(
+    candidates.map((candidate) => ({
+      path: candidate.fileName,
+      title: typeof candidate.record.title === "string" ? candidate.record.title : candidate.fileName,
+      kind: typeof candidate.record.kind === "string" ? candidate.record.kind : undefined,
+    })),
+    isRailwayPptMasterInput(input),
+  )
+  const selectedPaths = new Set(selected.map((record) => record.path))
+  const artifacts: RuntimeArtifactPayload[] = []
+  for (const candidate of candidates) {
+    if (!selectedPaths.has(candidate.fileName) || totalBytes + candidate.bytes.byteLength > input.artifactContract.maxArtifactTotalBytes || artifacts.length >= input.artifactContract.maxArtifacts) continue
+    totalBytes += candidate.bytes.byteLength
+    const displayTitle = displayArtifactName(typeof candidate.record.title === "string" && candidate.record.title.trim() ? candidate.record.title : candidate.fileName)
+    artifacts.push({
+      path: `artifacts/${candidate.fileName.slice("artifacts/".length)}`,
+      title: displayTitle.slice(0, 255),
+      kind: typeof candidate.record.kind === "string" && candidate.record.kind.trim() ? candidate.record.kind.trim().slice(0, 64) : "file",
+      mimeType: mimeType(candidate.fileName),
+      sizeBytes: candidate.bytes.byteLength,
+      contentBase64: candidate.bytes.toString("base64"),
+    })
   }
   if (!artifacts.length) {
     const directCandidates = (await Promise.all([...allowed].map((extension) => findFiles(join(runDir, "artifacts"), `.${extension}`)))).flat()
-    for (const fullPath of [...new Set(directCandidates)].slice(0, input.artifactContract.maxArtifacts)) {
+    const directSelected = selectPublishableArtifactRecords(
+      [...new Set(directCandidates)].map((fullPath) => ({ path: fullPath, title: fullPath.split("/").at(-1) || "artifact" })),
+      isRailwayPptMasterInput(input),
+    ).slice(0, input.artifactContract.maxArtifacts)
+    for (const record of directSelected) {
+      const fullPath = record.path
       const fileName = fullPath.split("/").at(-1) || "artifact"
       const bytes = await readFile(fullPath).catch(() => null)
       if (!bytes || bytes.byteLength > input.artifactContract.maxArtifactBytes || totalBytes + bytes.byteLength > input.artifactContract.maxArtifactTotalBytes) continue
       totalBytes += bytes.byteLength
       artifacts.push({
         path: `artifacts/${fileName}`,
-        title: fileName,
+        title: displayArtifactName(fileName),
         kind: fileName.endsWith(".pptx") ? "pptx" : "file",
         mimeType: mimeType(fileName),
         sizeBytes: bytes.byteLength,

@@ -4,7 +4,8 @@ import { getCloudflareSessionEventTicket, getCloudflareSessionRun, subscribeClou
 import { getOpenCodeRuntimeRunByTaskRunId, getRailwayOpenCodeRuntimeState, updateOpenCodeRuntimeRun } from "@/lib/platform/opencode-runtime-store"
 import { appendPlatformRunEvent, getPlatformTaskRun, updatePlatformTaskRun } from "@/lib/platform/task-run-store"
 import { savePlatformArtifact } from "@/lib/platform/task-run-store"
-import { validateRuntimeArtifactPayload, validateRuntimeArtifactReference } from "./artifact-detector"
+import { dedupeRuntimeArtifacts, validateRuntimeArtifactPayload, validateRuntimeArtifactReference } from "./artifact-detector"
+import { filterTaskProgressEvents } from "./runtime-events"
 import { resolveRuntimeArtifactLimits, runtimeArtifactExtensions } from "./artifact-policy"
 import type { RuntimeArtifactPayload, RuntimeArtifactReference } from "@/lib/ai-runtime/contracts"
 
@@ -61,9 +62,9 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
   })
   const allowedArtifactExtensions = runtimeArtifactExtensions(taskInput.agentId, taskInput.selectedSkillIds)
   const conversationId = typeof taskInput.conversationId === "string" ? taskInput.conversationId : null
-  const artifacts = events
+  const artifacts = dedupeRuntimeArtifacts(events
     .filter((event) => (event.event === "artifact_reference" || event.event === "artifact_payload") && event.artifact)
-    .map((event) => event.artifact as Record<string, unknown>)
+    .map((event) => event.artifact as Record<string, unknown>))
   const assistantContent = buildRuntimeAssistantMessage(text, artifacts)
   let assistantMessagePersisted = previous.assistantMessagePersisted === true
 
@@ -147,7 +148,7 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
     assistantMessagePersisted = true
   }
 
-  for (const event of events) {
+  for (const event of filterTaskProgressEvents(events)) {
     if (!event.event) continue
     await appendPlatformRunEvent(taskRunId, {
       level: event.event === "runtime_error" ? "error" : "info",
@@ -162,7 +163,7 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
     runtimeRunId: platformRun.externalRunId,
     assistantMessagePersisted,
     fallbackSynced: true,
-    events: events.slice(-100).map((event) => ({
+    events: filterTaskProgressEvents(events).slice(-100).map((event) => ({
       type: event.event || "runtime_event",
       label: event.event || "runtime_event",
       detail: event.message || event.delta?.slice(0, 240),
