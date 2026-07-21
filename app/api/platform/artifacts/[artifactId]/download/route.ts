@@ -81,7 +81,7 @@ export async function GET(
       }
     }
 
-    const sourceUrl = artifact.storageKey ? null : resolvePlatformArtifactSourceUrl(artifact)
+    const sourceUrl = resolvePlatformArtifactSourceUrl(artifact)
     if (sourceUrl) {
       const response = await fetch(sourceUrl, {
         cache: "no-store",
