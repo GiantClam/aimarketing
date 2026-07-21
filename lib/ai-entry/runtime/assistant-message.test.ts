@@ -16,7 +16,7 @@ test("runtime completion synthesizes a durable message for artifact-only runs", 
       { title: "企业 AI 复盘.pptx" },
       { fileName: "ppt/index.html" },
     ]),
-    "任务已完成，已生成以下文件：\n- 企业 AI 复盘.pptx\n- ppt/index.html",
+    "任务已完成，已生成以下文件：\n- 企业 AI 复盘.pptx",
   )
 })
 

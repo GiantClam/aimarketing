@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { validateRuntimeArtifactPayload, validateRuntimeArtifactReference } from "./artifact-detector"
+import {
+  selectFinalRuntimeArtifacts,
+  validateRuntimeArtifactPayload,
+  validateRuntimeArtifactReference,
+} from "./artifact-detector"
 
 const limits = {
   maxArtifacts: 8,
@@ -52,4 +56,25 @@ test("rejects non-PPTX/HTML files under the Dashi artifact contract", () => {
     sizeBytes: 2,
     contentBase64,
   }, dashiLimits), /extension_not_allowed/)
+})
+
+test("selects one named final PPTX and hides runtime process files", () => {
+  const selected = selectFinalRuntimeArtifacts([
+    { fileName: "result.pptx", kind: "pptx", sizeBytes: 10 },
+    { fileName: "quality-check.svg", kind: "svg", sizeBytes: 3 },
+    { fileName: "ppt/index.html", kind: "html", sizeBytes: 4 },
+    { fileName: "final-deck.pptx", kind: "pptx", sizeBytes: 12 },
+    { fileName: "deck-copy.pptx", kind: "pptx", sizeBytes: 12 },
+  ])
+
+  assert.deepEqual(selected.map((item) => item.fileName), ["final-deck.pptx"])
+})
+
+test("uses the PPTX summary filename for persisted conversation artifacts", () => {
+  const selected = selectFinalRuntimeArtifacts([
+    { artifactId: 1, title: "中间结果", kind: "file", summary: "preview.html (text/html)" },
+    { artifactId: 2, title: "最终演示", kind: "pptx", summary: "最终演示.pptx (application/vnd.openxmlformats-officedocument.presentationml.presentation)" },
+  ])
+
+  assert.deepEqual(selected.map((item) => item.artifactId), [2])
 })

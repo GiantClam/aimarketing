@@ -4,7 +4,7 @@ import {
   resolveLatestPptConversationState,
 } from "@/lib/ai-entry/ppt-tool-result-message"
 import { isValidRuntimeProjectSnapshot, type RuntimeProjectSnapshot } from "@/lib/ai-runtime/contracts"
-import { normalizeRuntimeArtifactFileName } from "@/lib/ai-entry/runtime/artifact-detector"
+import { normalizeRuntimeArtifactFileName, selectFinalRuntimeArtifacts } from "@/lib/ai-entry/runtime/artifact-detector"
 
 export type AiEntryConversationState = {
   ppt: PptConversationState
@@ -28,7 +28,7 @@ function artifactFileName(value: Pick<AiEntryRuntimeArtifactContext, "title" | "
 function dedupeArtifacts(items: AiEntryRuntimeArtifactContext[]) {
   const byFileName = new Map<string, AiEntryRuntimeArtifactContext>()
   for (const item of items) byFileName.set(artifactFileName(item), item)
-  return [...byFileName.values()]
+  return selectFinalRuntimeArtifacts([...byFileName.values()])
 }
 
 function withArtifacts(state: { ppt: PptConversationState; projectSnapshot?: RuntimeProjectSnapshot }, artifacts: AiEntryRuntimeArtifactContext[] | undefined): AiEntryConversationState {
@@ -205,7 +205,7 @@ export function appendAiEntryRuntimeArtifactContext(input: {
   const secondaryArtifacts = merged
     .filter((item) => !["pptx", "html", "pdf"].includes(item.kind.toLowerCase()))
     .slice(-secondaryLimit)
-  const artifacts = [...secondaryArtifacts, ...primaryArtifacts]
+  const artifacts = selectFinalRuntimeArtifacts([...secondaryArtifacts, ...primaryArtifacts])
   const ppt = input.exportContext
     ? {
         latestPreview: previousState.ppt.latestPreview,

@@ -165,9 +165,9 @@ test("runtime artifact context keeps PPTX artifacts ahead of internal files", ()
     },
   })
 
-  assert.equal(next.artifacts?.length, 10)
-  assert.equal(next.artifacts?.at(-1)?.artifactId, 10)
-  assert.equal(next.artifacts?.at(-1)?.kind, "pptx")
+  assert.equal(next.artifacts?.length, 1)
+  assert.equal(next.artifacts?.[0]?.artifactId, 10)
+  assert.equal(next.artifacts?.[0]?.kind, "pptx")
 })
 
 test("runtime PPTX publication marks the conversation as exported", () => {
@@ -205,5 +205,5 @@ test("runtime artifact context deduplicates files by basename", () => {
     },
   })
 
-  assert.deepEqual(next.artifacts?.map((item) => item.artifactId), [1, 3])
+  assert.deepEqual(next.artifacts?.map((item) => item.artifactId), [3])
 })

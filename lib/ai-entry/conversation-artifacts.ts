@@ -1,5 +1,5 @@
 import type { ArtifactPart } from "./message-parts/types"
-import { dedupeRuntimeArtifacts, displayRuntimeArtifactFileName } from "./runtime/artifact-detector"
+import { selectFinalRuntimeArtifacts, displayRuntimeArtifactFileName } from "./runtime/artifact-detector"
 
 export type AiEntryConversationArtifact = {
   artifactId: number
@@ -51,5 +51,5 @@ export function buildConversationArtifactParts(value: unknown): ArtifactPart[] {
     })
     return parts
   }, [])
-  return dedupeRuntimeArtifacts(parts)
+  return selectFinalRuntimeArtifacts(parts)
 }

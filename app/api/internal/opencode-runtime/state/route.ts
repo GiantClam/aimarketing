@@ -1,8 +1,9 @@
+import { createHash } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 
 import type { RuntimeArtifactPayload } from "@/lib/ai-runtime/contracts"
 import { runtimeArtifactExtensions } from "@/lib/ai-entry/runtime/artifact-policy"
-import { validateRuntimeArtifactPayload } from "@/lib/ai-entry/runtime/artifact-detector"
+import { selectFinalRuntimeArtifacts, validateRuntimeArtifactPayload } from "@/lib/ai-entry/runtime/artifact-detector"
 import { buildRuntimeAssistantMessage } from "@/lib/ai-entry/runtime/assistant-message"
 import { appendAiEntryMessage, recordAiEntryRuntimeArtifactContext, recordAiEntryRuntimeProjectSnapshot } from "@/lib/ai-entry/repository"
 import { isRailwayRuntimeTerminal, platformTaskStatusFromRailway } from "@/lib/ai-entry/runtime/railway-task-status"
@@ -103,13 +104,26 @@ async function persistRailwayArtifact(input: {
   const currentTotalBytes = input.taskRun.artifacts.reduce((total, item) => total + (Number(asRecord(item.payload)?.runtimeSizeBytes) || 0), 0)
   const validated = validateRuntimeArtifactPayload(input.artifact, contract, currentTotalBytes)
   const buffer = Buffer.from(validated.contentBase64, "base64")
+  const checksumSha256 = createHash("sha256").update(validated.contentBase64, "base64").digest("hex")
+  const sameContent = input.taskRun.artifacts.find((item) => {
+    const payload = asRecord(item.payload)
+    return payload?.runtimeRunId === input.runtimeRunId && payload?.checksumSha256 === checksumSha256
+  })
+  if (sameContent) return artifactReferenceEvent(input.artifact as unknown as Record<string, unknown>, {
+    provider: sameContent.storageKey ? "r2" : "platform",
+    bucket: sameContent.storageKey ? (process.env.R2_BUCKET_NAME || "platform-artifacts") : "database",
+    key: sameContent.storageKey || `platform:${sameContent.id}`,
+    publicUrl: sameContent.externalUrl,
+    artifactId: sameContent.id,
+    checksumSha256,
+  })
   let storageKey: string | null = null
   let publicUrl: string | null = null
   let payload: Record<string, unknown> = {
     runtimeRunId: input.runtimeRunId,
     runtimePath: validated.path,
     runtimeSizeBytes: validated.sizeBytes,
-    checksumSha256: null,
+    checksumSha256,
     fileName: validated.fileName,
   }
   if (isPlatformArtifactR2Available()) {
@@ -155,6 +169,7 @@ async function persistRailwayArtifact(input: {
     key: storageKey || `platform:${saved.id}`,
     publicUrl,
     artifactId: saved.id,
+    checksumSha256,
   })
 }
 
@@ -179,13 +194,15 @@ async function syncRailwayTask(input: { runtimeRunId: string; status: OpenCodeRu
   }
   const allEvents = input.state.events.map((item) => asRecord(item.event)).filter((event): event is Record<string, unknown> => Boolean(event))
   const text = allEvents.filter((event) => event.event === "text_delta" && typeof event.delta === "string").map((event) => String(event.delta)).join("").slice(-200_000)
-  const artifactEvents = allEvents.filter((event) => event.event === "artifact_reference" && asRecord(event.artifact))
+  const artifactEvents = selectFinalRuntimeArtifacts(allEvents
+    .filter((event) => event.event === "artifact_reference" && asRecord(event.artifact))
+    .map((event) => asRecord(event.artifact) || {}))
   const taskInput = asRecord(platformRun.inputPayload) || {}
   const conversationId = typeof taskInput.conversationId === "string" ? taskInput.conversationId : null
   const terminalNow = isRailwayRuntimeTerminal(input.status)
   let assistantMessagePersisted = previous.assistantMessagePersisted === true
   if (input.status === "succeeded" && conversationId && !assistantMessagePersisted) {
-    const assistantMessage = buildRuntimeAssistantMessage(text, artifactEvents.map((event) => asRecord(event.artifact) || {}))
+    const assistantMessage = buildRuntimeAssistantMessage(text, artifactEvents)
     if (assistantMessage) {
       await appendAiEntryMessage({ userId: platformRun.userId, conversationId, role: "assistant", content: assistantMessage, idempotencyKey: `opencode:${input.runtimeRunId}:assistant`, agentId: typeof taskInput.agentId === "string" ? taskInput.agentId : null })
       assistantMessagePersisted = true

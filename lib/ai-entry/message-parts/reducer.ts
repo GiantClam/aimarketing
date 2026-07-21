@@ -13,7 +13,7 @@ import type {
   ValidationPart,
 } from "./types"
 import type { PptTemplateRecommendationContext } from "@/lib/ai-entry/ppt-tool-result-message"
-import { isInternalRuntimeArtifact, normalizeRuntimeArtifactFileName } from "@/lib/ai-entry/runtime/artifact-detector"
+import { isInternalRuntimeArtifact, normalizeRuntimeArtifactFileName, selectFinalRuntimeArtifacts } from "@/lib/ai-entry/runtime/artifact-detector"
 
 const REASONING_PART_ID = "reasoning"
 const TASK_PROGRESS_PART_ID = "task-progress"
@@ -76,6 +76,12 @@ function artifactFileKey(part: Pick<ArtifactPart, "fileName" | "title">) {
 }
 
 function upsertArtifactPart(parts: MessagePart[], artifact: ArtifactPart): MessagePart[] {
+  const artifactParts = parts.filter((part): part is ArtifactPart => part.type === "artifact")
+  const selectedArtifacts = selectFinalRuntimeArtifacts([...artifactParts, artifact])
+  if (selectedArtifacts.some((part) => part.artifactType === "pptx" || part.fileName?.toLowerCase().endsWith(".pptx"))) {
+    const selectedIds = new Set(selectedArtifacts.map((part) => part.id))
+    return parts.filter((part) => part.type !== "artifact" || selectedIds.has(part.id))
+  }
   const key = artifactFileKey(artifact)
   const incomingName = artifact.fileName || artifact.title || ""
   const incomingIsNamedPptx = incomingName.toLowerCase().endsWith(".pptx") && !isInternalRuntimeArtifact(incomingName)

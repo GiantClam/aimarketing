@@ -40,14 +40,39 @@ export function isInternalRuntimeArtifact(value: string) {
   return normalizeRuntimeArtifactFileName(value) === "result.pptx"
 }
 
-export function dedupeRuntimeArtifacts<T extends { path?: unknown; fileName?: unknown; title?: unknown }>(items: T[]) {
+type RuntimeArtifactSummary = {
+  title?: unknown
+  fileName?: unknown
+  path?: unknown
+  summary?: unknown
+  kind?: unknown
+  mimeType?: unknown
+  artifactType?: unknown
+  sizeBytes?: unknown
+}
+
+function artifactFileName<T extends RuntimeArtifactSummary>(item: T) {
+  const directName = typeof item.fileName === "string"
+    ? item.fileName
+    : typeof item.path === "string"
+      ? item.path
+      : ""
+  if (directName.trim()) return directName
+  if (typeof item.summary === "string") {
+    const summaryFileName = item.summary.match(/^(.+?)\s+\([^)]*\)$/u)?.[1]?.trim()
+    if (summaryFileName) return summaryFileName
+  }
+  return typeof item.title === "string" ? item.title : ""
+}
+
+export function dedupeRuntimeArtifacts<T extends RuntimeArtifactSummary>(items: T[]) {
   const hasNamedPptx = items.some((item) => {
-    const name = typeof item.fileName === "string" ? item.fileName : typeof item.path === "string" ? item.path : typeof item.title === "string" ? item.title : ""
+    const name = artifactFileName(item)
     return normalizeRuntimeArtifactFileName(name).endsWith(".pptx") && !isInternalRuntimeArtifact(name)
   })
   const selected = new Map<string, T>()
   for (const item of items) {
-    const rawName = typeof item.fileName === "string" ? item.fileName : typeof item.path === "string" ? item.path : typeof item.title === "string" ? item.title : ""
+    const rawName = artifactFileName(item)
     const normalizedName = normalizeRuntimeArtifactFileName(rawName)
     if (!normalizedName) continue
     if (hasNamedPptx && isInternalRuntimeArtifact(rawName)) continue
@@ -57,6 +82,41 @@ export function dedupeRuntimeArtifacts<T extends { path?: unknown; fileName?: un
     }
   }
   return [...selected.values()]
+}
+
+function isPptxArtifact<T extends RuntimeArtifactSummary>(item: T) {
+  const name = artifactFileName(item).toLowerCase()
+  const kind = typeof item.kind === "string" ? item.kind.toLowerCase() : ""
+  const mimeType = typeof item.mimeType === "string" ? item.mimeType.toLowerCase() : ""
+  const artifactType = typeof item.artifactType === "string" ? item.artifactType.toLowerCase() : ""
+  return name.endsWith(".pptx") || kind === "pptx" || artifactType === "pptx" || mimeType.includes("presentationml.presentation")
+}
+
+function finalArtifactScore<T extends RuntimeArtifactSummary>(item: T) {
+  const name = normalizeRuntimeArtifactFileName(artifactFileName(item))
+  let score = 0
+  if (/\b(?:final|output|export|generated|deliverable)\b|最终|成品|定稿|输出/u.test(name)) score += 100
+  if (isInternalRuntimeArtifact(name)) score -= 1000
+  const sizeBytes = typeof item.sizeBytes === "number" && Number.isFinite(item.sizeBytes) ? item.sizeBytes : 0
+  return { score, sizeBytes }
+}
+
+/** Keeps one final PPTX when a runtime also reports intermediate artifacts. */
+export function selectFinalRuntimeArtifacts<T extends RuntimeArtifactSummary>(items: T[]) {
+  const deduped = dedupeRuntimeArtifacts(items)
+  const pptx = deduped.filter(isPptxArtifact)
+  if (pptx.length === 0) return deduped
+
+  const namedPptx = pptx.filter((item) => !isInternalRuntimeArtifact(artifactFileName(item)))
+  const candidates = namedPptx.length > 0 ? namedPptx : pptx
+  const selected = candidates.reduce((best, item) => {
+    const currentScore = finalArtifactScore(item)
+    const bestScore = finalArtifactScore(best)
+    if (currentScore.score > bestScore.score) return item
+    if (currentScore.score === bestScore.score && currentScore.sizeBytes > bestScore.sizeBytes) return item
+    return best
+  })
+  return [selected]
 }
 
 function safeFileName(path: string) {

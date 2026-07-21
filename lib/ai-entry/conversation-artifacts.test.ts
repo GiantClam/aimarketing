@@ -11,10 +11,9 @@ test("maps persisted conversation artifacts to downloadable message parts", () =
     { artifactId: 533, title: "quality-check.svg", kind: "svg" },
   ])
 
-  assert.equal(parts.length, 2)
+  assert.equal(parts.length, 1)
   assert.equal(parts[0]?.artifactType, "pptx")
   assert.equal(parts[0]?.downloadUrl, "/api/platform/artifacts/531/download?download=1")
-  assert.equal(parts[1]?.previewUrl, "/api/platform/artifacts/532/download")
 })
 
 test("infers a Dashi PPTX from a persisted generic runtime artifact", () => {

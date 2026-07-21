@@ -1,6 +1,14 @@
+import { selectFinalRuntimeArtifacts } from "./artifact-detector"
+
 type RuntimeArtifactSummary = {
   title?: unknown
   fileName?: unknown
+  path?: unknown
+  summary?: unknown
+  kind?: unknown
+  mimeType?: unknown
+  artifactType?: unknown
+  sizeBytes?: unknown
 }
 
 export function buildRuntimeAssistantMessage(
@@ -10,7 +18,7 @@ export function buildRuntimeAssistantMessage(
   const normalizedText = text.trim()
   if (normalizedText) return normalizedText
 
-  const titles = artifacts
+  const titles = selectFinalRuntimeArtifacts(artifacts)
     .map((artifact) => {
       if (typeof artifact.title === "string" && artifact.title.trim()) return artifact.title.trim()
       if (typeof artifact.fileName === "string" && artifact.fileName.trim()) return artifact.fileName.trim()

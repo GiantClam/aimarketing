@@ -4,7 +4,7 @@ import { getCloudflareSessionEventTicket, getCloudflareSessionRun, subscribeClou
 import { getOpenCodeRuntimeRunByTaskRunId, getRailwayOpenCodeRuntimeState, updateOpenCodeRuntimeRun } from "@/lib/platform/opencode-runtime-store"
 import { appendPlatformRunEvent, getPlatformTaskRun, updatePlatformTaskRun } from "@/lib/platform/task-run-store"
 import { savePlatformArtifact } from "@/lib/platform/task-run-store"
-import { dedupeRuntimeArtifacts, validateRuntimeArtifactPayload, validateRuntimeArtifactReference } from "./artifact-detector"
+import { selectFinalRuntimeArtifacts, validateRuntimeArtifactPayload, validateRuntimeArtifactReference } from "./artifact-detector"
 import { filterTaskProgressEvents } from "./runtime-events"
 import { resolveRuntimeArtifactLimits, runtimeArtifactExtensions } from "./artifact-policy"
 import type { RuntimeArtifactPayload, RuntimeArtifactReference } from "@/lib/ai-runtime/contracts"
@@ -62,7 +62,7 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
   })
   const allowedArtifactExtensions = runtimeArtifactExtensions(taskInput.agentId, taskInput.selectedSkillIds)
   const conversationId = typeof taskInput.conversationId === "string" ? taskInput.conversationId : null
-  const artifacts = dedupeRuntimeArtifacts(events
+  const artifacts = selectFinalRuntimeArtifacts(events
     .filter((event) => (event.event === "artifact_reference" || event.event === "artifact_payload") && event.artifact)
     .map((event) => event.artifact as Record<string, unknown>))
   const assistantContent = buildRuntimeAssistantMessage(text, artifacts)
