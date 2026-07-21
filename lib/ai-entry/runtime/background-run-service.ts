@@ -30,10 +30,7 @@ export async function createBackgroundOpenCodeRun(input: {
     attachmentObjects: [],
     checkpoint: null,
   }
-  const runtimeProvider = process.env.OPENCODE_PROVIDER_PROXY_URL?.trim() && process.env.RUNTIME_PROXY_TOKEN?.trim()
-    ? { ...input.provider, apiKey: `proxy:${input.provider.providerId}` }
-    : input.provider
-  const request = { runId: input.runtimeInput.runId, sessionKey, input: v2Input, deadlineMs: 3_600_000 as const, provider: runtimeProvider }
+  const request = { runId: input.runtimeInput.runId, sessionKey, input: v2Input, deadlineMs: 3_600_000 as const, provider: input.provider }
   const backend = input.backend || "railway-opencode"
   const taskRun = await createPlatformTaskRun({
     enterpriseId: input.currentUser.enterpriseId,

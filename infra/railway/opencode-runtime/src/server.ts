@@ -23,9 +23,6 @@ const requestTimeoutMs = Number.parseInt(process.env.OPENCODE_RUN_TIMEOUT_MS || 
 const internalToken = process.env.OPENCODE_WORKER_INTERNAL_TOKEN?.trim() || ""
 const runtimeStateUrl = process.env.OPENCODE_RUNTIME_STATE_URL?.trim().replace(/\/+$/u, "") || ""
 const runtimeStateToken = process.env.RUNTIME_STATE_TOKEN?.trim() || process.env.OPENCODE_RUNTIME_STATE_TOKEN?.trim() || ""
-const providerProxyUrl = process.env.OPENCODE_PROVIDER_PROXY_URL?.trim().replace(/\/+$/u, "") || ""
-const providerProxyToken = process.env.RUNTIME_PROXY_TOKEN?.trim() || ""
-const allowDirectProvider = process.env.OPENCODE_ALLOW_DIRECT_PROVIDER?.trim().toLowerCase() === "true"
 const bundleVersion = process.env.OPENCODE_RUNTIME_BUNDLE_VERSION?.trim() || "runtime-bundle-v1"
 const residentOpenCode = new OpenCodeServeManager({
   runtimeDir,
@@ -91,21 +88,10 @@ async function persistRuntimeState(input: { runId: string; event?: AgentRuntimeE
   }).catch((error) => console.warn(JSON.stringify({ event: "opencode_runtime_state_write_failed", runId: input.runId, message: error instanceof Error ? error.message : String(error) })))
 }
 
-async function resolveProviderForRun(provider: OpenCodeProviderConfig, input: AgentRuntimeInput | AgentRuntimeInputV2): Promise<OpenCodeProviderConfig> {
-  if (!providerProxyUrl) {
-    if (process.env.NODE_ENV === "production" && !allowDirectProvider) throw new Error("provider_proxy_not_configured")
-    return provider
-  }
-  if (!providerProxyToken) throw new Error("provider_proxy_token_missing")
-  const response = await fetch(providerProxyUrl, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${providerProxyToken}`, "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ providerId: provider.providerId, modelId: provider.modelId, runId: input.runId, enterpriseId: input.enterpriseId }),
-    signal: AbortSignal.timeout(5_000),
-  }).catch((error) => { throw new Error(`provider_proxy_unreachable:${error instanceof Error ? error.message : String(error)}`) })
-  const payload = await response.json().catch(() => null) as Partial<OpenCodeProviderConfig> | null
-  if (!response.ok || !isValidOpenCodeProviderConfig(payload)) throw new Error(`provider_proxy_route_failed:${response.status}`)
-  return payload
+function resolveProviderForRun(provider: OpenCodeProviderConfig): OpenCodeProviderConfig {
+  // The authenticated application request is the source of truth. Do not
+  // rehydrate credentials from Railway or Vercel environment variables.
+  return provider
 }
 
 async function fetchExternalRuntimeState(runId: string) {
@@ -575,7 +561,7 @@ async function executeRun(
   try {
     await persistRuntimeState({ runId: input.runId, status: "running" })
     contextHashForInput(input)
-    const resolvedProvider = await resolveProviderForRun(provider, input)
+    const resolvedProvider = resolveProviderForRun(provider)
     const prepared = await prepareRunDirectory(input)
     runDir = prepared.runDir
     const { sessionDir, workingDir } = prepared

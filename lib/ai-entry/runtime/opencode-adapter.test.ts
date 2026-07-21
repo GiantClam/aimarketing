@@ -29,6 +29,32 @@ const input = {
 
 const provider = { providerId: "deepseek", modelId: "deepseek-v4-pro", baseUrl: "https://deepseek.example/v1", apiKey: "test-key" }
 
+test("Railway receives the application-selected provider credentials unchanged", async () => {
+  const requestProviders: unknown[] = []
+  const body = [
+    `data: ${JSON.stringify({ event: "done", runId: input.runId })}\n\n`,
+  ].join("")
+
+  for await (const event of runOpenCodeAgent(input, {
+    runnerUrl: "https://railway.example.com",
+    secret: "secret",
+    provider,
+    session: true,
+    fetchImpl: async (url, options) => {
+      const payload = JSON.parse(String(options?.body)) as { provider?: unknown }
+      requestProviders.push(payload.provider)
+      if (String(url).endsWith("/sessions/prepare")) {
+        return new Response(JSON.stringify({ prepared: true, sessionReady: true, sessionKey: "sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", bundleVersion: "runtime-bundle-v2" }), { status: 200 })
+      }
+      return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } })
+    },
+  })) {
+    assert.ok(event)
+  }
+
+  assert.deepEqual(requestProviders, [provider, provider])
+})
+
 test("Railway session runtime errors are propagated instead of becoming empty responses", async () => {
   const body = `data: ${JSON.stringify({ event: "runtime_error", code: "provider_proxy_route_failed", message: "provider_proxy_route_failed:404", retryable: true, runId: input.runId })}\n\n`
   const events: AgentRuntimeEvent[] = []

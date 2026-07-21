@@ -15,17 +15,6 @@ export type RunOpenCodeAgentOptions = {
   session?: boolean
 }
 
-function providerForRuntimeRequest(provider: NonNullable<RunOpenCodeAgentOptions["provider"]>) {
-  // In Railway deployments the runtime resolves the credential through the
-  // Provider Credential Proxy. The request carries only a non-secret marker;
-  // local development keeps the direct key path behind an explicit runtime
-  // configuration gate.
-  if (process.env.OPENCODE_PROVIDER_PROXY_URL?.trim() && process.env.RUNTIME_PROXY_TOKEN?.trim()) {
-    return { ...provider, apiKey: `proxy:${provider.providerId}` }
-  }
-  return provider
-}
-
 async function* streamCloudflareSession(
   input: AgentRuntimeInputV2,
   provider: OpenCodeProviderConfig,
@@ -57,7 +46,9 @@ async function* streamCloudflareSession(
 export async function* runOpenCodeAgent(input: AgentRuntimeInput, options: RunOpenCodeAgentOptions = {}): AsyncGenerator<AgentRuntimeEvent> {
   if (!options.provider) throw new Error("opencode_provider_required")
   const backend = options.backend || (options.railway === false ? "cloudflare-opencode-session" : "railway-opencode")
-  const runtimeProvider = providerForRuntimeRequest(options.provider)
+  // The application owns provider selection and credentials. Preserve the
+  // exact request-scoped config through both runtime transports.
+  const runtimeProvider = options.provider
   if (options.session) {
     const sessionKey = await buildAgentRuntimeSessionKey({ enterpriseId: input.enterpriseId, userId: input.userId, conversationId: input.conversationId, agentId: input.agentId })
     const sessionInput: AgentRuntimeInputV2 = {
