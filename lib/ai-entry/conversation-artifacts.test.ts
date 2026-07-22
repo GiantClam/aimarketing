@@ -13,7 +13,7 @@ test("maps persisted conversation artifacts to downloadable message parts", () =
 
   assert.equal(parts.length, 1)
   assert.equal(parts[0]?.artifactType, "pptx")
-  assert.equal(parts[0]?.downloadUrl, "/api/platform/artifacts/531/download?download=1")
+  assert.equal(parts[0]?.downloadUrl, "/api/platform/artifacts/532/download?download=1")
 })
 
 test("infers a Dashi PPTX from a persisted generic runtime artifact", () => {

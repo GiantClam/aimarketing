@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 
 import {
+  selectLatestFinalRuntimeArtifacts,
   selectFinalRuntimeArtifacts,
   validateRuntimeArtifactPayload,
   validateRuntimeArtifactReference,
@@ -77,4 +78,13 @@ test("uses the PPTX summary filename for persisted conversation artifacts", () =
   ])
 
   assert.deepEqual(selected.map((item) => item.artifactId), [2])
+})
+
+test("selects the newest named PPTX for conversation display", () => {
+  const selected = selectLatestFinalRuntimeArtifacts([
+    { fileName: "final-deck.pptx", kind: "pptx", createdAt: 100 },
+    { fileName: "new-deck.pptx", kind: "pptx", createdAt: 200 },
+  ])
+
+  assert.deepEqual(selected.map((item) => item.fileName), ["new-deck.pptx"])
 })

@@ -49,6 +49,7 @@ type RuntimeArtifactSummary = {
   mimeType?: unknown
   artifactType?: unknown
   sizeBytes?: unknown
+  createdAt?: unknown
 }
 
 function artifactFileName<T extends RuntimeArtifactSummary>(item: T) {
@@ -115,6 +116,24 @@ export function selectFinalRuntimeArtifacts<T extends RuntimeArtifactSummary>(it
     if (currentScore.score > bestScore.score) return item
     if (currentScore.score === bestScore.score && currentScore.sizeBytes > bestScore.sizeBytes) return item
     return best
+  })
+  return [selected]
+}
+
+/** Selects the newest deliverable for persisted conversation display. */
+export function selectLatestFinalRuntimeArtifacts<T extends RuntimeArtifactSummary>(items: T[]) {
+  const deduped = dedupeRuntimeArtifacts(items)
+  const pptx = deduped.filter(isPptxArtifact)
+  if (pptx.length === 0) return deduped
+
+  const namedPptx = pptx.filter((item) => !isInternalRuntimeArtifact(artifactFileName(item)))
+  const candidates = namedPptx.length > 0 ? namedPptx : pptx
+  const selected = candidates.reduce((best, item) => {
+    const bestCreatedAt = typeof best.createdAt === "number" && Number.isFinite(best.createdAt) ? best.createdAt : null
+    const itemCreatedAt = typeof item.createdAt === "number" && Number.isFinite(item.createdAt) ? item.createdAt : null
+    if (itemCreatedAt !== null && (bestCreatedAt === null || itemCreatedAt >= bestCreatedAt)) return item
+    if (itemCreatedAt === null && bestCreatedAt !== null) return best
+    return item
   })
   return [selected]
 }
