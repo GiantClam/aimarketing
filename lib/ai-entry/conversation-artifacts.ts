@@ -6,6 +6,7 @@ export type AiEntryConversationArtifact = {
   title: string
   kind: string
   summary?: string
+  createdAt?: number
 }
 
 function artifactType(input: AiEntryConversationArtifact): ArtifactPart["artifactType"] {
@@ -34,10 +35,12 @@ export function buildConversationArtifactParts(value: unknown): ArtifactPart[] {
     const kind = typeof record.kind === "string" ? record.kind : ""
     if (/^(?:svg|json)$/iu.test(kind) || /\.(?:svg|json)$/iu.test(title)) return parts
     const summary = typeof record.summary === "string" ? record.summary : undefined
+    const createdAt = typeof record.createdAt === "number" && Number.isFinite(record.createdAt) ? record.createdAt : undefined
     const type = artifactType({ artifactId, title, kind, summary })
     parts.push({
       type: "artifact",
       id: `artifact:${artifactId}`,
+      createdAt,
       artifactType: type,
       artifactId,
       title,

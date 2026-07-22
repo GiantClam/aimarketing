@@ -103,6 +103,7 @@ export type SourcePart = {
 export type ArtifactPart = {
   type: "artifact"
   id: string
+  createdAt?: number
   artifactType: "pptx" | "html" | "image" | "generic"
   artifactId: number | null
   title: string | null

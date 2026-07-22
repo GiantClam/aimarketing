@@ -80,7 +80,19 @@ function upsertArtifactPart(parts: MessagePart[], artifact: ArtifactPart): Messa
   const selectedArtifacts = selectFinalRuntimeArtifacts([...artifactParts, artifact])
   if (selectedArtifacts.some((part) => part.artifactType === "pptx" || part.fileName?.toLowerCase().endsWith(".pptx"))) {
     const selectedIds = new Set(selectedArtifacts.map((part) => part.id))
-    return parts.filter((part) => part.type !== "artifact" || selectedIds.has(part.id))
+    const next = parts.filter((part) => part.type !== "artifact" || selectedIds.has(part.id))
+    const incomingKey = artifactFileKey(artifact)
+    const matchingIndex = next.findIndex(
+      (part) => part.type === "artifact" && artifactFileKey(part) === incomingKey,
+    )
+    if (matchingIndex >= 0) {
+      next[matchingIndex] = artifact
+      return next
+    }
+    if (selectedArtifacts.some((part) => part.id === artifact.id || artifactFileKey(part) === incomingKey)) {
+      return [...next, artifact]
+    }
+    return next
   }
   const key = artifactFileKey(artifact)
   const incomingName = artifact.fileName || artifact.title || ""

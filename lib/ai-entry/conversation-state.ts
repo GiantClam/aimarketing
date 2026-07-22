@@ -17,6 +17,7 @@ export type AiEntryRuntimeArtifactContext = {
   title: string
   kind: string
   summary: string
+  createdAt?: number
 }
 
 function artifactFileName(value: Pick<AiEntryRuntimeArtifactContext, "title" | "summary">) {
@@ -68,8 +69,9 @@ export function normalizeAiEntryConversationState(value: unknown): AiEntryConver
         const title = typeof record.title === "string" ? record.title.trim().slice(0, 255) : ""
         const kind = typeof record.kind === "string" ? record.kind.trim().slice(0, 64) : ""
         const summary = typeof record.summary === "string" ? record.summary.trim().slice(0, 2_000) : ""
+        const createdAt = typeof record.createdAt === "number" && Number.isFinite(record.createdAt) ? Math.floor(record.createdAt) : undefined
         if (!artifactId || !title || !kind) return items
-        items.push({ artifactId, title, kind, summary })
+        items.push({ artifactId, title, kind, summary, createdAt })
         return items
       }, []).slice(-10))
     : []
@@ -194,9 +196,16 @@ export function appendAiEntryRuntimeArtifactContext(input: {
   }
 }) {
   const previousState = normalizeAiEntryConversationState(input.previousState)
+  const previousArtifact = previousState.artifacts?.find((item) => item.artifactId === input.artifact.artifactId)
   const merged = dedupeArtifacts([
     ...(previousState.artifacts || []).filter((item) => item.artifactId !== input.artifact.artifactId),
-    input.artifact,
+    {
+      ...input.artifact,
+      createdAt:
+        input.artifact.createdAt ??
+        previousArtifact?.createdAt ??
+        Math.floor(Date.now() / 1000),
+    },
   ])
   const primaryArtifacts = merged
     .filter((item) => ["pptx", "html", "pdf"].includes(item.kind.toLowerCase()))

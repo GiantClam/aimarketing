@@ -35,6 +35,7 @@ import {
 } from "@/lib/ai-entry/message-parts/reducer"
 import type { ArtifactPart, MessagePart } from "@/lib/ai-entry/message-parts/types"
 import { buildConversationArtifactParts } from "@/lib/ai-entry/conversation-artifacts"
+import { attachConversationArtifacts } from "@/lib/ai-entry/conversation-artifact-placement"
 import {
   isPendingAssistantTaskStoreStorageKey,
   listAiEntryPendingTasks,
@@ -284,6 +285,7 @@ type MessageApiResponse = {
       title?: string
       kind?: string
       summary?: string
+      createdAt?: number
     }>
     ppt?: {
       phase?: "idle" | "preview-ready" | "preview-invalidated" | "exported"
@@ -855,9 +857,6 @@ function attachTaskRunsToMessages(messages: ChatMessage[], taskRuns: MessageApiT
   if (taskRuns.length === 0 && conversationArtifacts.length === 0) return messages
 
   const taskRunMap = new Map(taskRuns.map((taskRun) => [taskRun.task_id, taskRun] as const))
-  const latestSuccessfulTask = taskRuns
-    .filter((taskRun) => taskRun.task_type === "opencode_agent_run" && taskRun.status === "success")
-    .sort((left, right) => right.updated_at - left.updated_at)[0] || null
   const attachedTaskRunIds = new Set<string>()
   const mappedMessages = messages.map((message) => {
     if (message.role !== "assistant") return message
@@ -900,33 +899,10 @@ function attachTaskRunsToMessages(messages: ChatMessage[], taskRuns: MessageApiT
       ],
     }))
 
-  if (latestSuccessfulTask && conversationArtifacts.length > 0) {
-    const latestAssistantIndex = [...mappedMessages]
-      .map((message, index) => ({ message, index }))
-      .reverse()
-      .find(({ message }) => message.role === "assistant" && Boolean(message.content.trim()))?.index
-    if (latestAssistantIndex !== undefined) {
-      const message = mappedMessages[latestAssistantIndex]
-      mappedMessages[latestAssistantIndex] = {
-        ...message,
-        parts: [...(message.parts || []), ...conversationArtifacts],
-      }
-    }
-  }
-
   const nextMessages = normalizeConversationMessageOrder(
     [...mappedMessages, ...syntheticTaskRunMessages],
   )
-  if (conversationArtifacts.length > 0 && !latestSuccessfulTask) {
-    nextMessages.push({
-      id: "conversation-artifacts",
-      role: "assistant",
-      content: "",
-      createdAt: Math.floor(Date.now() / 1000),
-      parts: conversationArtifacts,
-    })
-  }
-  return nextMessages
+  return attachConversationArtifacts(nextMessages, conversationArtifacts)
 }
 
 function saveAiEntryPendingTasks(taskRuns: MessageApiTaskRun[], fallback: {

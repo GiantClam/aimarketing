@@ -173,7 +173,7 @@ test("runtime artifact context keeps PPTX artifacts ahead of internal files", ()
 test("runtime PPTX publication marks the conversation as exported", () => {
   const next = appendAiEntryRuntimeArtifactContext({
     previousState: { ppt: { latestPreview: null, latestExport: null, phase: "idle" } },
-    artifact: { artifactId: 42, title: "deck.pptx", kind: "pptx", summary: "deck.pptx" },
+    artifact: { artifactId: 42, title: "deck.pptx", kind: "pptx", summary: "deck.pptx", createdAt: 123 },
     exportContext: { previewSessionId: "runtime-run-42" },
   })
 
@@ -186,6 +186,7 @@ test("runtime PPTX publication marks the conversation as exported", () => {
     },
     phase: "exported",
   })
+  assert.equal(next.artifacts?.[0]?.createdAt, 123)
 })
 
 test("runtime artifact context deduplicates files by basename", () => {
