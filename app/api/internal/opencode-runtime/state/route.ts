@@ -66,9 +66,11 @@ function artifactReferenceEvent(artifact: Record<string, unknown>, reference: Re
       bucket: reference.bucket || "platform-artifacts",
       key: reference.key || `platform:${reference.artifactId || "unknown"}`,
       publicUrl: reference.publicUrl || null,
-      fileName: typeof artifact.path === "string"
-        ? displayRuntimeArtifactFileName(artifact.path.replace(/^artifacts\//u, ""))
-        : typeof artifact.title === "string" && artifact.title.trim() ? displayRuntimeArtifactFileName(artifact.title) : "artifact",
+      fileName: typeof artifact.fileName === "string" && artifact.fileName.trim()
+        ? displayRuntimeArtifactFileName(artifact.fileName)
+        : typeof artifact.path === "string"
+          ? displayRuntimeArtifactFileName(artifact.path.replace(/^artifacts\//u, ""))
+          : typeof artifact.title === "string" && artifact.title.trim() ? displayRuntimeArtifactFileName(artifact.title) : "artifact",
       title: typeof artifact.title === "string" ? artifact.title : "OpenCode artifact",
       kind: typeof artifact.kind === "string" ? artifact.kind : "file",
       mimeType: typeof artifact.mimeType === "string" ? artifact.mimeType : "application/octet-stream",
@@ -173,6 +175,102 @@ async function persistRailwayArtifact(input: {
   })
 }
 
+function normalizeRailwayArtifactReference(artifact: Record<string, unknown>, contract: ReturnType<typeof artifactContractForRun>) {
+  const provider = typeof artifact.provider === "string" ? artifact.provider.trim() : ""
+  const bucket = typeof artifact.bucket === "string" ? artifact.bucket.trim() : ""
+  const key = typeof artifact.key === "string" ? artifact.key.trim() : ""
+  if (provider !== "r2" || !bucket || !key || key.startsWith("/") || key.includes("\\") || key.includes("../") || key.includes("/./")) {
+    throw new Error("runtime_artifact_reference_invalid")
+  }
+
+  const mimeType = typeof artifact.mimeType === "string" && artifact.mimeType.trim()
+    ? artifact.mimeType.trim()
+    : "application/octet-stream"
+  let fileName = typeof artifact.fileName === "string" && artifact.fileName.trim()
+    ? displayRuntimeArtifactFileName(artifact.fileName)
+    : typeof artifact.title === "string" && artifact.title.trim()
+      ? displayRuntimeArtifactFileName(artifact.title)
+      : "artifact"
+  if (!fileName.includes(".") && mimeType === "application/vnd.openxmlformats-officedocument.presentationml.presentation") fileName = `${fileName}.pptx`
+  const extension = fileName.includes(".") ? fileName.split(".").at(-1)!.toLowerCase() : ""
+  const allowedExtensions = new Set(contract.allowedExtensions.map((value) => value.replace(/^\./u, "").toLowerCase()))
+  if (!extension || !allowedExtensions.has(extension)) throw new Error("runtime_artifact_extension_not_allowed")
+
+  const sizeBytes = typeof artifact.sizeBytes === "number" ? artifact.sizeBytes : Number(artifact.sizeBytes)
+  if (!Number.isInteger(sizeBytes) || sizeBytes < 0 || sizeBytes > contract.maxArtifactBytes) throw new Error("runtime_artifact_size_exceeded")
+  const title = typeof artifact.title === "string" && artifact.title.trim()
+    ? displayRuntimeArtifactFileName(artifact.title).slice(0, 255)
+    : fileName
+  const publicUrl = typeof artifact.publicUrl === "string" && artifact.publicUrl.trim() ? artifact.publicUrl.trim() : null
+  const checksumSha256 = typeof artifact.checksumSha256 === "string" && artifact.checksumSha256.trim() ? artifact.checksumSha256.trim() : null
+  return { provider, bucket, key, publicUrl, fileName, title, kind: typeof artifact.kind === "string" && artifact.kind.trim() ? artifact.kind.trim().slice(0, 64) : "file", mimeType, sizeBytes, checksumSha256, extension }
+}
+
+async function persistRailwayArtifactReference(input: {
+  runtimeRunId: string
+  taskRun: Awaited<ReturnType<typeof getPlatformTaskRun>>
+  artifact: Record<string, unknown>
+}) {
+  if (!input.taskRun) throw new Error("opencode_runtime_task_run_not_found")
+  const taskInput = asRecord(input.taskRun.inputPayload) || {}
+  const contract = artifactContractForRun(taskInput, typeof taskInput.agentId === "string" ? taskInput.agentId : null)
+  const validated = normalizeRailwayArtifactReference(input.artifact, contract)
+  const existing = input.taskRun.artifacts.find((item) => {
+    const payload = asRecord(item.payload)
+    return payload?.runtimeRunId === input.runtimeRunId && (
+      item.storageKey === validated.key ||
+      payload?.storageKey === validated.key ||
+      Boolean(validated.checksumSha256) && payload?.checksumSha256 === validated.checksumSha256
+    )
+  })
+  if (existing) return artifactReferenceEvent({ ...input.artifact, fileName: validated.fileName, title: validated.title }, {
+    provider: "r2",
+    bucket: validated.bucket,
+    key: validated.key,
+    publicUrl: existing.externalUrl || validated.publicUrl,
+    artifactId: existing.id,
+    checksumSha256: validated.checksumSha256,
+  })
+
+  const saved = await savePlatformArtifact({
+    runId: input.taskRun.id,
+    enterpriseId: input.taskRun.enterpriseId,
+    ownerUserId: input.taskRun.userId,
+    kind: "file",
+    title: validated.title,
+    mimeType: validated.mimeType,
+    storageKey: validated.key,
+    externalUrl: validated.publicUrl,
+    payload: {
+      runtimeRunId: input.runtimeRunId,
+      runtimePath: `artifacts/${validated.fileName}`,
+      fileName: validated.fileName,
+      runtimeSizeBytes: validated.sizeBytes,
+      checksumSha256: validated.checksumSha256,
+      source: "opencode-railway",
+    },
+    source: "chat",
+  })
+  const conversationId = typeof taskInput.conversationId === "string" ? taskInput.conversationId : null
+  if (conversationId) {
+    await recordAiEntryRuntimeArtifactContext({
+      userId: input.taskRun.userId,
+      conversationId,
+      agentId: typeof taskInput.agentId === "string" ? taskInput.agentId : null,
+      artifact: { artifactId: saved.id, title: saved.title, kind: validated.extension, summary: `${validated.fileName} (${validated.mimeType})` },
+      ...(validated.extension === "pptx" ? { exportContext: { previewSessionId: input.runtimeRunId } } : {}),
+    }).catch(() => undefined)
+  }
+  return artifactReferenceEvent({ ...input.artifact, fileName: validated.fileName, title: validated.title }, {
+    provider: "r2",
+    bucket: validated.bucket,
+    key: validated.key,
+    publicUrl: validated.publicUrl,
+    artifactId: saved.id,
+    checksumSha256: validated.checksumSha256,
+  })
+}
+
 async function syncRailwayTask(input: { runtimeRunId: string; status: OpenCodeRuntimeRunStatus; state: Awaited<ReturnType<typeof getRailwayOpenCodeRuntimeState>> }) {
   if (!input.state) return
   const runtimeRun = await getOpenCodeRuntimeRunByRuntimeId(input.runtimeRunId)
@@ -197,12 +295,23 @@ async function syncRailwayTask(input: { runtimeRunId: string; status: OpenCodeRu
   const artifactEvents = selectFinalRuntimeArtifacts(allEvents
     .filter((event) => event.event === "artifact_reference" && asRecord(event.artifact))
     .map((event) => asRecord(event.artifact) || {}))
+  const normalizedArtifactEvents: Array<Record<string, unknown>> = []
+  for (const artifact of artifactEvents) {
+    normalizedArtifactEvents.push(await persistRailwayArtifactReference({
+      runtimeRunId: input.runtimeRunId,
+      taskRun: platformRun,
+      artifact,
+    }))
+  }
+  const persistedArtifacts = selectFinalRuntimeArtifacts(normalizedArtifactEvents
+    .map((event) => asRecord(event.artifact))
+    .filter((artifact): artifact is Record<string, unknown> => Boolean(artifact)))
   const taskInput = asRecord(platformRun.inputPayload) || {}
   const conversationId = typeof taskInput.conversationId === "string" ? taskInput.conversationId : null
   const terminalNow = isRailwayRuntimeTerminal(input.status)
   let assistantMessagePersisted = previous.assistantMessagePersisted === true
   if (input.status === "succeeded" && conversationId && !assistantMessagePersisted) {
-    const assistantMessage = buildRuntimeAssistantMessage(text, artifactEvents)
+    const assistantMessage = buildRuntimeAssistantMessage(text, persistedArtifacts)
     if (assistantMessage) {
       await appendAiEntryMessage({ userId: platformRun.userId, conversationId, role: "assistant", content: assistantMessage, idempotencyKey: `opencode:${input.runtimeRunId}:assistant`, agentId: typeof taskInput.agentId === "string" ? taskInput.agentId : null })
       assistantMessagePersisted = true
@@ -231,7 +340,7 @@ async function syncRailwayTask(input: { runtimeRunId: string; status: OpenCodeRu
     assistantMessagePersisted,
     runtimeText: assistantMessagePersisted ? undefined : text,
     billingFinalized,
-    artifacts: artifactEvents.length,
+    artifacts: persistedArtifacts.length,
     events: normalizedEvents,
     stage: input.status === "queued" ? "runtime_queued" : input.status === "succeeded" ? "runtime_publishing" : terminalNow ? "runtime_failed" : "runtime_running",
     lastHeartbeatAt: Math.floor(Date.now() / 1000),
