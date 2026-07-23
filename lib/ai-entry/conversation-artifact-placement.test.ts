@@ -35,6 +35,20 @@ test("把全局 artifact 挂回包含文件名的原 assistant 消息", () => {
   assert.equal(next.find((message) => message.id === "4")?.parts, undefined)
 })
 
+test("同一文件名出现在进度消息和交付消息时，artifact 挂到最近的交付消息", () => {
+  const messages: Array<{ id: string; role: "user" | "assistant"; content: string; createdAt: number; parts?: MessagePart[] }> = [
+    { id: "1", role: "assistant" as const, content: "正在检查 final-deck.pptx 的导出状态", createdAt: 100 },
+    { id: "2", role: "assistant" as const, content: "最新 PPTX 已重新导出：final-deck.pptx", createdAt: 205 },
+    { id: "3", role: "assistant" as const, content: "如果需要，我还可以继续修改 final-deck.pptx", createdAt: 1000 },
+  ]
+
+  const next = attachConversationArtifacts(messages, [artifact({ createdAt: 200 })])
+
+  assert.equal(next.find((message) => message.id === "2")?.parts?.[0]?.type, "artifact")
+  assert.equal(next.find((message) => message.id === "1")?.parts, undefined)
+  assert.equal(next.find((message) => message.id === "3")?.parts, undefined)
+})
+
 test("没有可匹配消息时，artifact 消息使用稳定时间而不是最新消息时间", () => {
   const messages: Array<{ id: string; role: "user" | "assistant"; content: string; createdAt: number; parts?: MessagePart[] }> = [
     { id: "1", role: "user" as const, content: "生成 PPT", createdAt: 10 },

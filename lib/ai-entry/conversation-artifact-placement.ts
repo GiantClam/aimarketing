@@ -22,14 +22,25 @@ function findArtifactMessageIndex(messages: ArtifactMessage[], artifact: Artifac
 
   let bestIndex = -1
   let bestScore = 0
+  let bestDistance = Number.POSITIVE_INFINITY
+  const artifactCreatedAt = typeof artifact.createdAt === "number" && Number.isFinite(artifact.createdAt)
+    ? artifact.createdAt
+    : null
   messages.forEach((message, index) => {
     if (message.role !== "assistant") return
     const content = message.content.toLowerCase()
     const score =
       (fileNameToken && content.includes(fileNameToken) ? 2 : 0) +
       (titleToken && titleToken !== fileNameToken && content.includes(titleToken) ? 1 : 0)
-    if (score > bestScore) {
+    const messageCreatedAt = typeof message.createdAt === "number" && Number.isFinite(message.createdAt)
+      ? message.createdAt
+      : null
+    const distance = artifactCreatedAt !== null && messageCreatedAt !== null
+      ? Math.abs(messageCreatedAt - artifactCreatedAt)
+      : Number.POSITIVE_INFINITY
+    if (score > bestScore || (score > 0 && score === bestScore && distance < bestDistance)) {
       bestScore = score
+      bestDistance = distance
       bestIndex = index
     }
   })
