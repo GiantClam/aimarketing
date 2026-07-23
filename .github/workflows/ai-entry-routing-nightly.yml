@@ -7,29 +7,47 @@ on:
 
 jobs:
   routing-nightly:
-    if: ${{ secrets.DATABASE_URL != '' || secrets.POSTGRES_URL != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
+      - name: Check database configuration
+        id: database-config
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+        shell: bash
+        run: |
+          if [[ -n "${DATABASE_URL:-}" || -n "${POSTGRES_URL:-}" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping AI entry routing nightly check because no database secret is configured."
+          fi
+
       - name: Checkout
+        if: steps.database-config.outputs.available == 'true'
         uses: actions/checkout@v4
 
       - name: Setup Node
+        if: steps.database-config.outputs.available == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: "pnpm"
 
       - name: Setup pnpm
+        if: steps.database-config.outputs.available == 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 10
 
       - name: Install dependencies
+        if: steps.database-config.outputs.available == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Run AI entry routing nightly check
+        if: steps.database-config.outputs.available == 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
@@ -41,7 +59,7 @@ jobs:
         run: pnpm test:ai-entry:routing-nightly
 
       - name: Upload nightly routing report
-        if: always()
+        if: always() && steps.database-config.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ai-entry-routing-nightly-report

@@ -24,6 +24,19 @@ jobs:
           python -m pip install playwright requests
           python -m playwright install --with-deps chromium
 
+      - name: Check Dify regression configuration
+        id: dify-config
+        env:
+          TEST_DIFY_SESSION_COOKIE: ${{ secrets.TEST_DIFY_SESSION_COOKIE }}
+        shell: bash
+        run: |
+          if [[ -n "${TEST_DIFY_SESSION_COOKIE:-}" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping Dify advisor regression because no session cookie is configured."
+          fi
+
       - name: Run deployed browser regression
         env:
           BASE_URL: ${{ secrets.TEST_BASE_URL }}
@@ -35,7 +48,7 @@ jobs:
         run: python tests/deployed-e2e.py
 
       - name: Run Dify advisor regression
-        if: ${{ secrets.TEST_DIFY_SESSION_COOKIE != '' }}
+        if: steps.dify-config.outputs.available == 'true'
         env:
           BASE_URL: ${{ secrets.TEST_BASE_URL }}
           TEST_DIFY_SESSION_COOKIE: ${{ secrets.TEST_DIFY_SESSION_COOKIE }}
