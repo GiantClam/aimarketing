@@ -3,16 +3,22 @@ import test from "node:test"
 
 import { createWorkflowSaveCoordinator } from "./workflow-save-coordinator"
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+  return { promise, resolve }
+}
+
 test("workflow save coordinator coalesces duplicate in-flight snapshots", async () => {
   const coordinator = createWorkflowSaveCoordinator<string>()
   const calls: string[] = []
-  let release: ((value: string) => void) | null = null
+  const firstSave = deferred<string>()
 
   const first = coordinator.run("snapshot-a", () => {
     calls.push("save-a")
-    return new Promise<string>((resolve) => {
-      release = resolve
-    })
+    return firstSave.promise
   })
   const second = coordinator.run("snapshot-a", () => {
     calls.push("save-a-duplicate")
@@ -22,7 +28,7 @@ test("workflow save coordinator coalesces duplicate in-flight snapshots", async 
   assert.equal(first, second)
   assert.deepEqual(calls, ["save-a"])
 
-  release?.("saved-a")
+  firstSave.resolve("saved-a")
   assert.equal(await first, "saved-a")
   assert.equal(await second, "saved-a")
 })
@@ -30,13 +36,11 @@ test("workflow save coordinator coalesces duplicate in-flight snapshots", async 
 test("workflow save coordinator serializes newer snapshots after the active save", async () => {
   const coordinator = createWorkflowSaveCoordinator<string>()
   const calls: string[] = []
-  let releaseFirst: ((value: string) => void) | null = null
+  const firstSave = deferred<string>()
 
   const first = coordinator.run("snapshot-a", () => {
     calls.push("save-a")
-    return new Promise<string>((resolve) => {
-      releaseFirst = resolve
-    })
+    return firstSave.promise
   })
   const second = coordinator.run("snapshot-b", async () => {
     calls.push("save-b")
@@ -44,7 +48,7 @@ test("workflow save coordinator serializes newer snapshots after the active save
   })
 
   assert.deepEqual(calls, ["save-a"])
-  releaseFirst?.("saved-a")
+  firstSave.resolve("saved-a")
 
   assert.equal(await first, "saved-a")
   assert.equal(await second, "saved-b")

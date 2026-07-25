@@ -6,6 +6,9 @@ import {
   buildTaskCenterTasks,
   filterTaskCenterTasks,
   formatDuration,
+  getLocalizedSourceLabel,
+  getLocalizedStatusLabel,
+  getLocalizedTaskName,
   getRunId,
   type WorkspaceTaskCenterItem,
 } from "@/lib/platform/task-center-view"
@@ -106,4 +109,17 @@ test("filterTaskCenterTasks filters by task query and latest task status", () =>
 test("formatDuration keeps task duration display stable", () => {
   assert.equal(formatDuration(305000), "00:05:05")
   assert.equal(formatDuration(null), "00:00:00")
+})
+
+test("task center labels localize common video task states and names", () => {
+  const task = buildTaskCenterTasks(
+    buildNormalizedRuns([
+      makeRun({ kind: "media", itemType: "capability", itemSlug: "text-to-video" }),
+    ]),
+  )[0]!
+
+  assert.equal(getLocalizedTaskName(task, "zh"), "文生视频")
+  assert.equal(getLocalizedStatusLabel("succeeded", "zh"), "已完成")
+  assert.equal(getLocalizedSourceLabel("media", "zh"), "媒体")
+  assert.equal(getLocalizedTaskName(task, "en"), "Text To Video")
 })

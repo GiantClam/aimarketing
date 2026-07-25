@@ -85,10 +85,40 @@ test("model registry exposes RunningHub seedance mini video models", () => {
   assert.equal(imageModel?.providerMetadata?.nativeModel, "seedance-mini-image-to-video")
 })
 
+test("model registry exposes RunningHub Seedance Pro text and image video models", () => {
+  const textModel = getModelDefinition("runninghub:video:seedance-pro-text-to-video")
+  const imageModel = getModelDefinition("runninghub:video:seedance-pro-image-to-video")
+
+  assert.equal(textModel?.provider, "runninghub")
+  assert.equal(textModel?.capability, "video.text_to_video")
+  assert.equal(textModel?.providerMetadata?.nativeModel, "seedance-pro-text-to-video")
+
+  assert.equal(imageModel?.provider, "runninghub")
+  assert.equal(imageModel?.capability, "video.image_to_video")
+  assert.equal(imageModel?.providerMetadata?.nativeModel, "seedance-pro-image-to-video")
+})
+
+test("model registry exposes only the supported MiniMax video models", () => {
+  const videoModels = listModels()
+    .filter((model) => model.provider === "minimax" && model.outputKind === "video")
+    .map((model) => model.providerMetadata?.nativeModel)
+
+  assert.deepEqual(videoModels, [
+    "MiniMax-Hailuo-2.3",
+    "MiniMax-Hailuo-2.3",
+    "MiniMax-Hailuo-2.3-Fast",
+  ])
+  assert.equal(getModelDefinition("minimax:video:text-to-video:MiniMax-Hailuo-02-Pro"), null)
+  assert.equal(getModelDefinition("minimax:video:text-to-video:T2V-01"), null)
+})
+
 test("model registry exposes Bailian Qwen Image and HappyHorse models", () => {
   const qwenText = getModelDefinition("bailian:image:qwen-image-3.0-pro")
   const qwenEdit = getModelDefinition("bailian:image:qwen-image-2.7-edit")
   const happyHorse = getModelDefinition("bailian:video:happyhorse-1.1-t2v")
+  const happyHorseImage = getModelDefinition("bailian:video:happyhorse-1.1-i2v")
+  const happyHorseReference = getModelDefinition("bailian:video:happyhorse-1.1-r2v")
+  const happyHorseEdit = getModelDefinition("bailian:video:happyhorse-1.0-video-edit")
 
   assert.equal(qwenText?.provider, "bailian")
   assert.equal(qwenText?.capability, "image.text_to_image")
@@ -97,6 +127,9 @@ test("model registry exposes Bailian Qwen Image and HappyHorse models", () => {
   assert.equal(qwenEdit?.providerMetadata?.nativeModel, "qwen-image-2.7")
   assert.equal(happyHorse?.capability, "video.text_to_video")
   assert.equal(happyHorse?.providerMetadata?.nativeModel, "happyhorse-1.1-t2v")
+  assert.equal(happyHorseImage?.capability, "video.image_to_video")
+  assert.equal(happyHorseReference?.capability, "video.reference_to_video")
+  assert.equal(happyHorseEdit?.capability, "video.video_edit")
 })
 
 test("image model aliases resolve the parameter schema used by the assistant", () => {

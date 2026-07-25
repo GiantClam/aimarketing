@@ -22,5 +22,6 @@ export function isBailianConfigured(config = getBailianConfig()) {
 }
 
 export function buildBailianUrl(baseUrl: string, path: string) {
-  return `${baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "").replace(/\/compatible-mode\/v1$/i, "")
+  return `${normalizedBaseUrl}/${path.replace(/^\/+/, "")}`
 }

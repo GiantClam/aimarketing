@@ -9,7 +9,13 @@ export type BillingFeatureKey =
   | "video_generation"
 
 export type GptImage2Quality = "low" | "medium" | "high"
-export type VideoBillingFeatureId = "text-to-video" | "image-to-video" | "digital-human" | "video-enhance"
+export type VideoBillingFeatureId =
+  | "text-to-video"
+  | "image-to-video"
+  | "reference-to-video"
+  | "video-edit"
+  | "digital-human"
+  | "video-enhance"
 
 export type CostEstimate = {
   featureKey: BillingFeatureKey
@@ -56,6 +62,8 @@ const GPT_IMAGE_2_OUTPUT_COSTS_USD: Record<string, Partial<Record<GptImage2Quali
 const DEFAULT_VIDEO_USD_PER_SECOND: Record<VideoBillingFeatureId, number> = {
   "text-to-video": 0.08,
   "image-to-video": 0.08,
+  "reference-to-video": 0.08,
+  "video-edit": 0.08,
   "digital-human": 0.12,
   "video-enhance": 0.04,
 }
@@ -66,7 +74,13 @@ function readPositiveNumberEnv(name: string, fallback: number) {
 }
 
 function normalizeVideoFeatureId(value: unknown): VideoBillingFeatureId {
-  if (value === "image-to-video" || value === "digital-human" || value === "video-enhance") return value
+  if (
+    value === "image-to-video" ||
+    value === "reference-to-video" ||
+    value === "video-edit" ||
+    value === "digital-human" ||
+    value === "video-enhance"
+  ) return value
   return "text-to-video"
 }
 

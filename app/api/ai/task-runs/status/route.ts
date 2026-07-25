@@ -59,7 +59,9 @@ export async function POST(request: NextRequest) {
               createdAt: task.createdAt,
               updatedAt: task.updatedAt,
               startedAt: task.startedAt,
-              finishedAt: task.finishedAt,
+              finishedAt: ["success", "failed", "approved", "rejected"].includes(task.status || "")
+                ? task.updatedAt
+                : null,
             })
           : null,
       )

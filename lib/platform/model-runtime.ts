@@ -13,6 +13,8 @@ type MediaFeatureId =
   | "voice-synthesis"
   | "text-to-video"
   | "image-to-video"
+  | "reference-to-video"
+  | "video-edit"
   | "digital-human"
 
 function normalizeText(value: unknown) {
@@ -25,7 +27,12 @@ export function resolveMediaFeatureId(target: MediaTarget, value: unknown): Medi
     if (normalized === "voice-clone" || normalized === "voice-synthesis") return normalized
     return "ai-music"
   }
-  if (normalized === "image-to-video" || normalized === "digital-human") return normalized
+  if (
+    normalized === "image-to-video" ||
+    normalized === "reference-to-video" ||
+    normalized === "video-edit" ||
+    normalized === "digital-human"
+  ) return normalized
   return "text-to-video"
 }
 
@@ -36,6 +43,8 @@ export function resolveCapabilityForMediaFeature(target: MediaTarget, featureId:
     return "audio.generate"
   }
   if (featureId === "image-to-video") return "video.image_to_video"
+  if (featureId === "reference-to-video") return "video.reference_to_video"
+  if (featureId === "video-edit") return "video.video_edit"
   if (featureId === "digital-human") return "video.digital_human"
   return "video.text_to_video"
 }
@@ -130,6 +139,8 @@ function resolveCapabilityFromRun(run: Pick<PlatformTaskRunRecord, "itemSlug">):
   if (run.itemSlug === "voice-synthesis") return "audio.voice_synthesis"
   if (run.itemSlug === "ai-music") return "audio.generate"
   if (run.itemSlug === "image-to-video") return "video.image_to_video"
+  if (run.itemSlug === "reference-to-video") return "video.reference_to_video"
+  if (run.itemSlug === "video-edit") return "video.video_edit"
   if (run.itemSlug === "digital-human") return "video.digital_human"
   if (run.itemSlug === "text-to-video" || run.itemSlug === "ai-video") return "video.text_to_video"
   return null

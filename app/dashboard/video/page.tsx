@@ -18,6 +18,8 @@ function normalizeInitialFeatureId(value: string | string[] | undefined): Capabi
   if (
     raw === "text-to-video" ||
     raw === "image-to-video" ||
+    raw === "reference-to-video" ||
+    raw === "video-edit" ||
     raw === "digital-human" ||
     raw === "video-enhance"
   ) {

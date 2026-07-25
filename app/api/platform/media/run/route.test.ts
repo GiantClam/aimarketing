@@ -430,7 +430,7 @@ test("platform media text-to-video submits through the unified runtime facade", 
       featureId: "text-to-video",
       params: {
         prompt: "Launch film",
-        model: "minimax:video:text-to-video:MiniMax-Hailuo-02-Pro",
+        model: "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
       },
     }),
   })
@@ -438,7 +438,7 @@ test("platform media text-to-video submits through the unified runtime facade", 
   assert.equal(response.status, 200)
   assert.equal(executeMediaCapabilityCalls.length, 1)
   assert.equal(executeMediaCapabilityCalls[0]?.featureId, "text-to-video")
-  assert.equal(executeMediaCapabilityCalls[0]?.modelId, "minimax:video:text-to-video:MiniMax-Hailuo-02-Pro")
+  assert.equal(executeMediaCapabilityCalls[0]?.modelId, "minimax:video:text-to-video:MiniMax-Hailuo-2.3")
   assert.equal(reserveFeatureCreditsCalls.length, 1)
   assert.equal(reserveFeatureCreditsCalls[0]?.featureKey, "video_generation")
   assert.equal(reserveFeatureCreditsCalls[0]?.amount, 240)

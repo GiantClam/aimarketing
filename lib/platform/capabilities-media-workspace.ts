@@ -13,6 +13,8 @@ export type CapabilityMediaWorkspaceFeatureId =
   | "voice-synthesis"
   | "text-to-video"
   | "image-to-video"
+  | "reference-to-video"
+  | "video-edit"
   | "digital-human"
   | "video-enhance"
 
@@ -110,17 +112,24 @@ const GROUPS: CapabilityMediaWorkspaceGroupDefinition[] = [
     id: "video-processing",
     title: { zh: "视频处理", en: "Video Processing" },
     description: {
-      zh: "支持文生视频、图生视频、口播数字人和视频高清化，统一在一个视频工作台完成。",
-      en: "Handle text-to-video, image-to-video, digital human, and video enhancement tasks in one video workspace.",
+      zh: "支持文生视频、图生视频、参考生视频、视频编辑、口播数字人和视频高清化，统一在一个视频工作台完成。",
+      en: "Handle text-to-video, image-to-video, reference-to-video, video editing, digital human, and enhancement tasks in one video workspace.",
     },
   },
 ]
 
-function resolveVideoCapability(featureId: "text-to-video" | "image-to-video"): ModelCapability {
-  return featureId === "image-to-video" ? "video.image_to_video" : "video.text_to_video"
+function resolveVideoCapability(
+  featureId: "text-to-video" | "image-to-video" | "reference-to-video" | "video-edit",
+): ModelCapability {
+  if (featureId === "image-to-video") return "video.image_to_video"
+  if (featureId === "reference-to-video") return "video.reference_to_video"
+  if (featureId === "video-edit") return "video.video_edit"
+  return "video.text_to_video"
 }
 
-function buildVideoModelOptions(featureId: "text-to-video" | "image-to-video"): LocalizedOption[] {
+function buildVideoModelOptions(
+  featureId: "text-to-video" | "image-to-video" | "reference-to-video" | "video-edit",
+): LocalizedOption[] {
   return buildModelSelectOptions(listModels({ capability: resolveVideoCapability(featureId) })).map((option) => ({
     value: option.value,
     label: {
@@ -337,6 +346,50 @@ const FEATURES: CapabilityMediaWorkspaceFeatureDefinition[] = [
     ],
   },
   {
+    id: "reference-to-video",
+    groupId: "video-processing",
+    capabilitySlug: "ai-video",
+    previewKind: "video",
+    title: { zh: "参考生视频", en: "Reference to Video" },
+    summary: {
+      zh: "上传一至多张参考图，保持角色或主体特征并生成视频。",
+      en: "Generate video from one or more reference images while preserving subject identity.",
+    },
+    submitLabel: { zh: "生成视频", en: "Generate video" },
+    action: "generate",
+    fields: [
+      {
+        id: "model",
+        type: "select",
+        label: { zh: "模型", en: "Model" },
+        defaultValue: getDefaultModelId("video.reference_to_video") || "",
+        options: buildVideoModelOptions("reference-to-video"),
+      },
+    ],
+  },
+  {
+    id: "video-edit",
+    groupId: "video-processing",
+    capabilitySlug: "ai-video",
+    previewKind: "video",
+    title: { zh: "视频编辑", en: "Video Edit" },
+    summary: {
+      zh: "上传视频并用文字指令完成风格转换、元素替换等编辑。",
+      en: "Edit an existing video with instructions for style transfer or element replacement.",
+    },
+    submitLabel: { zh: "编辑视频", en: "Edit video" },
+    action: "generate",
+    fields: [
+      {
+        id: "model",
+        type: "select",
+        label: { zh: "模型", en: "Model" },
+        defaultValue: getDefaultModelId("video.video_edit") || "",
+        options: buildVideoModelOptions("video-edit"),
+      },
+    ],
+  },
+  {
     id: "digital-human",
     groupId: "video-processing",
     capabilitySlug: "ai-video",
@@ -466,7 +519,7 @@ export function getCapabilityMediaWorkspaceFeatures(locale: AppLocale): Capabili
 
 export function resolveCapabilityMediaWorkspaceVideoFields(
   locale: AppLocale,
-  featureId: "text-to-video" | "image-to-video",
+  featureId: "text-to-video" | "image-to-video" | "reference-to-video" | "video-edit",
   selectedModelId?: string | null,
 ): CapabilityMediaWorkspaceFieldView[] {
   const capability = resolveVideoCapability(featureId)

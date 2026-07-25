@@ -55,7 +55,7 @@ test("minimax video body maps text-to-video into the official Hailuo payload", (
   })
 })
 
-test("minimax video body maps image-to-video first frame and 1080p", () => {
+test("minimax video body maps Hailuo 2.3 Fast image-to-video first frame", () => {
   const body = buildMiniMaxVideoCreateBody({
     featureId: "image-to-video",
     params: {
@@ -64,16 +64,16 @@ test("minimax video body maps image-to-video first frame and 1080p", () => {
       duration: "10",
       resolution: "1080p",
     },
-    defaultModel: "MiniMax-Hailuo-02-Pro",
+    defaultModel: "MiniMax-Hailuo-2.3-Fast",
   })
 
-  assert.equal(body.model, "MiniMax-Hailuo-02-Pro")
+  assert.equal(body.model, "MiniMax-Hailuo-2.3-Fast")
   assert.equal(body.duration, 10)
   assert.equal(body.resolution, "1080P")
   assert.equal(body.first_frame_image, "https://example.com/frame.png")
 })
 
-test("minimax video body downgrades legacy T2V models to 720P and 6 seconds", () => {
+test("minimax video body falls back to Hailuo 2.3 for removed legacy models", () => {
   const body = buildMiniMaxVideoCreateBody({
     featureId: "text-to-video",
     params: {
@@ -84,9 +84,9 @@ test("minimax video body downgrades legacy T2V models to 720P and 6 seconds", ()
     },
   })
 
-  assert.equal(body.model, "T2V-01-Director")
-  assert.equal(body.duration, 6)
-  assert.equal(body.resolution, "720P")
+  assert.equal(body.model, "MiniMax-Hailuo-2.3")
+  assert.equal(body.duration, 10)
+  assert.equal(body.resolution, "1080P")
 })
 
 test("minimax video helpers normalize documented statuses and resolutions", () => {

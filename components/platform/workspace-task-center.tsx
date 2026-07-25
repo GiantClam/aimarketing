@@ -34,8 +34,10 @@ import {
   getAverageDuration,
   getLatestTimestamp,
   getRunId,
+  getLocalizedSourceLabel,
+  getLocalizedStatusLabel,
+  getLocalizedTaskName,
   sourceLabels,
-  statusLabels,
   type DateRangeFilter,
   type SortFilter,
   type SourceFilter,
@@ -70,6 +72,133 @@ const statusStyles: Record<TaskStatus, string> = {
   queued: "border-[#e6e6de] bg-[#f2f2ee] text-[#666]",
 }
 
+const TASK_CENTER_COPY = {
+  zh: {
+    header: "任务中心",
+    description: "按任务聚合查看 workflow、media、tool 和 agent 的执行情况，不再把单次运行事件当成任务本身。",
+    exportTasks: "导出任务",
+    refreshTasks: "刷新任务",
+    totalTasks: "任务总数",
+    executionRecords: "条执行记录",
+    active: "进行中",
+    queuedTasks: "个排队任务",
+    healthy: "运行健康",
+    latestSucceeded: "最近一次执行成功",
+    needsReview: "需要关注",
+    latestFailed: "最近一次执行失败或已取消",
+    lastUpdated: "最后更新",
+    groupedSnapshot: "聚合任务快照",
+    noSync: "暂无同步",
+    searchAria: "搜索任务名称或最近运行 ID",
+    searchPlaceholder: "搜索任务名称、slug、最近运行 ID……",
+    allStatus: "全部状态",
+    allSources: "全部来源",
+    today: "今天",
+    last7Days: "最近 7 天",
+    last30Days: "最近 30 天",
+    custom: "自定义",
+    latestActivity: "最近活动",
+    avgDuration: "平均耗时",
+    latestStatus: "最近状态",
+    source: "来源",
+    viewLatestExecution: "查看最近执行",
+    retry: "重试",
+    openResult: "打开结果",
+    more: "更多",
+    task: "任务",
+    latestRun: "最近运行",
+    lastUpdatedColumn: "最后更新",
+    runs: "运行次数",
+    actions: "操作",
+    localPlatformTask: "本地平台任务",
+    run: "次运行",
+    failedRun: "次失败",
+    empty: "当前筛选条件下没有聚合后的任务记录。",
+    showing: "显示",
+    to: "至",
+    of: "，共",
+    tasks: "个任务",
+    previousPage: "上一页",
+    nextPage: "下一页",
+    taskOverview: "任务概览",
+    overviewDescription: "按任务身份聚合，每行指向最近的执行记录。",
+    taskInsights: "任务洞察",
+    insightsDescription: "当前可见聚合任务列表的运行健康情况。",
+    successRate: "成功率",
+    latestOutcomeHealth: "最近任务结果健康度",
+    taskTag: "任务",
+    tasksOverTime: "任务趋势",
+    sourceBreakdown: "来源分布",
+    viewFullAnalytics: "查看完整分析",
+    timer: "计时器",
+    commandMenu: "命令菜单",
+  },
+  en: {
+    header: "Task Center",
+    description: "Review workflow, media, tool, and agent activity as grouped tasks instead of treating each execution event as a task.",
+    exportTasks: "Export tasks",
+    refreshTasks: "Refresh tasks",
+    totalTasks: "Total tasks",
+    executionRecords: "execution records",
+    active: "Active",
+    queuedTasks: "queued tasks",
+    healthy: "Healthy",
+    latestSucceeded: "Latest execution succeeded",
+    needsReview: "Needs review",
+    latestFailed: "Latest execution failed or cancelled",
+    lastUpdated: "Last updated",
+    groupedSnapshot: "Grouped task snapshot",
+    noSync: "No sync",
+    searchAria: "Search task name or latest run ID",
+    searchPlaceholder: "Search task name, slug, latest run ID...",
+    allStatus: "All status",
+    allSources: "All sources",
+    today: "Today",
+    last7Days: "Last 7 days",
+    last30Days: "Last 30 days",
+    custom: "Custom",
+    latestActivity: "Latest activity",
+    avgDuration: "Avg duration",
+    latestStatus: "Latest status",
+    source: "Source",
+    viewLatestExecution: "View latest execution",
+    retry: "Retry",
+    openResult: "Open result",
+    more: "More",
+    task: "Task",
+    latestRun: "Latest Run",
+    lastUpdatedColumn: "Last Updated",
+    runs: "Runs",
+    actions: "Actions",
+    localPlatformTask: "Local platform task",
+    run: "run",
+    failedRun: "failed",
+    empty: "No grouped tasks match the current filters.",
+    showing: "Showing",
+    to: "to",
+    of: "of",
+    tasks: "tasks",
+    previousPage: "Previous page",
+    nextPage: "Next page",
+    taskOverview: "Task Overview",
+    overviewDescription: "Grouped by task identity. Each row points to the latest execution record.",
+    taskInsights: "Task Insights",
+    insightsDescription: "Operational health for the visible grouped task list.",
+    successRate: "Success rate",
+    latestOutcomeHealth: "Latest task outcome health",
+    taskTag: "Task",
+    tasksOverTime: "Tasks over time",
+    sourceBreakdown: "Source breakdown",
+    viewFullAnalytics: "View full analytics",
+    timer: "Timer",
+    commandMenu: "Command menu",
+  },
+} as const
+
+function getTaskCenterCopy(locale: "zh" | "en") {
+  return TASK_CENTER_COPY[locale]
+}
+
 function escapeCsvCell(value: string) {
   return `"${value.replace(/"/g, '""')}"`
 }
@@ -95,18 +224,18 @@ function useFilteredTasks(tasks: TaskCenterTask[], filters: {
   )
 }
 
-function TaskSourceBadge({ source }: { source: TaskSource }) {
+function TaskSourceBadge({ source, locale }: { source: TaskSource; locale: "zh" | "en" }) {
   return (
     <span className={`inline-flex h-[26px] items-center rounded-[7px] border px-2.5 text-[11px] font-black uppercase ${sourceStyles[source]}`}>
-      {sourceLabels[source]}
+      {getLocalizedSourceLabel(source, locale)}
     </span>
   )
 }
 
-function TaskStatusBadge({ status }: { status: TaskStatus }) {
+function TaskStatusBadge({ status, locale }: { status: TaskStatus; locale: "zh" | "en" }) {
   return (
     <span className={`inline-flex h-[26px] items-center rounded-full border px-2.5 text-[11px] font-black uppercase ${statusStyles[status]}`}>
-      {statusLabels[status]}
+      {getLocalizedStatusLabel(status, locale)}
     </span>
   )
 }
@@ -118,19 +247,19 @@ function TaskCenterHeader({
   locale: "zh" | "en"
   onExport: () => void
 }) {
+  const copy = getTaskCenterCopy(locale)
+
   return (
     <header className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
       <div>
         <div className="font-display text-[11px] font-black uppercase tracking-[0.16em] text-muted-foreground">
-          TASK CENTER
+          {copy.header}
         </div>
         <h1 className="mt-2 font-display text-[4.2rem] font-black uppercase leading-[0.86] tracking-[0] text-[#111] sm:text-[5.35rem] lg:text-[5.85rem]">
-          TASK CENTER
+          {copy.header}
         </h1>
         <p className="mt-5 max-w-[720px] text-[15px] leading-7 text-[#666] sm:text-base">
-          {locale === "zh"
-            ? "按任务聚合查看 workflow、media、tool 和 agent 的执行情况，不再把单次运行事件当成任务本身。"
-            : "Review workflow, media, tool, and agent activity as grouped tasks instead of treating each execution event as a task."}
+          {copy.description}
         </p>
       </div>
 
@@ -141,7 +270,7 @@ function TaskCenterHeader({
           className="inline-flex h-11 items-center gap-2 rounded-[9px] border border-[#deded6] bg-white px-[18px] text-sm font-extrabold text-[#111] shadow-[0_10px_24px_rgba(0,0,0,0.045)] transition hover:-translate-y-0.5 hover:border-[#cfcfc7]"
         >
           <Download className="h-4 w-4" />
-          Export tasks
+          {copy.exportTasks}
         </button>
         <button
           type="button"
@@ -149,7 +278,7 @@ function TaskCenterHeader({
           className="inline-flex h-11 items-center gap-2 rounded-[9px] border border-[#c9a400] bg-[#ffd000] px-[22px] text-sm font-black text-[#111] shadow-[0_10px_24px_rgba(255,208,0,0.22)] transition hover:-translate-y-0.5 hover:bg-[#ffd21a]"
         >
           <RefreshCw className="h-4 w-4" />
-          Refresh tasks
+          {copy.refreshTasks}
         </button>
       </div>
     </header>
@@ -196,25 +325,27 @@ function TaskMetricGrid({
   totalRuns: number
   locale: "zh" | "en"
 }) {
+  const copy = getTaskCenterCopy(locale)
   const running = tasks.filter((task) => task.normalizedStatus === "running").length
   const queued = tasks.filter((task) => task.normalizedStatus === "queued").length
   const succeeded = tasks.filter((task) => task.normalizedStatus === "succeeded").length
   const failed = tasks.filter((task) => task.normalizedStatus === "failed" || task.normalizedStatus === "cancelled").length
   const latest = getLatestTimestamp(tasks)
-  const latestLabel = latest ? formatTaskTimestamp(latest.toISOString(), locale) : "No sync"
+  const latestLabel = latest ? formatTaskTimestamp(latest.toISOString(), locale) : copy.noSync
 
   return (
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-      <TaskMetricCard icon={ListChecks} label="Total tasks" value={tasks.length.toLocaleString()} detail={`${totalRuns.toLocaleString()} execution records`} />
-      <TaskMetricCard icon={Loader2} label="Active" value={running.toLocaleString()} detail={`${queued.toLocaleString()} queued tasks`} />
-      <TaskMetricCard icon={CheckCircle2} label="Healthy" value={succeeded.toLocaleString()} detail="Latest execution succeeded" tone="good" />
-      <TaskMetricCard icon={XCircle} label="Needs review" value={failed.toLocaleString()} detail="Latest execution failed or cancelled" tone={failed > 0 ? "risk" : "neutral"} />
-      <TaskMetricCard icon={Clock3} label="Last updated" value={latestLabel} detail="Grouped task snapshot" />
+      <TaskMetricCard icon={ListChecks} label={copy.totalTasks} value={tasks.length.toLocaleString()} detail={`${totalRuns.toLocaleString()} ${copy.executionRecords}`} />
+      <TaskMetricCard icon={Loader2} label={copy.active} value={running.toLocaleString()} detail={`${queued.toLocaleString()} ${copy.queuedTasks}`} />
+      <TaskMetricCard icon={CheckCircle2} label={copy.healthy} value={succeeded.toLocaleString()} detail={copy.latestSucceeded} tone="good" />
+      <TaskMetricCard icon={XCircle} label={copy.needsReview} value={failed.toLocaleString()} detail={copy.latestFailed} tone={failed > 0 ? "risk" : "neutral"} />
+      <TaskMetricCard icon={Clock3} label={copy.lastUpdated} value={latestLabel} detail={copy.groupedSnapshot} />
     </section>
   )
 }
 
 function TaskFilterToolbar({
+  locale,
   query,
   status,
   source,
@@ -226,6 +357,7 @@ function TaskFilterToolbar({
   onDateRangeChange,
   onSortChange,
 }: {
+  locale: "zh" | "en"
   query: string
   status: StatusFilter
   source: SourceFilter
@@ -237,6 +369,8 @@ function TaskFilterToolbar({
   onDateRangeChange: (value: DateRangeFilter) => void
   onSortChange: (value: SortFilter) => void
 }) {
+  const copy = getTaskCenterCopy(locale)
+
   return (
     <section className="rounded-2xl border border-[#e7e7df] bg-white p-4 shadow-[0_10px_28px_rgba(0,0,0,0.045)]">
       <DashboardFilterToolbar
@@ -246,11 +380,11 @@ function TaskFilterToolbar({
         search={
           <label className="relative block min-w-0">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#777]" />
-            <span className="sr-only">Search task name or latest run ID</span>
+            <span className="sr-only">{copy.searchAria}</span>
             <input
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
-              placeholder="Search task name, slug, latest run ID..."
+              placeholder={copy.searchPlaceholder}
               className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white pl-10 pr-3 text-sm outline-none transition focus:border-[#b89100] focus:ring-4 focus:ring-[#ffd000]/25"
             />
           </label>
@@ -258,30 +392,30 @@ function TaskFilterToolbar({
         filters={
           <>
             <select value={status} onChange={(event) => onStatusChange(event.target.value as StatusFilter)} className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white px-3 text-sm font-bold text-[#111] outline-none sm:min-w-[140px] sm:w-auto">
-              <option value="all">All status</option>
-              <option value="running">Running</option>
-              <option value="succeeded">Succeeded</option>
-              <option value="failed">Failed</option>
-              <option value="queued">Queued</option>
+              <option value="all">{copy.allStatus}</option>
+              <option value="running">{getLocalizedStatusLabel("running", locale)}</option>
+              <option value="succeeded">{getLocalizedStatusLabel("succeeded", locale)}</option>
+              <option value="failed">{getLocalizedStatusLabel("failed", locale)}</option>
+              <option value="queued">{getLocalizedStatusLabel("queued", locale)}</option>
             </select>
             <select value={source} onChange={(event) => onSourceChange(event.target.value as SourceFilter)} className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white px-3 text-sm font-bold text-[#111] outline-none sm:min-w-[140px] sm:w-auto">
-              <option value="all">All sources</option>
-              <option value="tool">Tool</option>
-              <option value="workflow">Workflow</option>
-              <option value="agent">Agent</option>
-              <option value="media">Media</option>
+              <option value="all">{copy.allSources}</option>
+              <option value="tool">{getLocalizedSourceLabel("tool", locale)}</option>
+              <option value="workflow">{getLocalizedSourceLabel("workflow", locale)}</option>
+              <option value="agent">{getLocalizedSourceLabel("agent", locale)}</option>
+              <option value="media">{getLocalizedSourceLabel("media", locale)}</option>
             </select>
             <select value={dateRange} onChange={(event) => onDateRangeChange(event.target.value as DateRangeFilter)} className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white px-3 text-sm font-bold text-[#111] outline-none sm:min-w-[160px] sm:w-auto">
-              <option value="today">Today</option>
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
-              <option value="custom">Custom</option>
+              <option value="today">{copy.today}</option>
+              <option value="7d">{copy.last7Days}</option>
+              <option value="30d">{copy.last30Days}</option>
+              <option value="custom">{copy.custom}</option>
             </select>
             <select value={sort} onChange={(event) => onSortChange(event.target.value as SortFilter)} className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white px-3 text-sm font-bold text-[#111] outline-none sm:min-w-[170px] sm:w-auto">
-              <option value="newest">Latest activity</option>
-              <option value="duration">Avg duration</option>
-              <option value="status">Latest status</option>
-              <option value="source">Source</option>
+              <option value="newest">{copy.latestActivity}</option>
+              <option value="duration">{copy.avgDuration}</option>
+              <option value="status">{copy.latestStatus}</option>
+              <option value="source">{copy.source}</option>
             </select>
           </>
         }
@@ -290,7 +424,8 @@ function TaskFilterToolbar({
   )
 }
 
-function TaskActions({ task }: { task: TaskCenterTask }) {
+function TaskActions({ task, locale }: { task: TaskCenterTask; locale: "zh" | "en" }) {
+  const copy = getTaskCenterCopy(locale)
   const isFailed = task.normalizedStatus === "failed" || task.normalizedStatus === "cancelled"
 
   return (
@@ -298,24 +433,24 @@ function TaskActions({ task }: { task: TaskCenterTask }) {
       <Link
         href={`/dashboard/tasks/${task.latestRun.id}`}
         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e1e1da] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
-        title="View latest execution"
-        aria-label="View latest execution"
+        title={copy.viewLatestExecution}
+        aria-label={copy.viewLatestExecution}
       >
         <Eye className="h-4 w-4" />
       </Link>
       <button
         type="button"
         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e1e1da] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
-        title={isFailed ? "Retry" : "Open result"}
-        aria-label={isFailed ? "Retry" : "Open result"}
+        title={isFailed ? copy.retry : copy.openResult}
+        aria-label={isFailed ? copy.retry : copy.openResult}
       >
         <RotateCcw className="h-4 w-4" />
       </button>
       <button
         type="button"
         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e1e1da] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
-        title="More"
-        aria-label="More"
+        title={copy.more}
+        aria-label={copy.more}
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>
@@ -330,12 +465,23 @@ function RecentTasksTable({
   tasks: TaskCenterTask[]
   locale: "zh" | "en"
 }) {
+  const copy = getTaskCenterCopy(locale)
+
   return (
     <div className="overflow-x-auto rounded-xl border border-[#edede7]">
       <table className="w-full min-w-[980px] border-separate border-spacing-0 bg-white">
         <thead className="bg-[#fafaf7] text-[11px] font-black uppercase tracking-[0.08em] text-[#555]">
           <tr>
-            {["Task", "Source", "Latest Run", "Last Updated", "Runs", "Avg Duration", "Status", "Actions"].map((heading) => (
+            {[
+              copy.task,
+              copy.source,
+              copy.latestRun,
+              copy.lastUpdatedColumn,
+              copy.runs,
+              copy.avgDuration,
+              copy.latestStatus,
+              copy.actions,
+            ].map((heading) => (
               <th key={heading} className="px-4 py-3 text-left">
                 {heading}
               </th>
@@ -357,13 +503,13 @@ function RecentTasksTable({
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           {task.normalizedStatus === "running" ? <span className="h-2 w-2 rounded-full bg-[#23a55a]" /> : null}
-                          <span className="truncate font-black uppercase tracking-[0.01em] text-[#111]">{task.displayName}</span>
+                          <span className="truncate font-black uppercase tracking-[0.01em] text-[#111]">{getLocalizedTaskName(task, locale)}</span>
                         </div>
                         <div className="mt-1 truncate text-xs text-[#777]">
                           {[
-                            task.externalSystem || task.itemType || "Local platform task",
-                            `${task.runCount} run${task.runCount === 1 ? "" : "s"}`,
-                            task.failedRunCount > 0 ? `${task.failedRunCount} failed` : null,
+                            task.externalSystem || task.itemType || copy.localPlatformTask,
+                            `${task.runCount} ${locale === "zh" ? copy.run : task.runCount === 1 ? copy.run : `${copy.run}s`}`,
+                            task.failedRunCount > 0 ? `${task.failedRunCount} ${copy.failedRun}` : null,
                           ]
                             .filter(Boolean)
                             .join(" · ")}
@@ -372,17 +518,17 @@ function RecentTasksTable({
                     </div>
                   </td>
                   <td className="border-t border-[#edede7] px-4 py-3 text-sm">
-                    <TaskSourceBadge source={task.source} />
+                    <TaskSourceBadge source={task.source} locale={locale} />
                   </td>
                   <td className="border-t border-[#edede7] px-4 py-3 font-mono text-xs text-[#333]">{getRunId(task.latestRun)}</td>
                   <td className="border-t border-[#edede7] px-4 py-3 text-sm text-[#333]">{formatTaskTimestamp(task.updatedAt, locale)}</td>
                   <td className="border-t border-[#edede7] px-4 py-3 text-sm text-[#333]">{task.runCount.toLocaleString()}</td>
                   <td className="border-t border-[#edede7] px-4 py-3 font-mono text-xs text-[#333]">{formatDuration(task.averageDurationMs)}</td>
                   <td className="border-t border-[#edede7] px-4 py-3">
-                    <TaskStatusBadge status={task.normalizedStatus} />
+                    <TaskStatusBadge status={task.normalizedStatus} locale={locale} />
                   </td>
                   <td className="border-t border-[#edede7] px-4 py-3">
-                    <TaskActions task={task} />
+                    <TaskActions task={task} locale={locale} />
                   </td>
                 </tr>
               )
@@ -390,7 +536,7 @@ function RecentTasksTable({
           ) : (
             <tr>
               <td colSpan={8} className="border-t border-[#edede7] px-4 py-12 text-center text-sm font-bold text-[#777]">
-                {locale === "zh" ? "当前筛选条件下没有聚合后的任务记录。" : "No grouped tasks match the current filters."}
+                {copy.empty}
               </td>
             </tr>
           )}
@@ -403,12 +549,15 @@ function RecentTasksTable({
 function TaskPagination({
   page,
   total,
+  locale,
   onPageChange,
 }: {
   page: number
   total: number
+  locale: "zh" | "en"
   onPageChange: (page: number) => void
 }) {
+  const copy = getTaskCenterCopy(locale)
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const start = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
   const end = Math.min(total, page * PAGE_SIZE)
@@ -417,10 +566,12 @@ function TaskPagination({
   return (
     <div className="flex flex-col gap-3 pt-4 text-sm text-[#666] sm:flex-row sm:items-center sm:justify-between">
       <div className="font-bold">
-        Showing {start} to {end} of {total.toLocaleString()} tasks
+        {locale === "zh"
+          ? `${copy.showing} ${start} ${copy.to} ${end}${copy.of} ${total.toLocaleString()}${copy.tasks}`
+          : `${copy.showing} ${start} ${copy.to} ${end} ${copy.of} ${total.toLocaleString()} ${copy.tasks}`}
       </div>
       <div className="flex items-center gap-2">
-        <button type="button" onClick={() => onPageChange(Math.max(1, page - 1))} className="h-9 rounded-lg border border-[#deded6] bg-white px-3 font-black text-[#111]" aria-label="Previous page">
+        <button type="button" onClick={() => onPageChange(Math.max(1, page - 1))} className="h-9 rounded-lg border border-[#deded6] bg-white px-3 font-black text-[#111]" aria-label={copy.previousPage}>
           &lt;
         </button>
         {visiblePages.map((item) => (
@@ -434,7 +585,7 @@ function TaskPagination({
           </button>
         ))}
         {pageCount > 3 ? <span className="px-1 font-black text-[#777]">...</span> : null}
-        <button type="button" onClick={() => onPageChange(Math.min(pageCount, page + 1))} className="h-9 rounded-lg border border-[#deded6] bg-white px-3 font-black text-[#111]" aria-label="Next page">
+        <button type="button" onClick={() => onPageChange(Math.min(pageCount, page + 1))} className="h-9 rounded-lg border border-[#deded6] bg-white px-3 font-black text-[#111]" aria-label={copy.nextPage}>
           &gt;
         </button>
       </div>
@@ -455,20 +606,22 @@ function RecentTasksPanel({
   locale: "zh" | "en"
   onPageChange: (page: number) => void
 }) {
+  const copy = getTaskCenterCopy(locale)
+
   return (
     <section className="rounded-[18px] border border-[#e7e7df] bg-white p-5 shadow-[0_14px_34px_rgba(0,0,0,0.06)] lg:p-6">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="font-display text-2xl font-black uppercase leading-none text-[#111]">Task Overview</h2>
-          <p className="mt-2 text-sm text-[#777]">Grouped by task identity. Each row points to the latest execution record.</p>
+          <h2 className="font-display text-2xl font-black uppercase leading-none text-[#111]">{copy.taskOverview}</h2>
+          <p className="mt-2 text-sm text-[#777]">{copy.overviewDescription}</p>
         </div>
         <span className="rounded-lg border border-[#e7e7df] bg-[#fafaf7] px-3 py-2 text-xs font-black uppercase tracking-[0.1em] text-[#555]">
-          {total.toLocaleString()} tasks
+          {total.toLocaleString()} {copy.tasks}
         </span>
       </div>
 
       <RecentTasksTable tasks={tasks} locale={locale} />
-      <TaskPagination page={page} total={total} onPageChange={onPageChange} />
+      <TaskPagination page={page} total={total} locale={locale} onPageChange={onPageChange} />
     </section>
   )
 }
@@ -483,16 +636,19 @@ function DonutChart({ rate }: { rate: number }) {
   )
 }
 
-function Sparkline() {
+function Sparkline({ locale }: { locale: "zh" | "en" }) {
+  const copy = getTaskCenterCopy(locale)
+
   return (
-    <svg viewBox="0 0 180 52" className="h-[52px] w-full" role="img" aria-label="Average duration trend">
+    <svg viewBox="0 0 180 52" className="h-[52px] w-full" role="img" aria-label={`${copy.avgDuration} trend`}>
       <path d="M4 38 C 28 18, 42 34, 62 24 S 95 14, 112 27 S 148 40, 176 12" fill="none" stroke="#ffd000" strokeLinecap="round" strokeWidth="5" />
       <path d="M4 38 C 28 18, 42 34, 62 24 S 95 14, 112 27 S 148 40, 176 12" fill="none" stroke="#111" strokeLinecap="round" strokeWidth="1.5" />
     </svg>
   )
 }
 
-function TasksOverTime({ tasks }: { tasks: TaskCenterTask[] }) {
+function TasksOverTime({ tasks, locale }: { tasks: TaskCenterTask[]; locale: "zh" | "en" }) {
+  const copy = getTaskCenterCopy(locale)
   const latest = getLatestTimestamp(tasks)
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = latest ? new Date(latest.getTime() - (6 - index) * 24 * 60 * 60 * 1000) : null
@@ -504,7 +660,7 @@ function TasksOverTime({ tasks }: { tasks: TaskCenterTask[] }) {
     const total = Math.max(1, succeeded + failed + running)
 
     return {
-      label: date ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date) : `D${index + 1}`,
+      label: date ? new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric" }).format(date) : `D${index + 1}`,
       succeeded,
       failed,
       running,
@@ -514,7 +670,7 @@ function TasksOverTime({ tasks }: { tasks: TaskCenterTask[] }) {
 
   return (
     <div className="space-y-3">
-      <div className="font-display text-[11px] font-black uppercase tracking-[0.12em] text-[#666]">Tasks over time</div>
+      <div className="font-display text-[11px] font-black uppercase tracking-[0.12em] text-[#666]">{copy.tasksOverTime}</div>
       <div className="flex h-28 items-end gap-2">
         {days.map((day) => (
           <div key={day.label} className="flex flex-1 flex-col items-center gap-2">
@@ -531,7 +687,8 @@ function TasksOverTime({ tasks }: { tasks: TaskCenterTask[] }) {
   )
 }
 
-function SourceBreakdown({ tasks }: { tasks: TaskCenterTask[] }) {
+function SourceBreakdown({ tasks, locale }: { tasks: TaskCenterTask[]; locale: "zh" | "en" }) {
+  const copy = getTaskCenterCopy(locale)
   const total = Math.max(1, tasks.length)
   const sourceCounts = (Object.keys(sourceLabels) as TaskSource[]).map((source) => {
     const count = tasks.filter((task) => task.source === source).length
@@ -540,11 +697,11 @@ function SourceBreakdown({ tasks }: { tasks: TaskCenterTask[] }) {
 
   return (
     <div className="space-y-3">
-      <div className="font-display text-[11px] font-black uppercase tracking-[0.12em] text-[#666]">Source breakdown</div>
+      <div className="font-display text-[11px] font-black uppercase tracking-[0.12em] text-[#666]">{copy.sourceBreakdown}</div>
       {sourceCounts.map((item) => (
         <div key={item.source} className="space-y-1.5">
           <div className="flex items-center justify-between text-xs font-black text-[#333]">
-            <span>{sourceLabels[item.source]}</span>
+            <span>{getLocalizedSourceLabel(item.source, locale)}</span>
             <span>
               {item.count} · {item.percent.toFixed(1)}%
             </span>
@@ -558,7 +715,8 @@ function SourceBreakdown({ tasks }: { tasks: TaskCenterTask[] }) {
   )
 }
 
-function QueueInsightsPanel({ tasks }: { tasks: TaskCenterTask[] }) {
+function QueueInsightsPanel({ tasks, locale }: { tasks: TaskCenterTask[]; locale: "zh" | "en" }) {
+  const copy = getTaskCenterCopy(locale)
   const succeeded = tasks.filter((task) => task.normalizedStatus === "succeeded").length
   const failed = tasks.filter((task) => task.normalizedStatus === "failed" || task.normalizedStatus === "cancelled").length
   const terminal = succeeded + failed
@@ -568,16 +726,16 @@ function QueueInsightsPanel({ tasks }: { tasks: TaskCenterTask[] }) {
   return (
     <aside className="rounded-[18px] border border-[#e7e7df] bg-white p-5 shadow-[0_14px_34px_rgba(0,0,0,0.06)] lg:p-6">
       <div className="mb-5">
-        <h2 className="font-display text-2xl font-black uppercase leading-none text-[#111]">Task Insights</h2>
-        <p className="mt-2 text-sm text-[#777]">Operational health for the visible grouped task list.</p>
+        <h2 className="font-display text-2xl font-black uppercase leading-none text-[#111]">{copy.taskInsights}</h2>
+        <p className="mt-2 text-sm text-[#777]">{copy.insightsDescription}</p>
       </div>
 
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-5 rounded-xl border border-[#edede7] bg-[#fafaf7] p-4">
             <div>
-              <div className="font-display text-[11px] font-black uppercase tracking-[0.12em] text-[#666]">Success rate</div>
+              <div className="font-display text-[11px] font-black uppercase tracking-[0.12em] text-[#666]">{copy.successRate}</div>
               <div className="mt-2 font-display text-4xl font-black leading-none text-[#111]">{successRate.toFixed(1)}%</div>
-              <div className="mt-3 text-xs font-bold text-[#23a55a]">Latest task outcome health</div>
+              <div className="mt-3 text-xs font-bold text-[#23a55a]">{copy.latestOutcomeHealth}</div>
             </div>
             <DonutChart rate={successRate} />
           </div>
@@ -585,37 +743,39 @@ function QueueInsightsPanel({ tasks }: { tasks: TaskCenterTask[] }) {
         <div className="rounded-xl border border-[#edede7] bg-white p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="font-display text-[11px] font-black uppercase tracking-[0.12em] text-[#666]">Avg duration</div>
+              <div className="font-display text-[11px] font-black uppercase tracking-[0.12em] text-[#666]">{copy.avgDuration}</div>
               <div className="mt-2 font-mono text-2xl font-black text-[#111]">{formatDuration(avgDuration)}</div>
             </div>
             <span className="rounded-full border border-[#efe6a8] bg-[#fffbe5] px-2.5 py-1 text-[11px] font-black uppercase text-[#8a7500]">
-              Task
+              {copy.taskTag}
             </span>
           </div>
-          <Sparkline />
+          <Sparkline locale={locale} />
         </div>
 
-        <TasksOverTime tasks={tasks} />
-        <SourceBreakdown tasks={tasks} />
+        <TasksOverTime tasks={tasks} locale={locale} />
+        <SourceBreakdown tasks={tasks} locale={locale} />
 
         <Link
           href="/dashboard/tasks"
           className="inline-flex h-11 w-full items-center justify-center rounded-[9px] border border-[#111] bg-[#111] px-4 text-sm font-black text-white transition hover:bg-[#242424]"
         >
-          View full analytics
+          {copy.viewFullAnalytics}
         </Link>
       </div>
     </aside>
   )
 }
 
-function FloatingUtility() {
+function FloatingUtility({ locale }: { locale: "zh" | "en" }) {
+  const copy = getTaskCenterCopy(locale)
+
   return (
     <div className="fixed right-6 top-1/2 z-30 hidden -translate-y-1/2 flex-col gap-2 rounded-full bg-[#111] px-2 py-2 text-white shadow-[0_14px_30px_rgba(0,0,0,0.18)] 2xl:flex">
-      <button type="button" className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-white/12" aria-label="Timer">
+      <button type="button" className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-white/12" aria-label={copy.timer}>
         <Timer className="h-4 w-4" />
       </button>
-      <button type="button" className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-white/12" aria-label="Command menu">
+      <button type="button" className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-white/12" aria-label={copy.commandMenu}>
         <Command className="h-4 w-4" />
       </button>
     </div>
@@ -648,15 +808,16 @@ export function WorkspaceTaskCenter({
   }
 
   function exportTasks() {
-    const header = ["Task Name", "Source", "Latest Run ID", "Last Updated", "Runs", "Avg Duration", "Status"]
+    const copy = getTaskCenterCopy(locale)
+    const header = [copy.task, copy.source, copy.latestRun, copy.lastUpdatedColumn, copy.runs, copy.avgDuration, copy.latestStatus]
     const rows = filteredTasks.map((task) => [
-      task.displayName,
-      sourceLabels[task.source],
+      getLocalizedTaskName(task, locale),
+      getLocalizedSourceLabel(task.source, locale),
       getRunId(task.latestRun),
       formatTaskTimestamp(task.updatedAt, locale),
       String(task.runCount),
       formatDuration(task.averageDurationMs),
-      statusLabels[task.normalizedStatus],
+      getLocalizedStatusLabel(task.normalizedStatus, locale),
     ])
     const csv = [header, ...rows].map((row) => row.map(escapeCsvCell).join(",")).join("\n")
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
@@ -677,6 +838,7 @@ export function WorkspaceTaskCenter({
         <main className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]">
           <div className="space-y-5">
             <TaskFilterToolbar
+              locale={locale}
               query={query}
               status={status}
               source={source}
@@ -697,11 +859,11 @@ export function WorkspaceTaskCenter({
             />
           </div>
 
-          <QueueInsightsPanel tasks={filteredTasks} />
+          <QueueInsightsPanel tasks={filteredTasks} locale={locale} />
         </main>
       </section>
 
-      <FloatingUtility />
+      <FloatingUtility locale={locale} />
     </div>
   )
 }

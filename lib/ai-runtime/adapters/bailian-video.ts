@@ -20,15 +20,22 @@ function toOutputs(results: Array<{ url?: string | null; outputType?: string | n
   return results.map((item) => ({ kind: "video", url: item.url ?? null, mimeType: item.outputType ?? null, text: item.text ?? null, title: item.title ?? null }))
 }
 
+function inferFeatureId(model: ModelDefinition) {
+  const value = model.providerMetadata?.featureId
+  if (value === "image-to-video" || value === "reference-to-video" || value === "video-edit") return value
+  return "text-to-video" as const
+}
+
 export const bailianVideoAdapter: ProviderAdapter = {
   provider: "bailian",
-  capabilities: ["video.text_to_video"],
+  capabilities: ["video.text_to_video", "video.image_to_video", "video.reference_to_video", "video.video_edit"],
   isConfigured(input: ProviderConfigContext) {
     return isBailianVideoConfigured(input.runtimeContext?.bailianConfig)
   },
   async execute(input: CapabilityExecutionRequest, model: ModelDefinition): Promise<CapabilityExecutionResult> {
     const result = await executeBailianVideoFeature({
       currentUser: input.currentUser,
+      featureId: inferFeatureId(model),
       params: {
         ...input.input,
         model: model.providerMetadata?.nativeModel,

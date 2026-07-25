@@ -13,7 +13,7 @@ import { settleVideoBillingForRun } from "@/lib/platform/video-billing-settlemen
 import { buildBailianUrl, getBailianConfig, isBailianConfigured, type BailianConfig } from "@/lib/platform/bailian"
 
 type BailianRuntimeUser = { id: number; enterpriseId: number | null }
-type BailianVideoFeatureId = "text-to-video"
+export type BailianVideoFeatureId = "text-to-video" | "image-to-video" | "reference-to-video" | "video-edit"
 type BailianVideoResult = { url?: string | null; outputType?: string | null; text?: string | null; title?: string | null }
 
 export type BailianVideoTask = {
@@ -36,6 +36,28 @@ function numberValue(value: unknown, fallback: number) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
 }
 
+function nonNegativeInteger(value: unknown) {
+  const parsed = typeof value === "number" ? value : Number(value)
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null
+}
+
+function booleanValue(value: unknown, fallback: boolean) {
+  if (typeof value === "boolean") return value
+  if (typeof value === "string") {
+    if (value.trim().toLowerCase() === "true") return true
+    if (value.trim().toLowerCase() === "false") return false
+  }
+  return fallback
+}
+
+function mediaUrls(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => (typeof item === "string" && item.trim() ? [item.trim()] : []))
+  }
+  if (typeof value !== "string") return []
+  return value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean)
+}
+
 function mapStatus(value: unknown): BailianVideoTask["status"] {
   const normalized = text(value).toUpperCase()
   if (normalized === "SUCCEEDED" || normalized === "SUCCESS") return "SUCCESS"
@@ -52,26 +74,92 @@ export function isBailianVideoConfigured(config = getBailianConfig()) {
   return isBailianConfigured(config)
 }
 
-export function buildBailianVideoCreateBody(params: Record<string, unknown>, model: string) {
+function buildBailianVideoUrl(baseUrl: string, path: string) {
+  const videoBaseUrl = baseUrl.replace(/\/compatible-mode\/v1\/?$/i, "")
+  return buildBailianUrl(videoBaseUrl, path)
+}
+
+export function buildBailianVideoCreateBody(
+  params: Record<string, unknown>,
+  model: string,
+  featureId: BailianVideoFeatureId = model.endsWith("-i2v")
+    ? "image-to-video"
+    : model.endsWith("-r2v")
+      ? "reference-to-video"
+      : model.endsWith("-video-edit")
+        ? "video-edit"
+        : "text-to-video",
+) {
   const prompt = text(params.prompt)
-  if (!prompt) throw new Error("video_prompt_required")
+  if (!prompt && featureId !== "image-to-video") throw new Error("video_prompt_required")
+
   const resolution = text(params.resolution).toUpperCase()
-  const ratio = text(params.ratio)
+  const parameters: Record<string, unknown> = {
+    resolution: resolution === "720P" ? "720P" : "1080P",
+  }
+  if (featureId !== "video-edit") {
+    parameters.ratio = text(params.ratio) || "16:9"
+    parameters.duration = Math.max(3, Math.min(15, numberValue(params.duration, 5)))
+  }
+  if (params.watermark !== undefined) parameters.watermark = booleanValue(params.watermark, true)
+  const seed = nonNegativeInteger(params.seed)
+  if (seed !== null) parameters.seed = seed
+
+  if (featureId === "video-edit") {
+    const sourceVideoUrl = text(params.sourceVideoUrl) || text(params.videoUrl)
+    if (!sourceVideoUrl) throw new Error("video_source_required")
+    const references = mediaUrls(params.referenceImageUrls ?? params.referenceImages ?? params.referenceUrls)
+    parameters.audio_setting = text(params.audioSetting) || "auto"
+    return {
+      model,
+      input: {
+        prompt,
+        media: [
+          { type: "video", url: sourceVideoUrl },
+          ...references.map((url) => ({ type: "reference_image", url })),
+        ],
+      },
+      parameters,
+    }
+  }
+
+  if (featureId === "image-to-video") {
+    const firstFrameUrl = text(params.firstFrameUrl) || text(params.inputImageUrl)
+    if (!firstFrameUrl) throw new Error("video_first_frame_required")
+    return {
+      model,
+      input: {
+        ...(prompt ? { prompt } : {}),
+        media: [{ type: "first_frame", url: firstFrameUrl }],
+      },
+      parameters,
+    }
+  }
+
+  if (featureId === "reference-to-video") {
+    const references = mediaUrls(params.referenceImageUrls ?? params.referenceImages ?? params.referenceUrls)
+    if (references.length === 0) throw new Error("video_reference_image_required")
+    return {
+      model,
+      input: {
+        prompt,
+        media: references.map((url) => ({ type: "reference_image", url })),
+      },
+      parameters,
+    }
+  }
+
   return {
     model,
     input: { prompt },
-    parameters: {
-      resolution: resolution === "720P" ? "720P" : "1080P",
-      ratio: ratio || "16:9",
-      duration: Math.max(3, Math.min(15, numberValue(params.duration, 5))),
-    },
+    parameters,
   }
 }
 
 async function requestBailian<T>(path: string, init: { method: "GET" | "POST"; body?: Record<string, unknown>; config?: BailianConfig; asyncRequest?: boolean }) {
   const config = init.config || getBailianConfig()
   if (!isBailianConfigured(config)) throw new Error("bailian_not_configured")
-  const response = await fetch(buildBailianUrl(config.baseUrl, path), {
+  const response = await fetch(buildBailianVideoUrl(config.baseUrl, path), {
     method: init.method,
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
@@ -86,12 +174,17 @@ async function requestBailian<T>(path: string, init: { method: "GET" | "POST"; b
   return payload || ({} as T)
 }
 
-async function createUpstreamTask(params: Record<string, unknown>, config: BailianConfig, model: string) {
+async function createUpstreamTask(
+  params: Record<string, unknown>,
+  config: BailianConfig,
+  model: string,
+  featureId: BailianVideoFeatureId,
+) {
   const payload = await requestBailian<Record<string, unknown>>("/api/v1/services/aigc/video-generation/video-synthesis", {
     method: "POST",
     config,
     asyncRequest: true,
-    body: buildBailianVideoCreateBody(params, model),
+    body: buildBailianVideoCreateBody(params, model, featureId),
   })
   const output = payload.output && typeof payload.output === "object" ? (payload.output as Record<string, unknown>) : payload
   const taskId = text(output.task_id) || text(payload.task_id)
@@ -122,7 +215,10 @@ async function patchRun(runId: number, patch: { status?: PlatformTaskRunStatus; 
   return detail
 }
 
-function requestedTarget(_run: HydratedPlatformTaskRun): BailianVideoFeatureId {
+function requestedTarget(run: HydratedPlatformTaskRun): BailianVideoFeatureId {
+  if (run.itemSlug === "image-to-video" || run.itemSlug === "reference-to-video" || run.itemSlug === "video-edit") {
+    return run.itemSlug
+  }
   return "text-to-video"
 }
 
@@ -141,16 +237,22 @@ function taskFromRun(run: HydratedPlatformTaskRun): BailianVideoTask {
   }
 }
 
-export async function executeBailianVideoFeature(input: { currentUser: BailianRuntimeUser; params: Record<string, unknown>; config?: BailianConfig; model: string }) {
+export async function executeBailianVideoFeature(input: {
+  currentUser: BailianRuntimeUser
+  featureId: BailianVideoFeatureId
+  params: Record<string, unknown>
+  config?: BailianConfig
+  model: string
+}) {
   const enterpriseId = requireEnterpriseId(input.currentUser)
-  const run = await createPlatformTaskRun({ enterpriseId, userId: input.currentUser.id, kind: "media", itemType: "capability", itemSlug: "text-to-video", status: "queued", inputPayload: input.params })
-  await appendPlatformRunEvent(run.id, { level: "info", message: "media_queued", payload: { provider: "bailian", featureId: "text-to-video" } })
-  const task = await createUpstreamTask(input.params, input.config || getBailianConfig(), input.model)
+  const run = await createPlatformTaskRun({ enterpriseId, userId: input.currentUser.id, kind: "media", itemType: "capability", itemSlug: input.featureId, status: "queued", inputPayload: input.params })
+  await appendPlatformRunEvent(run.id, { level: "info", message: "media_queued", payload: { provider: "bailian", featureId: input.featureId } })
+  const task = await createUpstreamTask(input.params, input.config || getBailianConfig(), input.model, input.featureId)
   const detail = await patchRun(run.id, {
     status: "running",
     externalRunId: task.taskId,
     startedAt: new Date(),
-    normalizedResult: { requestedTarget: "text-to-video", provider: "bailian", status: "RUNNING", results: [], extra: { providerTaskId: task.taskId }, raw: task.raw },
+    normalizedResult: { requestedTarget: input.featureId, provider: "bailian", status: "RUNNING", results: [], extra: { providerTaskId: task.taskId }, raw: task.raw },
   })
   return taskFromRun(detail)
 }
@@ -172,7 +274,7 @@ export async function queryBailianVideoTask(input: { currentUser: BailianRuntime
     finishedAt: nextStatus === "succeeded" || nextStatus === "failed" ? new Date() : undefined,
     normalizedResult: {
       ...current,
-      requestedTarget: "text-to-video",
+      requestedTarget: requestedTarget(run),
       provider: "bailian",
       status: query.status,
       results: query.videoUrl ? [{ url: query.videoUrl, outputType: "video/mp4", text: "Bailian HappyHorse video result", title: "happyhorse-video.mp4" }] : [],

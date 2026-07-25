@@ -4,6 +4,8 @@ export const MODEL_CAPABILITIES = [
   "image.image_to_image",
   "video.text_to_video",
   "video.image_to_video",
+  "video.reference_to_video",
+  "video.video_edit",
   "video.digital_human",
   "audio.generate",
   "audio.voice_clone",

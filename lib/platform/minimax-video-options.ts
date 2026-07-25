@@ -22,54 +22,6 @@ export const MINIMAX_VIDEO_MODEL_OPTIONS: MiniMaxVideoModelOption[] = [
     supportedFeatures: ["image-to-video"],
     resolutionMode: "hailuo",
   },
-  {
-    value: "MiniMax-Hailuo-02",
-    label: "MiniMax Hailuo 02",
-    supportedFeatures: ["text-to-video", "image-to-video"],
-    resolutionMode: "hailuo",
-  },
-  {
-    value: "MiniMax-Hailuo-02-Pro",
-    label: "MiniMax Hailuo 02 Pro",
-    supportedFeatures: ["text-to-video", "image-to-video"],
-    resolutionMode: "hailuo",
-  },
-  {
-    value: "MiniMax-Hailuo-02-Fast",
-    label: "MiniMax Hailuo 02 Fast",
-    supportedFeatures: ["text-to-video", "image-to-video"],
-    resolutionMode: "hailuo",
-  },
-  {
-    value: "T2V-01-Director",
-    label: "T2V-01 Director",
-    supportedFeatures: ["text-to-video"],
-    resolutionMode: "legacy",
-  },
-  {
-    value: "T2V-01",
-    label: "T2V-01",
-    supportedFeatures: ["text-to-video"],
-    resolutionMode: "legacy",
-  },
-  {
-    value: "I2V-01-Director",
-    label: "I2V-01 Director",
-    supportedFeatures: ["image-to-video"],
-    resolutionMode: "legacy",
-  },
-  {
-    value: "I2V-01-live",
-    label: "I2V-01 Live",
-    supportedFeatures: ["image-to-video"],
-    resolutionMode: "legacy",
-  },
-  {
-    value: "I2V-01",
-    label: "I2V-01",
-    supportedFeatures: ["image-to-video"],
-    resolutionMode: "legacy",
-  },
 ]
 
 export function getMiniMaxVideoModelOptions(featureId: MiniMaxVideoFeatureId) {

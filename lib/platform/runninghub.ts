@@ -62,6 +62,8 @@ export type RunningHubConfig = {
   workflowCreatePath: string
   seedanceTextToVideoEndpoint: string | null
   seedanceImageToVideoEndpoint: string | null
+  seedanceProTextToVideoEndpoint?: string | null
+  seedanceProImageToVideoEndpoint?: string | null
   seedanceMiniTextToVideoEndpoint: string | null
   seedanceMiniImageToVideoEndpoint: string | null
   digitalHumanWorkflowId: string | null
@@ -97,6 +99,12 @@ export function getRunningHubConfig(): RunningHubConfig {
   const seedanceImageToVideoEndpoint =
     normalizeEndpoint(process.env.RUNNINGHUB_SEEDANCE_IMAGE_TO_VIDEO_ENDPOINT) ||
     "/openapi/v2/rhart-video/sparkvideo-2.0-fast/image-to-video"
+  const seedanceProTextToVideoEndpoint = normalizeEndpoint(
+    process.env.RUNNINGHUB_SEEDANCE_PRO_TEXT_TO_VIDEO_ENDPOINT,
+  ) || "/openapi/v2/rhart-video/sparkvideo-2.0/text-to-video"
+  const seedanceProImageToVideoEndpoint = normalizeEndpoint(
+    process.env.RUNNINGHUB_SEEDANCE_PRO_IMAGE_TO_VIDEO_ENDPOINT,
+  ) || "/openapi/v2/rhart-video/sparkvideo-2.0/image-to-video"
   const seedanceMiniTextToVideoEndpoint = normalizeEndpoint(
     process.env.RUNNINGHUB_SEEDANCE_MINI_TEXT_TO_VIDEO_ENDPOINT,
   ) || "/openapi/v2/rhart-video/sparkvideo-2.0-mini/text-to-video"
@@ -108,8 +116,10 @@ export function getRunningHubConfig(): RunningHubConfig {
   const videoEnhanceWorkflowId = process.env.RUNNINGHUB_VIDEO_ENHANCE_WORKFLOW_ID?.trim() || null
   const legacyVideoEndpoint = normalizeEndpoint(process.env.RUNNINGHUB_VIDEO_ENDPOINT)
   const hasScopedVideoConfig = Boolean(
-    seedanceTextToVideoEndpoint ||
+      seedanceTextToVideoEndpoint ||
       seedanceImageToVideoEndpoint ||
+      seedanceProTextToVideoEndpoint ||
+      seedanceProImageToVideoEndpoint ||
       seedanceMiniTextToVideoEndpoint ||
       seedanceMiniImageToVideoEndpoint ||
       (workflowCreatePath && digitalHumanWorkflowId) ||
@@ -124,6 +134,8 @@ export function getRunningHubConfig(): RunningHubConfig {
     workflowCreatePath,
     seedanceTextToVideoEndpoint,
     seedanceImageToVideoEndpoint,
+    seedanceProTextToVideoEndpoint,
+    seedanceProImageToVideoEndpoint,
     seedanceMiniTextToVideoEndpoint,
     seedanceMiniImageToVideoEndpoint,
     digitalHumanWorkflowId,
@@ -138,6 +150,8 @@ export function getRunningHubConfig(): RunningHubConfig {
         legacyVideoEndpoint ||
         seedanceTextToVideoEndpoint ||
         seedanceImageToVideoEndpoint ||
+        seedanceProTextToVideoEndpoint ||
+        seedanceProImageToVideoEndpoint ||
         seedanceMiniTextToVideoEndpoint ||
         seedanceMiniImageToVideoEndpoint ||
         workflowCreatePath,

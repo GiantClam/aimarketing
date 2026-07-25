@@ -1,4 +1,5 @@
 import type { PlatformExecutionProxyTarget } from "@/lib/platform/execute"
+import { isBailianConfigured } from "@/lib/platform/bailian"
 import { isMiniMaxVideoConfigured } from "@/lib/platform/minimax-video"
 import { getRunningHubConfig, isRunningHubConfiguredForTarget } from "@/lib/platform/runninghub"
 
@@ -69,7 +70,10 @@ export function resolvePlatformMediaExecutionProxyTarget(
   }
 
   if (mediaTarget === "ai-video") {
-    if (isMiniMaxVideoConfigured() && (action === "execute" || action === "generate")) {
+    if (
+      (isMiniMaxVideoConfigured() || isBailianConfigured()) &&
+      (action === "execute" || action === "generate")
+    ) {
       return buildRunningHubProxyTarget("ai-video", "generate")
     }
 

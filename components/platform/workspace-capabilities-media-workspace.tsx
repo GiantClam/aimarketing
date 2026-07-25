@@ -130,6 +130,15 @@ type WorkspaceTabState = {
   >
 }
 
+const VIDEO_PARAMETER_WIDE_FIELDS = new Set([
+  "model",
+  "prompt",
+  "firstFrameUrl",
+  "lastFrameUrl",
+  "referenceImageUrls",
+  "sourceVideoUrl",
+])
+
 type Copy = {
   eyebrow: string
   title: string
@@ -749,7 +758,12 @@ export function WorkspaceCapabilitiesMediaWorkspace({
   const activeFeature = activeTab ? featureMap[activeTab.featureId] : null
   const activeFields = useMemo(() => {
     if (!activeFeature || !activeTab) return []
-    if (activeFeature.id === "text-to-video" || activeFeature.id === "image-to-video") {
+    if (
+      activeFeature.id === "text-to-video" ||
+      activeFeature.id === "image-to-video" ||
+      activeFeature.id === "reference-to-video" ||
+      activeFeature.id === "video-edit"
+    ) {
       return resolveCapabilityMediaWorkspaceVideoFields(locale, activeFeature.id, activeTab.values.model || null)
     }
     return activeFeature.fields
@@ -1298,7 +1312,13 @@ export function WorkspaceCapabilitiesMediaWorkspace({
               <article className="configuration-panel">
                 <div className="panel-title">{copy.config}</div>
                 <p className="panel-helper">{activeFeature.summary}</p>
-                <div className="mt-5 space-y-4">
+                <div
+                  className={
+                    activeFeature.capabilitySlug === "ai-video"
+                      ? "mt-5 grid grid-cols-1 gap-x-4 gap-y-4 md:grid-cols-2"
+                      : "mt-5 space-y-4"
+                  }
+                >
                   {activeFeature.id === "voice-synthesis" ? (
                     <div className="voice-library-box">
                       <div className="flex items-center justify-between gap-3">
@@ -1366,7 +1386,14 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                   ) : null}
 
                   {activeFields.map((field) => (
-                    <div key={field.id} className="space-y-2">
+                    <div
+                      key={field.id}
+                      className={`space-y-2 ${
+                        activeFeature.capabilitySlug === "ai-video" && VIDEO_PARAMETER_WIDE_FIELDS.has(field.id)
+                          ? "md:col-span-2"
+                          : ""
+                      }`}
+                    >
                       <Label htmlFor={`${activeTab.id}-${field.id}`} className="field-label">{field.label}</Label>
                       {activeFeature.id === "voice-synthesis" && field.id === "voiceId"
                         ? renderVoiceSelect(activeTab, field)
@@ -1429,7 +1456,11 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                     </div>
                   ))}
 
-                  <div className="pt-2">
+                  <div
+                    className={`pt-2 ${
+                      activeFeature.capabilitySlug === "ai-video" ? "md:col-span-2 md:col-start-1" : ""
+                    }`}
+                  >
                     <Button type="button" className="execute-btn" onClick={() => void submitActiveTab()} disabled={activeTab.isSubmitting}>
                       {activeTab.isSubmitting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Sparkles className="mr-2 size-4" />}
                       {activeTab.isSubmitting ? copy.generating : activeFeature.submitLabel}

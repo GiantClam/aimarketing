@@ -69,6 +69,45 @@ export const sourceLabels: Record<TaskSource, string> = {
   media: "Media",
 }
 
+const localizedStatusLabels: Record<TaskStatus, { zh: string; en: string }> = {
+  queued: { zh: "排队中", en: "Queued" },
+  running: { zh: "运行中", en: "Running" },
+  succeeded: { zh: "已完成", en: "Succeeded" },
+  failed: { zh: "失败", en: "Failed" },
+  cancelled: { zh: "已取消", en: "Cancelled" },
+}
+
+const localizedSourceLabels: Record<TaskSource, { zh: string; en: string }> = {
+  tool: { zh: "工具", en: "Tool" },
+  workflow: { zh: "工作流", en: "Workflow" },
+  agent: { zh: "Agent", en: "Agent" },
+  media: { zh: "媒体", en: "Media" },
+}
+
+const localizedTaskNames: Record<string, { zh: string; en: string }> = {
+  "text-to-video": { zh: "文生视频", en: "Text To Video" },
+  "image-to-video": { zh: "图生视频", en: "Image To Video" },
+  "reference-to-video": { zh: "参考生视频", en: "Reference To Video" },
+  "video-edit": { zh: "视频编辑", en: "Video Edit" },
+  "digital-human": { zh: "数字人", en: "Digital Human" },
+  "video-enhance": { zh: "视频增强", en: "Video Enhance" },
+  "ai-music": { zh: "AI 音乐", en: "AI Music" },
+  "voice-clone": { zh: "声音克隆", en: "Voice Clone" },
+  "voice-synthesis": { zh: "语音合成", en: "Voice Synthesis" },
+}
+
+export function getLocalizedStatusLabel(status: TaskStatus, locale: "zh" | "en") {
+  return localizedStatusLabels[status][locale]
+}
+
+export function getLocalizedSourceLabel(source: TaskSource, locale: "zh" | "en") {
+  return localizedSourceLabels[source][locale]
+}
+
+export function getLocalizedTaskName(task: Pick<TaskCenterTask, "itemSlug" | "displayName">, locale: "zh" | "en") {
+  return localizedTaskNames[task.itemSlug]?.[locale] || task.displayName
+}
+
 export function normalizeSource(kind: string): TaskSource {
   if (kind === "workflow" || kind === "media" || kind === "tool" || kind === "agent") return kind
   return "tool"

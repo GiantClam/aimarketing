@@ -21,6 +21,8 @@ function normalizeInitialFeatureId(value: string | string[] | undefined): Capabi
     raw === "voice-synthesis" ||
     raw === "text-to-video" ||
     raw === "image-to-video" ||
+    raw === "reference-to-video" ||
+    raw === "video-edit" ||
     raw === "digital-human" ||
     raw === "video-enhance"
   ) {

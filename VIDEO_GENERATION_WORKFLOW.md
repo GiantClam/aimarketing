@@ -1,6 +1,13 @@
 # Video Workflow Plan
 
-视频能力先保留四个 RunningHub 入口：
+当前视频能力上线范围：
+
+- MiniMax Hailuo 2.3：文生视频、图生视频
+- MiniMax Hailuo 2.3 Fast：图生视频
+- 阿里百炼 HappyHorse：文生视频、首帧图生视频、参考生视频、视频编辑
+- RunningHub Seedance Pro：文生视频、图生视频
+
+历史 RunningHub 工作流入口仍保留：
 
 - 文生视频
 - 图生视频
@@ -8,6 +15,18 @@
 - 视频高清化
 
 暂不接入视频复刻、热门视频检索、人脸融合等延展入口。所有视频任务都按异步任务处理，提交后立即返回任务记录，前端通过轮询或后续 webhook 更新状态，任务成功后转存最终视频，避免 RunningHub 结果 URL 过期。
+
+## 上线前配置
+
+以下变量必须配置在服务端生产 Secret Manager 中，不能写入前端、数据库或仓库：
+
+- `LEAD_TOOLS_MINIMAX_API_KEY`
+- `LEAD_TOOLS_MINIMAX_BASE_URL=https://api.minimaxi.com/v1`
+- `BAILIAN_API_KEY`
+- `BAILIAN_BASE_URL=https://ws-nn0thi431wsrd63b.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1`
+- `RUNNINGHUB_API_KEY`
+
+修改 Secret 后必须重启应用实例，并执行一次文生视频和图生视频冒烟测试。
 
 ## 目标
 
@@ -418,6 +437,10 @@ RUNNINGHUB_UPLOAD_PATH=/openapi/v2/media/upload/binary
 
 RUNNINGHUB_SEEDANCE_TEXT_TO_VIDEO_ENDPOINT=/openapi/v2/rhart-video/sparkvideo-2.0-fast/text-to-video
 RUNNINGHUB_SEEDANCE_IMAGE_TO_VIDEO_ENDPOINT=/openapi/v2/rhart-video/sparkvideo-2.0-fast/image-to-video
+RUNNINGHUB_SEEDANCE_PRO_TEXT_TO_VIDEO_ENDPOINT=/openapi/v2/rhart-video/sparkvideo-2.0/text-to-video
+RUNNINGHUB_SEEDANCE_PRO_IMAGE_TO_VIDEO_ENDPOINT=/openapi/v2/rhart-video/sparkvideo-2.0/image-to-video
+RUNNINGHUB_SEEDANCE_MINI_TEXT_TO_VIDEO_ENDPOINT=/openapi/v2/rhart-video/sparkvideo-2.0-mini/text-to-video
+RUNNINGHUB_SEEDANCE_MINI_IMAGE_TO_VIDEO_ENDPOINT=/openapi/v2/rhart-video/sparkvideo-2.0-mini/image-to-video
 
 RUNNINGHUB_DIGITAL_HUMAN_WORKFLOW_ID=2019410250268418050
 RUNNINGHUB_VIDEO_ENHANCE_WORKFLOW_ID=2064172986302812162

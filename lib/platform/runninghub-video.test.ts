@@ -12,6 +12,8 @@ const config: RunningHubConfig = {
   workflowCreatePath: "/task/openapi/create",
   seedanceTextToVideoEndpoint: "/openapi/v2/rhart-video/sparkvideo-2.0-fast/text-to-video",
   seedanceImageToVideoEndpoint: "/openapi/v2/rhart-video/sparkvideo-2.0-fast/image-to-video",
+  seedanceProTextToVideoEndpoint: "/openapi/v2/rhart-video/sparkvideo-2.0/text-to-video",
+  seedanceProImageToVideoEndpoint: "/openapi/v2/rhart-video/sparkvideo-2.0/image-to-video",
   seedanceMiniTextToVideoEndpoint: "/openapi/v2/rhart-video/sparkvideo-2.0-mini/text-to-video",
   seedanceMiniImageToVideoEndpoint: "/openapi/v2/rhart-video/sparkvideo-2.0-mini/image-to-video",
   digitalHumanWorkflowId: null,
@@ -60,5 +62,25 @@ test("seedance endpoint resolver keeps fast and mini model routes separate", () 
       config,
     }),
     "/openapi/v2/rhart-video/sparkvideo-2.0-mini/image-to-video",
+  )
+})
+
+test("seedance endpoint resolver routes pro models to the standard RunningHub API", () => {
+  assert.equal(
+    resolveSeedanceVideoEndpoint({
+      featureId: "text-to-video",
+      params: { modelId: "runninghub:video:seedance-pro-text-to-video" },
+      config,
+    }),
+    "/openapi/v2/rhart-video/sparkvideo-2.0/text-to-video",
+  )
+
+  assert.equal(
+    resolveSeedanceVideoEndpoint({
+      featureId: "image-to-video",
+      params: { nativeModel: "seedance-pro-image-to-video" },
+      config,
+    }),
+    "/openapi/v2/rhart-video/sparkvideo-2.0/image-to-video",
   )
 })

@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { platformTaskRuns } from "@/lib/db/schema"
 import { queryMiniMaxAudioTask, type MiniMaxNormalizedTask } from "@/lib/platform/minimax-audio"
 import { queryMiniMaxVideoTask, type MiniMaxVideoTask } from "@/lib/platform/minimax-video"
+import { queryBailianVideoTask, type BailianVideoTask } from "@/lib/platform/bailian-video"
 import {
   queryMediaCapabilityTask,
   resolveModelIdFromRun,
@@ -72,6 +73,7 @@ type PlatformRunSyncDeps = {
 }
 
 const MINIMAX_VIDEO_ITEM_SLUGS = new Set(["text-to-video", "image-to-video"])
+const BAILIAN_VIDEO_ITEM_SLUGS = new Set(["text-to-video", "image-to-video", "reference-to-video", "video-edit"])
 const RUNNINGHUB_VIDEO_ITEM_SLUGS = new Set([
   "ai-video",
   "text-to-video",
@@ -216,6 +218,7 @@ export async function syncPlatformTaskRuns(
   const appendEvent = deps.appendEvent ?? appendPlatformRunEvent
   const minimaxQuery = deps.queryMiniMaxAudioTask ?? queryMiniMaxAudioTask
   const minimaxVideoQuery = deps.queryMiniMaxVideoTask ?? queryMiniMaxVideoTask
+  const bailianVideoQuery = queryBailianVideoTask
   const runningHubVideoQuery = deps.queryRunningHubVideoTask ?? queryRunningHubVideoTask
   const runningHubQuery = deps.queryRunningHubTask ?? queryRunningHubTask
   const now = deps.now ?? Date.now
@@ -303,6 +306,41 @@ export async function syncPlatformTaskRuns(
           "payload" in result
             ? normalizeTaskLikeResult(result.payload as MiniMaxVideoTask)
             : normalizeTaskLikeResult(result as MiniMaxVideoTask)
+        if (normalized.providerStatus) {
+          updated += 1
+        }
+        continue
+      }
+
+      if (run.externalSystem === "bailian" && BAILIAN_VIDEO_ITEM_SLUGS.has(run.itemSlug)) {
+        const modelId = resolveModelIdFromRun({
+          run,
+        })
+        if (!modelId) {
+          await appendUnsupportedSyncEvent(run, deps)
+          continue
+        }
+        const result = await queryMediaCapabilityTask({
+          currentUser: {
+            id: run.userId,
+            enterpriseId: run.enterpriseId,
+          },
+          runId: run.id,
+          modelId,
+        }).catch(async () =>
+          bailianVideoQuery({
+            currentUser: {
+              id: run.userId,
+              enterpriseId: run.enterpriseId,
+            },
+            runId: run.id,
+          }),
+        )
+
+        const normalized =
+          "payload" in result
+            ? normalizeTaskLikeResult(result.payload as BailianVideoTask)
+            : normalizeTaskLikeResult(result as BailianVideoTask)
         if (normalized.providerStatus) {
           updated += 1
         }

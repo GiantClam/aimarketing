@@ -22,7 +22,6 @@ export type EnterpriseVideoModelProviderId =
   | "bailian_official"
   | "minimax_official"
   | "gemini_official"
-  | "seedance_official"
   | "runninghub"
 
 export type EnterpriseAudioModelProviderId = "minimax_official"
@@ -119,7 +118,7 @@ const SUPPORTED_MODEL_CARDS: Record<EnterpriseModelCategory, SupportedModelDescr
     {
       providerId: "bailian_official",
       providerLabel: "阿里云百炼",
-      integrationLabel: "Bailian API",
+      integrationLabel: "Bailian Singapore API",
       models: ["qwen-image-3.0-pro", "qwen-image-2.7"],
     },
     {
@@ -152,13 +151,18 @@ const SUPPORTED_MODEL_CARDS: Record<EnterpriseModelCategory, SupportedModelDescr
       providerId: "bailian_official",
       providerLabel: "阿里云百炼",
       integrationLabel: "Bailian API",
-      models: ["happyhorse-1.1-t2v"],
+      models: [
+        "happyhorse-1.1-t2v",
+        "happyhorse-1.1-i2v",
+        "happyhorse-1.1-r2v",
+        "happyhorse-1.0-video-edit",
+      ],
     },
     {
       providerId: "minimax_official",
       providerLabel: "MiniMax 海螺",
       integrationLabel: "Official API",
-      models: ["海螺视频模型"],
+      models: ["MiniMax-Hailuo-2.3", "MiniMax-Hailuo-2.3-Fast"],
     },
     {
       providerId: "gemini_official",
@@ -167,16 +171,15 @@ const SUPPORTED_MODEL_CARDS: Record<EnterpriseModelCategory, SupportedModelDescr
       models: ["Veo 3.1"],
     },
     {
-      providerId: "seedance_official",
-      providerLabel: "Seedance",
-      integrationLabel: "Official API",
-      models: ["Seedance 视频模型"],
-    },
-    {
       providerId: "runninghub",
       providerLabel: "RunningHub",
       integrationLabel: "RunningHub API",
-      models: ["RunningHub 视频工作流"],
+      models: [
+        "Seedance Pro Text to Video",
+        "Seedance Pro Image to Video",
+        "Seedance Fast",
+        "Seedance Mini",
+      ],
     },
   ],
   audio_generation: [

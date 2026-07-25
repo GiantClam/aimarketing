@@ -103,16 +103,35 @@ function isSeedanceMiniVideoModel(params: Record<string, unknown>) {
   })
 }
 
+function isSeedanceProVideoModel(params: Record<string, unknown>) {
+  const candidates = [params.modelId, params.model, params.nativeModel]
+  return candidates.some((value) => {
+    if (typeof value !== "string") return false
+    const normalized = value.trim().toLowerCase()
+    return normalized.includes("seedance-pro") || normalized.includes("sparkvideo-2.0") &&
+      !normalized.includes("sparkvideo-2.0-fast") && !normalized.includes("sparkvideo-2.0-mini")
+  })
+}
+
 export function resolveSeedanceVideoEndpoint(input: {
   featureId: RunningHubSeedanceVideoFeatureId
   params: Record<string, unknown>
   config: ReturnType<typeof getRunningHubConfig>
 }) {
+  const usePro = isSeedanceProVideoModel(input.params)
   const useMini = isSeedanceMiniVideoModel(input.params)
   if (input.featureId === "image-to-video") {
-    return useMini ? input.config.seedanceMiniImageToVideoEndpoint : input.config.seedanceImageToVideoEndpoint
+    return usePro
+      ? input.config.seedanceProImageToVideoEndpoint || input.config.seedanceImageToVideoEndpoint
+      : useMini
+        ? input.config.seedanceMiniImageToVideoEndpoint
+        : input.config.seedanceImageToVideoEndpoint
   }
-  return useMini ? input.config.seedanceMiniTextToVideoEndpoint : input.config.seedanceTextToVideoEndpoint
+  return usePro
+    ? input.config.seedanceProTextToVideoEndpoint || input.config.seedanceTextToVideoEndpoint
+    : useMini
+      ? input.config.seedanceMiniTextToVideoEndpoint
+      : input.config.seedanceTextToVideoEndpoint
 }
 
 function buildRunningHubFileNameFieldId(fieldId: string) {
