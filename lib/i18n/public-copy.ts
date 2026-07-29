@@ -105,7 +105,7 @@ type PublicPricingGridCopy = {
   recommended: string
   starterAccess: string
   perMonth: string
-  workspaceMember: (count: number) => string
+  unlimitedMembers: string
   creditsLine: (monthlyCredits: number, trialCredits: number) => string
   imageQuality: (quality: string) => string
   priorityQueue: string
@@ -302,7 +302,7 @@ const en: PublicCopy = {
     recommended: "Recommended",
     starterAccess: "Starter access",
     perMonth: "per month",
-    workspaceMember: (count) => `${count} workspace member${count > 1 ? "s" : ""}`,
+    unlimitedMembers: "Unlimited workspace members",
     creditsLine: (monthlyCredits, trialCredits) =>
       monthlyCredits > 0 ? `${formatNumber(monthlyCredits, "en")} monthly credits` : `${formatNumber(trialCredits, "en")} trial credits`,
     imageQuality: (quality) => `Image quality: ${quality}`,
@@ -494,7 +494,7 @@ const zh: PublicCopy = {
     recommended: "推荐",
     starterAccess: "入门可用",
     perMonth: "每月",
-    workspaceMember: (count) => `${count} 位工作台成员`,
+    unlimitedMembers: "工作区成员不限数量",
     creditsLine: (monthlyCredits, trialCredits) =>
       monthlyCredits > 0 ? `${formatNumber(monthlyCredits, "zh")} 积分 / 月` : `${formatNumber(trialCredits, "zh")} 试用积分`,
     imageQuality: (quality) => `图片质量：${quality}`,

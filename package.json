@@ -22,6 +22,7 @@
     "migrate:billing": "node scripts/run-billing-subscription-migration.js",
     "migrate:billing:plan-change": "node scripts/run-billing-plan-change-migration.js",
     "migrate:billing:stripe": "node scripts/run-billing-stripe-migration.js",
+    "migrate:billing:credit-topup": "node scripts/run-billing-credit-topup-migration.js",
     "migrate:all": "node scripts/run-all-db-migrations.js",
     "db:opencode:v2:migrate": "node scripts/run-opencode-runtime-v2-migration.js",
     "db:opencode:v2:verify": "node scripts/run-opencode-runtime-v2-migration.js --verify",

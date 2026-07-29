@@ -24,8 +24,9 @@ export type WorkspaceBillingSnapshot = {
   } | null
   effectivePlan: BillingPlan
   activeMemberCount: number
-  seatLimit: number
-  seatsRemaining: number
+  /** Legacy fields remain nullable so older API consumers can migrate safely. */
+  seatLimit: null
+  seatsRemaining: null
 }
 
 function toIsoOrNull(value: string | Date | null | undefined) {
@@ -95,7 +96,6 @@ export async function getWorkspaceBillingSnapshot(enterpriseId: number): Promise
   const subscriptionRow = (subscriptionResult.rows[0] || null) as SubscriptionRow | null
   const effectivePlan = getEffectivePlan(subscriptionRow)
   const activeMemberCount = readCount(membersResult.rows[0]?.active_member_count)
-  const seatLimit = Math.max(1, Number(effectivePlan.sharedMemberLimit || 1))
 
   return {
     subscription: subscriptionRow
@@ -112,11 +112,7 @@ export async function getWorkspaceBillingSnapshot(enterpriseId: number): Promise
       : null,
     effectivePlan,
     activeMemberCount,
-    seatLimit,
-    seatsRemaining: Math.max(0, seatLimit - activeMemberCount),
+    seatLimit: null,
+    seatsRemaining: null,
   }
-}
-
-export function hasAvailableWorkspaceSeat(snapshot: Pick<WorkspaceBillingSnapshot, "seatLimit" | "activeMemberCount">) {
-  return snapshot.activeMemberCount < snapshot.seatLimit
 }

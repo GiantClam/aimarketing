@@ -11,13 +11,6 @@ const originalLoad = nodeModule._load
 let selectQueue: any[][] = []
 let updates: Array<{ values: Record<string, unknown> }> = []
 let upsertPermissionsCalls = 0
-let workspaceSnapshot = {
-  activeMemberCount: 2,
-  seatLimit: 2,
-  seatsRemaining: 0,
-  effectivePlan: { code: "starter" },
-}
-
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
     return {
@@ -38,13 +31,6 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/auth/session") {
     return {
       getSessionUser: async () => ({ id: 7 }),
-    }
-  }
-  if (request === "@/lib/billing/workspace") {
-    return {
-      getWorkspaceBillingSnapshot: async () => workspaceSnapshot,
-      hasAvailableWorkspaceSeat: (snapshot: { activeMemberCount: number; seatLimit: number }) =>
-        snapshot.activeMemberCount < snapshot.seatLimit,
     }
   }
   if (request === "@/lib/db") {
@@ -116,22 +102,17 @@ test.beforeEach(() => {
   selectQueue = [
     [{ id: 5, userId: 12, enterpriseId: 11, status: "pending" }],
     [{ enterpriseId: 11 }],
+    [{ enterpriseId: null, enterpriseStatus: "inactive" }],
   ]
   updates = []
   upsertPermissionsCalls = 0
-  workspaceSnapshot = {
-    activeMemberCount: 2,
-    seatLimit: 2,
-    seatsRemaining: 0,
-    effectivePlan: { code: "starter" },
-  }
 })
 
 test.after(() => {
   nodeModule._load = originalLoad
 })
 
-test("enterprise request approval blocks when workspace seats are full", async () => {
+test("enterprise request approval succeeds without a plan seat limit", async () => {
   const response = (await POST(
     {
       json: async () => ({ action: "approve" }),
@@ -139,11 +120,8 @@ test("enterprise request approval blocks when workspace seats are full", async (
     { params: Promise.resolve({ requestId: "5" }) },
   )) as any
 
-  assert.equal(response.status, 409)
-  assert.equal(response.body?.error, "billing_member_limit_reached")
-  assert.equal(response.body?.activeMemberCount, 2)
-  assert.equal(response.body?.seatLimit, 2)
-  assert.equal(response.body?.planCode, "starter")
-  assert.equal(updates.length, 0)
-  assert.equal(upsertPermissionsCalls, 0)
+  assert.equal(response.status, 200)
+  assert.equal(response.body?.success, true)
+  assert.equal(updates.length, 2)
+  assert.equal(upsertPermissionsCalls, 1)
 })

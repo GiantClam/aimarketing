@@ -252,7 +252,7 @@ export function WorkspacePlatformGovernance({
             "直接读取当前 provider routing、任务模式和 entitlement 钩子，避免平台能力页和实际运行时脱节。",
           billingTitle: "计费与额度",
           billingBody:
-            "统一查看当前计划、可用 credits、预留额度和团队 seat 状态，让平台治理和商业规则保持同一视角。",
+            "统一查看当前计划、可用 credits、预留额度和团队成员状态，让平台治理和商业规则保持同一视角。",
           registryTitle: "目录显示控制",
           registryBody:
             "这里汇总 capability / agent / plugin / MCP / workflow 的注册表状态，用来判断哪些能力已启用、哪些仍是 deferred。",
@@ -261,7 +261,7 @@ export function WorkspacePlatformGovernance({
             "更细的成员、知识、账单和工作台策略仍保留在原有页面，但现在都从同一个平台设置页回流。",
           enterpriseIaTitle: "企业设置入口与治理面",
           enterpriseIaBody:
-            "成员与知识相关配置现在已经在这里直接可管；席位、用量、算力和 SSO 继续先以信息架构入口落位，帮助企业管理员知道这些治理面会落在哪些工作台路径上。",
+            "成员与知识相关配置现在已经在这里直接可管；用量、算力和 SSO 继续先以信息架构入口落位，帮助企业管理员知道这些治理面会落在哪些工作台路径上。",
           tabsTitle: "企业设置板块",
           tabsBody:
             "把企业治理配置拆成清晰的 tab：治理偏好、模型配置、企业管理员面板分别承接，避免管理员在个人设置和平台设置之间来回跳转。",
@@ -273,8 +273,8 @@ export function WorkspacePlatformGovernance({
             "原来出现在个人设置里的管理员入口已经收回到企业设置。这里同时承接成员审核、权限分配、知识连接和顾问工作流治理。",
           adminMovedTag: "已从个人设置迁移",
           personalSettingsLink: "打开个人设置",
-          membersTitle: "企业成员与席位",
-          membersBody: "直接显示当前企业总成员数、活跃成员数，以及套餐能提供的 seat 上限。",
+          membersTitle: "企业成员",
+          membersBody: "直接显示当前企业总成员数和活跃成员数，套餐不设置成员数量上限。",
           usageTitle: "共享额度与用量",
           usageBody: "把共享 credits、当前计划和近 30 天的 credits 流水压成一个运营视角。",
           ssoTitle: "SSO 就绪状态",
@@ -287,7 +287,7 @@ export function WorkspacePlatformGovernance({
           plan: "当前计划",
           status: "订阅状态",
           nextPlan: "下个计划",
-          seats: "成员席位",
+          seats: "成员",
           canSpend: "可消耗",
           yes: "可以",
           no: "不可以",
@@ -306,7 +306,7 @@ export function WorkspacePlatformGovernance({
           workspaceVisible: "工作台可见",
           totalMembers: "总成员",
           activeMembers: "活跃成员",
-          seatLimit: "Seat 上限",
+          seatLimit: "成员数量上限",
           recentLedger: "近 30 天流水",
           recentNetCredits: "近 30 天净积分",
           ssoConfigured: "已配置",
@@ -326,7 +326,7 @@ export function WorkspacePlatformGovernance({
             "Reads the real provider routing, task modes, and entitlement hooks so the platform view stays aligned with the actual runtime.",
           billingTitle: "Billing and credit posture",
           billingBody:
-            "Review the current plan, available credits, reserved balance, and seat status in one place so platform governance and commercial rules share the same surface.",
+            "Review the current plan, available credits, reserved balance, and member status in one place so platform governance and commercial rules share the same surface.",
           registryTitle: "Directory visibility control",
           registryBody:
             "Summarizes capability / agent / plugin / MCP / workflow registry state so teams can see what is enabled versus still deferred.",
@@ -335,7 +335,7 @@ export function WorkspacePlatformGovernance({
             "Member, knowledge, billing, and detailed workspace settings still live on their existing pages, but they now roll back into one platform settings layer.",
           enterpriseIaTitle: "Enterprise settings entry and governance layer",
           enterpriseIaBody:
-            "Member and knowledge controls are now directly manageable here, while seats, usage, compute, and SSO still land as information-architecture entry points first.",
+            "Member and knowledge controls are now directly manageable here, while usage, compute, and SSO still land as information-architecture entry points first.",
           tabsTitle: "Enterprise settings sections",
           tabsBody:
             "Split enterprise controls into clear tabs so governance preferences, model configuration, and admin operations each have a dedicated surface.",
@@ -347,8 +347,8 @@ export function WorkspacePlatformGovernance({
             "The admin handoff that used to sit in personal settings now lives here alongside member reviews, permissions, knowledge bindings, and advisor workflow governance.",
           adminMovedTag: "Moved from personal settings",
           personalSettingsLink: "Open personal settings",
-          membersTitle: "Members and seats",
-          membersBody: "Show the company member footprint directly: total members, active members, and the seat limit available on the current plan.",
+          membersTitle: "Members",
+          membersBody: "Show the company member footprint directly: total members and active members. Plans do not cap member count.",
           usageTitle: "Shared credits and usage",
           usageBody: "Compress shared credits, current plan, and 30-day credit ledger activity into one operational view.",
           ssoTitle: "SSO readiness",
@@ -361,7 +361,7 @@ export function WorkspacePlatformGovernance({
           plan: "Current plan",
           status: "Subscription status",
           nextPlan: "Next plan",
-          seats: "Workspace seats",
+          seats: "Members",
           canSpend: "Spendable now",
           yes: "Yes",
           no: "No",
@@ -380,7 +380,7 @@ export function WorkspacePlatformGovernance({
           workspaceVisible: "Workspace visible",
           totalMembers: "Total members",
           activeMembers: "Active members",
-          seatLimit: "Seat limit",
+          seatLimit: "Member limit",
           recentLedger: "30-day ledger",
           recentNetCredits: "30-day net credits",
           ssoConfigured: "Configured",

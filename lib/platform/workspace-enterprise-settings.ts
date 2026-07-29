@@ -18,11 +18,11 @@ export type LocalizedWorkspaceEnterpriseSettingEntry = {
 const zhEntries: LocalizedWorkspaceEnterpriseSettingEntry[] = [
   {
     slug: "seats",
-    title: "席位管理",
-    summary: "统一梳理企业成员席位、活跃成员和角色编排入口。",
+    title: "成员管理",
+    summary: "统一梳理企业成员、活跃状态和角色编排入口。",
     description:
-      "当前版本先补齐信息架构入口，让管理员在同一治理层理解席位、成员活跃度和团队分配，不展开新的权限底层。",
-    bullets: ["查看活跃成员与席位上限", "回流计费与订阅视图", "保留后续组织与角色扩展位"],
+      "当前版本先补齐信息架构入口，让管理员在同一治理层理解成员活跃度和团队分配，不展开新的权限底层。",
+    bullets: ["查看活跃成员与角色分配", "回流计费与订阅视图", "保留后续组织与角色扩展位"],
     href: "/dashboard/platform-settings/seats",
     relatedLinks: [
       { label: "平台设置总览", href: "/dashboard/platform-settings" },
@@ -78,10 +78,10 @@ const enEntries: LocalizedWorkspaceEnterpriseSettingEntry[] = [
   {
     slug: "seats",
     title: "Seat management",
-    summary: "Keep workspace seats, active members, and role allocation in one enterprise view.",
+    summary: "Keep workspace members, active status, and role allocation in one enterprise view.",
     description:
-      "This phase adds the information architecture entry point so admins can reason about seats, active members, and team allocation without changing the permission core.",
-    bullets: ["Review active members and seat ceilings", "Roll back into billing and subscription views", "Reserve room for future org and role expansion"],
+      "This phase adds the information architecture entry point so admins can reason about members, active status, and team allocation without changing the permission core.",
+    bullets: ["Review active members and role allocation", "Roll back into billing and subscription views", "Reserve room for future org and role expansion"],
     href: "/dashboard/platform-settings/seats",
     relatedLinks: [
       { label: "Platform settings", href: "/dashboard/platform-settings" },

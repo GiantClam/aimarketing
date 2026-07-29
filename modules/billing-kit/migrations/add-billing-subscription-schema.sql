@@ -115,21 +115,21 @@ INSERT INTO "AI_MARKETING_subscription_plans" (
     'Starter',
     990,
     3000,
-    '{"sharedMemberLimit":2,"gptImage2":true,"maskEdit":"limited","videoGeneration":"trial"}'::jsonb
+    '{"gptImage2":true,"maskEdit":"limited","videoGeneration":"trial"}'::jsonb
   ),
   (
     'creator',
     'Creator',
     1990,
     10000,
-    '{"sharedMemberLimit":5,"gptImage2":true,"maskEdit":"standard","videoGeneration":"limited"}'::jsonb
+    '{"gptImage2":true,"maskEdit":"standard","videoGeneration":"limited"}'::jsonb
   ),
   (
     'studio',
     'Studio',
     5990,
     35000,
-    '{"sharedMemberLimit":10,"gptImage2":true,"maskEdit":"high","priorityQueue":true,"videoGeneration":"standard"}'::jsonb
+    '{"gptImage2":true,"maskEdit":"high","priorityQueue":true,"videoGeneration":"standard"}'::jsonb
   )
 ON CONFLICT (code) DO UPDATE SET
   name = EXCLUDED.name,
