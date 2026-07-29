@@ -12,6 +12,7 @@ import {
   Database,
   Globe,
   GraduationCap,
+  House,
   ImageIcon,
   LayoutGrid,
   LogOut,
@@ -312,16 +313,17 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
 
       <aside
         className={`dashboard-panel !fixed inset-y-0 left-0 z-50 overflow-hidden border-r border-sidebar-border/50 bg-sidebar shadow-none transition-[width,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:!static ${
-          sidebarCollapsed ? "w-[88px]" : "w-[240px] lg:w-[260px]"
+          sidebarCollapsed ? "w-[88px]" : "w-[240px] lg:w-[276px]"
         } ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
         <div className="flex h-full flex-col">
           <div className={sidebarCollapsed ? "border-b border-sidebar-border/55 p-3" : "border-b border-sidebar-border/55 p-4"}>
-            <div className={sidebarCollapsed ? "flex flex-col items-center gap-3" : "flex items-start justify-between gap-3"}>
-              <div className={sidebarCollapsed ? "flex flex-col items-center gap-3" : "flex min-w-0 items-center gap-3"}>
+            <div className="flex flex-col gap-3">
+                <div className={sidebarCollapsed ? "flex flex-col items-center gap-3" : "flex min-w-0 items-center gap-3"}>
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[6px] border border-primary/40 bg-primary">
                   <span className="dashboard-title text-base text-primary-foreground">AI</span>
                 </div>
+                {!sidebarCollapsed && <span className="dashboard-title text-lg tracking-tight text-sidebar-foreground">MARKETING</span>}
               </div>
               <div className={sidebarCollapsed ? "flex w-full flex-col items-center gap-2" : "flex items-center gap-1"}>
                 <LocaleSwitcher compact={sidebarCollapsed} className={sidebarCollapsed ? "w-full justify-center" : ""} />
@@ -358,6 +360,14 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                     {enterprisePending ? messages.dashboardLayout.pendingEnterprise : messages.dashboardLayout.rejectedEnterprise}
                   </div>
                 )}
+
+                <DashboardMenuLink
+                  href="/dashboard"
+                  label={locale === "zh" ? "首页" : "Home"}
+                  icon={House}
+                  collapsed={sidebarCollapsed}
+                  active={pathname === "/dashboard"}
+                />
 
                 {showAiEntry && (
                   sidebarCollapsed ? (

@@ -1346,7 +1346,7 @@ export function AiEntryWorkspace({
             loading: "正在生成...",
             restoring: "正在恢复会话...",
             quickStart: "快速提问",
-            modelLabel: "模型",
+            modelLabel: "Standard",
             modelLoading: "加载模型中...",
             modelEmpty: "无可用模型",
             agentLabel: "顾问",
@@ -1383,7 +1383,7 @@ export function AiEntryWorkspace({
             loading: "Generating...",
             restoring: "Restoring conversation...",
             quickStart: "Quick tips",
-            modelLabel: "Model",
+            modelLabel: "Standard",
             modelLoading: "Loading models...",
             modelEmpty: "No models",
             agentLabel: "Advisor",
@@ -3769,8 +3769,9 @@ export function AiEntryWorkspace({
           }}
           disabled={isResponseLoading || modelsLoading || models.length === 0}
         >
-          <SelectTrigger className={`model-select min-w-0 w-[140px] max-w-[44vw] rounded-[8px] px-3 text-xs text-foreground outline-none focus:border-primary sm:w-[220px] sm:max-w-[220px] ${buttonHeight}`}>
-            <SelectValue placeholder={`${copy.modelLabel}: ${modelsLoading ? copy.modelLoading : copy.modelEmpty}`} />
+            <SelectTrigger className={`model-select min-w-0 w-[140px] max-w-[44vw] rounded-[8px] px-3 text-xs text-foreground outline-none focus:border-primary sm:w-[220px] sm:max-w-[220px] ${buttonHeight}`}>
+            <span className="model-select-label">{copy.modelLabel}</span>
+            <SelectValue placeholder={modelsLoading ? copy.modelLoading : copy.modelEmpty} />
           </SelectTrigger>
           <SelectContent>{renderModelSelectContent()}</SelectContent>
         </Select>

@@ -1,0 +1,191 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1100" viewBox="0 0 1800 1100" fill="none">
+  <defs>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" stroke="#303030" stroke-opacity=".33"/>
+    </pattern>
+    <linearGradient id="surface" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#1B1B1B"/>
+      <stop offset="1" stop-color="#121212"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#242424"/>
+      <stop offset="1" stop-color="#171717"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000" flood-opacity=".35"/>
+    </filter>
+    <filter id="softGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <style>
+      .display { font-family: Inter, Arial, sans-serif; font-weight: 800; letter-spacing: -0.02em; }
+      .body { font-family: Inter, Arial, sans-serif; font-weight: 500; }
+      .small { font-family: Inter, Arial, sans-serif; font-weight: 700; letter-spacing: .13em; }
+      .muted { fill: #9C9C9C; }
+      .line { stroke: #3A3A3A; stroke-width: 1; }
+      .yellow { fill: #FFD000; }
+    </style>
+  </defs>
+
+  <!-- Canvas -->
+  <rect width="1800" height="1100" fill="#0F0F0F"/>
+  <rect width="1800" height="1100" fill="url(#grid)" opacity=".65"/>
+  <path d="M0 84H1800" stroke="#2E2E2E"/>
+
+  <!-- Top chrome -->
+  <g transform="translate(48 30)">
+    <rect width="42" height="42" rx="9" fill="#FFD000"/>
+    <path d="M13 14h16v4H13v-4Zm0 8h16v4H13v-4Zm0 8h10v4H13v-4Z" fill="#111"/>
+    <text x="58" y="28" class="display" font-size="22" fill="#FFF">AI MARKETING</text>
+    <path d="M271 13v18" stroke="#454545"/>
+    <text x="293" y="27" class="body" font-size="14" fill="#A9A9A9">WORKSPACE FLOW</text>
+  </g>
+  <g transform="translate(1330 32)">
+    <circle cx="10" cy="10" r="4" fill="#63D58A"/>
+    <text x="23" y="15" class="body" font-size="13" fill="#D4D4D4">All systems operational</text>
+    <rect x="220" y="-10" width="112" height="38" rx="8" fill="#222" stroke="#444"/>
+    <text x="245" y="14" class="body" font-size="13" fill="#FFF">Share flow</text>
+    <rect x="344" y="-10" width="112" height="38" rx="8" fill="#FFD000"/>
+    <text x="371" y="14" class="body" font-size="13" font-weight="800" fill="#111">Export</text>
+  </g>
+
+  <!-- Sidebar -->
+  <g transform="translate(48 112)">
+    <text x="0" y="0" class="small" font-size="10" fill="#7F7F7F">CAMPAIGN</text>
+    <text x="0" y="34" class="display" font-size="22" fill="#FFF">Spring Launch</text>
+    <path d="M0 60H184" stroke="#383838"/>
+    <g transform="translate(0 88)">
+      <rect width="184" height="44" rx="8" fill="#252525" stroke="#3B3B3B"/>
+      <circle cx="24" cy="22" r="7" stroke="#FFD000" stroke-width="2"/>
+      <path d="M24 18v8m-4-4h8" stroke="#FFD000" stroke-width="2"/>
+      <text x="47" y="27" class="body" font-size="13" fill="#FFF">Overview</text>
+    </g>
+    <g transform="translate(0 140)">
+      <rect width="184" height="44" rx="8" fill="#FFD000"/>
+      <path d="M17 17h14v13H17z" stroke="#111" stroke-width="2"/><path d="M20 21h8M20 25h5" stroke="#111" stroke-width="2"/>
+      <text x="47" y="27" class="body" font-size="13" font-weight="800" fill="#111">Flow map</text>
+    </g>
+    <g transform="translate(0 192)"><circle cx="24" cy="22" r="7" stroke="#8A8A8A" stroke-width="2"/><path d="m21 22 2 2 4-5" stroke="#8A8A8A" stroke-width="2"/><text x="47" y="27" class="body" font-size="13" fill="#B4B4B4">Assets</text></g>
+    <g transform="translate(0 244)"><path d="M18 17h12v12H18z" stroke="#8A8A8A" stroke-width="2"/><path d="M21 20h6M21 24h6" stroke="#8A8A8A" stroke-width="2"/><text x="47" y="27" class="body" font-size="13" fill="#B4B4B4">Activity</text></g>
+    <g transform="translate(0 296)"><path d="M17 29c4-8 10-12 15-12" stroke="#8A8A8A" stroke-width="2"/><circle cx="18" cy="29" r="3" stroke="#8A8A8A" stroke-width="2"/><circle cx="32" cy="17" r="3" stroke="#8A8A8A" stroke-width="2"/><text x="47" y="27" class="body" font-size="13" fill="#B4B4B4">Team review</text></g>
+    <path d="M0 364H184" stroke="#383838"/>
+    <text x="0" y="401" class="small" font-size="10" fill="#7F7F7F">FLOW STATUS</text>
+    <g transform="translate(0 425)"><circle cx="7" cy="7" r="4" fill="#FFD000"/><text x="22" y="12" class="body" font-size="12" fill="#D1D1D1">2 steps complete</text></g>
+    <g transform="translate(0 453)"><circle cx="7" cy="7" r="4" fill="#4E4E4E"/><text x="22" y="12" class="body" font-size="12" fill="#888">2 steps in progress</text></g>
+    <rect y="835" width="184" height="54" rx="10" fill="#191919" stroke="#363636"/>
+    <circle cx="28" cy="862" r="14" fill="#FFD000"/>
+    <text x="22" y="867" class="display" font-size="12" fill="#111">AM</text>
+    <text x="53" y="857" class="body" font-size="12" fill="#FFF">Alex Morgan</text>
+    <text x="53" y="875" class="body" font-size="11" fill="#878787">Marketing lead</text>
+    <path d="m159 858 5 5 5-5" stroke="#999" stroke-width="2"/>
+  </g>
+
+  <!-- Main heading -->
+  <g transform="translate(292 112)">
+    <text class="small" font-size="11" fill="#FFD000">INTERACTION MAP / V2</text>
+    <text y="55" class="display" font-size="46" fill="#FFF">From brief to launch.</text>
+    <text y="87" class="body" font-size="16" fill="#A0A0A0">One campaign context moves through research, creation, and approval.</text>
+    <rect x="1245" y="5" width="155" height="40" rx="8" fill="#1C1C1C" stroke="#444"/>
+    <circle cx="1270" cy="25" r="6" stroke="#FFD000" stroke-width="2"/><path d="M1270 21v8m-4-4h8" stroke="#FFD000" stroke-width="2"/>
+    <text x="1286" y="30" class="body" font-size="13" fill="#FFF">Add step</text>
+  </g>
+
+  <!-- Flow connectors behind cards -->
+  <g transform="translate(292 285)">
+    <path d="M340 170H390" stroke="#FFD000" stroke-width="2" stroke-dasharray="4 7"/>
+    <path d="m383 163 8 7-8 7" stroke="#FFD000" stroke-width="2"/>
+    <path d="M700 170H750" stroke="#FFD000" stroke-width="2" stroke-dasharray="4 7"/>
+    <path d="m743 163 8 7-8 7" stroke="#FFD000" stroke-width="2"/>
+    <path d="M1060 170H1110" stroke="#FFD000" stroke-width="2" stroke-dasharray="4 7"/>
+    <path d="m1103 163 8 7-8 7" stroke="#FFD000" stroke-width="2"/>
+    <circle cx="365" cy="170" r="4" fill="#FFD000" filter="url(#softGlow)"/>
+    <circle cx="725" cy="170" r="4" fill="#FFD000" filter="url(#softGlow)"/>
+    <circle cx="1085" cy="170" r="4" fill="#FFD000" filter="url(#softGlow)"/>
+  </g>
+
+  <!-- Step 1 -->
+  <g transform="translate(292 285)" filter="url(#shadow)">
+    <rect width="310" height="662" rx="12" fill="url(#surface)" stroke="#4B4B4B"/>
+    <rect x="0" y="0" width="310" height="5" rx="2" fill="#FFD000"/>
+    <circle cx="28" cy="39" r="17" fill="#FFD000"/><text x="23" y="45" class="display" font-size="17" fill="#111">1</text>
+    <text x="58" y="35" class="small" font-size="10" fill="#FFD000">BRIEF</text>
+    <text x="58" y="56" class="body" font-size="12" fill="#FFF">Campaign brief</text>
+    <rect x="22" y="85" width="266" height="110" rx="8" fill="#FFF"/>
+    <text x="38" y="111" class="small" font-size="9" fill="#767676">PROJECT NAME</text>
+    <text x="38" y="136" class="display" font-size="19" fill="#111">Spring Launch</text>
+    <path d="M38 154H270" stroke="#E3E3DE"/>
+    <text x="38" y="178" class="body" font-size="11" fill="#555">New AI workspace / Q2 campaign</text>
+    <text x="22" y="232" class="small" font-size="9" fill="#909090">CORE INPUTS</text>
+    <g transform="translate(22 250)"><rect width="266" height="42" rx="7" fill="#202020" stroke="#3D3D3D"/><text x="14" y="17" class="small" font-size="8" fill="#8E8E8E">GOAL</text><text x="14" y="33" class="body" font-size="12" fill="#FFF">Drive sign-ups for free trial</text><path d="M244 16v12m-4-8 4-4 4 4" stroke="#FFD000" stroke-width="2"/></g>
+    <g transform="translate(22 302)"><rect width="266" height="42" rx="7" fill="#202020" stroke="#3D3D3D"/><text x="14" y="17" class="small" font-size="8" fill="#8E8E8E">AUDIENCE</text><text x="14" y="33" class="body" font-size="12" fill="#FFF">B2B marketing teams</text><path d="M244 16v12m-4-8 4-4 4 4" stroke="#FFD000" stroke-width="2"/></g>
+    <g transform="translate(22 354)"><rect width="266" height="42" rx="7" fill="#202020" stroke="#3D3D3D"/><text x="14" y="17" class="small" font-size="8" fill="#8E8E8E">TONE</text><text x="14" y="33" class="body" font-size="12" fill="#FFF">Confident, clear, inspiring</text><path d="M244 16v12m-4-8 4-4" stroke="#FFD000" stroke-width="2"/></g>
+    <text x="22" y="447" class="small" font-size="9" fill="#909090">DELIVERABLES</text>
+    <g transform="translate(22 462)"><rect width="16" height="16" rx="4" fill="#FFD000"/><path d="m26 470 4 4 8-9" stroke="#FFD000" stroke-width="2"/><text x="50" y="475" class="body" font-size="12" fill="#D8D8D8">Landing page</text></g>
+    <g transform="translate(22 492)"><rect width="16" height="16" rx="4" fill="#FFD000"/><path d="m26 500 4 4 8-9" stroke="#FFD000" stroke-width="2"/><text x="50" y="505" class="body" font-size="12" fill="#D8D8D8">Email campaign</text></g>
+    <rect x="22" y="558" width="266" height="52" rx="8" fill="#FFD000"/>
+    <text x="40" y="590" class="body" font-size="13" font-weight="800" fill="#111">Continue</text>
+    <path d="M257 583h12m-6-6 6 6-6 6" stroke="#111" stroke-width="2"/>
+  </g>
+
+  <!-- Step 2 -->
+  <g transform="translate(652 285)" filter="url(#shadow)">
+    <rect width="310" height="662" rx="12" fill="url(#surface)" stroke="#4B4B4B"/>
+    <rect x="0" y="0" width="310" height="5" rx="2" fill="#FFD000"/>
+    <circle cx="28" cy="39" r="17" fill="#242424" stroke="#FFD000" stroke-width="2"/><text x="23" y="45" class="display" font-size="17" fill="#FFD000">2</text>
+    <text x="58" y="35" class="small" font-size="10" fill="#FFD000">RESEARCH</text>
+    <text x="58" y="56" class="body" font-size="12" fill="#FFF">Audience insights</text>
+    <rect x="22" y="85" width="266" height="38" rx="7" fill="#202020" stroke="#414141"/><circle cx="41" cy="104" r="7" stroke="#999" stroke-width="2"/><path d="m46 109 5 5" stroke="#999" stroke-width="2"/><text x="61" y="109" class="body" font-size="12" fill="#A5A5A5">Search market signals...</text>
+    <g transform="translate(22 146)"><text class="body" font-size="11" fill="#FFD000">Insights</text><text x="73" class="body" font-size="11" fill="#888">Competitors</text><text x="158" class="body" font-size="11" fill="#888">Trends</text><path d="M0 25H66" stroke="#FFD000" stroke-width="2"/><path d="M0 26H266" stroke="#333"/></g>
+    <text x="22" y="210" class="small" font-size="9" fill="#909090">TOP SIGNALS</text>
+    <g transform="translate(22 228)"><rect width="266" height="64" rx="8" fill="#202020" stroke="#454545"/><circle cx="29" cy="32" r="13" fill="#FFD000"/><path d="m24 32 4 4 7-8" stroke="#111" stroke-width="2"/><text x="54" y="28" class="body" font-size="12" fill="#FFF">Teams want speed</text><text x="54" y="46" class="body" font-size="11" fill="#999">without sacrificing quality.</text></g>
+    <g transform="translate(22 304)"><rect width="266" height="64" rx="8" fill="#202020" stroke="#454545"/><circle cx="29" cy="32" r="13" fill="#FFD000"/><path d="M23 32h12M29 26v12" stroke="#111" stroke-width="2"/><text x="54" y="28" class="body" font-size="12" fill="#FFF">AI adoption is rising</text><text x="54" y="46" class="body" font-size="11" fill="#999">but workflows stay fragmented.</text></g>
+    <g transform="translate(22 380)"><rect width="266" height="64" rx="8" fill="#202020" stroke="#454545"/><circle cx="29" cy="32" r="13" fill="#FFD000"/><path d="M24 35h10M26 29h6" stroke="#111" stroke-width="2"/><text x="54" y="28" class="body" font-size="12" fill="#FFF">Clear ROI drives shortlist</text><text x="54" y="46" class="body" font-size="11" fill="#999">decisions for lean teams.</text></g>
+    <rect x="22" y="482" width="126" height="42" rx="8" fill="#2B2B2B" stroke="#565656"/><text x="40" y="508" class="body" font-size="12" fill="#FFF">Add insight</text><path d="M121 500v14m-7-7h14" stroke="#FFD000" stroke-width="2"/>
+    <rect x="22" y="558" width="266" height="52" rx="8" fill="#272727" stroke="#555"/><text x="40" y="581" class="small" font-size="8" fill="#909090">CONTEXT READY</text><text x="40" y="599" class="body" font-size="12" fill="#FFF">3 insights added to brief</text><circle cx="262" cy="584" r="9" fill="#63D58A"/><path d="m258 584 3 3 5-6" stroke="#111" stroke-width="2"/>
+  </g>
+
+  <!-- Step 3 -->
+  <g transform="translate(1012 285)" filter="url(#shadow)">
+    <rect width="310" height="662" rx="12" fill="url(#surface)" stroke="#4B4B4B"/>
+    <rect x="0" y="0" width="310" height="5" rx="2" fill="#FFD000"/>
+    <circle cx="28" cy="39" r="17" fill="#242424" stroke="#FFD000" stroke-width="2"/><text x="23" y="45" class="display" font-size="17" fill="#FFD000">3</text>
+    <text x="58" y="35" class="small" font-size="10" fill="#FFD000">GENERATE</text>
+    <text x="58" y="56" class="body" font-size="12" fill="#FFF">Generated outputs</text>
+    <g transform="translate(22 84)"><rect width="266" height="38" rx="7" fill="#202020" stroke="#414141"/><text x="15" y="24" class="body" font-size="11" fill="#FFD000">GPT-4o</text><text x="83" y="24" class="body" font-size="11" fill="#A6A6A6">Claude 3.5</text><text x="174" y="24" class="body" font-size="11" fill="#A6A6A6">Gemini 1.5</text><path d="M12 36H62" stroke="#FFD000" stroke-width="2"/></g>
+    <g transform="translate(22 145)"><rect width="126" height="154" rx="8" fill="#FFF"/><text x="14" y="27" class="small" font-size="8" fill="#777">LANDING PAGE</text><text x="14" y="60" class="display" font-size="20" fill="#111">Ship faster</text><text x="14" y="82" class="display" font-size="20" fill="#111">with AI.</text><text x="14" y="108" class="body" font-size="10" fill="#555">One workspace.</text><text x="14" y="123" class="body" font-size="10" fill="#555">Every output.</text><rect x="14" y="132" width="70" height="12" rx="3" fill="#FFD000"/></g>
+    <g transform="translate(162 145)"><rect width="126" height="154" rx="8" fill="#1D1D1D" stroke="#494949"/><text x="14" y="27" class="small" font-size="8" fill="#FFD000">VISUAL CONCEPT</text><path d="M0 102 70 60l56 28v66H0z" fill="#FFD000" opacity=".93"/><rect x="24" y="73" width="79" height="55" rx="4" fill="#111"/><path d="M36 87h44M36 97h58M36 107h27" stroke="#FFD000" stroke-width="3"/><text x="14" y="143" class="body" font-size="10" fill="#FFF">Launch smarter.</text></g>
+    <rect x="22" y="326" width="266" height="98" rx="8" fill="#202020" stroke="#454545"/>
+    <text x="38" y="351" class="small" font-size="8" fill="#8E8E8E">PROMPT COMPOSER</text>
+    <text x="38" y="375" class="body" font-size="11" fill="#FFF">Make the headline more direct and</text><text x="38" y="392" class="body" font-size="11" fill="#FFF">confident for B2B buyers.</text>
+    <circle cx="259" cy="390" r="13" fill="#FFD000"/><path d="m253 390 12-7m-12 7 12 7" stroke="#111" stroke-width="2"/>
+    <rect x="22" y="448" width="266" height="52" rx="8" fill="#FFD000"/><text x="40" y="480" class="body" font-size="13" font-weight="800" fill="#111">Generate</text><path d="M257 473h12m-6-6 6 6-6 6" stroke="#111" stroke-width="2"/>
+    <g transform="translate(22 534)"><circle cx="8" cy="8" r="8" fill="#FFD000"/><path d="m4 8 3 3 6-7" stroke="#111" stroke-width="2"/><text x="28" y="13" class="body" font-size="12" fill="#D5D5D5">2 outputs ready</text><text x="208" y="13" class="body" font-size="11" fill="#888">v2</text></g>
+  </g>
+
+  <!-- Step 4 -->
+  <g transform="translate(1372 285)" filter="url(#shadow)">
+    <rect width="310" height="662" rx="12" fill="url(#surface)" stroke="#4B4B4B"/>
+    <rect x="0" y="0" width="310" height="5" rx="2" fill="#FFD000"/>
+    <circle cx="28" cy="39" r="17" fill="#242424" stroke="#FFD000" stroke-width="2"/><text x="23" y="45" class="display" font-size="17" fill="#FFD000">4</text>
+    <text x="58" y="35" class="small" font-size="10" fill="#FFD000">REVIEW</text>
+    <text x="58" y="56" class="body" font-size="12" fill="#FFF">Review &amp; approvals</text>
+    <g transform="translate(22 86)"><text class="body" font-size="11" fill="#FFD000">Comments</text><text x="87" class="body" font-size="11" fill="#888">Activity</text><path d="M0 25H72" stroke="#FFD000" stroke-width="2"/><path d="M0 26H266" stroke="#333"/></g>
+    <g transform="translate(22 141)"><circle cx="20" cy="20" r="18" fill="#575757"/><path d="M14 25c3-9 10-13 16-9" stroke="#EEE" stroke-width="2"/><text x="52" y="16" class="body" font-size="12" fill="#FFF">Sarah Chen</text><text x="52" y="36" class="body" font-size="11" fill="#999">Tighten the subheadline.</text><text x="228" y="16" class="body" font-size="9" fill="#777">10:24</text></g>
+    <g transform="translate(22 217)"><circle cx="20" cy="20" r="18" fill="#8A8A8A"/><path d="M14 25c3-9 10-13 16-9" stroke="#111" stroke-width="2"/><text x="52" y="16" class="body" font-size="12" fill="#FFF">James Wu</text><text x="52" y="36" class="body" font-size="11" fill="#999">Updated the CTA copy.</text><text x="228" y="16" class="body" font-size="9" fill="#777">10:31</text></g>
+    <g transform="translate(22 293)"><circle cx="20" cy="20" r="18" fill="#5B5B5B"/><path d="M14 25c3-9 10-13 16-9" stroke="#EEE" stroke-width="2"/><text x="52" y="16" class="body" font-size="12" fill="#FFF">Mina Patel</text><text x="52" y="36" class="body" font-size="11" fill="#999">Looks great.</text><rect x="113" y="24" width="58" height="18" rx="4" fill="#FFD000"/><text x="124" y="37" class="small" font-size="8" fill="#111">APPROVED</text></g>
+    <path d="M22 380H288" stroke="#373737"/>
+    <text x="22" y="415" class="small" font-size="9" fill="#909090">VERSION</text>
+    <g transform="translate(22 431)"><rect width="60" height="30" rx="6" fill="#FFD000"/><text x="22" y="20" class="body" font-size="11" font-weight="800" fill="#111">v2</text><rect x="68" width="60" height="30" rx="6" fill="#242424" stroke="#4A4A4A"/><text x="90" y="20" class="body" font-size="11" fill="#A2A2A2">v1</text><text x="154" y="20" class="body" font-size="11" fill="#858585">Compare changes</text></g>
+    <rect x="22" y="514" width="266" height="52" rx="8" fill="#FFD000"/><text x="40" y="546" class="body" font-size="13" font-weight="800" fill="#111">Approve &amp; launch</text><path d="M257 539h12m-6-6 6 6-6 6" stroke="#111" stroke-width="2"/>
+    <g transform="translate(22 596)"><circle cx="8" cy="8" r="8" fill="#63D58A"/><path d="m4 8 3 3 6-7" stroke="#111" stroke-width="2"/><text x="28" y="13" class="body" font-size="12" fill="#D5D5D5">Ready for launch</text></g>
+  </g>
+
+  <!-- Bottom interaction legend -->
+  <g transform="translate(292 1000)">
+    <circle cx="8" cy="8" r="4" fill="#FFD000"/><text x="22" y="13" class="body" font-size="12" fill="#BEBEBE">Active handoff</text>
+    <circle cx="157" cy="8" r="4" fill="#63D58A"/><text x="171" y="13" class="body" font-size="12" fill="#BEBEBE">Completed state</text>
+    <rect x="340" y="0" width="20" height="16" rx="4" fill="#242424" stroke="#565656"/><text x="372" y="13" class="body" font-size="12" fill="#BEBEBE">Context preserved across every step</text>
+    <text x="1125" y="13" class="small" font-size="9" fill="#696969">AI MARKETING / PRODUCT CONCEPT / 2026</text>
+  </g>
+</svg>

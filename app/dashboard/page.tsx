@@ -25,5 +25,12 @@ export default async function DashboardPage() {
       : Promise.resolve([]),
   ])
 
-  return <WorkspacePlatformHome locale={locale} capabilities={capabilities} workflowTemplates={workflowTemplates} />
+  return (
+    <WorkspacePlatformHome
+      locale={locale}
+      capabilities={capabilities}
+      workflowTemplates={workflowTemplates}
+      userName={currentUser?.name}
+    />
+  )
 }
