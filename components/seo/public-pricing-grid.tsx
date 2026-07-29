@@ -114,7 +114,7 @@ function buildFeatureSummary(
     : "standard"
 
   const summary = [
-    copy.workspaceMember(plan.sharedMemberLimit),
+    copy.unlimitedMembers,
     copy.creditsLine(plan.monthlyCredits, plan.trialCredits),
     copy.imageQuality(imageQuality),
   ]

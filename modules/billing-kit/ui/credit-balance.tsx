@@ -32,9 +32,7 @@ type SubscriptionState = {
     stripe_subscription_id?: string | null
     current_period_start: string | null
     current_period_end: string | null
-    seat_limit?: number | null
     active_member_count?: number | null
-    seats_remaining?: number | null
   } | null
 }
 
@@ -45,10 +43,6 @@ type CreditBalanceProps = {
 
 function formatNumber(value: number, locale: string) {
   return new Intl.NumberFormat(locale).format(Math.max(0, Math.floor(value || 0)))
-}
-
-function formatTemplate(template: string, values: Record<string, string | number>) {
-  return template.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? ""))
 }
 
 function translateBillingError(code: string, billing: {
@@ -145,8 +139,6 @@ export function CreditBalance({ refreshKey = 0, onSubscriptionLoaded }: CreditBa
   const billedPlanCode = subscription?.subscription?.plan_code || "free"
   const planCode = subscription?.subscription?.effective_plan_code || billedPlanCode
   const status = subscription?.subscription?.status || "active"
-  const seatLimit = subscription?.subscription?.seat_limit
-  const activeMemberCount = subscription?.subscription?.active_member_count
   const nextPlanCode = subscription?.subscription?.next_plan_code
   const hasImmediateUpgradeAccess = billedPlanCode !== planCode && nextPlanCode === planCode
   const canManageStripeSubscription =
@@ -242,14 +234,6 @@ export function CreditBalance({ refreshKey = 0, onSubscriptionLoaded }: CreditBa
               <p className="mt-3 text-sm text-muted-foreground">{billing.immediateUpgradeMessage}</p>
             ) : nextPlanCode ? (
               <p className="mt-3 text-sm text-muted-foreground">{billing.nextPlanMessage}</p>
-            ) : null}
-            {typeof seatLimit === "number" && typeof activeMemberCount === "number" ? (
-              <p className="mt-3 text-sm text-muted-foreground">
-                {formatTemplate(billing.membersUsage, {
-                  used: formatNumber(activeMemberCount, locale),
-                  limit: formatNumber(seatLimit, locale),
-                })}
-              </p>
             ) : null}
           </div>
         </div>

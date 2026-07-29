@@ -458,9 +458,7 @@ export async function handleBillingSubscriptionGet(request: NextRequest) {
         subscription: {
           ...subscription,
           effective_plan_code: workspaceSnapshot?.effectivePlan?.code || normalizeText(subscription.plan_code) || "free",
-          seat_limit: workspaceSnapshot?.seatLimit ?? null,
           active_member_count: workspaceSnapshot?.activeMemberCount ?? null,
-          seats_remaining: workspaceSnapshot?.seatsRemaining ?? null,
         },
       })
     }
@@ -484,9 +482,7 @@ export async function handleBillingSubscriptionGet(request: NextRequest) {
         current_period_end: freeState.subscription.currentPeriodEnd,
         cancel_at_period_end: false,
         next_plan_code: null,
-        seat_limit: nextWorkspaceSnapshot?.seatLimit ?? null,
         active_member_count: nextWorkspaceSnapshot?.activeMemberCount ?? null,
-        seats_remaining: nextWorkspaceSnapshot?.seatsRemaining ?? null,
       },
     })
   } catch (error) {

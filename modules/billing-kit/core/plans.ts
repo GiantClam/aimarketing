@@ -5,7 +5,6 @@ export type BillingPlan = {
   name: string
   priceUsdCents: number
   monthlyCredits: number
-  sharedMemberLimit: number
   trialDays: number | null
   trialCredits: number
   checkoutEnabled: boolean
@@ -40,7 +39,6 @@ export const BILLING_PLANS: Record<BillingPlanCode, BillingPlan> = {
     name: "Free",
     priceUsdCents: 0,
     monthlyCredits: 0,
-    sharedMemberLimit: 1,
     trialDays: getDefaultFreeTrialDays(),
     trialCredits: getDefaultFreeTrialCredits(),
     checkoutEnabled: false,
@@ -56,7 +54,6 @@ export const BILLING_PLANS: Record<BillingPlanCode, BillingPlan> = {
     name: "Starter",
     priceUsdCents: 990,
     monthlyCredits: 3_000,
-    sharedMemberLimit: 2,
     trialDays: null,
     trialCredits: 0,
     checkoutEnabled: isPaidPlanCheckoutEnabled(),
@@ -72,7 +69,6 @@ export const BILLING_PLANS: Record<BillingPlanCode, BillingPlan> = {
     name: "Creator",
     priceUsdCents: 1_990,
     monthlyCredits: 10_000,
-    sharedMemberLimit: 5,
     trialDays: null,
     trialCredits: 0,
     checkoutEnabled: isPaidPlanCheckoutEnabled(),
@@ -88,7 +84,6 @@ export const BILLING_PLANS: Record<BillingPlanCode, BillingPlan> = {
     name: "Studio",
     priceUsdCents: 5_990,
     monthlyCredits: 35_000,
-    sharedMemberLimit: 10,
     trialDays: null,
     trialCredits: 0,
     checkoutEnabled: isPaidPlanCheckoutEnabled(),

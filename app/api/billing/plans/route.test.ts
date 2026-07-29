@@ -48,9 +48,9 @@ test.before(async () => {
 test.beforeEach(() => {
   requireSessionUserResult = { user: { id: 7, email: "liulanggoukk@gmail.com", enterpriseId: 1 } }
   plansResponse = [
-    { code: "free", name: "Free", priceUsdCents: 0, monthlyCredits: 0, sharedMemberLimit: 1, trialDays: 30, trialCredits: 300, checkoutEnabled: false, features: {}, paypalPlanId: null, stripePriceId: null },
-    { code: "starter", name: "Starter", priceUsdCents: 990, monthlyCredits: 3000, sharedMemberLimit: 2, trialDays: null, trialCredits: 0, checkoutEnabled: false, features: {}, paypalPlanId: null, stripePriceId: null },
-    { code: "creator", name: "Creator", priceUsdCents: 1990, monthlyCredits: 10000, sharedMemberLimit: 5, trialDays: null, trialCredits: 0, checkoutEnabled: true, features: {}, paypalPlanId: null, stripePriceId: null },
+    { code: "free", name: "Free", priceUsdCents: 0, monthlyCredits: 0, trialDays: 30, trialCredits: 300, checkoutEnabled: false, features: {}, paypalPlanId: null, stripePriceId: null },
+    { code: "starter", name: "Starter", priceUsdCents: 990, monthlyCredits: 3000, trialDays: null, trialCredits: 0, checkoutEnabled: false, features: {}, paypalPlanId: null, stripePriceId: null },
+    { code: "creator", name: "Creator", priceUsdCents: 1990, monthlyCredits: 10000, trialDays: null, trialCredits: 0, checkoutEnabled: true, features: {}, paypalPlanId: null, stripePriceId: null },
   ]
 })
 
