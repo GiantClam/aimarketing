@@ -5,11 +5,15 @@ import { useSearchParams } from "next/navigation"
 import { ReceiptText } from "lucide-react"
 
 import { CreditBalance } from "@/modules/billing-kit/ui/credit-balance"
+import { CreditTopUp } from "@/modules/billing-kit/ui/credit-top-up"
 import { PricingCards } from "@/modules/billing-kit/ui/pricing-cards"
 import { useI18n } from "@/modules/billing-kit/host/locale"
 
+type BillingTab = "subscription" | "one_time"
+
 export default function BillingPage() {
   const [refreshKey, setRefreshKey] = useState(0)
+  const [activeTab, setActiveTab] = useState<BillingTab>("subscription")
   const [syncComplete, setSyncComplete] = useState(false)
   const [approvalSaved, setApprovalSaved] = useState(false)
   const { messages } = useI18n()
@@ -17,10 +21,29 @@ export default function BillingPage() {
   const searchParams = useSearchParams()
   const paypalState = searchParams.get("paypal")
   const stripeState = searchParams.get("stripe")
+  const oneTimePaymentReturn =
+    searchParams.get("zpay") === "return" ||
+    stripeState === "credit_approved" ||
+    stripeState === "credit_cancelled"
   const approvedPlanCode = searchParams.get("planCode")
   const approvedSubscriptionId =
     searchParams.get("subscription_id") || searchParams.get("ba_token") || searchParams.get("token")
   const approvedStripeSessionId = searchParams.get("session_id")
+
+  useEffect(() => {
+    if (oneTimePaymentReturn) {
+      setActiveTab("one_time")
+      window.localStorage.setItem("aimarketing.billing-tab", "one_time")
+      return
+    }
+    const storedTab = window.localStorage.getItem("aimarketing.billing-tab")
+    if (storedTab === "subscription" || storedTab === "one_time") setActiveTab(storedTab)
+  }, [oneTimePaymentReturn])
+
+  function selectTab(tab: BillingTab) {
+    setActiveTab(tab)
+    window.localStorage.setItem("aimarketing.billing-tab", tab)
+  }
 
   useEffect(() => {
     if (paypalState !== "approved") {
@@ -184,10 +207,44 @@ export default function BillingPage() {
             }
           }}
         />
-        <PricingCards
-          refreshKey={refreshKey}
-          onSubscribed={() => setRefreshKey((current) => current + 1)}
-        />
+        <section className="rounded-[2rem] border-2 border-white/70 bg-white/70 p-3 shadow-sm backdrop-blur">
+          <div className="grid gap-2 rounded-[1.5rem] bg-slate-100/80 p-2 sm:grid-cols-2" role="tablist" aria-label="Billing options">
+            {([
+              ["subscription", billing.subscriptionTab, billing.subscriptionTabDescription],
+              ["one_time", billing.oneTimeTab, billing.oneTimeTabDescription],
+            ] as const).map(([tab, label, description]) => {
+              const selected = activeTab === tab
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => selectTab(tab)}
+                  className={`rounded-[1.25rem] px-5 py-4 text-left transition ${
+                    selected ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-slate-950"
+                  }`}
+                >
+                  <span className="block text-base font-semibold">{label}</span>
+                  <span className={`mt-1 block text-xs leading-5 ${selected ? "text-white/70" : "text-slate-500"}`}>
+                    {description}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
+        {activeTab === "subscription" ? (
+          <PricingCards
+            refreshKey={refreshKey}
+            onSubscribed={() => setRefreshKey((current) => current + 1)}
+          />
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-3">
+            <CreditTopUp onPurchased={() => setRefreshKey((current) => current + 1)} />
+          </div>
+        )}
       </div>
     </div>
   )

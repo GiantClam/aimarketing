@@ -28,6 +28,7 @@ const subscriptionDetails: any = {
 }
 const queryCalls: Array<{ sql: string; params: any[] }> = []
 const upsertActiveCalls: any[] = []
+const settleStripeCreditCalls: any[] = []
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -69,6 +70,14 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
           plan_code: input.planCode,
           status: "active",
         }
+      },
+    }
+  }
+  if (request === "@/modules/billing-kit/server/credit-topup-service") {
+    return {
+      settleStripeCreditOrder: async (input: any) => {
+        settleStripeCreditCalls.push(input)
+        return { duplicate: false, creditAmount: 1000 }
       },
     }
   }
@@ -118,6 +127,7 @@ test.beforeEach(() => {
   constructedEventObject = { id: "in_123", subscription: "sub_123" }
   queryCalls.length = 0
   upsertActiveCalls.length = 0
+  settleStripeCreditCalls.length = 0
 })
 
 test.after(() => {
@@ -176,4 +186,43 @@ test("stripe webhook upgrades the pending checkout session on checkout.session.c
   assert.equal(upsertActiveCalls.length, 1)
   assert.equal(upsertActiveCalls[0]?.stripeCheckoutSessionId, "cs_test_123")
   assert.equal(upsertActiveCalls[0]?.stripeSubscriptionId, "sub_123")
+})
+
+test("stripe webhook settles a paid one-time credit checkout session", async () => {
+  constructedEventType = "checkout.session.completed"
+  constructedEventObject = {
+    id: "cs_credit_123",
+    mode: "payment",
+    payment_status: "paid",
+    payment_intent: "pi_credit_123",
+    amount_total: 1990,
+    currency: "usd",
+    metadata: {
+      orderNo: "stripe_order_123",
+      productCode: "credits_1000",
+    },
+  }
+
+  const response = (await POST({
+    text: async () => JSON.stringify({ id: "evt_credit_123" }),
+    headers: { get: (name: string) => (name === "stripe-signature" ? "sig_test" : null) },
+  } as any)) as any
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body?.ok, true)
+  assert.equal(settleStripeCreditCalls.length, 1)
+  assert.deepEqual(settleStripeCreditCalls[0], {
+    orderNo: "stripe_order_123",
+    providerTradeNo: "pi_credit_123",
+    amountMinor: 1990,
+    currency: "usd",
+    providerPayload: {
+      event: "checkout.session.completed",
+      sessionId: "cs_credit_123",
+      paymentStatus: "paid",
+      paymentIntent: "pi_credit_123",
+      amountTotal: "1990",
+      currency: "usd",
+    },
+  })
 })

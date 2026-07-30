@@ -5,9 +5,9 @@ import { Check, ShieldCheck } from "lucide-react"
 
 import { PayPalSubscriptionButton } from "@/modules/billing-kit/ui/paypal-subscription-button"
 import { StripeSubscriptionButton } from "@/modules/billing-kit/ui/stripe-subscription-button"
-import { CreditTopUp } from "@/modules/billing-kit/ui/credit-top-up"
 import { useI18n } from "@/modules/billing-kit/host/locale"
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/modules/billing-kit/host/ui"
+import { buildPlanFeatureLines, formatCredits, formatTemplate } from "@/modules/billing-kit/ui/plan-feature-lines"
 
 type BillingPlan = {
   code: string
@@ -35,117 +35,11 @@ type SubscriptionState = {
   } | null
 }
 
-const IMAGE_CREDITS_BY_QUALITY = {
-  low: 3,
-  medium: 27,
-  high: 106,
-} as const
-
-const VIDEO_CREDITS_PER_SECOND = 80
-
-const IMAGE_MODEL_CATALOG = "Qwen Image 3.0 Pro、Qwen Image 2.7、Nanobanana2、GPT Image 2"
-const VIDEO_MODEL_CATALOG = "HappyHorse 1.1、MiniMax Hailuo 2.3、Seedance"
-
 function formatPrice(cents: number, locale: string) {
   return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: "USD",
   }).format((cents || 0) / 100)
-}
-
-function formatCredits(credits: number, locale: string) {
-  return new Intl.NumberFormat(locale).format(credits)
-}
-
-function formatTemplate(template: string, values: Record<string, string | number>) {
-  return template.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? ""))
-}
-
-function formatEstimatedImageAllowance(plan: BillingPlan, locale: string) {
-  const credits = plan.code === "free" ? plan.trialCredits : plan.monthlyCredits
-  const qualityLabels: Record<keyof typeof IMAGE_CREDITS_BY_QUALITY, string> = locale.toLowerCase().startsWith("zh")
-    ? { low: "低质量", medium: "中质量", high: "高质量" }
-    : { low: "low", medium: "medium", high: "high" }
-  const quality = Array.isArray(plan.features?.imageQuality)
-    ? plan.features.imageQuality.filter((item): item is keyof typeof IMAGE_CREDITS_BY_QUALITY => item in IMAGE_CREDITS_BY_QUALITY)
-    : []
-  const estimates = quality.map((item) => {
-    const count = Math.floor(credits / IMAGE_CREDITS_BY_QUALITY[item])
-    return `${qualityLabels[item]} ${formatCredits(count, locale)} 张`
-  })
-  return estimates.join(" / ") || "—"
-}
-
-function formatEstimatedVideoAllowance(plan: BillingPlan, locale: string) {
-  const credits = plan.code === "free" ? plan.trialCredits : plan.monthlyCredits
-  const seconds = Math.floor(credits / VIDEO_CREDITS_PER_SECOND)
-  return `${formatCredits(seconds, locale)}s`
-}
-
-function permissionLines(
-  plan: BillingPlan,
-  billing: {
-    imageAllowanceLine: string
-    videoAllowanceLine: string
-    modelAccessLine: string
-    agentAccessLine: string
-    workflowAccessLine: string
-    workspaceGoverned: string
-  },
-  locale: string,
-) {
-  const qualityLabels: Record<string, string> = locale.toLowerCase().startsWith("zh")
-    ? { low: "低质量", medium: "中质量", high: "高质量" }
-    : { low: "low", medium: "medium", high: "high" }
-  const quality = Array.isArray(plan.features?.imageQuality)
-    ? plan.features.imageQuality.map((item) => qualityLabels[String(item)] || String(item)).join(" / ")
-    : "standard"
-  const imageModels = `${IMAGE_MODEL_CATALOG}（${quality}）`
-  const videoModels = plan.features?.videoGeneration
-    ? `${VIDEO_MODEL_CATALOG}（${billing.workspaceGoverned}）`
-    : "—"
-
-  return [
-    formatTemplate(billing.imageAllowanceLine, { details: formatEstimatedImageAllowance(plan, locale) }),
-    formatTemplate(billing.videoAllowanceLine, { details: formatEstimatedVideoAllowance(plan, locale) }),
-    formatTemplate(billing.modelAccessLine, { details: `${imageModels}；视频：${videoModels}` }),
-    billing.agentAccessLine,
-    billing.workflowAccessLine,
-  ]
-}
-
-function featureLines(
-  plan: BillingPlan,
-  billing: {
-    freeTrialLine: string
-    sharedCreditsLine: string
-    unlimitedMembersLine: string
-    imageQualityLine: string
-    maskEditLine: string
-    priorityQueue: string
-    standardQueue: string
-    imageAllowanceLine: string
-    videoAllowanceLine: string
-    modelAccessLine: string
-    agentAccessLine: string
-    workflowAccessLine: string
-    workspaceGoverned: string
-  },
-  locale: string,
-) {
-  const quality = Array.isArray(plan.features?.imageQuality)
-    ? plan.features.imageQuality.join("/")
-    : "standard"
-  return [
-    plan.code === "free"
-      ? formatTemplate(billing.freeTrialLine, { credits: formatCredits(plan.trialCredits, locale), days: plan.trialDays || 0 })
-      : formatTemplate(billing.sharedCreditsLine, { credits: formatCredits(plan.monthlyCredits, locale) }),
-    billing.unlimitedMembersLine,
-    formatTemplate(billing.imageQualityLine, { quality }),
-    formatTemplate(billing.maskEditLine, { level: String(plan.features?.maskEdit || "standard") }),
-    plan.features?.priorityQueue ? billing.priorityQueue : billing.standardQueue,
-    ...permissionLines(plan, billing, locale),
-  ]
 }
 
 function planAvailabilityMessage(
@@ -294,7 +188,7 @@ export function PricingCards({
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="space-y-3">
-                {featureLines(plan, billing, locale).map((line) => (
+                {buildPlanFeatureLines(plan, billing, locale).map((line) => (
                   <div key={line} className="flex items-start gap-3 text-sm">
                     <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-700">
                       <Check className="h-3.5 w-3.5" />
@@ -341,7 +235,6 @@ export function PricingCards({
           </Card>
         )
       })}
-      <CreditTopUp onPurchased={onSubscribed} />
     </div>
   )
 }

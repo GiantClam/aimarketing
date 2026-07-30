@@ -80,10 +80,13 @@ export async function findCreditPaymentOrder(input: {
   return result.rows[0] ? mapOrder(result.rows[0]) : null
 }
 
-export async function settleZPayCreditOrder(input: {
+async function settleCreditPaymentOrder(input: {
   orderNo: string
+  provider: "zpay" | "stripe"
   providerTradeNo: string | null
   providerPayload: Record<string, string>
+  amountMinor?: number | null
+  currency?: string | null
 }) {
   const client = await pool.connect()
   try {
@@ -91,7 +94,7 @@ export async function settleZPayCreditOrder(input: {
     const orderResult = await client.query(
       `
         SELECT id, order_no, enterprise_id, user_id, product_code, provider, amount_minor,
-               credit_amount, status, expires_at
+               currency, credit_amount, status, expires_at
         FROM "AI_MARKETING_payment_orders"
         WHERE order_no = $1
         FOR UPDATE
@@ -100,7 +103,13 @@ export async function settleZPayCreditOrder(input: {
     )
     const order = orderResult.rows[0]
     if (!order) throw new Error("billing_payment_order_not_found")
-    if (order.provider !== "zpay") throw new Error("billing_payment_provider_mismatch")
+    if (order.provider !== input.provider) throw new Error("billing_payment_provider_mismatch")
+    if (input.amountMinor != null && Number(order.amount_minor) !== input.amountMinor) {
+      throw new Error("billing_payment_amount_mismatch")
+    }
+    if (input.currency && String(order.currency).toUpperCase() !== input.currency.toUpperCase()) {
+      throw new Error("billing_payment_currency_mismatch")
+    }
     if (order.status === "paid") {
       await client.query("COMMIT")
       return { duplicate: true, creditAmount: Number(order.credit_amount) }
@@ -129,7 +138,7 @@ export async function settleZPayCreditOrder(input: {
         INSERT INTO "AI_MARKETING_credit_ledger" (
           credit_account_id, enterprise_id, subscription_id, entry_type, feature_key,
           amount, balance_after, reserved_balance_after, idempotency_key, provider, metadata
-        ) VALUES ($1, $2, NULL, 'grant', 'purchased_credits', $3, $4, $5, $6, 'zpay', $7::jsonb)
+        ) VALUES ($1, $2, NULL, 'grant', 'purchased_credits', $3, $4, $5, $6, $7, $8::jsonb)
         ON CONFLICT (credit_account_id, idempotency_key) DO NOTHING
         RETURNING id
       `,
@@ -140,7 +149,13 @@ export async function settleZPayCreditOrder(input: {
         currentBalance + creditAmount,
         reservedBalance,
         idempotencyKey,
-        JSON.stringify({ orderNo: order.order_no, productCode: order.product_code, providerTradeNo: input.providerTradeNo }),
+        input.provider,
+        JSON.stringify({
+          orderNo: order.order_no,
+          productCode: order.product_code,
+          provider: input.provider,
+          providerTradeNo: input.providerTradeNo,
+        }),
       ],
     )
 
@@ -175,4 +190,22 @@ export async function settleZPayCreditOrder(input: {
   } finally {
     client.release()
   }
+}
+
+export async function settleZPayCreditOrder(input: {
+  orderNo: string
+  providerTradeNo: string | null
+  providerPayload: Record<string, string>
+}) {
+  return settleCreditPaymentOrder({ ...input, provider: "zpay" })
+}
+
+export async function settleStripeCreditOrder(input: {
+  orderNo: string
+  providerTradeNo: string | null
+  providerPayload: Record<string, string>
+  amountMinor?: number | null
+  currency?: string | null
+}) {
+  return settleCreditPaymentOrder({ ...input, provider: "stripe" })
 }

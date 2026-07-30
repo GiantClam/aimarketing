@@ -11,6 +11,7 @@ import {
   parseStripeClientReferenceId,
 } from "@/lib/billing/stripe"
 import { upsertActiveStripeSubscription } from "@/lib/billing/subscription-store"
+import { settleStripeCreditOrder } from "@/modules/billing-kit/server/credit-topup-service"
 
 type StripeClient = ReturnType<typeof getStripeClient>
 type StripeSubscription = Awaited<ReturnType<StripeClient["subscriptions"]["retrieve"]>>
@@ -235,6 +236,34 @@ async function handleCheckoutCompleted(
   client: { query: typeof pool.query },
   session: StripeCheckoutSession,
 ) {
+  if (session.mode === "payment") {
+    const metadata = session.metadata || {}
+    const orderNo = normalizeText(metadata.orderNo)
+    const paymentStatus = normalizeText(session.payment_status).toLowerCase()
+    if (!orderNo || !["paid", "no_payment_required"].includes(paymentStatus)) return
+
+    const paymentIntent =
+      typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : session.payment_intent && typeof session.payment_intent === "object" && "id" in session.payment_intent
+          ? String(session.payment_intent.id)
+          : null
+    await settleStripeCreditOrder({
+      orderNo,
+      providerTradeNo: paymentIntent,
+      amountMinor: typeof session.amount_total === "number" ? session.amount_total : null,
+      currency: session.currency,
+      providerPayload: {
+        event: "checkout.session.completed",
+        sessionId: session.id,
+        paymentStatus,
+        paymentIntent: paymentIntent || "",
+        amountTotal: session.amount_total == null ? "" : String(session.amount_total),
+        currency: session.currency || "",
+      },
+    })
+    return
+  }
   if (session.mode !== "subscription") return
   const stripeSubscriptionId = typeof session.subscription === "string" ? session.subscription : ""
   if (!stripeSubscriptionId) return

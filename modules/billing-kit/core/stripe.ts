@@ -19,8 +19,16 @@ function getStripeSecretKey() {
   return normalizeText(process.env.STRIPE_SECRET_KEY)
 }
 
+function getStripeOneTimeWebhookSecret() {
+  return normalizeText(process.env.STRIPE_WEBHOOK_SECRET)
+}
+
 export function isStripeSubscriptionEnabled() {
   return process.env.BILLING_STRIPE_SUBSCRIPTIONS_ENABLED === "true"
+}
+
+export function isStripeOneTimeEnabled() {
+  return process.env.BILLING_STRIPE_ONE_TIME_ENABLED === "true" && Boolean(getStripeSecretKey()) && Boolean(getStripeOneTimeWebhookSecret())
 }
 
 export function getStripeAllowedEmails() {
@@ -39,6 +47,66 @@ export function isStripeSubscriptionEnabledForEmail(email: string | null | undef
 
 export function getStripePriceId(planCode: BillingPlanCode) {
   return normalizeText(process.env[`STRIPE_${planCode.toUpperCase()}_PRICE_ID`])
+}
+
+export function getStripeCreditPriceId(productCode: string) {
+  const normalizedProductCode = normalizeText(productCode).toUpperCase()
+  return normalizeText(process.env[`STRIPE_${normalizedProductCode}_PRICE_ID`])
+}
+
+export function isStripeCreditPaymentEnabled(productCode: string) {
+  return isStripeOneTimeEnabled() && Boolean(getStripeCreditPriceId(productCode))
+}
+
+export async function getStripeCreditPrice(productCode: string) {
+  const priceId = getStripeCreditPriceId(productCode)
+  if (!isStripeCreditPaymentEnabled(productCode) || !priceId) return null
+  const price = await getStripeClient().prices.retrieve(priceId)
+  if (price.type !== "one_time" || price.unit_amount == null || !price.currency) {
+    throw new Error("stripe_credit_price_invalid")
+  }
+  return price
+}
+
+export async function createStripeCreditCheckoutSession(input: {
+  productCode: string
+  orderNo: string
+  userEmail: string
+  enterpriseId: number | null
+  userId: number
+  successUrl: string
+  cancelUrl: string
+}) {
+  const price = await getStripeCreditPrice(input.productCode)
+  if (!price) throw new Error("stripe_credit_price_missing")
+
+  const clientReferenceId = `enterprise:${input.enterpriseId || "personal"}:user:${input.userId}:credit:${input.productCode}:order:${input.orderNo}`
+  return getStripeClient().checkout.sessions.create({
+    mode: "payment",
+    success_url: input.successUrl,
+    cancel_url: input.cancelUrl,
+    customer_email: input.userEmail,
+    client_reference_id: clientReferenceId,
+    line_items: [{ price: price.id, quantity: 1 }],
+    metadata: {
+      enterpriseId: String(input.enterpriseId || ""),
+      userId: String(input.userId),
+      productCode: input.productCode,
+      orderNo: input.orderNo,
+      provider: "stripe",
+      productType: "one_time",
+    },
+    payment_intent_data: {
+      metadata: {
+        enterpriseId: String(input.enterpriseId || ""),
+        userId: String(input.userId),
+        productCode: input.productCode,
+        orderNo: input.orderNo,
+        provider: "stripe",
+        productType: "one_time",
+      },
+    },
+  })
 }
 
 export function getPlanCodeForStripePriceId(priceId: string | null | undefined): BillingPlanCode | null {

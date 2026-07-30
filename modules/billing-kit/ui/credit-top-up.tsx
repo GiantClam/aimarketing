@@ -6,6 +6,15 @@ import { useSearchParams } from "next/navigation"
 
 import { useI18n } from "@/modules/billing-kit/host/locale"
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@/modules/billing-kit/host/ui"
+import { buildPlanFeatureLines, type BillingPlanFeatureInput } from "@/modules/billing-kit/ui/plan-feature-lines"
+
+const IMAGE_CREDITS_BY_QUALITY = {
+  low: 3,
+  medium: 27,
+  high: 106,
+} as const
+
+const VIDEO_CREDITS_PER_SECOND = 80
 
 type CreditProduct = {
   code: string
@@ -15,6 +24,8 @@ type CreditProduct = {
   currency: string
   expiresAt: null
   availableProviders: string[]
+  stripeAmountMinor: number | null
+  stripeCurrency: string | null
 }
 
 type CreditTopUpProps = {
@@ -25,13 +36,12 @@ function formatCredits(value: number, locale: string) {
   return new Intl.NumberFormat(locale).format(value)
 }
 
-const IMAGE_CREDITS_BY_QUALITY = {
-  low: 3,
-  medium: 27,
-  high: 106,
-} as const
-
-const VIDEO_CREDITS_PER_SECOND = 80
+function formatMoney(amountMinor: number, currency: string, locale: string) {
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+  }).format(amountMinor / 100)
+}
 
 export function CreditTopUp({ onPurchased }: CreditTopUpProps) {
   const { locale, messages } = useI18n()
@@ -43,6 +53,7 @@ export function CreditTopUp({ onPurchased }: CreditTopUpProps) {
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
   const [polledOrderNo, setPolledOrderNo] = useState("")
+  const [currentPlan, setCurrentPlan] = useState<BillingPlanFeatureInput | null>(null)
 
   const isChinese = locale.startsWith("zh")
   const text = isChinese
@@ -84,8 +95,21 @@ export function CreditTopUp({ onPurchased }: CreditTopUpProps) {
         if (!response.ok) throw new Error(json?.error || text.loadFailed)
           if (!cancelled) {
             const availableProducts = Array.isArray(json?.products) ? json.products : []
-            setProducts(availableProducts.filter((product: CreditProduct) => product.code === "credits_1000"))
+            setProducts(availableProducts)
           }
+        const [plansResponse, subscriptionResponse] = await Promise.all([
+          fetch("/api/billing/plans", { cache: "no-store" }),
+          fetch("/api/billing/subscription", { cache: "no-store" }),
+        ])
+        const plansJson = await plansResponse.json().catch(() => null)
+        const subscriptionJson = await subscriptionResponse.json().catch(() => null)
+        if (!cancelled && plansResponse.ok && subscriptionResponse.ok) {
+          const planCode = subscriptionJson?.subscription?.effective_plan_code || subscriptionJson?.subscription?.plan_code || "free"
+          const matchedPlan = Array.isArray(plansJson?.plans)
+            ? plansJson.plans.find((plan: BillingPlanFeatureInput) => plan.code === planCode)
+            : null
+          setCurrentPlan(matchedPlan || null)
+        }
       } catch (loadError) {
         if (!cancelled) setError(loadError instanceof Error ? loadError.message : text.loadFailed)
       } finally {
@@ -98,7 +122,10 @@ export function CreditTopUp({ onPurchased }: CreditTopUpProps) {
     }
   }, [text.loadFailed])
 
-  const returnOrderNo = searchParams.get("zpay") === "return" ? searchParams.get("orderNo") || "" : ""
+  const returnOrderNo =
+    searchParams.get("zpay") === "return" || searchParams.get("stripe") === "credit_approved"
+      ? searchParams.get("orderNo") || ""
+      : ""
 
   useEffect(() => {
     if (!returnOrderNo || returnOrderNo === polledOrderNo) return
@@ -140,7 +167,9 @@ export function CreditTopUp({ onPurchased }: CreditTopUpProps) {
 
   async function startPayment(product: CreditProduct) {
     const zpayAvailable = product.availableProviders.includes("zpay")
-    if (payingCode || !zpayAvailable) return
+    const stripeAvailable = product.availableProviders.includes("stripe")
+    const provider = isChinese && zpayAvailable ? "zpay" : stripeAvailable ? "stripe" : zpayAvailable ? "zpay" : ""
+    if (payingCode || !provider) return
     setPayingCode(product.code)
     setError("")
     setNotice("")
@@ -150,8 +179,8 @@ export function CreditTopUp({ onPurchased }: CreditTopUpProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           productCode: product.code,
-          provider: "zpay",
-          paymentMethod: "alipay",
+          provider,
+          paymentMethod: provider === "zpay" ? "alipay" : "card",
           idempotencyKey: crypto.randomUUID(),
         }),
       })
@@ -174,6 +203,11 @@ export function CreditTopUp({ onPurchased }: CreditTopUpProps) {
       ) : null}
       {products.map((product) => {
         const zpayAvailable = product.availableProviders.includes("zpay")
+        const stripeAvailable = product.availableProviders.includes("stripe")
+        const preferredProvider = isChinese && zpayAvailable ? "zpay" : stripeAvailable ? "stripe" : zpayAvailable ? "zpay" : ""
+        const usesStripePrice = preferredProvider === "stripe" && product.stripeAmountMinor != null && product.stripeCurrency
+        const displayAmountMinor = usesStripePrice ? product.stripeAmountMinor : product.amountMinor
+        const displayCurrency = usesStripePrice ? product.stripeCurrency : product.currency
         const imageAllowance = [
           [isChinese ? "低质量" : "low", Math.floor(product.creditAmount / IMAGE_CREDITS_BY_QUALITY.low)],
           [isChinese ? "中质量" : "medium", Math.floor(product.creditAmount / IMAGE_CREDITS_BY_QUALITY.medium)],
@@ -182,15 +216,27 @@ export function CreditTopUp({ onPurchased }: CreditTopUpProps) {
           .map(([label, count]) => `${label} ${formatCredits(Number(count), locale)} ${isChinese ? "张" : "images"}`)
           .join(" / ")
         const videoAllowance = `${formatCredits(Math.floor(product.creditAmount / VIDEO_CREDITS_PER_SECOND), locale)}s`
-        const featureLines = [
-          billing.creditPackCreditsLine.replace("{credits}", formatCredits(product.creditAmount, locale)),
-          billing.creditPackImageAllowanceLine.replace("{details}", imageAllowance),
-          billing.creditPackVideoAllowanceLine.replace("{details}", videoAllowance),
-          billing.creditPackModelAccessLine,
-          billing.creditPackAgentAccessLine,
-          billing.creditPackWorkflowAccessLine,
-          billing.creditPackNoSubscriptionLine,
-        ]
+        const featureLines = currentPlan
+          ? [
+              ...buildPlanFeatureLines(currentPlan, billing, locale, {
+                credits: product.creditAmount,
+                creditsLine: billing.creditPackCreditsLine,
+                allowanceLines: {
+                  image: billing.creditPackImageAllowanceLine,
+                  video: billing.creditPackVideoAllowanceLine,
+                },
+              }),
+              billing.creditPackNoSubscriptionLine,
+            ]
+          : [
+              billing.creditPackCreditsLine.replace("{credits}", formatCredits(product.creditAmount, locale)),
+              billing.creditPackImageAllowanceLine.replace("{details}", imageAllowance),
+              billing.creditPackVideoAllowanceLine.replace("{details}", videoAllowance),
+              billing.creditPackModelAccessLine,
+              billing.creditPackAgentAccessLine,
+              billing.creditPackWorkflowAccessLine,
+              billing.creditPackNoSubscriptionLine,
+            ]
         return (
           <Card key={product.code} className="relative overflow-hidden rounded-[2rem] border-2 border-slate-200 bg-white/90 shadow-sm">
             <div className="absolute right-4 top-4">
@@ -201,8 +247,11 @@ export function CreditTopUp({ onPurchased }: CreditTopUpProps) {
                 <WalletCards className="h-5 w-5" />
                 {product.name}
               </CardTitle>
+              {currentPlan ? <p className="text-sm text-muted-foreground">{billing.creditPackAlignedPlanLine.replace("{plan}", currentPlan.name)}</p> : null}
               <div className="mt-5">
-                <span className="text-5xl font-semibold tracking-tight">¥{(product.amountMinor / 100).toFixed(2)}</span>
+                <span className="text-5xl font-semibold tracking-tight">
+                  {formatMoney(Number(displayAmountMinor), String(displayCurrency), locale)}
+                </span>
               </div>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -224,10 +273,10 @@ export function CreditTopUp({ onPurchased }: CreditTopUpProps) {
               <Button
                 className="w-full rounded-full"
                 onClick={() => void startPayment(product)}
-                disabled={!zpayAvailable || Boolean(payingCode)}
+                disabled={!preferredProvider || Boolean(payingCode)}
               >
                 {payingCode === product.code ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                {zpayAvailable ? text.buy : text.unavailable}
+                {preferredProvider ? text.buy : text.unavailable}
               </Button>
             </CardContent>
           </Card>

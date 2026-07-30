@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { getCreditProduct, listCreditProducts } from "./credit-products"
+import { getCreditProduct, isCreditProductAvailable, listAvailableCreditProducts, listCreditProducts } from "./credit-products"
 
 test("credit packs use the documented prices and never expire", () => {
   assert.deepEqual(
@@ -15,4 +15,10 @@ test("credit packs use the documented prices and never expire", () => {
   )
   assert.ok(listCreditProducts().every((product) => product.expiresAt === null))
   assert.equal(getCreditProduct("credits_5000")?.expiresAt, null)
+})
+
+test("only the 1000-credit pack is currently available for checkout", () => {
+  assert.deepEqual(listAvailableCreditProducts().map((product) => product.code), ["credits_1000"])
+  assert.equal(isCreditProductAvailable("credits_1000"), true)
+  assert.equal(isCreditProductAvailable("credits_5000"), false)
 })

@@ -391,6 +391,24 @@ ZPAY_ENABLED=false
 
 `ZPAY_KEY`、`ZPAY_PID` 只在服务端使用，不能通过公开 API 返回给浏览器。
 
+## 8.1 Stripe 一次性积分包预留
+
+一次性积分包与订阅使用不同的 Checkout 模式：积分包使用 Stripe Checkout 的 `payment` 模式，支付成功后由 webhook 按订单号幂等发放积分，不创建或变更订阅。当前默认关闭，待 Stripe 一次性支付环境变量配置完成后再开启：
+
+~~~env
+BILLING_STRIPE_ONE_TIME_ENABLED=false
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_CREDITS_1000_PRICE_ID=
+STRIPE_CREDITS_5000_PRICE_ID=
+STRIPE_CREDITS_15000_PRICE_ID=
+STRIPE_CREDITS_50000_PRICE_ID=
+~~~
+
+每个 `STRIPE_CREDITS_*_PRICE_ID` 必须对应 Stripe 中的 one-time Price。页面按当前语言和可用通道选择支付：中文环境优先 Z-Pay 支付宝；Stripe 配置完成后，其他语言优先 Stripe；用户通过“订阅套餐 / 一次性购买”页签切换。一次性积分永久有效，不受订阅周期影响。
+
+当前产品策略只开放 `credits_1000`（1000 积分包），其他积分包价格保留在目录中，待后续确认后再开放。
+
 ## 9. 订阅与一次性充值的状态边界
 
 ### 9.1 一次性充值不创建订阅

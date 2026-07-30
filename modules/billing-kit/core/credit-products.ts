@@ -14,8 +14,18 @@ const CREDIT_PRODUCTS: readonly CreditProduct[] = [
   { code: "credits_50000", name: "50000 积分包", creditAmount: 50_000, priceCnyFen: 69_900, currency: "CNY", expiresAt: null },
 ]
 
+const ENABLED_CREDIT_PRODUCT_CODES = new Set(["credits_1000"])
+
 export function listCreditProducts() {
   return CREDIT_PRODUCTS.map((product) => ({ ...product }))
+}
+
+export function listAvailableCreditProducts() {
+  return listCreditProducts().filter((product) => ENABLED_CREDIT_PRODUCT_CODES.has(product.code))
+}
+
+export function isCreditProductAvailable(code: string) {
+  return ENABLED_CREDIT_PRODUCT_CODES.has(code)
 }
 
 export function getCreditProduct(code: string) {
