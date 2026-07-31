@@ -671,6 +671,17 @@ function readPersistedSelectedModelId() {
   }
 }
 
+function persistSelectedModelId(modelId: string | null | undefined) {
+  if (typeof window === "undefined") return
+  const normalized = typeof modelId === "string" ? modelId.trim() : ""
+  if (!normalized) return
+  try {
+    window.localStorage.setItem(AI_ENTRY_SELECTED_MODEL_STORAGE_KEY, normalized)
+  } catch {
+    // ignore localStorage write failures
+  }
+}
+
 function readPersistedReasoningEffort(): ReasoningEffort {
   if (typeof window === "undefined") return "auto"
   try {
@@ -678,6 +689,15 @@ function readPersistedReasoningEffort(): ReasoningEffort {
     return REASONING_EFFORTS.includes(raw as ReasoningEffort) ? raw as ReasoningEffort : "auto"
   } catch {
     return "auto"
+  }
+}
+
+function persistReasoningEffort(effort: ReasoningEffort) {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.setItem(AI_ENTRY_SELECTED_REASONING_STORAGE_KEY, effort)
+  } catch {
+    // ignore localStorage write failures
   }
 }
 
@@ -1476,6 +1496,7 @@ export function AiEntryWorkspace({
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
   const [modelSelectOpen, setModelSelectOpen] = useState(false)
   const [selectedReasoningEffort, setSelectedReasoningEffort] = useState<ReasoningEffort>("auto")
+  const [reasoningHydrated, setReasoningHydrated] = useState(false)
   const [reasoningSelectOpen, setReasoningSelectOpen] = useState(false)
   const [restoredConversationModelId, setRestoredConversationModelId] = useState<string | null>(null)
 
@@ -1764,19 +1785,10 @@ export function AiEntryWorkspace({
   }, [embedded, isPptAssistantRoute, pathname, routeEntryMode, router, search])
 
   useEffect(() => {
-    if (shouldLockModel) return
+    if (shouldLockModel || modelsLoading || models.length === 0 || !selectedModelId) return
     if (typeof window === "undefined") return
-    try {
-      const normalized = typeof selectedModelId === "string" ? selectedModelId.trim() : ""
-      if (normalized) {
-        window.localStorage.setItem(AI_ENTRY_SELECTED_MODEL_STORAGE_KEY, normalized)
-      } else {
-        window.localStorage.removeItem(AI_ENTRY_SELECTED_MODEL_STORAGE_KEY)
-      }
-    } catch {
-      // ignore localStorage write failures
-    }
-  }, [selectedModelId, shouldLockModel])
+    persistSelectedModelId(selectedModelId)
+  }, [models.length, modelsLoading, selectedModelId, shouldLockModel])
 
   useEffect(() => {
     if (modelsLoading) return
@@ -1787,16 +1799,13 @@ export function AiEntryWorkspace({
         modelId: selectedModel?.modelId || selectedModel?.runtimeId || selectedModelId,
       })
     })
+    setReasoningHydrated(true)
   }, [modelProviderId, modelsLoading, selectedModel, selectedModelId])
 
   useEffect(() => {
-    if (shouldLockModel || modelsLoading || typeof window === "undefined") return
-    try {
-      window.localStorage.setItem(AI_ENTRY_SELECTED_REASONING_STORAGE_KEY, resolvedReasoningEffort)
-    } catch {
-      // ignore localStorage write failures
-    }
-  }, [modelsLoading, resolvedReasoningEffort, shouldLockModel])
+    if (shouldLockModel || modelsLoading || !reasoningHydrated) return
+    persistReasoningEffort(resolvedReasoningEffort)
+  }, [modelsLoading, reasoningHydrated, resolvedReasoningEffort, shouldLockModel])
 
   const selectedAgent = useMemo(
     () => agents.find((item) => item.id === selectedAgentId) || null,
@@ -3110,6 +3119,14 @@ export function AiEntryWorkspace({
           (embedded || isAgentSelectionExplicit || Boolean(routeAgentId)),
         )
 
+      // Capture the user's choice synchronously before the first request can
+      // promote the draft to a new conversation and remount the workspace.
+      // The route transition must not fall back to the catalog default.
+      if (!shouldLockModel) {
+        persistSelectedModelId(selectedModelId)
+        persistReasoningEffort(resolvedReasoningEffort)
+      }
+
       const response = await fetch("/api/ai/chat", {
         method: "POST",
         headers: {
@@ -3576,10 +3593,6 @@ export function AiEntryWorkspace({
               providerId: typeof event.provider === "string" ? event.provider : null,
               models,
             })
-            if (resolvedProviderModelId) {
-              setSelectedModelId(resolvedProviderModelId)
-            }
-
             upsertTaskEvent({
               type: "response",
               label: "Response complete",
@@ -3815,6 +3828,7 @@ export function AiEntryWorkspace({
     selectedModel,
     selectedModelId,
     resolvedReasoningEffort,
+    shouldLockModel,
   ])
 
   const renderSelectors = (buttonHeight: "h-10" | "h-9") => (
@@ -3834,10 +3848,12 @@ export function AiEntryWorkspace({
             onOpenChange={setReasoningSelectOpen}
             value={resolvedReasoningEffort}
             onValueChange={(nextValue) => {
-              setSelectedReasoningEffort(normalizeReasoningEffort(nextValue, {
+              const nextReasoningEffort = normalizeReasoningEffort(nextValue, {
                 providerId: selectedModel?.providerId || modelProviderId,
                 modelId: selectedModel?.modelId || selectedModel?.runtimeId || selectedModelId,
-              }))
+              })
+              setSelectedReasoningEffort(nextReasoningEffort)
+              persistReasoningEffort(nextReasoningEffort)
               setReasoningSelectOpen(false)
             }}
             disabled={isResponseLoading || modelsLoading || reasoningCapabilities.length <= 1}
@@ -3856,7 +3872,9 @@ export function AiEntryWorkspace({
             onOpenChange={setModelSelectOpen}
             value={selectedModelId ?? undefined}
             onValueChange={(nextValue) => {
-              setSelectedModelId(nextValue || null)
+              const nextModelId = nextValue || null
+              setSelectedModelId(nextModelId)
+              persistSelectedModelId(nextModelId)
               setModelSelectOpen(false)
             }}
             disabled={isResponseLoading || modelsLoading || models.length === 0}
@@ -3872,10 +3890,12 @@ export function AiEntryWorkspace({
             onOpenChange={setReasoningSelectOpen}
             value={resolvedReasoningEffort}
             onValueChange={(nextValue) => {
-              setSelectedReasoningEffort(normalizeReasoningEffort(nextValue, {
+              const nextReasoningEffort = normalizeReasoningEffort(nextValue, {
                 providerId: selectedModel?.providerId || modelProviderId,
                 modelId: selectedModel?.modelId || selectedModel?.runtimeId || selectedModelId,
-              }))
+              })
+              setSelectedReasoningEffort(nextReasoningEffort)
+              persistReasoningEffort(nextReasoningEffort)
               setReasoningSelectOpen(false)
             }}
             disabled={isResponseLoading || modelsLoading || reasoningCapabilities.length <= 1}
