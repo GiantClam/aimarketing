@@ -509,8 +509,9 @@ async function generateSeoTitlePlanWithDefaultProvider(params: {
           params.userPrompt,
         ].join("\n\n")
         let lastError: unknown = null
+        const reasoningEfforts = ["xhigh", "high", "none"] as const
 
-        for (const reasoningEffort of ["xhigh", "high"] as const) {
+        for (const [attemptIndex, reasoningEffort] of reasoningEfforts.entries()) {
           try {
             const response = streamText({
               model: providerRun.provider.chat(providerRun.model),
@@ -538,17 +539,18 @@ async function generateSeoTitlePlanWithDefaultProvider(params: {
             return text
           } catch (error) {
             lastError = error
-            const canRetryWithHigh =
-              reasoningEffort === "xhigh" &&
+            const nextReasoningEffort = reasoningEfforts[attemptIndex + 1]
+            const canRetryWithNextEffort =
+              nextReasoningEffort !== undefined &&
               (isUnsupportedReasoningEffortError(error) ||
                 (error instanceof Error &&
                   ["seo_title_json_missing", "seo_title_empty_response"].includes(error.message)))
-            if (!canRetryWithHigh) throw error
+            if (!canRetryWithNextEffort) throw error
             console.warn("lead-tools.seo-title.reasoning-fallback", {
               provider: providerRun.providerId,
               model: providerRun.model,
-              from: "xhigh",
-              to: "high",
+              from: reasoningEffort,
+              to: nextReasoningEffort,
               message: error instanceof Error ? error.message : String(error),
             })
           }
