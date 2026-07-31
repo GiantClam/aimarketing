@@ -541,7 +541,8 @@ async function generateSeoTitlePlanWithDefaultProvider(params: {
             const canRetryWithHigh =
               reasoningEffort === "xhigh" &&
               (isUnsupportedReasoningEffortError(error) ||
-                (error instanceof Error && error.message === "seo_title_json_missing"))
+                (error instanceof Error &&
+                  ["seo_title_json_missing", "seo_title_empty_response"].includes(error.message)))
             if (!canRetryWithHigh) throw error
             console.warn("lead-tools.seo-title.reasoning-fallback", {
               provider: providerRun.providerId,
