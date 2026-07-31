@@ -163,8 +163,16 @@ function buildCatalogGroups(providers: GovernedTextProviderOption[]) {
   }))
 }
 
+function isDeepseekV4Model(modelId: string) {
+  return /^deepseek-v4-(?:pro|flash)$/iu.test(normalizeText(modelId))
+}
+
 function buildDeepseekModelCandidates(provider: GovernedTextProviderOption) {
-  if (provider.providerId !== "deepseek") return [provider]
+  // Enterprise OpenAI-compatible routes keep their own provider ID and
+  // credentials, but may point at the same DeepSeek V4 model family. Expose
+  // Flash for those routes too so an externally configured model is not hidden
+  // just because it is not using the platform provider ID.
+  if (provider.providerId !== "deepseek" && !isDeepseekV4Model(provider.modelId)) return [provider]
 
   const candidates = [provider]
   if (provider.modelId !== "deepseek-v4-flash") {

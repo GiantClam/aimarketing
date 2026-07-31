@@ -53,6 +53,8 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
           "Never delete files or directories; preserve existing workspace files and overwrite only files required by the native Dashi workflow.",
           "Use the native Dashi skill and the OpenCode session history to interpret the current turn and advance its workflow. Do not use an application boolean, regex, or synthetic confirmation marker to decide whether export is approved.",
           `If the Skill's workflow has the required brief and the current user turn explicitly requests or confirms export, run Dashi's native render, visual QA, and export flow, and write the final PPTX/HTML/assets plus artifact-manifest.json under ./turns/${input.runId}/artifacts/. If export approval is missing, stop after the preview and ask the user for the exact missing confirmation.`,
+          "This runtime is headless and has no platform export API. When the user explicitly requests PPTX/PowerPoint and the browser export endpoint is unavailable, do not report that PPTX export is impossible: after rendering and validation, use the bundled local fallback `npm --prefix /opt/dashiai-ppt/project run export:pptx -- <deck>/ppt <output>.pptx`, then place the resulting PPTX under the current turn's artifacts directory and include it in artifact-manifest.json.",
+          "Do not finish a PPTX-requested turn with only HTML, JSON, or an explanation that a platform API is unavailable when the bundled local exporter can run.",
           "Use webfetch/web search inside OpenCode when current evidence is needed. Never expose provider credentials or other platform secrets.",
         ]
       : isEditablePpt

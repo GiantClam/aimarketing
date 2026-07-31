@@ -13,3 +13,19 @@ test("session endpoints convert signature failures into 401 responses", async ()
   assert.match(source, /authenticateOrReject/u)
   assert.match(source, /if \(rejected\) return rejected/u)
 })
+
+test("accepted v2 runs trigger the durable workflow directly", async () => {
+  const source = await readFile(resolve(import.meta.dirname, "session-coordinator.ts"), "utf8")
+  assert.match(source, /AGENT_RUN_WORKFLOW\.create/u)
+  assert.doesNotMatch(source, /AGENT_RUN_QUEUE\.send/u)
+})
+
+test("running v2 runs notify the platform before the terminal callback", async () => {
+  const source = await readFile(resolve(import.meta.dirname, "session-coordinator.ts"), "utf8")
+  assert.match(source, /await this\.notifyPlatform\(running\)/u)
+})
+
+test("Dashi execution keeps the sandbox on HTTP transport", async () => {
+  const source = await readFile(resolve(import.meta.dirname, "session-coordinator.ts"), "utf8")
+  assert.match(source, /transport: runtimeInput\.agentId === "executive-presentation-ppt" \? "http" : "rpc"/u)
+})

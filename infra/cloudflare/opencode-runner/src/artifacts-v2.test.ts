@@ -192,3 +192,33 @@ test("publishes a final PPTX when the native Skill writes it", async () => {
   assert.equal(result.artifacts.length, 1)
   assert.equal(result.artifacts[0]?.fileName, "deck.pptx")
 })
+
+test("discovers Dashi's session output directory when the manifest is absent", async () => {
+  const sessionDir = "/workspace/sessions/sess-ffffffffffffffffffffffffffffffff"
+  const runId = "66666666-6666-4666-8666-666666666666"
+  const pptxPath = `${sessionDir}/output/ai-marketing-workbench-ppt/AI营销工作台-演讲PPT.pptx`
+  const sandbox = {
+    async readFile(path: string) {
+      if (path === pptxPath) return new Uint8Array([80, 75, 3, 4])
+      return null
+    },
+    async exec(command: string) {
+      if (command.includes("find ")) return { success: true, stdout: `${pptxPath}\n` }
+      return { success: false }
+    },
+  }
+  const result = await publishRuntimeArtifactsV2({
+    bucket: { async put() {} } as never,
+    sandbox,
+    sessionKey: "sess-ffffffffffffffffffffffffffffffff",
+    runId,
+    sessionDir,
+    maxArtifacts: 8,
+    maxArtifactBytes: 1024,
+    maxArtifactTotalBytes: 4096,
+    allowedExtensions: ["pptx"],
+  })
+
+  assert.equal(result.artifacts.length, 1)
+  assert.equal(result.artifacts[0]?.fileName, "output/ai-marketing-workbench-ppt/AI营销工作台-演讲PPT.pptx")
+})

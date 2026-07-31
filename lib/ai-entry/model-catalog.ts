@@ -191,6 +191,7 @@ type RecentFilterResult = {
 const VERIFIED_PROVIDER_MODEL_IDS: Partial<Record<AiEntryProviderId, string[]>> = {
   deepseek: [
     "deepseek-v4-pro",
+    "deepseek-v4-flash",
   ],
   pptoken: [
     "grok-4.5",

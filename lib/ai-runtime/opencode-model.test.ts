@@ -4,13 +4,13 @@ import { test } from "node:test"
 import { resolveOpenCodeModelHint } from "./opencode-model"
 
 test("qualifies DeepSeek display IDs for OpenCode", () => {
-  assert.equal(resolveOpenCodeModelHint({ providerId: "enterprise-openai-compatible", modelId: "deepseek-v4-pro" }), "deepseek/deepseek-v4-pro")
+  assert.equal(resolveOpenCodeModelHint({ providerId: "enterprise-openai-compatible", modelId: "deepseek-v4-pro" }), "enterprise_openai_compatible/deepseek-v4-pro")
   assert.equal(resolveOpenCodeModelHint({ providerId: "deepseek", modelId: "deepseek-v4-pro" }), "deepseek/deepseek-v4-pro")
 })
 
 test("preserves already-qualified and non-DeepSeek model IDs", () => {
   assert.equal(resolveOpenCodeModelHint({ providerId: "deepseek", modelId: "deepseek/deepseek-v4-pro" }), "deepseek/deepseek-v4-pro")
-  assert.equal(resolveOpenCodeModelHint({ providerId: "pptoken", modelId: "gpt-5.4" }), "gpt-5.4")
+  assert.equal(resolveOpenCodeModelHint({ providerId: "pptoken", modelId: "gpt-5.4" }), "pptoken/gpt-5.4")
   assert.equal(resolveOpenCodeModelHint({ providerId: null, modelId: null }), null)
 })
 

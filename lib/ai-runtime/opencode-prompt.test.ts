@@ -194,6 +194,8 @@ test("speaker PPT prompt delegates the complete conversation to native Dashi", (
   })
 
   assert.match(prompt, /\/opt\/dashiai-ppt\/SKILL\.md/u)
+  assert.match(prompt, /bundled local fallback.*export:pptx/u)
+  assert.match(prompt, /Do not finish a PPTX-requested turn with only HTML/u)
   assert.match(prompt, /Do not use the legacy brief collector/u)
   assert.match(prompt, /System execution permissions for shell, write, edit, skill/u)
   assert.match(prompt, /Never choose a default for a user decision/u)

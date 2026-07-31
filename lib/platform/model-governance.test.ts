@@ -90,6 +90,28 @@ test("buildGovernedAiEntryModelCatalog exposes both selectable DeepSeek text mod
   assert.equal(catalog.models.find((item) => item.modelId === "deepseek-v4-flash")?.providerId, "deepseek")
 })
 
+test("buildGovernedAiEntryModelCatalog exposes DeepSeek V4 Flash through an enterprise OpenAI-compatible provider", () => {
+  const catalog = buildGovernedAiEntryModelCatalog({
+    user: null,
+    runtimeProviders: [
+      {
+        id: "enterprise-openai-compatible",
+        scope: "text",
+        configured: true,
+        active: true,
+        model: "deepseek-v4-pro",
+        baseURL: "https://enterprise.example/v1",
+      },
+    ],
+  })
+
+  assert.deepEqual(catalog.models.map((item) => item.id), [
+    "enterprise-openai-compatible::deepseek-v4-pro",
+    "enterprise-openai-compatible::deepseek-v4-flash",
+  ])
+  assert.equal(catalog.models.find((item) => item.modelId === "deepseek-v4-flash")?.providerId, "enterprise-openai-compatible")
+})
+
 test("buildGovernedAiEntryModelCatalog exposes PPToken Grok when its dedicated account is configured", () => {
   const previous = {
     pptoken: process.env.AI_ENTRY_PPTOKEN_API_KEY,
@@ -202,6 +224,7 @@ test("buildGovernedAiEntryModelCatalog keeps platform models visible when enterp
   ])
   assert.deepEqual(catalog.models.map((item) => item.id), [
     "enterprise-openai-compatible::deepseek-v4-pro",
+    "enterprise-openai-compatible::deepseek-v4-flash",
     "deepseek::deepseek-v4-pro",
     "deepseek::deepseek-v4-flash",
     "pptoken::gpt-5.4-mini",

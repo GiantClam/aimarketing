@@ -98,7 +98,7 @@ export async function publishRuntimeArtifactsV2(input: {
     // output root, not to the per-session workspace. Keep this root explicit
     // and only accept files newer than the current turn marker.
     const dashiOutputRoot = "/workspace/output"
-    const sessionRoots = [`${turnDir}/artifacts`, `${turnDir}`, `${input.sessionDir}/final`, `${input.sessionDir}/project`, `${input.sessionDir}/workspace`]
+    const sessionRoots = [`${turnDir}/artifacts`, `${turnDir}`, `${input.sessionDir}/final`, `${input.sessionDir}/output`, `${input.sessionDir}/project`, `${input.sessionDir}/workspace`]
     const findArgs = sessionRoots.map((root) => JSON.stringify(root)).join(" ")
     const findFiles = findExpression(input.allowedExtensions)
     const marker = `${turnDir}/.dashi-artifact-start`
@@ -107,7 +107,7 @@ export async function publishRuntimeArtifactsV2(input: {
     const fallbackRecords = (discovered.stdout || "").split(/\r?\n/).map((path) => path.trim()).filter((path) => {
       if (!path || seen.has(path)) return false
       seen.add(path)
-      return path.startsWith(`${turnDir}/`) || path.startsWith(`${input.sessionDir}/final/`) || path.startsWith(`${input.sessionDir}/project/`) || path.startsWith(`${input.sessionDir}/workspace/`) || path.startsWith(`${dashiRoot}/`) || path.startsWith(`${dashiOutputRoot}/`)
+      return path.startsWith(`${turnDir}/`) || path.startsWith(`${input.sessionDir}/final/`) || path.startsWith(`${input.sessionDir}/output/`) || path.startsWith(`${input.sessionDir}/project/`) || path.startsWith(`${input.sessionDir}/workspace/`) || path.startsWith(`${dashiRoot}/`) || path.startsWith(`${dashiOutputRoot}/`)
     }).map((fullPath) => {
       const relative = fullPath.startsWith(`${turnDir}/`)
         ? fullPath.slice(`${turnDir}/`.length)
@@ -140,7 +140,7 @@ export async function publishRuntimeArtifactsV2(input: {
     const relativePath = typeof record.path === "string" ? safeArtifactPath(record.path) : null
     const ext = relativePath?.split(".").at(-1)?.toLowerCase() || ""
     if (!relativePath || !allowed.has(ext)) { warnings.push("runtime_artifact_path_invalid"); continue }
-    const fallbackFullPath = typeof record.fullPath === "string" && (record.fullPath.startsWith(`${turnDir}/`) || record.fullPath.startsWith(`${input.sessionDir}/final/`) || record.fullPath.startsWith(`${input.sessionDir}/project/`) || record.fullPath.startsWith(`${input.sessionDir}/workspace/`) || record.fullPath.startsWith("/opt/dashiai-ppt/project/") || record.fullPath.startsWith("/workspace/output/"))
+    const fallbackFullPath = typeof record.fullPath === "string" && (record.fullPath.startsWith(`${turnDir}/`) || record.fullPath.startsWith(`${input.sessionDir}/final/`) || record.fullPath.startsWith(`${input.sessionDir}/output/`) || record.fullPath.startsWith(`${input.sessionDir}/project/`) || record.fullPath.startsWith(`${input.sessionDir}/workspace/`) || record.fullPath.startsWith("/opt/dashiai-ppt/project/") || record.fullPath.startsWith("/workspace/output/"))
       ? record.fullPath
       : null
     const fullPath = fallbackFullPath || `${turnDir}/artifacts/${relativePath}`

@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers"
 import { getSandbox } from "@cloudflare/sandbox"
-import type { AgentRuntimeEvent, CloudflareSessionRunRequest, RuntimeCheckpointRef } from "../../../../lib/ai-runtime/contracts"
+import type { AgentRuntimeEvent, CloudflareSessionQueueMessage, CloudflareSessionRunRequest, RuntimeCheckpointRef } from "../../../../lib/ai-runtime/contracts"
 import { verifyRunnerSignature, type NonceStore } from "./auth"
 import { createEventTicket, verifyEventTicket, allowedEventOrigin } from "./event-ticket"
 import { publishRuntimeArtifactsV2 } from "./artifacts-v2"
@@ -13,7 +13,9 @@ import { createRuntimeCallbackHeaders } from "../../../../lib/ai-entry/runtime/c
 export type SessionRunnerEnv = {
   Sandbox: unknown
   SessionCoordinatorV2: SessionCoordinatorNamespace
-  AGENT_RUN_QUEUE: Queue<unknown>
+  AGENT_RUN_WORKFLOW: {
+    create(options: { id: string; params: CloudflareSessionQueueMessage }): Promise<unknown>
+  }
   BACKUP_BUCKET: R2Bucket
   ARTIFACT_BUCKET: R2Bucket
   SHARED_AGENT_SKILL_BUNDLE_BUCKET: R2Bucket
@@ -142,7 +144,21 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
     const run: StoredRun = { runId: input.runId, sessionKey: input.sessionKey, status: "queued", updatedAt: new Date().toISOString(), checkpoint: input.input.checkpoint }
     await this.setRun(run)
     await this.emit(input.runId, { event: "run_queued", runId: input.runId, sessionKey: input.sessionKey, status: "queued" })
-    await this.env.AGENT_RUN_QUEUE.send({ version: 2, runId: input.runId, sessionKey: input.sessionKey, dispatchKey: runtimeDispatchKey(input.runId), requestedAt: new Date().toISOString() })
+    // Trigger the durable workflow directly from the session coordinator.
+    // The previous Queue -> consumer -> Workflow hop could acknowledge the
+    // HTTP request while leaving the run permanently queued when the queue
+    // consumer was stale or unavailable. The workflow instance ID is the run
+    // ID, so retries remain idempotent at the platform boundary.
+    await this.env.AGENT_RUN_WORKFLOW.create({
+      id: input.runId,
+      params: {
+        version: 2,
+        runId: input.runId,
+        sessionKey: input.sessionKey,
+        dispatchKey: runtimeDispatchKey(input.runId),
+        requestedAt: new Date().toISOString(),
+      },
+    })
     return json({ accepted: true, runId: input.runId, sessionKey: input.sessionKey, status: "queued" }, 202)
   }
 
@@ -221,15 +237,24 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
       await this.ctx.storage.put("sharedAgentId", runtimeInput.agentId)
     }
     const existingRun: StoredRun = current || { runId: input.runId, sessionKey: input.sessionKey, status: "queued", updatedAt: new Date().toISOString(), checkpoint }
-    await this.setRun({ ...existingRun, status: "running", updatedAt: new Date().toISOString() })
+    const running: StoredRun = { ...existingRun, status: "running", updatedAt: new Date().toISOString() }
+    await this.setRun(running)
     await this.emit(input.runId, { event: "runtime_started", runId: input.runId })
+    // Surface the running state immediately. Without this callback the
+    // platform task remains visually queued until the terminal callback,
+    // making healthy long-running Dashi jobs look stuck.
+    await this.notifyPlatform(running)
     const stage = async (tool: string, phase: "started" | "completed", message?: string) => {
       await this.emit(input.runId, { event: "tool_event", tool, phase, ...(message ? { message } : {}), runId: input.runId })
     }
     const sessionKey = input.sessionKey
     await stage("sandbox_acquire", "started")
     const sandbox = getSandbox(this.env.Sandbox as Parameters<typeof getSandbox>[0], sessionKey, {
-      transport: "rpc",
+      // Keep Dashi on HTTP for both preparation and execution. The workflow
+      // path can lose the Cap'n Web RPC session before the first tool call;
+      // HTTP keeps the self-contained presentation turn independent of that
+      // session while other shared agents retain the lower-latency RPC path.
+      transport: runtimeInput.agentId === "executive-presentation-ppt" ? "http" : "rpc",
       // Every turn uses absolute workspace paths and an explicit OpenCode
       // server/process. The deprecated implicit shell can exit after a backup
       // and make later artifact discovery fail the entire shared run.

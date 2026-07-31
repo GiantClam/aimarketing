@@ -2,6 +2,7 @@
   "name": "my-v0-project",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@9.15.4",
   "scripts": {
     "build": "node scripts/clean-build-artifacts.js && next build",
     "prebuild": "pnpm run validate:workflow:upstream",

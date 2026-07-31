@@ -28,6 +28,7 @@ let lastStreamingSystemPrompt = ""
 let lastStreamingToolChoice: Record<string, unknown> | undefined
 let customAgentExecutionMode: "direct_agent" | "workflow_backed" = "direct_agent"
 let customAgentStatus: "published" | "disabled" | "archived" | "draft" = "published"
+let enterpriseTextRuntimeConfig: Record<string, unknown> | null = null
 let ensureConversationArgs:
   | {
       fallbackTitle?: string
@@ -641,6 +642,18 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
             runtimeId: "gpt-5.4",
             providerId: "pptoken",
           },
+          {
+            id: "enterprise-openai-compatible::deepseek-v4-pro",
+            modelId: "deepseek-v4-pro",
+            runtimeId: "deepseek-v4-pro",
+            providerId: "enterprise-openai-compatible",
+          },
+          {
+            id: "enterprise-openai-compatible::deepseek-v4-flash",
+            modelId: "deepseek-v4-flash",
+            runtimeId: "deepseek-v4-flash",
+            providerId: "enterprise-openai-compatible",
+          },
         ],
         selectedModelId: "pptoken::gpt-5.4",
         providerId: "pptoken",
@@ -650,7 +663,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 
   if (request === "@/lib/platform/enterprise-runtime-config") {
     return {
-      getEnterpriseTextRuntimeProviderConfigsForUser: async () => null,
+      getEnterpriseTextRuntimeProviderConfigsForUser: async () => enterpriseTextRuntimeConfig,
     }
   }
 
@@ -680,6 +693,7 @@ test.beforeEach(() => {
   lastOpenCodeOptions = null
   lastNativeProviderOptions = null
   backgroundRunCalls = []
+  enterpriseTextRuntimeConfig = null
   lastStreamingSystemPrompt = ""
   lastStreamingToolChoice = undefined
   customAgentExecutionMode = "direct_agent"
@@ -854,6 +868,64 @@ test("presentation PPT queues Cloudflare OpenCode and never enters the legacy PP
     assert.equal(toolRegistryToolIds.includes("preview_ppt_deck"), false)
     assert.equal(toolRegistryToolIds.includes("export_ppt_deck"), false)
   } finally {
+    for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key]
+    Object.assign(process.env, previous)
+  }
+})
+
+test("presentation PPT accepts DeepSeek V4 Flash from an enterprise OpenAI-compatible route", async () => {
+  const previous = { ...process.env }
+  Object.assign(process.env, {
+    AI_ENTRY_SAAS_OPENCODE_ENABLED: "true",
+    AI_ENTRY_RUNTIME_MODE: "opencode-cloudflare-sandbox",
+    AI_ENTRY_OPENCODE_BACKEND: "cloudflare-sandbox-exec",
+    AI_ENTRY_OPENCODE_SESSION_ENABLED: "true",
+    AI_ENTRY_OPENCODE_ASYNC_ENABLED: "true",
+    CLOUDFLARE_OPENCODE_RUNNER_URL: "https://runner.example.com",
+    CLOUDFLARE_OPENCODE_RUNNER_HMAC_SECRET: "test-secret",
+  })
+  enterpriseTextRuntimeConfig = {
+    selectedProviderId: "enterprise-openai-compatible",
+    selectedModelId: "deepseek-v4-pro",
+    providerConfigs: [
+      {
+        id: "enterprise-openai-compatible",
+        apiKey: "enterprise-key",
+        baseURL: "https://enterprise.example/v1",
+        model: "deepseek-v4-pro",
+      },
+    ],
+  }
+  try {
+    const response = await POST({
+      json: async () => ({
+        messages: [{ role: "user", content: "生成一份 AI 客服试点复盘 PPT。" }],
+        stream: true,
+        agentConfig: { agentId: "executive-presentation-ppt" },
+        modelConfig: {
+          providerId: "enterprise-openai-compatible",
+          modelId: "deepseek-v4-flash",
+        },
+      }),
+      nextUrl: { origin: "https://example.com" },
+    })
+    const text = await response.text()
+
+    assert.equal(response.status, 200)
+    assert.match(text, /"event":"background_task_queued"/u)
+    assert.equal(backgroundRunCalls.length, 1)
+    assert.deepEqual(backgroundRunCalls[0]?.provider, {
+      providerId: "enterprise-openai-compatible",
+      modelId: "deepseek-v4-flash",
+      baseUrl: "https://enterprise.example/v1",
+      apiKey: "enterprise-key",
+    })
+    assert.equal(
+      (backgroundRunCalls[0]?.runtimeInput as { modelHint?: string } | undefined)?.modelHint,
+      "enterprise_openai_compatible/deepseek-v4-flash",
+    )
+  } finally {
+    enterpriseTextRuntimeConfig = null
     for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key]
     Object.assign(process.env, previous)
   }
