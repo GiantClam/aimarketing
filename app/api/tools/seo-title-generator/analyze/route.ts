@@ -14,6 +14,14 @@ function encodeEvent(event: string, payload: unknown) {
   return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`)
 }
 
+function getPublicGenerationError(error: unknown) {
+  if (error instanceof ZodError) {
+    return "The generated report was incomplete. Please try again."
+  }
+
+  return "Unable to generate the SEO title report right now. Please try again."
+}
+
 export async function POST(request: NextRequest) {
   let input: ReturnType<typeof seoTitleInputSchema.parse>
   try {
@@ -38,11 +46,14 @@ export async function POST(request: NextRequest) {
         controller.enqueue(encodeEvent("report_completed", { report }))
         controller.enqueue(encodeEvent("paid_capabilities_available", { capabilities: paidSeoCapabilities }))
       } catch (error) {
+        console.error("lead-tools.seo-title.generation-failed", {
+          message: error instanceof Error ? error.message : String(error),
+        })
         controller.enqueue(
           encodeEvent("error", {
             code: "seo_title_generation_failed",
             retryable: true,
-            message: error instanceof Error ? error.message : "Failed to generate SEO title report",
+            message: getPublicGenerationError(error),
           }),
         )
       } finally {

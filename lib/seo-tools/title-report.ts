@@ -15,6 +15,14 @@ export const seoTitleInputSchema = z.object({
 
 export type SeoTitleInput = z.infer<typeof seoTitleInputSchema>
 
+const DEFAULT_ASSESSMENT = {
+  intentMatch: 4,
+  clarity: 4,
+  differentiation: 4,
+  promiseCredibility: 4,
+  explanation: "Clear, intent-led title direction with a specific user benefit.",
+} satisfies SeoTitleModelAssessment
+
 export const seoTitleModelAssessmentSchema = z.object({
   intentMatch: z.number().min(1).max(5),
   clarity: z.number().min(1).max(5),
@@ -30,10 +38,15 @@ export const seoTitleCandidatePlanSchema = z.object({
   title: z.string().trim().min(2).max(180),
   angle: z.string().trim().min(1).max(120),
   rationale: z.string().trim().min(1).max(600),
-  modelAssessment: seoTitleModelAssessmentSchema,
+  // DeepSeek occasionally omits this supplementary block when it has already
+  // supplied the title, angle, and rationale. Keep the report usable and let
+  // deterministic title checks complete the assessment instead of rejecting
+  // every candidate.
+  modelAssessment: seoTitleModelAssessmentSchema.optional(),
 })
 
-export type SeoTitleCandidate = z.infer<typeof seoTitleCandidatePlanSchema> & {
+export type SeoTitleCandidate = Omit<z.infer<typeof seoTitleCandidatePlanSchema>, "modelAssessment"> & {
+  modelAssessment: SeoTitleModelAssessment
   ruleScore: SeoTitleRuleScore
 }
 
@@ -71,19 +84,22 @@ export const seoTitleGeneratedPlanSchema = z.object({
 
 export type SeoTitleGeneratedPlan = z.infer<typeof seoTitleGeneratedPlanSchema>
 
-const DEFAULT_ASSESSMENT: SeoTitleModelAssessment = {
-  intentMatch: 4,
-  clarity: 4,
-  differentiation: 4,
-  promiseCredibility: 4,
-  explanation: "Clear, intent-led title direction with a specific user benefit.",
-}
-
 function pageTypeLabel(pageType: SeoTitleInput["pageType"], isChinese: boolean) {
   const labels = isChinese
     ? { "landing-page": "落地页", "blog-post": "文章", "product-page": "产品页", "feature-page": "功能页" }
     : { "landing-page": "landing page", "blog-post": "blog post", "product-page": "product page", "feature-page": "feature page" }
   return labels[pageType]
+}
+
+function getDefaultAssessment(language: SeoTitleInput["language"]): SeoTitleModelAssessment {
+  if (language === "zh-CN") {
+    return {
+      ...DEFAULT_ASSESSMENT,
+      explanation: "标题清晰表达了搜索意图与用户价值，仍需结合真实数据验证。",
+    }
+  }
+
+  return DEFAULT_ASSESSMENT
 }
 
 export function buildMockSeoTitlePlan(input: SeoTitleInput): SeoTitleGeneratedPlan {
@@ -172,9 +188,9 @@ export function buildMockSeoTitlePlan(input: SeoTitleInput): SeoTitleGeneratedPl
 
 export function buildSeoTitleReport(plan: SeoTitleGeneratedPlan): SeoTitleReport {
   const titles = plan.candidates.map((candidate) => candidate.title)
-  const candidates = plan.candidates.map((candidate) => ({
+  const candidates: SeoTitleCandidate[] = plan.candidates.map((candidate) => ({
     ...candidate,
-    modelAssessment: candidate.modelAssessment || DEFAULT_ASSESSMENT,
+    modelAssessment: candidate.modelAssessment || getDefaultAssessment(plan.language),
     ruleScore: scoreSeoTitle({ title: candidate.title, keyword: plan.keyword, candidates: titles, language: plan.language }),
   }))
   const recommendedCandidateId = candidates.some((candidate) => candidate.id === plan.recommendedCandidateId)

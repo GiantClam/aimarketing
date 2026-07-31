@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { getPublicSeoToolIds } from "./public-runtime-policy"
-import { buildMockSeoTitlePlan, buildSeoTitleReport, getLocalizedPaidSeoCapabilities, paidSeoCapabilities, seoTitleInputSchema } from "./title-report"
+import { buildMockSeoTitlePlan, buildSeoTitleReport, getLocalizedPaidSeoCapabilities, paidSeoCapabilities, seoTitleGeneratedPlanSchema, seoTitleInputSchema } from "./title-report"
 import { scoreSeoTitle } from "./title-score"
 
 test("anonymous SEO title reports use fixed input and do not expose paid tools", () => {
@@ -54,6 +54,26 @@ test("fallback title reports retain the supplied page context", () => {
   assert.match(report.intentHypothesis, /产品页/)
   assert.match(report.intentHypothesis, /提升自然流量与点击率/)
   assert.match(report.candidates[0]?.rationale || "", /旧标题/)
+})
+
+test("title reports retain candidates when a provider omits supplementary model assessments", () => {
+  const input = seoTitleInputSchema.parse({
+    keyword: "SEO title generator",
+    audience: "marketing teams",
+    region: "United States",
+    pageType: "landing-page",
+    language: "en-US",
+  })
+  const plan = buildMockSeoTitlePlan(input)
+  const parsed = seoTitleGeneratedPlanSchema.parse({
+    ...plan,
+    candidates: plan.candidates.map(({ modelAssessment: _modelAssessment, ...candidate }) => candidate),
+  })
+  const report = buildSeoTitleReport(parsed)
+
+  assert.equal(report.candidates.length, 10)
+  assert.equal(report.candidates.every((candidate) => candidate.modelAssessment.intentMatch === 4), true)
+  assert.match(report.candidates[0]?.modelAssessment.explanation || "", /specific user benefit/)
 })
 
 test("paid SEO capability cards are localized for the Chinese tool page", () => {
