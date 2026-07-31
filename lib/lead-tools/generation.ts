@@ -86,65 +86,6 @@ function buildSeoPlanSchema() {
   } satisfies Record<string, unknown>
 }
 
-function buildSeoTitlePlanSchema() {
-  const assessment = {
-    type: "object",
-    additionalProperties: false,
-    required: ["intentMatch", "clarity", "differentiation", "promiseCredibility", "explanation"],
-    properties: {
-      intentMatch: { type: "number", minimum: 1, maximum: 5 },
-      clarity: { type: "number", minimum: 1, maximum: 5 },
-      differentiation: { type: "number", minimum: 1, maximum: 5 },
-      promiseCredibility: { type: "number", minimum: 1, maximum: 5 },
-      explanation: { type: "string" },
-    },
-  }
-  const candidate = {
-    type: "object",
-    additionalProperties: false,
-    required: ["id", "title", "angle", "rationale", "modelAssessment"],
-    properties: {
-      id: { type: "string" },
-      title: { type: "string" },
-      angle: { type: "string" },
-      rationale: { type: "string" },
-      modelAssessment: assessment,
-    },
-  }
-  return {
-    type: "object",
-    additionalProperties: false,
-    required: ["keyword", "pageType", "audience", "region", "language", "intentHypothesis", "candidates", "recommendedCandidateId", "abTests", "risks"],
-    properties: {
-      keyword: { type: "string" },
-      pageType: { type: "string", enum: ["landing-page", "blog-post", "product-page", "feature-page"] },
-      audience: { type: "string" },
-      region: { type: "string" },
-      language: { type: "string", enum: ["zh-CN", "en-US"] },
-      intentHypothesis: { type: "string" },
-      candidates: { type: "array", minItems: 10, maxItems: 12, items: candidate },
-      recommendedCandidateId: { type: "string" },
-      abTests: {
-        type: "array",
-        minItems: 2,
-        maxItems: 3,
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["name", "variantA", "variantB", "hypothesis"],
-          properties: {
-            name: { type: "string" },
-            variantA: { type: "string" },
-            variantB: { type: "string" },
-            hypothesis: { type: "string" },
-          },
-        },
-      },
-      risks: { type: "array", minItems: 2, maxItems: 5, items: { type: "string" } },
-    },
-  } satisfies Record<string, unknown>
-}
-
 function buildPptSystemPrompt(request: PptPreviewRequest) {
   const templateMode = resolvePptPreviewTemplateMode(request)
   const templateLabel =
@@ -526,23 +467,42 @@ export async function generateLeadToolPptPreview(request: PptPreviewRequest): Pr
   }
 }
 
-async function generateSeoTitlePlanWithLeadToolProvider(params: {
+async function generateSeoTitlePlanWithDefaultProvider(params: {
   systemPrompt: string
   userPrompt: string
 }) {
-  const providerResult = await generateTextWithLeadToolPreviewProvider({
-    systemPrompt: [
-      params.systemPrompt,
-      "Return only one valid JSON object. Do not use markdown, code fences, or commentary.",
-      "The object must contain keyword, pageType, audience, region, language, intentHypothesis, candidates, recommendedCandidateId, abTests, and risks.",
-    ].join("\n\n"),
-    userPrompt: params.userPrompt,
-    model: getLeadToolPreviewModel("seo-title-generator"),
-    maxOutputTokens: 2_200,
-    timeoutMs: 24_000,
-  })
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 40_000)
 
-  return seoTitleGeneratedPlanSchema.parse(JSON.parse(extractJsonObjectBlock(providerResult.text, "seo_title_json_missing")))
+  try {
+    const providerResult = await executeAiEntryWithProviderFailover(
+      async (providerRun) => {
+        const response = await generateText({
+          model: providerRun.provider.chat(providerRun.model),
+          system: [
+            params.systemPrompt,
+            "Return only one valid JSON object. Do not use markdown, code fences, or commentary.",
+            "The object must contain keyword, pageType, audience, region, language, intentHypothesis, candidates, recommendedCandidateId, abTests, and risks.",
+          ].join("\n\n"),
+          prompt: params.userPrompt,
+          temperature: 0.35,
+          maxOutputTokens: 2_200,
+          abortSignal: controller.signal,
+        })
+        const text = response.text.trim()
+        if (!text) throw new Error("seo_title_empty_response")
+        return text
+      },
+      {
+        preferredProviderId: "deepseek",
+        preferredModel: getLeadToolPreviewModel("seo-title-generator"),
+      },
+    )
+
+    return seoTitleGeneratedPlanSchema.parse(JSON.parse(extractJsonObjectBlock(providerResult.result, "seo_title_json_missing")))
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 export async function generateLeadToolSeoPreview(request: SeoMetaRequest): Promise<SeoMetaPreview> {
@@ -582,22 +542,7 @@ export async function generateSeoTitleReport(request: SeoTitleInput): Promise<Se
     skillInstruction,
   ].join("\n\n")
   const userPrompt = buildSeoTitleUserPrompt(request)
-  const plan: SeoTitleGeneratedPlan = hasLeadToolMinimaxProvider() || hasLeadToolStepfunProvider()
-    ? await generateSeoTitlePlanWithLeadToolProvider({ systemPrompt, userPrompt })
-    : (await generateStructuredObjectWithWriterModel({
-        model: getLeadToolPreviewModel("seo-title-generator"),
-        systemPrompt,
-        userPrompt,
-        toolName: "return_seo_title_report",
-        toolDescription: "Return a complete free SEO title report with distinct titles and transparent model judgments.",
-        jsonSchema: buildSeoTitlePlanSchema(),
-        options: {
-          temperature: 0.45,
-          maxTokens: 3400,
-          timeoutMs: 35_000,
-          totalTimeoutMs: 45_000,
-        },
-      })) as SeoTitleGeneratedPlan
+  const plan: SeoTitleGeneratedPlan = await generateSeoTitlePlanWithDefaultProvider({ systemPrompt, userPrompt })
 
   return buildSeoTitleReport({
     ...plan,

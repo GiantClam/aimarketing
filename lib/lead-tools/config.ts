@@ -1,6 +1,7 @@
 const DEFAULT_LEAD_TOOL_MODEL =
   process.env.PPTOKEN_MODEL || process.env.AI_ENTRY_PPTOKEN_MODEL || "openai/gpt-4.1-mini"
 const DEFAULT_PPT_PREVIEW_MODEL = "deepseek-v4-pro"
+const DEFAULT_SEO_TITLE_PREVIEW_MODEL = "deepseek-v4-pro"
 const DEFAULT_PPT_RUNTIME_SLIDE_MODEL = "gpt-5.4"
 const DEFAULT_PPT_RUNTIME_FALLBACK_MODEL = "MiniMax-M2.7-highspeed"
 const DEFAULT_PPT_RUNTIME_FALLBACK_PROVIDER = "minimax"
@@ -40,7 +41,14 @@ export function getLeadToolPreviewModel(slug: string) {
     )
   }
 
-  if (slug === "ai-seo-meta-generator" || slug === "seo-title-generator") {
+  if (slug === "seo-title-generator") {
+    return pickFirstNonEmpty(
+      [process.env.LEAD_TOOLS_SEO_TITLE_PREVIEW_MODEL, process.env.LEAD_TOOLS_SEO_PREVIEW_MODEL, process.env.LEAD_TOOLS_PREVIEW_MODEL],
+      DEFAULT_SEO_TITLE_PREVIEW_MODEL,
+    )
+  }
+
+  if (slug === "ai-seo-meta-generator") {
     return pickFirstNonEmpty(
       [process.env.LEAD_TOOLS_SEO_PREVIEW_MODEL, process.env.LEAD_TOOLS_PREVIEW_MODEL],
       DEFAULT_LEAD_TOOL_MODEL,

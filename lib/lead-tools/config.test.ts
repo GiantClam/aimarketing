@@ -79,6 +79,27 @@ test("ai-ppt-preview defaults to deepseek v4 pro for planning", () => {
   }
 })
 
+test("anonymous SEO title generation defaults to deepseek v4 pro", () => {
+  const previousTitleModel = process.env.LEAD_TOOLS_SEO_TITLE_PREVIEW_MODEL
+  const previousSeoModel = process.env.LEAD_TOOLS_SEO_PREVIEW_MODEL
+  const previousGlobalModel = process.env.LEAD_TOOLS_PREVIEW_MODEL
+
+  try {
+    delete process.env.LEAD_TOOLS_SEO_TITLE_PREVIEW_MODEL
+    delete process.env.LEAD_TOOLS_SEO_PREVIEW_MODEL
+    delete process.env.LEAD_TOOLS_PREVIEW_MODEL
+
+    assert.equal(getLeadToolPreviewModel("seo-title-generator"), "deepseek-v4-pro")
+  } finally {
+    if (previousTitleModel === undefined) delete process.env.LEAD_TOOLS_SEO_TITLE_PREVIEW_MODEL
+    else process.env.LEAD_TOOLS_SEO_TITLE_PREVIEW_MODEL = previousTitleModel
+    if (previousSeoModel === undefined) delete process.env.LEAD_TOOLS_SEO_PREVIEW_MODEL
+    else process.env.LEAD_TOOLS_SEO_PREVIEW_MODEL = previousSeoModel
+    if (previousGlobalModel === undefined) delete process.env.LEAD_TOOLS_PREVIEW_MODEL
+    else process.env.LEAD_TOOLS_PREVIEW_MODEL = previousGlobalModel
+  }
+})
+
 test("ppt execution transport defaults to local", () => {
   const previousTransport = process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT
   const previousBaseUrl = process.env.PPT_WORKER_BASE_URL
