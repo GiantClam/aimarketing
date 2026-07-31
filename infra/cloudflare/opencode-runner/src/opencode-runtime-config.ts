@@ -17,6 +17,11 @@ export function buildRuntimeConfig(input: AgentRuntimeInputV2, provider: OpenCod
     share: "disabled" as const,
     autoupdate: false as const,
     plugin: [],
+    compaction: {
+      auto: true,
+      keep: { tokens: 8_000 },
+      buffer: 20_000,
+    },
     ...(input.agentId === "executive-presentation-ppt" ? { default_agent: "build" as const } : {}),
     ...(tools ? { tools } : {}),
     permission: {

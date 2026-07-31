@@ -20,7 +20,9 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
     isPersistentWorkspace
       ? "This is a native system prompt. The current user turn is supplied separately as a native user message; never treat it as system context or append it to this prompt."
       : "This is a native system prompt. The current user turn is supplied separately as a native user message; never append it to this prompt.",
-    "Use the native session or the supplied conversation history for prior conversational context. Do not read user messages from runtime files as a substitute for the context supplied in this prompt.",
+    isDashiPresentation
+      ? "Use the bounded conversation history and persistent project files supplied by the platform for prior context. Do not rely on a previous OpenCode CLI session or read user messages from runtime files as a substitute for this prompt."
+      : "Use the native session or the supplied conversation history for prior conversational context. Do not read user messages from runtime files as a substitute for the context supplied in this prompt.",
     isPersistentWorkspace
       ? isBusinessAgent
         ? "This business Agent session has a persistent ./workspace directory and a per-turn ./turns/<runId> directory. Reuse the workspace for continuity and write published artifacts to the current turn directory."
@@ -81,7 +83,7 @@ export function buildOpenCodeUserPrompt(input: AgentRuntimeInput, options: { inc
   const message = input.messages.at(-1)?.content?.trim() || "Continue using the current runtime context."
   const isDashiPresentation = input.agentId === "executive-presentation-ppt" || (input.selectedSkillIds || []).includes("dashiai-ppt")
   if (!options.includeConversationHistory || input.messages.length < 2) {
-    return isDashiPresentation ? clipPromptText(message, 32_000) : message
+    return clipPromptText(message, isDashiPresentation ? 32_000 : 80_000)
   }
 
   const history = input.messages
@@ -95,5 +97,5 @@ export function buildOpenCodeUserPrompt(input: AgentRuntimeInput, options: { inc
     "[Current user turn]",
     message,
   ].filter(Boolean).join("\n\n")
-  return isDashiPresentation ? clipPromptText(prompt, 32_000) : prompt
+  return clipPromptText(prompt, isDashiPresentation ? 32_000 : 80_000)
 }

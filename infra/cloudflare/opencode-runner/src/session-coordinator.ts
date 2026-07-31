@@ -39,6 +39,33 @@ export type SessionCoordinatorNamespace = {
 type StoredEvent = { id: number; event: AgentRuntimeEvent }
 type StoredRun = { runId: string; sessionKey: string; status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "timed_out"; updatedAt: string; checkpoint: RuntimeCheckpointRef | null; error?: string }
 
+const MAX_STORED_EVENTS = 240
+const MAX_STORED_EVENT_BYTES = 512 * 1024
+
+function clipEventText(value: string, maxChars: number) {
+  if (value.length <= maxChars) return value
+  return `${value.slice(0, maxChars)}...[event clipped]`
+}
+
+function compactStoredEvent(event: AgentRuntimeEvent): AgentRuntimeEvent {
+  if (event.event === "text_delta") return { ...event, delta: clipEventText(event.delta, 2_000) }
+  if (event.event === "tool_event") return event.message ? { ...event, message: clipEventText(event.message, 2_000) } : event
+  if (event.event === "runtime_warning" || event.event === "runtime_error") return { ...event, message: clipEventText(event.message, 2_000) }
+  // Published artifact references are persisted separately. Never put a
+  // base64 artifact payload in Durable Object history or callbacks.
+  if (event.event === "artifact_payload") return {
+    event: "runtime_warning",
+    code: "artifact_payload_omitted_from_event_history",
+    message: "Large artifact payload omitted from Durable Object event history; use the published artifact reference.",
+    runId: event.runId,
+  }
+  return event
+}
+
+function eventBytes(events: StoredEvent[]) {
+  return new TextEncoder().encode(JSON.stringify(events)).byteLength
+}
+
 function json(value: unknown, status = 200, headers?: HeadersInit) {
   return new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...headers } })
 }
@@ -84,7 +111,8 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
 
   private async emit(runId: string, event: AgentRuntimeEvent) {
     const existing = await this.events(runId)
-    const next = [...existing, { id: (existing.at(-1)?.id || 0) + 1, event }].slice(-500)
+    const next = [...existing, { id: (existing.at(-1)?.id || 0) + 1, event: compactStoredEvent(event) }].slice(-MAX_STORED_EVENTS)
+    while (next.length > 1 && eventBytes(next) > MAX_STORED_EVENT_BYTES) next.shift()
     await this.ctx.storage.put(`events:${runId}`, next)
   }
 
@@ -226,6 +254,13 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
     const current = await this.getRun(input.runId)
     if (current?.status === "succeeded") return current
     if (current?.status === "cancelled") return current
+    if (current?.status === "failed") {
+      // Workflow retries are intentionally allowed to recover a reset DO or
+      // sandbox. A failed run must not carry its old OpenCode session id into
+      // that retry; the workspace checkpoint remains the continuity boundary.
+      await this.ctx.storage.delete("opencodeSessionId")
+      await this.releaseSandbox()
+    }
     const latestCheckpoint = await this.ctx.storage.get<RuntimeCheckpointRef>("latestCheckpoint")
     const checkpoint = input.input.checkpoint || latestCheckpoint || null
     const runtimeInput = { ...input.input, checkpoint }
@@ -309,6 +344,12 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
     const input = await request.json() as CloudflareSessionRunRequest
     try { return json(await this.executeRun(input)) } catch (error) {
       const message = error instanceof Error ? error.message.slice(0, 1024) : "runtime_execution_failed"
+      if (/(?:memory limit|isolate was reset|session_coordinator_fetch_failed)/iu.test(message)) {
+        // A workflow retry must boot a clean OpenCode runtime instead of
+        // reusing a session id owned by the failed container/process.
+        await this.ctx.storage.delete("opencodeSessionId")
+        await this.releaseSandbox()
+      }
       await this.emit(input.runId, { event: "runtime_error", code: "runtime_execution_failed", message, retryable: true, runId: input.runId })
       const failed: StoredRun = { runId: input.runId, sessionKey: input.sessionKey, status: "failed", updatedAt: new Date().toISOString(), checkpoint: input.input.checkpoint, error: message }
       await this.setRun(failed)

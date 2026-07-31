@@ -71,6 +71,26 @@ test("keeps reconstructed conversation history in chronological order", () => {
   assert.deepEqual(input.messages.map((message) => message.content), ["第一步", "第二步", "第三步"])
 })
 
+test("keeps only the most recent four historical messages by default", () => {
+  const input = buildAgentRuntimeInput({
+    runId: "run-history-budget",
+    conversationId: "conversation-history-budget",
+    enterpriseId: 1,
+    userId: 42,
+    agentId: "general",
+    systemPrompt: "system",
+    messages: Array.from({ length: 12 }, (_, index) => ({
+      role: index % 2 === 0 ? "user" as const : "assistant" as const,
+      content: `message-${index}`,
+    })),
+  })
+  const contents = input.messages.map((message) => message.content).join("\n")
+  assert.equal(contents.includes("message-0"), false)
+  assert.equal(contents.includes("message-7"), true)
+  assert.equal(contents.includes("message-10"), true)
+  assert.equal(contents.includes("message-11"), true)
+})
+
 test("limits native Dashi artifacts to PPTX and HTML", () => {
   const input = buildAgentRuntimeInput({
     runId: "run-dashi-artifacts",

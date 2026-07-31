@@ -11,10 +11,12 @@ import {
   appendAiEntryMessage,
   ensureAiEntryConversation,
   listAiEntryMessages,
+  recordAiEntryConversationContextSummary,
   recordAiEntryRuntimeProjectSnapshot,
   type AiEntryConversationScope,
 } from "@/lib/ai-entry/repository"
 import { resolveAiEntryConversationStateFromContents } from "@/lib/ai-entry/conversation-state"
+import { buildPersistedConversationSummary } from "@/lib/ai-entry/runtime/context-summary"
 import { resolveAiEntryMaxStepCount } from "@/lib/ai-entry/agent-runtime-policy"
 import {
   getConfiguredAiEntryProviderForModel,
@@ -1222,6 +1224,7 @@ export async function POST(request: NextRequest) {
       : defaultRuntimeProfile
     let persistedRuntimeArtifacts: Array<{ artifactId: number; title: string; kind: string; summary: string }> = []
     let projectSnapshot: RuntimeProjectSnapshot | null = null
+    let conversationContextSummary: string | null = null
     let canonicalConversationRevision: number | null = null
     let canonicalRuntimeMessages = normalizedMessages.map((message) => ({
       role: message.role === "assistant" ? "assistant" as const : "user" as const,
@@ -1231,6 +1234,7 @@ export async function POST(request: NextRequest) {
       try {
         const conversationPage = await listAiEntryMessages(currentUser.id, conversationId, 200, conversationScope, agentConfig.agentId)
         persistedRuntimeArtifacts = conversationPage?.conversation_state.artifacts || []
+        conversationContextSummary = conversationPage?.conversation_context_summary || null
         if (runtimeProfile.backend === "railway-opencode" && (effectiveAgentId === "executive-ppt" || selectedSkillIds.includes("ppt-master"))) {
           projectSnapshot = conversationPage?.conversation_state.projectSnapshot || null
         }
@@ -1241,6 +1245,22 @@ export async function POST(request: NextRequest) {
             role: message.role === "assistant" ? "assistant" as const : "user" as const,
             content: normalizeCoreMessageContent(message.content),
           })).filter((message) => message.content.length > 0)
+          const nextContextSummary = buildPersistedConversationSummary(canonicalRuntimeMessages, conversationContextSummary)
+          if (nextContextSummary && nextContextSummary !== conversationContextSummary) {
+            conversationContextSummary = nextContextSummary
+            void recordAiEntryConversationContextSummary({
+              userId: currentUser.id,
+              conversationId,
+              summary: nextContextSummary,
+              scope: conversationScope,
+              agentId: agentConfig.agentId,
+            }).catch((error) => {
+              console.warn("ai-entry.opencode.context_summary.persist_failed", {
+                conversationId,
+                message: error instanceof Error ? error.message : String(error),
+              })
+            })
+          }
         }
       } catch (error) {
         console.warn("ai-entry.opencode.artifact_context.load_failed", {
@@ -1474,6 +1494,7 @@ export async function POST(request: NextRequest) {
       artifactContext: persistedRuntimeArtifacts,
       projectSnapshot,
       workflowContext: null,
+      conversationSummary: conversationContextSummary,
       modelHint:
         isDashiPresentationAgent || isEditablePptAgent
           ? editablePptModelHint

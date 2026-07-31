@@ -31,7 +31,8 @@ function isRetryableRunnerError(error: unknown) {
   return (
     ["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_SOCKET", "EAI_AGAIN"].includes(causeCode) ||
     /(?:fetch failed|network|timeout|connection reset|connection refused|socket)/iu.test(message) ||
-    /opencode_runner_http_(?:429|502|503|504):/u.test(message)
+    /opencode_runner_http_(?:429|502|503|504):/u.test(message) ||
+    /opencode_runner_http_500:.*session_coordinator_fetch_failed/iu.test(message)
   )
 }
 

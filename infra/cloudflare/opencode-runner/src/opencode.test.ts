@@ -162,9 +162,10 @@ test("Dashi auto-authorizes system permissions without answering user questions"
     baseUrl: "https://pptoken.example/v1",
     apiKey: "pptoken-test-key",
   }, { agent: "build", skipPermissions: true })) { void _event }
-  const config = JSON.parse(configContent) as { permission: { question: string }; tools: { question: boolean } }
+  const config = JSON.parse(configContent) as { permission: { question: string }; tools: { question: boolean }; compaction: { auto: boolean; keep: { tokens: number }; buffer: number } }
   assert.equal(config.permission.question, "deny")
   assert.equal(config.tools.question, false)
+  assert.deepEqual(config.compaction, { auto: true, keep: { tokens: 8_000 }, buffer: 20_000 })
   assert.match(scriptContent, /dangerously-skip-permissions/u)
 })
 

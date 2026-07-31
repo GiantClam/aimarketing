@@ -2,9 +2,19 @@ import { createHash } from "node:crypto"
 import type { AgentRuntimeInput, RuntimeProjectSnapshot, SharedSkillSetSelection, WorkflowContext } from "@/lib/ai-runtime/contracts"
 import { resolveRuntimeArtifactLimits, runtimeArtifactExtensions } from "./artifact-policy"
 import { isAiEntryOpenCodeArtifactContextEnabled } from "./profile-store"
+import {
+  buildRuntimeContextWindow,
+  clipRuntimeContextText,
+  contextByteLength,
+  DEFAULT_RUNTIME_CONTEXT_BYTES,
+  DEFAULT_RUNTIME_RECENT_MESSAGES,
+  MAX_RUNTIME_SUMMARY_CHARS,
+  MAX_RUNTIME_TOOL_OUTPUT_CHARS,
+  resolveRuntimeContextBytes,
+} from "./context-window"
 
-export const DEFAULT_MAX_CONTEXT_CHARS = 60_000
-export const DEFAULT_RECENT_MESSAGES_LIMIT = 20
+export const DEFAULT_MAX_CONTEXT_CHARS = DEFAULT_RUNTIME_CONTEXT_BYTES
+export const DEFAULT_RECENT_MESSAGES_LIMIT = DEFAULT_RUNTIME_RECENT_MESSAGES
 export const DEFAULT_ARTIFACT_CONTEXT_LIMIT = 10
 
 export class AgentRuntimeInputTooLargeError extends Error {
@@ -28,7 +38,7 @@ function envPositiveInt(name: string, fallback: number) {
 }
 
 function serializeLength(input: Pick<AgentRuntimeInput, "systemPrompt" | "messages" | "attachments" | "artifactContext" | "workflowContext" | "projectSnapshot">) {
-  return JSON.stringify(input).length
+  return contextByteLength(input)
 }
 
 function normalizeAttachments(attachments: AgentRuntimeInput["attachments"]) {
@@ -37,7 +47,7 @@ function normalizeAttachments(attachments: AgentRuntimeInput["attachments"]) {
       id: text(attachment.id).slice(0, 128),
       fileName: text(attachment.fileName).slice(0, 255),
       mimeType: text(attachment.mimeType).slice(0, 120),
-      textSummary: text(attachment.textSummary).slice(0, 12_000),
+      textSummary: clipRuntimeContextText(text(attachment.textSummary), 2_000),
     }))
     .filter((attachment) => attachment.id && attachment.textSummary)
 }
@@ -52,7 +62,10 @@ function workflowMessage(workflowContext: WorkflowContext | null): RuntimeMessag
       `workflowKey: ${workflowContext.workflowKey}`,
       `status: ${workflowContext.status}`,
       `currentStepKey: ${workflowContext.currentStepKey || "none"}`,
-      workflowContext.latestStepSummaries.join("\n"),
+      workflowContext.latestStepSummaries
+        .slice(-4)
+        .map((summary) => clipRuntimeContextText(summary, MAX_RUNTIME_TOOL_OUTPUT_CHARS))
+        .join("\n"),
       `allowedUserActions: ${workflowContext.allowedUserActions.join(", ") || "none"}`,
     ].filter(Boolean).join("\n"),
   }
@@ -70,7 +83,7 @@ function artifactMessage(artifacts: AgentRuntimeInput["artifactContext"]): Runti
 }
 
 function conversationSummaryMessage(summary: string): RuntimeMessage | null {
-  const normalized = text(summary)
+  const normalized = clipRuntimeContextText(text(summary), MAX_RUNTIME_SUMMARY_CHARS)
   return normalized ? { role: "assistant", content: `[Conversation summary]\n${normalized}` } : null
 }
 
@@ -102,7 +115,9 @@ export function buildAgentRuntimeInput(input: {
     maxArtifactTotalBytes: number
   }
 }): AgentRuntimeInput {
-  const maxContextChars = input.maxContextChars || envPositiveInt("AI_ENTRY_OPENCODE_MAX_CONTEXT_CHARS", DEFAULT_MAX_CONTEXT_CHARS)
+  const maxContextChars = resolveRuntimeContextBytes(
+    input.maxContextChars || envPositiveInt("AI_ENTRY_OPENCODE_MAX_CONTEXT_CHARS", DEFAULT_MAX_CONTEXT_CHARS),
+  )
   const normalizedSystemPrompt = text(input.systemPrompt)
   const normalizedMessages = input.messages
     .filter((message) => (message.role === "user" || message.role === "assistant" || message.role === "tool") && text(message.content))
@@ -180,17 +195,24 @@ export function buildAgentRuntimeInput(input: {
   const historical = normalizedMessages
     .filter((_, index) => index !== currentUserIndex)
     .slice(-(input.recentMessagesLimit || envPositiveInt("AI_ENTRY_OPENCODE_RECENT_MESSAGES_LIMIT", DEFAULT_RECENT_MESSAGES_LIMIT)))
+    .map((message) => message.role === "tool"
+      ? { ...message, content: clipRuntimeContextText(message.content, MAX_RUNTIME_TOOL_OUTPUT_CHARS) }
+      : message)
   const summary = conversationSummaryMessage(input.conversationSummary || "")
-  const contextMessages = [workflow, artifactMessage(artifacts), ...historical, summary].filter((message): message is RuntimeMessage => Boolean(message))
-
-  let selected = [...contextMessages]
-  const fits = () => serializeLength({ ...baseInput, messages: [...selected, currentUserMessage], artifactContext: artifacts }) <= maxContextChars
-  while (!fits() && selected.some((message) => historical.includes(message))) {
-    const historicalIndex = [...selected].findIndex((message) => historical.includes(message))
-    if (historicalIndex < 0) break
-    selected.splice(historicalIndex, 1)
-  }
-  while (!fits() && artifacts.length > 3) {
+  const contextMessages = [workflow, artifactMessage(artifacts)].filter((message): message is RuntimeMessage => Boolean(message))
+  const window = buildRuntimeContextWindow({
+    currentMessage: currentUserMessage,
+    historicalMessages: historical,
+    supplementalMessages: contextMessages,
+    summaryMessage: summary,
+    // Leave a small envelope for the signed runtime contract (IDs, policy,
+    // artifact contract) while keeping the user-facing prompt itself bounded.
+    maxBytes: maxContextChars + 512,
+    serialize: (messages) => serializeLength({ ...baseInput, messages, artifactContext: artifacts }),
+  })
+  let selected = window.selected
+  const fits = window.fits
+  while (!fits() && artifacts.length > 0) {
     artifacts.shift()
     const nextArtifact = artifactMessage(artifacts)
     selected = selected.filter((message) => !message.content.startsWith("[Platform artifact context"))

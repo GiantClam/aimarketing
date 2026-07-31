@@ -141,6 +141,11 @@ export async function* runOpenCode(
     OPENCODE_DISABLE_AUTOUPDATE: "true",
     OPENCODE_ENABLE_EXA: input.agentId === "executive-presentation-ppt" && input.policy.allowNetwork ? "true" : "false",
     OPENCODE_CONFIG_CONTENT: JSON.stringify({
+      compaction: {
+        auto: true,
+        keep: { tokens: 8_000 },
+        buffer: 20_000,
+      },
       ...(isDashiPresentation
         ? {
             default_agent: "build",

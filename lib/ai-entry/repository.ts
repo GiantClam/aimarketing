@@ -88,6 +88,7 @@ export type AiEntryMessagePage = {
   limit: number
   has_more: boolean
   conversation: AiEntryConversationSummary | null
+  conversation_context_summary: string | null
   conversation_state: AiEntryConversationState
   task_runs: AiEntryTaskRunSummary[]
   pending_task: AiEntryPendingTaskSummary | null
@@ -1238,6 +1239,10 @@ export async function listAiEntryMessages(
     data,
     limit: safeLimit,
     has_more: false,
+    conversation_context_summary:
+      typeof normalizeConversationMetadata(conversation.metadata)?.aiEntryRuntimeContextSummary === "string"
+        ? String(normalizeConversationMetadata(conversation.metadata)?.aiEntryRuntimeContextSummary)
+        : null,
     conversation_state: conversationState,
     task_runs: taskRuns,
     pending_task: pendingTask,
@@ -1261,6 +1266,31 @@ export async function listAiEntryMessages(
       },
     ),
   }
+}
+
+export async function recordAiEntryConversationContextSummary(input: {
+  userId: number
+  conversationId: string
+  summary: string | null
+  scope?: AiEntryConversationScope
+  agentId?: string | null
+}) {
+  const conversation = await getAiEntryConversation(input.userId, input.conversationId, input.scope || "chat", input.agentId)
+  if (!conversation) return null
+  await withAiEntryDbRetry("update-ai-entry-runtime-context-summary", () =>
+    db.execute(input.summary?.trim()
+      ? sql`
+          UPDATE ${conversations}
+          SET metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object('aiEntryRuntimeContextSummary', ${input.summary.trim()})
+          WHERE id = ${conversation.id}
+        `
+      : sql`
+          UPDATE ${conversations}
+          SET metadata = coalesce(metadata, '{}'::jsonb) - 'aiEntryRuntimeContextSummary'
+          WHERE id = ${conversation.id}
+        `),
+  )
+  return input.summary?.trim() || null
 }
 
 export async function recordAiEntryRuntimeArtifactContext(input: {

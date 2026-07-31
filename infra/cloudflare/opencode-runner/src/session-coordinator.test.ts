@@ -29,3 +29,11 @@ test("Dashi execution keeps the sandbox on HTTP transport", async () => {
   const source = await readFile(resolve(import.meta.dirname, "session-coordinator.ts"), "utf8")
   assert.match(source, /transport: runtimeInput\.agentId === "executive-presentation-ppt" \? "http" : "rpc"/u)
 })
+
+test("bounds durable event history and removes large artifact payloads", async () => {
+  const source = await readFile(resolve(import.meta.dirname, "session-coordinator.ts"), "utf8")
+  assert.match(source, /MAX_STORED_EVENTS = 240/u)
+  assert.match(source, /MAX_STORED_EVENT_BYTES = 512 \* 1024/u)
+  assert.match(source, /artifact_payload_omitted_from_event_history/u)
+  assert.match(source, /ctx\.storage\.delete\("opencodeSessionId"\)/u)
+})

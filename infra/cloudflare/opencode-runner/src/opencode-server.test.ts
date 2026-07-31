@@ -14,3 +14,9 @@ test("Cloudflare workspace prompts include application conversation history", as
   const source = await readFile(resolve(import.meta.dirname, "workspace-v2.ts"), "utf8")
   assert.match(source, /buildOpenCodeUserPrompt\(input, \{ includeConversationHistory: true \}\)/u)
 })
+
+test("Dashi uses the persistent project workspace but an isolated CLI HOME per turn", async () => {
+  const source = await readFile(resolve(import.meta.dirname, "opencode-server.ts"), "utf8")
+  assert.match(source, /homeDir: `\$\{runDir\}\/runtime-home`/u)
+  assert.match(source, /continueSession: false/u)
+})

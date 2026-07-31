@@ -100,7 +100,6 @@ export class OpenCodeServerSession {
   private sandbox: OpenCodeSandbox | null = null
   private provider: OpenCodeProviderConfig | null = null
   private turnAbortController: AbortController | null = null
-  private cliContinuation = false
   private readonly partText = new Map<string, string>()
   private readonly toolParts = new Set<string>()
   private readonly skillToolPhases = new Map<string, "started" | "completed" | "failed">()
@@ -134,7 +133,9 @@ export class OpenCodeServerSession {
     if (input.agentId === "executive-presentation-ppt") {
       this.directory = directory
       this.sandbox = sandbox
-      this.cliContinuation = storedSessionId === "cli"
+      // Dashi keeps the project in ./workspace, but each turn gets a fresh
+      // OpenCode CLI session and HOME. This prevents the CLI transcript and
+      // session database from growing with every PPT iteration.
       this.sessionId = null
       return "cli"
     }
@@ -185,6 +186,11 @@ export class OpenCodeServerSession {
   async *executeTurn(input: AgentRuntimeInputV2): AsyncGenerator<AgentRuntimeEvent> {
     if (!this.directory || !this.sandbox) throw new Error("opencode_session_not_ready")
     if (input.agentId !== "executive-presentation-ppt" && (!this.result || !this.sessionId)) throw new Error("opencode_session_not_ready")
+    // These maps describe one SDK turn only. Retaining part text and tool IDs
+    // across a conversation makes the Durable Object grow with every turn.
+    this.partText.clear()
+    this.toolParts.clear()
+    this.skillToolPhases.clear()
     const sessionId = this.sessionId
     const directory = this.directory
 
@@ -209,14 +215,13 @@ export class OpenCodeServerSession {
           {
             workingDir: directory,
             promptPath: `${runDir}/prompt.md`,
-            homeDir: `${directory}/runtime-home`,
+            homeDir: `${runDir}/runtime-home`,
             sessionId,
-            continueSession: this.cliContinuation,
+            continueSession: false,
             agent: "build",
             skipPermissions: true,
           },
         )
-        this.cliContinuation = true
       } finally {
         this.turnAbortController = null
       }
