@@ -32,7 +32,7 @@ import { loadPublicSeoSkillInstruction } from "@/lib/seo-tools/skill-loader"
 import {
   buildMockSeoTitlePlan,
   buildSeoTitleReport,
-  seoTitleGeneratedPlanSchema,
+  normalizeSeoTitleGeneratedPlan,
   type SeoTitleGeneratedPlan,
   type SeoTitleInput,
   type SeoTitleReport,
@@ -468,6 +468,7 @@ export async function generateLeadToolPptPreview(request: PptPreviewRequest): Pr
 }
 
 async function generateSeoTitlePlanWithDefaultProvider(params: {
+  input: SeoTitleInput
   systemPrompt: string
   userPrompt: string
 }) {
@@ -499,7 +500,10 @@ async function generateSeoTitlePlanWithDefaultProvider(params: {
       },
     )
 
-    return seoTitleGeneratedPlanSchema.parse(JSON.parse(extractJsonObjectBlock(providerResult.result, "seo_title_json_missing")))
+    return normalizeSeoTitleGeneratedPlan(
+      JSON.parse(extractJsonObjectBlock(providerResult.result, "seo_title_json_missing")),
+      params.input,
+    )
   } finally {
     clearTimeout(timeoutId)
   }
@@ -542,7 +546,7 @@ export async function generateSeoTitleReport(request: SeoTitleInput): Promise<Se
     skillInstruction,
   ].join("\n\n")
   const userPrompt = buildSeoTitleUserPrompt(request)
-  const plan: SeoTitleGeneratedPlan = await generateSeoTitlePlanWithDefaultProvider({ systemPrompt, userPrompt })
+  const plan: SeoTitleGeneratedPlan = await generateSeoTitlePlanWithDefaultProvider({ input: request, systemPrompt, userPrompt })
 
   return buildSeoTitleReport({
     ...plan,

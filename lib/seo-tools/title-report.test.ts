@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { getPublicSeoToolIds } from "./public-runtime-policy"
-import { buildMockSeoTitlePlan, buildSeoTitleReport, getLocalizedPaidSeoCapabilities, paidSeoCapabilities, seoTitleGeneratedPlanSchema, seoTitleInputSchema } from "./title-report"
+import { buildMockSeoTitlePlan, buildSeoTitleReport, getLocalizedPaidSeoCapabilities, normalizeSeoTitleGeneratedPlan, paidSeoCapabilities, seoTitleGeneratedPlanSchema, seoTitleInputSchema } from "./title-report"
 import { scoreSeoTitle } from "./title-score"
 
 test("anonymous SEO title reports use fixed input and do not expose paid tools", () => {
@@ -74,6 +74,25 @@ test("title reports retain candidates when a provider omits supplementary model 
   assert.equal(report.candidates.length, 10)
   assert.equal(report.candidates.every((candidate) => candidate.modelAssessment.intentMatch === 4), true)
   assert.match(report.candidates[0]?.modelAssessment.explanation || "", /specific user benefit/)
+})
+
+test("normalizes a partial provider response into a complete SEO title report plan", () => {
+  const input = seoTitleInputSchema.parse({
+    keyword: "SEO title generator",
+    audience: "marketing teams",
+    region: "United States",
+    pageType: "landing-page",
+    language: "en-US",
+  })
+  const plan = normalizeSeoTitleGeneratedPlan({
+    intentHypothesis: "Visitors are comparing SEO title generators before choosing a landing page workflow.",
+    candidates: [{ title: "SEO Title Generator: Compare Fast, Search-Ready Options" }],
+  }, input)
+
+  assert.equal(plan.candidates.length, 10)
+  assert.equal(plan.candidates[0]?.title, "SEO Title Generator: Compare Fast, Search-Ready Options")
+  assert.equal(plan.abTests.length, 2)
+  assert.equal(plan.risks.length, 2)
 })
 
 test("paid SEO capability cards are localized for the Chinese tool page", () => {

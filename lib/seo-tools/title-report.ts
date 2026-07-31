@@ -186,6 +186,47 @@ export function buildMockSeoTitlePlan(input: SeoTitleInput): SeoTitleGeneratedPl
   }
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+}
+
+function readGeneratedText(value: unknown, maxLength: number) {
+  if (typeof value !== "string") return ""
+  return value.trim().slice(0, maxLength)
+}
+
+export function normalizeSeoTitleGeneratedPlan(value: unknown, input: SeoTitleInput): SeoTitleGeneratedPlan {
+  const fallback = buildMockSeoTitlePlan(input)
+  const rawPlan = asRecord(value)
+  const rawCandidates = Array.isArray(rawPlan?.candidates)
+    ? rawPlan.candidates.map(asRecord).filter((candidate): candidate is Record<string, unknown> => candidate !== null).slice(0, 12)
+    : []
+  const candidateCount = Math.max(10, rawCandidates.length)
+  const candidates = Array.from({ length: candidateCount }, (_, index) => {
+    const rawCandidate = rawCandidates[index]
+    const fallbackCandidate = fallback.candidates[index] || fallback.candidates[0]
+    const modelAssessment = seoTitleModelAssessmentSchema.safeParse(rawCandidate?.modelAssessment)
+
+    return {
+      id: readGeneratedText(rawCandidate?.id, 80) || fallbackCandidate?.id || `title-${index + 1}`,
+      title: readGeneratedText(rawCandidate?.title, 180) || fallbackCandidate?.title || input.keyword,
+      angle: readGeneratedText(rawCandidate?.angle, 120) || fallbackCandidate?.angle || `Angle ${index + 1}`,
+      rationale: readGeneratedText(rawCandidate?.rationale, 600) || fallbackCandidate?.rationale || "",
+      ...(modelAssessment.success ? { modelAssessment: modelAssessment.data } : {}),
+    }
+  })
+  const preferredCandidateId = readGeneratedText(rawPlan?.recommendedCandidateId, 80)
+
+  return seoTitleGeneratedPlanSchema.parse({
+    ...fallback,
+    intentHypothesis: readGeneratedText(rawPlan?.intentHypothesis, 800) || fallback.intentHypothesis,
+    candidates,
+    recommendedCandidateId: candidates.some((candidate) => candidate.id === preferredCandidateId)
+      ? preferredCandidateId
+      : candidates[0]?.id || fallback.recommendedCandidateId,
+  })
+}
+
 export function buildSeoTitleReport(plan: SeoTitleGeneratedPlan): SeoTitleReport {
   const titles = plan.candidates.map((candidate) => candidate.title)
   const candidates: SeoTitleCandidate[] = plan.candidates.map((candidate) => ({
