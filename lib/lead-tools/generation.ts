@@ -483,7 +483,6 @@ async function generateSeoTitlePlanWithDefaultProvider(params: {
             params.systemPrompt,
             "Return only one valid JSON object. Do not use markdown, code fences, or commentary.",
             "The object must contain keyword, pageType, audience, region, language, intentHypothesis, candidates, recommendedCandidateId, abTests, and risks.",
-            "Every candidate must contain id, title, angle, rationale, and modelAssessment. modelAssessment must contain intentMatch, clarity, differentiation, promiseCredibility (each 1-5), and explanation.",
           ].join("\n\n"),
           prompt: params.userPrompt,
           temperature: 0.35,
