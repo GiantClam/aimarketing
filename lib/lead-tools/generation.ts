@@ -28,6 +28,15 @@ import {
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import { renderPptPreviewDeckAssets } from "@/lib/lead-tools/ppt-master-preview"
 import { buildMockSeoMetaPreview, type SeoMetaPreview, type SeoMetaRequest, type SeoMetaVariant } from "@/lib/lead-tools/seo-meta-data"
+import { loadPublicSeoSkillInstruction } from "@/lib/seo-tools/skill-loader"
+import {
+  buildMockSeoTitlePlan,
+  buildSeoTitleReport,
+  seoTitleGeneratedPlanSchema,
+  type SeoTitleGeneratedPlan,
+  type SeoTitleInput,
+  type SeoTitleReport,
+} from "@/lib/seo-tools/title-report"
 
 type LeadToolPptPlan = {
   title: string
@@ -73,6 +82,65 @@ function buildSeoPlanSchema() {
           },
         },
       },
+    },
+  } satisfies Record<string, unknown>
+}
+
+function buildSeoTitlePlanSchema() {
+  const assessment = {
+    type: "object",
+    additionalProperties: false,
+    required: ["intentMatch", "clarity", "differentiation", "promiseCredibility", "explanation"],
+    properties: {
+      intentMatch: { type: "number", minimum: 1, maximum: 5 },
+      clarity: { type: "number", minimum: 1, maximum: 5 },
+      differentiation: { type: "number", minimum: 1, maximum: 5 },
+      promiseCredibility: { type: "number", minimum: 1, maximum: 5 },
+      explanation: { type: "string" },
+    },
+  }
+  const candidate = {
+    type: "object",
+    additionalProperties: false,
+    required: ["id", "title", "angle", "rationale", "modelAssessment"],
+    properties: {
+      id: { type: "string" },
+      title: { type: "string" },
+      angle: { type: "string" },
+      rationale: { type: "string" },
+      modelAssessment: assessment,
+    },
+  }
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["keyword", "pageType", "audience", "region", "language", "intentHypothesis", "candidates", "recommendedCandidateId", "abTests", "risks"],
+    properties: {
+      keyword: { type: "string" },
+      pageType: { type: "string", enum: ["landing-page", "blog-post", "product-page", "feature-page"] },
+      audience: { type: "string" },
+      region: { type: "string" },
+      language: { type: "string", enum: ["zh-CN", "en-US"] },
+      intentHypothesis: { type: "string" },
+      candidates: { type: "array", minItems: 10, maxItems: 12, items: candidate },
+      recommendedCandidateId: { type: "string" },
+      abTests: {
+        type: "array",
+        minItems: 2,
+        maxItems: 3,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["name", "variantA", "variantB", "hypothesis"],
+          properties: {
+            name: { type: "string" },
+            variantA: { type: "string" },
+            variantB: { type: "string" },
+            hypothesis: { type: "string" },
+          },
+        },
+      },
+      risks: { type: "array", minItems: 2, maxItems: 5, items: { type: "string" } },
     },
   } satisfies Record<string, unknown>
 }
@@ -134,6 +202,21 @@ function buildSeoUserPrompt(request: SeoMetaRequest) {
   ].join("\n")
 }
 
+function buildSeoTitleUserPrompt(request: SeoTitleInput) {
+  return [
+    `Keyword: ${request.keyword}`,
+    `Page type: ${request.pageType}`,
+    `Target audience: ${request.audience}`,
+    `Target region: ${request.region}`,
+    `Output language: ${request.language}`,
+    `Current title: ${request.currentTitle || "Not provided"}`,
+    `Brand: ${request.brandName || "Not provided"}`,
+    `Value proposition: ${request.valueProposition || "Not provided"}`,
+    "Generate 10 to 12 genuinely distinct title angles. Do not claim to have searched Google, accessed SERP data, inspected competitors, or measured CTR.",
+    "The intent hypothesis must explicitly say it is inferred from the input and is not live-SERP validated.",
+  ].join("\n")
+}
+
 export function hasLeadToolGenerationProvider() {
   return (
     hasLeadToolMinimaxProvider() ||
@@ -192,7 +275,13 @@ async function generateTextWithLeadToolPreviewProvider(params: {
   systemPrompt: string
   userPrompt: string
   model: string
+  maxOutputTokens?: number
+  timeoutMs?: number
 }) {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), params.timeoutMs ?? 42_000)
+
+  try {
   if (hasLeadToolMinimaxProvider()) {
     const config = getLeadToolMinimaxConfig()
     const provider = createOpenAI({
@@ -204,6 +293,8 @@ async function generateTextWithLeadToolPreviewProvider(params: {
       model: provider.chat(config.model || params.model),
       system: params.systemPrompt,
       prompt: params.userPrompt,
+      maxOutputTokens: params.maxOutputTokens,
+      abortSignal: controller.signal,
     })
 
     const text = response.text.trim()
@@ -229,6 +320,8 @@ async function generateTextWithLeadToolPreviewProvider(params: {
       model: provider.chat(config.model || params.model),
       system: params.systemPrompt,
       prompt: params.userPrompt,
+      maxOutputTokens: params.maxOutputTokens,
+      abortSignal: controller.signal,
     })
 
     const text = response.text.trim()
@@ -250,6 +343,8 @@ async function generateTextWithLeadToolPreviewProvider(params: {
           model: providerRun.provider.chat(providerRun.model),
           system: params.systemPrompt,
           prompt: params.userPrompt,
+          maxOutputTokens: params.maxOutputTokens,
+          abortSignal: controller.signal,
         })
 
         const text = response.text.trim()
@@ -275,15 +370,19 @@ async function generateTextWithLeadToolPreviewProvider(params: {
 
   const text = await generateTextWithWriterModel(params.systemPrompt, params.userPrompt, params.model, {
     temperature: 0.45,
-    maxTokens: 1400,
-    timeoutMs: 36_000,
-    totalTimeoutMs: 42_000,
+    maxTokens: params.maxOutputTokens ?? 1400,
+    timeoutMs: Math.min(params.timeoutMs ?? 42_000, 36_000),
+    totalTimeoutMs: params.timeoutMs ?? 42_000,
+    signal: controller.signal,
   })
 
   return {
     text,
     providerId: hasAibermApiKey() ? "aiberm" : hasCrazyrouteApiKey() ? "crazyroute" : "writer",
     model: params.model,
+  }
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
 
@@ -299,7 +398,7 @@ function looksLikePlaceholder(value: string) {
   return isPreviewPlaceholder(value)
 }
 
-function extractJsonObjectBlock(rawText: string) {
+function extractJsonObjectBlock(rawText: string, errorCode = "json_object_missing") {
   const cleanedText = rawText.replace(/<think>[\s\S]*?<\/think>/gi, "").trim()
   const candidates: string[] = []
 
@@ -335,7 +434,7 @@ function extractJsonObjectBlock(rawText: string) {
     }
   }
 
-  throw new Error("ppt_preview_json_missing")
+  throw new Error(errorCode)
 }
 
 function normalizeBasePlan(rawPlan: any, request: PptPreviewRequest): LeadToolPptPlan {
@@ -417,7 +516,7 @@ export async function generateLeadToolPptPreview(request: PptPreviewRequest): Pr
     userPrompt: buildPptUserPrompt(request),
     model: getLeadToolPreviewModel("ai-ppt-preview"),
   })
-  const rawPlan = JSON.parse(extractJsonObjectBlock(providerResult.text))
+  const rawPlan = JSON.parse(extractJsonObjectBlock(providerResult.text, "ppt_preview_json_missing"))
   const basePlan = normalizeBasePlan(rawPlan, request)
   const plans = buildStyledPlans(basePlan, request)(providerResult.providerId)
 
@@ -425,6 +524,25 @@ export async function generateLeadToolPptPreview(request: PptPreviewRequest): Pr
     ...renderPptPreviewDeckAssets(buildPptPreviewDeckFromPlans(request, plans)),
     previewModel: providerResult.model,
   }
+}
+
+async function generateSeoTitlePlanWithLeadToolProvider(params: {
+  systemPrompt: string
+  userPrompt: string
+}) {
+  const providerResult = await generateTextWithLeadToolPreviewProvider({
+    systemPrompt: [
+      params.systemPrompt,
+      "Return only one valid JSON object. Do not use markdown, code fences, or commentary.",
+      "The object must contain keyword, pageType, audience, region, language, intentHypothesis, candidates, recommendedCandidateId, abTests, and risks.",
+    ].join("\n\n"),
+    userPrompt: params.userPrompt,
+    model: getLeadToolPreviewModel("seo-title-generator"),
+    maxOutputTokens: 2_200,
+    timeoutMs: 24_000,
+  })
+
+  return seoTitleGeneratedPlanSchema.parse(JSON.parse(extractJsonObjectBlock(providerResult.text, "seo_title_json_missing")))
 }
 
 export async function generateLeadToolSeoPreview(request: SeoMetaRequest): Promise<SeoMetaPreview> {
@@ -451,6 +569,65 @@ export async function generateLeadToolSeoPreview(request: SeoMetaRequest): Promi
     generatedAt: new Date().toISOString(),
     summary: plan.summary,
     variants: plan.variants,
+  }
+}
+
+export async function generateSeoTitleReport(request: SeoTitleInput): Promise<SeoTitleReport> {
+  const skillInstruction = await loadPublicSeoSkillInstruction("headline-generator")
+  const systemPrompt = [
+    "You are producing a free SEO title analysis report.",
+    "Use the supplied skill instructions as editorial method, but follow the output schema exactly.",
+    "This public route has no live SERP, DataForSEO, GSC, GA4, page crawling, or paid tool data. Never invent or imply those sources.",
+    "Make every rationale, model judgment, and A/B test specific to the supplied page type, audience, current title, and value proposition. Do not repeat generic explanations.",
+    skillInstruction,
+  ].join("\n\n")
+  const userPrompt = buildSeoTitleUserPrompt(request)
+  const plan: SeoTitleGeneratedPlan = hasLeadToolMinimaxProvider() || hasLeadToolStepfunProvider()
+    ? await generateSeoTitlePlanWithLeadToolProvider({ systemPrompt, userPrompt })
+    : (await generateStructuredObjectWithWriterModel({
+        model: getLeadToolPreviewModel("seo-title-generator"),
+        systemPrompt,
+        userPrompt,
+        toolName: "return_seo_title_report",
+        toolDescription: "Return a complete free SEO title report with distinct titles and transparent model judgments.",
+        jsonSchema: buildSeoTitlePlanSchema(),
+        options: {
+          temperature: 0.45,
+          maxTokens: 3400,
+          timeoutMs: 35_000,
+          totalTimeoutMs: 45_000,
+        },
+      })) as SeoTitleGeneratedPlan
+
+  return buildSeoTitleReport({
+    ...plan,
+    keyword: request.keyword,
+    pageType: request.pageType,
+    audience: request.audience,
+    region: request.region,
+    language: request.language,
+  })
+}
+
+export async function generateSeoTitleReportWithFallback(
+  request: SeoTitleInput,
+  allowMockFallback: boolean,
+): Promise<SeoTitleReport> {
+  if (!hasLeadToolGenerationProvider()) {
+    if (allowMockFallback) return buildSeoTitleReport(buildMockSeoTitlePlan(request))
+    throw new Error("lead_tool_provider_missing")
+  }
+
+  try {
+    return await generateSeoTitleReport(request)
+  } catch (error) {
+    if (allowMockFallback) {
+      console.warn("lead-tools.seo-title.fallback", {
+        message: error instanceof Error ? error.message : String(error),
+      })
+      return buildSeoTitleReport(buildMockSeoTitlePlan(request))
+    }
+    throw error
   }
 }
 

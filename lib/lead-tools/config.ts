@@ -40,7 +40,7 @@ export function getLeadToolPreviewModel(slug: string) {
     )
   }
 
-  if (slug === "ai-seo-meta-generator") {
+  if (slug === "ai-seo-meta-generator" || slug === "seo-title-generator") {
     return pickFirstNonEmpty(
       [process.env.LEAD_TOOLS_SEO_PREVIEW_MODEL, process.env.LEAD_TOOLS_PREVIEW_MODEL],
       DEFAULT_LEAD_TOOL_MODEL,
@@ -58,7 +58,7 @@ export function getLeadToolFinalModel(slug: string) {
     )
   }
 
-  if (slug === "ai-seo-meta-generator") {
+  if (slug === "ai-seo-meta-generator" || slug === "seo-title-generator") {
     return pickFirstNonEmpty(
       [process.env.LEAD_TOOLS_SEO_FINAL_MODEL, process.env.LEAD_TOOLS_FINAL_MODEL],
       DEFAULT_LEAD_TOOL_MODEL,

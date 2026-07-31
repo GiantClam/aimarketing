@@ -87,6 +87,27 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
   },
   {
     businessSlug: "content-growth",
+    agentId: "business-seo-growth",
+    promptDocumentPath: "seo-growth.md",
+    name: { zh: "SEO 增长智能体", en: "SEO Growth Agent" },
+    summary: {
+      zh: "从 SEO 标题报告、品牌上下文和已授权数据出发，推进标题、元数据、内容 brief 与 SEO 工作流。",
+      en: "Turns SEO title reports, brand context, and authorized data into practical title, metadata, brief, and workflow next steps.",
+    },
+    systemPromptSummary: {
+      zh: "先复用公开工具的已有报告，区分假设与 Tool 数据，再给出最小可执行的 SEO 下一步。",
+      en: "Starts from the existing public report, separates hypotheses from Tool data, and recommends the smallest useful SEO next step.",
+    },
+    samplePrompts: [
+      { zh: "用品牌语气重写这份 SEO 标题报告中的推荐标题。", en: "Rewrite the recommended title from this SEO report in our brand voice." },
+      { zh: "把这个标题方向扩展成 Meta title、description 和 Content Brief。", en: "Turn this title direction into a meta title, description, and content brief." },
+      { zh: "我已经有订阅和积分，开始实时 SERP 研究前还需要确认什么？", en: "I have a subscription and credits. What should we confirm before live SERP research?" },
+    ],
+    workflowSlugs: ["content-repurpose", "seo-aeo-growth-engine"],
+    artifactKinds: ["copy", "brief", "plan", "workflow_result", "report"],
+  },
+  {
+    businessSlug: "content-growth",
     agentId: "business-aeo-foundations",
     promptDocumentPath: "business-aeo-foundations.md",
     name: { zh: "AEO 基础优化智能体", en: "AEO Foundations Agent" },

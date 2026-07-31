@@ -25,6 +25,19 @@ test("compiles independent, checked text Skill directories into one canonical bu
   assert.equal(validateSharedSkillSetBundle({ ...bundle, checksum: "tampered" }), false)
 })
 
+test("compiles the headline-generator skill from its checked source directory", async () => {
+  const seoSelection: SharedSkillSetSelection = {
+    ...selection,
+    agentId: "business-seo-growth",
+    skills: [{ id: "headline-generator", position: 0 }],
+    bundleKey: "shared-agent-skillsets/enterprise-1/business-seo-growth/skills.json",
+  }
+  const bundle = await buildSharedSkillSetBundle({ selection: seoSelection, agentInstructions: "Use the SEO Growth Agent instructions." })
+
+  assert.equal(bundle.skills[0]?.id, "headline-generator")
+  assert.match(bundle.skills[0]?.files.find((file) => file.path === "SKILL.md")?.content || "", /Never claim access to SERP/i)
+})
+
 test("only writes when the current same-name bundle content changed", async () => {
   const values = new Map<string, string>()
   let writes = 0

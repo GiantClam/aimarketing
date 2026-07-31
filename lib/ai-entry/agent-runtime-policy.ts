@@ -62,6 +62,18 @@ export function resolveAiEntryAgentRuntimePolicy(input: {
     }
   }
 
+  if (effectiveAgentId === "business-seo-growth") {
+    return {
+      ...policy,
+      allowedSkillIds: ["headline-generator", "meta-creator", "keyword-mapper", "content-analyzer", "seo-optimizer"],
+      allowedToolIds: ["web_search", "dataforseo_serp"],
+      allowedMcpServerIds: [],
+      maxToolCalls: 4,
+      maxRuntimeMs: DEFAULT_AGENT_RUNTIME_MS,
+      canCreateArtifacts: true,
+    }
+  }
+
   if (isRestrictedComplianceAgent(effectiveAgentId)) {
     return {
       ...policy,

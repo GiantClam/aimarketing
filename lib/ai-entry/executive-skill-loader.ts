@@ -103,6 +103,9 @@ const BUSINESS_AGENT_IMPORTED_SKILL_MAP: Record<string, string[]> = {
   "business-seo-repurpose": [
     "marketing/marketing-seo-specialist.md",
   ],
+  "business-seo-growth": [
+    "marketing/marketing-seo-specialist.md",
+  ],
   "business-aeo-foundations": [
     "marketing/marketing-aeo-foundations.md",
   ],

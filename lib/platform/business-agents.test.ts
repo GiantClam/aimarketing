@@ -43,7 +43,7 @@ const requiredPromptSections = [
 test("business agents cover every dashboard business entry with multiple agents, workflows, and prompts", () => {
   const agents = listBusinessAgentConfigs()
 
-  assert.equal(agents.length, 38)
+  assert.equal(agents.length, 39)
   assert.equal(new Set(agents.map((agent) => agent.agentId)).size, agents.length)
 
   for (const agent of agents) {

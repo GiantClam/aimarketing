@@ -11,6 +11,7 @@ import { extractUserIntentFromMessageContent } from "@/lib/ai-entry/chat-attachm
 import { type AiEntryConversationState, resolveAiEntryConversationStateFromContents } from "@/lib/ai-entry/conversation-state"
 import { type AiEntryMcpServerDefinition, getAiEntryMcpServerDefinitions, loadAiEntryMcpTools } from "@/lib/ai-entry/mcp-tools"
 import { buildAiEntryPptTools } from "@/lib/ai-entry/ppt-tools"
+import { buildAiEntrySeoTools } from "@/lib/ai-entry/seo-tools"
 import {
   type PptBriefState,
   preparePptPreviewInput,
@@ -791,6 +792,7 @@ export async function buildAiEntryToolRegistry(input: {
         selectedPreviewProviderId: input.selectedPreviewProviderId,
         briefState: input.pptBriefState ?? null,
       }),
+      ...buildAiEntrySeoTools({ currentUser: input.currentUser }),
     },
     firstPartyDesiredToolIds,
   )

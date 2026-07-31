@@ -22,6 +22,11 @@ export type SharedSkillSetBundle = {
 const SKILL_SOURCE_DIRECTORIES: Record<string, string> = {
   "executive-consulting": "executive-consulting-suite",
   "longform-writing": "longform-writing",
+  "headline-generator": "headline-generator",
+  "meta-creator": "meta-creator",
+  "keyword-mapper": "keyword-mapper",
+  "content-analyzer": "content-analyzer",
+  "seo-optimizer": "seo-optimizer",
 }
 
 function digest(value: string) {

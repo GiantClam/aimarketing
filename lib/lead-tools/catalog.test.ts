@@ -73,11 +73,13 @@ test("seo remediation lead tools are exposed as live public pages with workflow 
 
 test("CTR priority tools expose search-led English copy and actionable paths", () => {
   const titleTool = getLocalizedLeadToolBySlug("seo-title-generator", "en")
+  const zhTitleTool = getLocalizedLeadToolBySlug("seo-title-generator", "zh")
   const imageTool = getLocalizedLeadToolBySlug("ai-image", "en")
 
   assert.equal(titleTool?.name, "Free SEO Title Generator")
-  assert.match(titleTool?.description ?? "", /keyword.*copy-ready title options/i)
+  assert.match(titleTool?.description ?? "", /free SEO title report.*deterministic title checks/i)
   assert.ok(titleTool?.faqs.some((faq) => /How long should an SEO title be/i.test(faq.question)))
+  assert.ok(zhTitleTool?.faqs.some((faq) => faq.question === "SEO 标题多长比较合适？"))
   assert.equal(imageTool?.name, "AI Image Tool for Branding Teams")
   assert.ok(imageTool?.contentSections?.some((section) => /on-brand campaign visuals/i.test(section.heading)))
   assert.equal(imageTool?.primaryCta?.href, "/dashboard/image-assistant")

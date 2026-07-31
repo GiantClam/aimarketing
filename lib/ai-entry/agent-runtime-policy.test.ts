@@ -83,6 +83,15 @@ test("runtime policy keeps default runtime budget for non-ppt agents", () => {
   assert.equal(policy.maxRuntimeMs, 5 * 60 * 1000)
 })
 
+test("SEO Growth Agent alone receives the paid DataForSEO tool permission", () => {
+  const seoPolicy = resolveAiEntryAgentRuntimePolicy({ agentId: "business-seo-growth" })
+  const generalPolicy = resolveAiEntryAgentRuntimePolicy({ agentId: "general" })
+
+  assert.deepEqual(seoPolicy.allowedSkillIds, ["headline-generator", "meta-creator", "keyword-mapper", "content-analyzer", "seo-optimizer"])
+  assert.ok(seoPolicy.allowedToolIds.includes("dataforseo_serp"))
+  assert.equal(generalPolicy.allowedToolIds.includes("dataforseo_serp"), false)
+})
+
 test("tool-enabled runs reserve a final synthesis step", () => {
   assert.equal(resolveAiEntryMaxStepCount({ maxToolCalls: 8 }, true), 9)
   assert.equal(resolveAiEntryMaxStepCount({ maxToolCalls: 1 }, true), 2)

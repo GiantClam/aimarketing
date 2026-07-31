@@ -2,6 +2,7 @@ import Link from "next/link"
 import { ArrowLeft, ArrowUpRight, CheckCircle2, Lock, Search, Sparkles, Workflow } from "lucide-react"
 
 import { SeoMetaWorkbench } from "@/components/lead-tools/seo-meta-workbench"
+import { SeoTitleAnalyzer } from "@/components/lead-tools/seo-title-analyzer"
 import { ToolShell } from "@/components/lead-tools/tool-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -284,6 +285,7 @@ export async function ToolMarketingPage({
       title={tool.name}
       description={tool.description}
       proofPoints={tool.proofPoints}
+      hideHero={tool.slug === "seo-title-generator"}
       faqTitle={copy.faqTitle}
       faqDescription={copy.faqDescription}
       faq={tool.faqs}
@@ -318,14 +320,28 @@ export async function ToolMarketingPage({
       ) : null}
       {tool.slug === "ai-seo-meta-generator" || tool.slug === "seo-title-generator" ? (
         <>
-          <SeoMetaWorkbench
-            locale={locale}
-            titleOnly={tool.slug === "seo-title-generator"}
-            initialTopic={topic ?? prompt}
-            initialAudience={audience}
-            initialPageType={pageType}
-            initialLanguage={seoLanguage}
-          />
+          {tool.slug === "seo-title-generator" ? (
+            <SeoTitleAnalyzer
+              locale={locale}
+              initialKeyword={topic ?? prompt}
+              initialAudience={audience}
+              initialPageType={pageType}
+              initialLanguage={seoLanguage}
+              upgradeHref={
+                currentUser
+                  ? "/dashboard/business?view=content-growth&agent=business-seo-growth"
+                  : `/register?redirect=${encodeURIComponent(localizePublicPath("/tools/seo-title-generator", locale))}`
+              }
+            />
+          ) : (
+            <SeoMetaWorkbench
+              locale={locale}
+              initialTopic={topic ?? prompt}
+              initialAudience={audience}
+              initialPageType={pageType}
+              initialLanguage={seoLanguage}
+            />
+          )}
 
           <section className="mt-8 grid gap-4 md:grid-cols-3">
             <Card className="border-border/70 bg-card/85 text-foreground">

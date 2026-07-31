@@ -56,6 +56,18 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     }
   }
 
+  if (request === "@/lib/ai-entry/seo-tools") {
+    return {
+      buildAiEntrySeoTools: () => ({
+        dataforseo_serp: {
+          description: "Live SERP",
+          inputSchema: {},
+          execute: async () => ({ ok: true }),
+        },
+      }),
+    }
+  }
+
   if (request === "@/lib/assistant-async") {
     return {
       enqueueAssistantTask: async (input: {
@@ -202,6 +214,38 @@ test("tool registry includes web_search when ppt-master skill and policy both al
   })
 
   assert.deepEqual(result.selectedToolIds, ["web_search", "preview_ppt_deck", "export_ppt_deck"])
+})
+
+test("DataForSEO is registered only when the SEO skill and its runtime policy both allow it", async () => {
+  const result = await buildAiEntryToolRegistry({
+    currentUser: { id: 7, enterpriseId: 3 } as never,
+    policy: {
+      agentId: "business-seo-growth",
+      allowedSkillIds: ["headline-generator"],
+      allowedToolIds: ["dataforseo_serp"],
+      allowedMcpServerIds: [],
+      maxToolCalls: 4,
+      maxRuntimeMs: 30_000,
+      canCreateArtifacts: true,
+      approvalRequiredToolIds: [],
+    },
+    selectedSkills: [{
+      id: "headline-generator",
+      name: "Headline Generator",
+      description: "SEO title skill",
+      type: "prompt",
+      triggerHints: ["SEO title"],
+      instruction: "Use paid data only when allowed.",
+      toolIds: ["dataforseo_serp"],
+      mcpServerIds: [],
+      version: "1",
+    }],
+    skillsEnabled: true,
+    enabledToolNames: null,
+    auditContext: { traceId: "trace-seo", conversationId: "conv-seo", agentId: "business-seo-growth" },
+  })
+
+  assert.deepEqual(result.selectedToolIds, ["dataforseo_serp"])
 })
 
 test("tool registry keeps ppt assistant in preview-only mode before export confirmation", async () => {

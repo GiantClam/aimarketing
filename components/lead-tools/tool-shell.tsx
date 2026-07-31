@@ -13,6 +13,7 @@ type ToolShellProps = {
   faqDescription?: string
   faq?: Array<{ question: string; answer: string }>
   aside?: ReactNode
+  hideHero?: boolean
   children: ReactNode
 }
 
@@ -25,37 +26,40 @@ export function ToolShell({
   faqDescription = "这部分内容也会作为工具页的 SEO 长文结构的一部分。",
   faq = [],
   aside,
+  hideHero = false,
   children,
 }: ToolShellProps) {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <PublicSiteHeader activeKey="tools" />
       <div className="public-grid-bg public-tool-shell mx-auto max-w-7xl">
-        <section className="grid gap-8 rounded-[2rem] border border-border/70 bg-card/90 p-6 shadow-[0_28px_90px_-46px_rgba(0,0,0,0.65)] backdrop-blur md:grid-cols-[minmax(0,1fr)_300px] md:p-10">
-          <div className="space-y-6">
-            <Badge variant="outline" className="border-primary/40 bg-primary/10 px-3 py-1 text-primary">
-              {eyebrow}
-            </Badge>
-            <div className="space-y-4">
-              <h1 className="max-w-4xl text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">{title}</h1>
-              <p className="max-w-3xl text-lg leading-8 text-muted-foreground">{description}</p>
+        {!hideHero ? (
+          <section className="grid gap-8 rounded-[2rem] border border-border/70 bg-card/90 p-6 shadow-[0_28px_90px_-46px_rgba(0,0,0,0.65)] backdrop-blur md:grid-cols-[minmax(0,1fr)_300px] md:p-10">
+            <div className="space-y-6">
+              <Badge variant="outline" className="border-primary/40 bg-primary/10 px-3 py-1 text-primary">
+                {eyebrow}
+              </Badge>
+              <div className="space-y-4">
+                <h1 className="max-w-4xl text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">{title}</h1>
+                <p className="max-w-3xl text-lg leading-8 text-muted-foreground">{description}</p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                {proofPoints.map((point) => (
+                  <div
+                    key={point}
+                    className="rounded-full border border-border/70 bg-background/75 px-4 py-2 text-sm text-muted-foreground"
+                  >
+                    {point}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="flex flex-wrap gap-3">
-              {proofPoints.map((point) => (
-                <div
-                  key={point}
-                  className="rounded-full border border-border/70 bg-background/75 px-4 py-2 text-sm text-muted-foreground"
-                >
-                  {point}
-                </div>
-              ))}
-            </div>
-          </div>
 
-          {aside ? (
-            <aside className="rounded-[1.5rem] border border-primary/20 bg-background/80 p-4">{aside}</aside>
-          ) : null}
-        </section>
+            {aside ? (
+              <aside className="rounded-[1.5rem] border border-primary/20 bg-background/80 p-4">{aside}</aside>
+            ) : null}
+          </section>
+        ) : null}
 
         <section className="mt-8">{children}</section>
 

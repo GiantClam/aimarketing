@@ -578,9 +578,9 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
     slug: "seo-title-generator",
     name: "Free SEO Title Generator",
     shortName: "SEO Title",
-    tagline: "Create SEO title ideas from any keyword, page type, and audience.",
+    tagline: "Generate, score, and compare SEO title angles from a keyword, audience, and page goal.",
     description:
-      "Generate SEO title ideas for blog posts, landing pages, tools, and comparison pages. Enter a keyword and get copy-ready title options in seconds.",
+      "Get a free SEO title report with distinct title angles, deterministic title checks, a Google-style preview, and transparent limits before you unlock live SERP research.",
     category: "SEO",
     icon: "seo",
     media: "seo",
@@ -593,7 +593,7 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
     finalizeRequiresLogin: false,
     previewModel: getLeadToolPreviewModel("ai-seo-meta-generator"),
     finalModel: getLeadToolFinalModel("ai-seo-meta-generator"),
-    proofPoints: ["Multiple title angles per keyword", "Fits blog, tool, and compare pages", "Copy-ready titles, H1s, and meta directions"],
+    proofPoints: ["10+ distinct title angles per keyword", "Deterministic keyword, width, and duplication checks", "Live SERP research is clearly separated as a paid capability"],
     faqs: [
       {
         question: "How long should an SEO title be?",
@@ -609,7 +609,7 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
       },
       {
         question: "How is this different from a generic headline generator?",
-        answer: "It generates title directions around search intent, page type, audience, and click clarity instead of optimizing only for a catchy headline.",
+        answer: "It combines a search-intent hypothesis, page-type context, deterministic title checks, a search-result preview, and A/B-test suggestions. The free report clearly labels what has not been validated with live SERP data.",
       },
       {
         question: "Should I generate titles before or after the content brief?",
@@ -620,7 +620,7 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
       {
         heading: "What a strong SEO title should do",
         body: [
-          "A strong title should match the searcher's intent, signal the page angle quickly, and avoid overpromising what the content will deliver. The best variants also reflect the page type, such as a guide, generator, comparison, or examples page.",
+          "A strong title should match the searcher's intent, signal the page angle quickly, and avoid overpromising what the content will deliver. This tool scores deterministic title properties, while live SERP and competitor evidence remain a separately unlocked capability.",
         ],
       },
       {
@@ -648,8 +648,8 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
       },
     ],
     primaryCta: {
-      label: "Generate titles and meta",
-      href: "/tools/ai-seo-meta-generator",
+      label: "Analyze an SEO title",
+      href: "/tools/seo-title-generator",
     },
     secondaryCta: {
       label: "Plan the content brief first",
@@ -886,7 +886,28 @@ const localizedLeadToolCopy: Record<
       tagline: "围绕关键词、页面类型和受众快速生成多组 SEO 标题方向。",
       description: "输入关键词即可为文章、落地页、工具页和对比页生成可直接使用的 SEO 标题选项。",
       proofPoints: ["一个关键词多种标题角度", "覆盖文章、工具与对比页", "可直接复制标题、H1 与 Meta 方向"],
-      faqs: leadToolsCatalog.find((tool) => tool.slug === "seo-title-generator")?.faqs ?? [],
+      faqs: [
+        {
+          question: "SEO 标题多长比较合适？",
+          answer: "标题应清晰、具体并匹配页面意图，通常要尽量贴近搜索结果的可见宽度。请结合实际页面上下文判断，而不是只依赖字符数。",
+        },
+        {
+          question: "SEO 标题和 Meta Title 是同一个概念吗？",
+          answer: "通常指同一个 title 标签字段，搜索引擎会使用它展示结果；页面 H1 可以为自然阅读而略作不同。",
+        },
+        {
+          question: "怎样写出用户愿意点击的 SEO 标题？",
+          answer: "匹配搜索意图，明确结果或价值，自然放入核心关键词，并给用户一个具体但不过度承诺的点击理由。",
+        },
+        {
+          question: "它和普通标题生成器有什么不同？",
+          answer: "它结合了搜索意图假设、页面类型、确定性标题检查、搜索结果预览与 A/B 测试建议，并明确标注未经过实时 SERP 验证的部分。",
+        },
+        {
+          question: "应在内容简报之前还是之后生成标题？",
+          answer: "建议在简报清晰后、定稿前生成，让标题准确反映页面结构、意图和下一步行动。",
+        },
+      ],
     },
     "ai-image": {
       name: "面向品牌团队的 AI 图片工具",
