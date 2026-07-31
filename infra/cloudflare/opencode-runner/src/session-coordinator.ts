@@ -9,6 +9,7 @@ import { parseSessionRunRequest } from "./run-contract"
 import { runtimeDispatchKey, writeRuntimeDispatchEnvelope } from "./runtime-envelope"
 import { createSessionWorkspaceBackup, prepareSessionWorkspace } from "./workspace-v2"
 import { createRuntimeCallbackHeaders } from "../../../../lib/ai-entry/runtime/callback-signature"
+import { SerialTaskQueue } from "./serial-task-queue"
 
 export type SessionRunnerEnv = {
   Sandbox: unknown
@@ -99,6 +100,11 @@ function sharedSelectionForbidden(agentId: string | null) {
 
 export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
   private readonly runtime = new OpenCodeServerSession()
+  // A session owns one sandbox and one OpenCode process. Workflow executions
+  // for the same conversation can arrive concurrently, so serialize the
+  // sandbox-owning section instead of letting sandbox.exec calls interrupt
+  // each other while the runtime is being updated.
+  private readonly executionQueue = new SerialTaskQueue()
   private sandbox: ReturnType<typeof getSandbox> | null = null
 
   constructor(ctx: DurableObjectState, env: SessionRunnerEnv) {
@@ -329,7 +335,7 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
     await this.ctx.storage.put("latestCheckpoint", nextCheckpoint)
     await this.emit(input.runId, { event: "checkpoint_saved", checkpoint: nextCheckpoint, runId: input.runId })
     const artifacts = await publishRuntimeArtifactsV2({ bucket: this.env.ARTIFACT_BUCKET, sandbox, sessionKey, runId: input.runId, sessionDir, maxArtifacts: runtimeInput.artifactContract.maxArtifacts, maxArtifactBytes: runtimeInput.artifactContract.maxArtifactBytes, maxArtifactTotalBytes: runtimeInput.artifactContract.maxArtifactTotalBytes, allowedExtensions: runtimeInput.artifactContract.allowedExtensions })
-    for (const warning of artifacts.warnings) await this.emit(input.runId, { event: "runtime_warning", code: warning, message: "An artifact was rejected or could not be published.", runId: input.runId })
+    for (const warning of artifacts.warnings) await this.emit(input.runId, { event: "runtime_warning", code: warning, message: warning, runId: input.runId })
     for (const artifact of artifacts.artifacts) await this.emit(input.runId, { event: "artifact_reference", artifact, runId: input.runId })
     await this.emit(input.runId, { event: "done", runId: input.runId })
     const complete: StoredRun = { ...existingRun, status: "succeeded", updatedAt: new Date().toISOString(), checkpoint: nextCheckpoint }
@@ -339,9 +345,9 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
     return complete
   }
 
-  private async executeInternal(request: Request) {
-    if (request.headers.get("X-Workflow-Secret") !== this.env.AGENT_RUNNER_HMAC_SECRET) return json({ error: "workflow_unauthorized" }, 401)
-    const input = await request.json() as CloudflareSessionRunRequest
+  private async executeInternalBody(secret: string | null, body: string) {
+    if (secret !== this.env.AGENT_RUNNER_HMAC_SECRET) return json({ error: "workflow_unauthorized" }, 401)
+    const input = JSON.parse(body) as CloudflareSessionRunRequest
     try { return json(await this.executeRun(input)) } catch (error) {
       const message = error instanceof Error ? error.message.slice(0, 1024) : "runtime_execution_failed"
       if (/(?:memory limit|isolate was reset|session_coordinator_fetch_failed)/iu.test(message)) {
@@ -357,6 +363,12 @@ export class SessionCoordinator extends DurableObject<SessionRunnerEnv> {
       await this.releaseSandbox()
       return json(failed, 500)
     }
+  }
+
+  private async executeInternal(request: Request) {
+    const secret = request.headers.get("X-Workflow-Secret")
+    const body = await request.text()
+    return this.executionQueue.run(() => this.executeInternalBody(secret, body))
   }
 
   private async eventTicket(request: Request, runId: string, body: string) {

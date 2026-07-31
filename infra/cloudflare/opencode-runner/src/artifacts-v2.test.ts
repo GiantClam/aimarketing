@@ -222,3 +222,37 @@ test("discovers Dashi's session output directory when the manifest is absent", a
   assert.equal(result.artifacts.length, 1)
   assert.equal(result.artifacts[0]?.fileName, "output/ai-marketing-workbench-ppt/AI营销工作台-演讲PPT.pptx")
 })
+
+test("falls back to bounded recent Dashi output when the marker scan is empty", async () => {
+  const sessionDir = "/workspace/sessions/sess-11111111111111111111111111111111"
+  const runId = "77777777-7777-4777-8777-777777777777"
+  const pptxPath = "/opt/dashiai-ppt/project/artifacts/final-deck.pptx"
+  let findCalls = 0
+  const sandbox = {
+    async readFile(path: string) {
+      if (path === pptxPath) return { content: "UEsDBA==", encoding: "base64" }
+      return null
+    },
+    async exec(command: string) {
+      if (!command.includes("find ")) return { success: false }
+      findCalls += 1
+      return findCalls === 1 ? { success: true, stdout: "" } : { success: true, stdout: `${pptxPath}\n` }
+    },
+  }
+  const puts: string[] = []
+  const result = await publishRuntimeArtifactsV2({
+    bucket: { async put(key: string) { puts.push(key) } } as never,
+    sandbox,
+    sessionKey: "sess-11111111111111111111111111111111",
+    runId,
+    sessionDir,
+    maxArtifacts: 8,
+    maxArtifactBytes: 1024,
+    maxArtifactTotalBytes: 4096,
+    allowedExtensions: ["pptx"],
+  })
+
+  assert.equal(findCalls, 2)
+  assert.equal(result.artifacts.length, 1)
+  assert.equal(puts.length, 1)
+})

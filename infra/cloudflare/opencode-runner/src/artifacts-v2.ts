@@ -34,6 +34,8 @@ async function readBytes(sandbox: ArtifactSandbox, path: string) {
   const content = record && "content" in record ? record.content : value
   if (content instanceof ReadableStream) return new Uint8Array(await new Response(content).arrayBuffer())
   if (content instanceof Uint8Array) return content
+  if (content instanceof ArrayBuffer) return new Uint8Array(content)
+  if (ArrayBuffer.isView(content)) return new Uint8Array(content.buffer, content.byteOffset, content.byteLength)
   if (typeof content === "string") {
     if (record?.encoding === "base64") {
       const binary = atob(content)
@@ -102,7 +104,14 @@ export async function publishRuntimeArtifactsV2(input: {
     const findArgs = sessionRoots.map((root) => JSON.stringify(root)).join(" ")
     const findFiles = findExpression(input.allowedExtensions)
     const marker = `${turnDir}/.dashi-artifact-start`
-    const discovered = await input.sandbox.exec(`{ find ${findArgs} -type f ${findFiles} -print 2>/dev/null; if [ -f ${JSON.stringify(marker)} ]; then find ${JSON.stringify(dashiRoot)} -newer ${JSON.stringify(marker)} -type f ${findFiles} -print 2>/dev/null; find ${JSON.stringify(dashiOutputRoot)} -newer ${JSON.stringify(marker)} -type f ${findFiles} -print 2>/dev/null; else find ${JSON.stringify(dashiRoot)} -mmin -180 -type f ${findFiles} -print 2>/dev/null; find ${JSON.stringify(dashiOutputRoot)} -mmin -180 -type f ${findFiles} -print 2>/dev/null; fi; } | head -200`)
+    const discover = async (scope: string) => input.sandbox.exec(scope)
+    let discovered = await discover(`{ find ${findArgs} -type f ${findFiles} -print 2>/dev/null; if [ -f ${JSON.stringify(marker)} ]; then find ${JSON.stringify(dashiRoot)} -newer ${JSON.stringify(marker)} -type f ${findFiles} -print 2>/dev/null; find ${JSON.stringify(dashiOutputRoot)} -newer ${JSON.stringify(marker)} -type f ${findFiles} -print 2>/dev/null; else find ${JSON.stringify(dashiRoot)} -mmin -180 -type f ${findFiles} -print 2>/dev/null; find ${JSON.stringify(dashiOutputRoot)} -mmin -180 -type f ${findFiles} -print 2>/dev/null; fi; } | head -200`)
+    // Some Dashi exporters preserve the source file mtime while replacing the
+    // output. If the marker-based scan is empty, fall back to the same bounded
+    // recent-output window used by the legacy collector.
+    if (!(discovered.stdout || "").trim()) {
+      discovered = await discover(`find ${JSON.stringify(dashiRoot)} ${JSON.stringify(dashiOutputRoot)} -mmin -180 -type f ${findFiles} -print 2>/dev/null | head -200`)
+    }
     const seen = new Set<string>()
     const fallbackRecords = (discovered.stdout || "").split(/\r?\n/).map((path) => path.trim()).filter((path) => {
       if (!path || seen.has(path)) return false
@@ -123,7 +132,12 @@ export async function publishRuntimeArtifactsV2(input: {
   if (records.length === 0) return { artifacts: [] as RuntimeArtifactReference[], warnings: manifestWarning ? [manifestWarning] : [] }
   const allowed = new Set(input.allowedExtensions.map((item) => item.replace(/^\./, "").toLowerCase()))
   const artifacts: RuntimeArtifactReference[] = []
-  const warnings: string[] = manifestWarning ? [manifestWarning] : []
+  // A missing manifest is expected for native Dashi. Only report it when no
+  // fallback artifact was discovered; otherwise the published reference is
+  // the useful signal and the warning is noise in the task UI.
+  const warnings: string[] = manifestWarning === "runtime_artifact_manifest_invalid" || records.length === 0
+    ? (manifestWarning ? [manifestWarning] : [])
+    : []
   const seenRecordKeys = new Set<string>()
   let totalBytes = 0
   const prioritizedRecords = records
@@ -146,26 +160,38 @@ export async function publishRuntimeArtifactsV2(input: {
     const fullPath = fallbackFullPath || `${turnDir}/artifacts/${relativePath}`
     const symlink = await input.sandbox.exec(`test -L -- ${JSON.stringify(fullPath)}`)
     if (symlink.success) { warnings.push("runtime_artifact_symlink_rejected"); continue }
+    let bytes: Uint8Array
     try {
-      const bytes = await readBytes(input.sandbox, fullPath)
-      if (bytes.byteLength > input.maxArtifactBytes || totalBytes + bytes.byteLength > input.maxArtifactTotalBytes) { warnings.push("runtime_artifact_size_exceeded"); continue }
-      totalBytes += bytes.byteLength
-      const key = `artifacts/${input.sessionKey}/${input.runId}/${relativePath}`
-      const contentType = mimeType(relativePath)
+      bytes = await readBytes(input.sandbox, fullPath)
+    } catch (error) {
+      console.log(JSON.stringify({ event: "runtime_artifact_read_failed", runId: input.runId, path: fullPath, message: error instanceof Error ? error.message : String(error) }))
+      warnings.push("runtime_artifact_read_failed")
+      continue
+    }
+    if (bytes.byteLength > input.maxArtifactBytes || totalBytes + bytes.byteLength > input.maxArtifactTotalBytes) { warnings.push("runtime_artifact_size_exceeded"); continue }
+    const key = `artifacts/${input.sessionKey}/${input.runId}/${relativePath}`
+    const contentType = mimeType(relativePath)
+    const checksumSha256 = await sha256(bytes)
+    try {
       await input.bucket.put(key, bytes, { httpMetadata: { contentType, cacheControl: "public, max-age=31536000, immutable" } })
-      artifacts.push({
-        provider: "r2",
-        bucket: "ARTIFACT_BUCKET",
-        key,
-        publicUrl: null,
-        fileName: relativePath,
-        mimeType: contentType,
-        sizeBytes: bytes.byteLength,
-        title: typeof record.title === "string" && record.title.trim() ? record.title.trim().slice(0, 255) : relativePath,
-        kind: typeof record.kind === "string" && record.kind.trim() ? record.kind.trim().slice(0, 64) : "file",
-        checksumSha256: await sha256(bytes),
-      })
-    } catch { warnings.push("runtime_artifact_publish_failed") }
+    } catch (error) {
+      console.log(JSON.stringify({ event: "runtime_artifact_publish_failed", runId: input.runId, key, sizeBytes: bytes.byteLength, message: error instanceof Error ? error.message : String(error) }))
+      warnings.push("runtime_artifact_publish_failed")
+      continue
+    }
+    totalBytes += bytes.byteLength
+    artifacts.push({
+      provider: "r2",
+      bucket: "ARTIFACT_BUCKET",
+      key,
+      publicUrl: null,
+      fileName: relativePath,
+      mimeType: contentType,
+      sizeBytes: bytes.byteLength,
+      title: typeof record.title === "string" && record.title.trim() ? record.title.trim().slice(0, 255) : relativePath,
+      kind: typeof record.kind === "string" && record.kind.trim() ? record.kind.trim().slice(0, 64) : "file",
+      checksumSha256,
+    })
   }
   if (records.length > input.maxArtifacts) warnings.push("runtime_artifact_count_exceeded")
   return { artifacts, warnings }
