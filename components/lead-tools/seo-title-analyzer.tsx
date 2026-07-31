@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { paidSeoCapabilities, type SeoTitleCandidate, type SeoTitleInput, type SeoTitleReport } from "@/lib/seo-tools/title-report"
+import { getLocalizedPaidSeoCapabilities, type SeoTitleCandidate, type SeoTitleInput, type SeoTitleReport } from "@/lib/seo-tools/title-report"
 import type { AppLocale } from "@/lib/i18n/config"
 
 type SeoTitleAnalyzerProps = {
@@ -368,7 +368,7 @@ export function SeoTitleAnalyzer({
         </CardContent>
       </Card>
 
-      {report ? <Card className="border-primary/25 bg-card/90"><CardHeader><div className="flex items-center gap-2 text-primary"><LockKeyhole className="h-5 w-5" /><CardTitle className="text-xl">{copy.locked}</CardTitle></div><CardDescription>{copy.lockedDescription}</CardDescription></CardHeader><CardContent className="grid gap-3 md:grid-cols-3">{paidSeoCapabilities.map((capability) => <div key={capability.id} className="rounded-xl border border-border/70 bg-background/70 p-4"><p className="font-medium">{capability.title}</p><p className="mt-2 text-sm leading-6 text-muted-foreground">{capability.description}</p><dl className="mt-4 space-y-1 text-xs text-muted-foreground"><div><dt className="inline">{copy.source}: </dt><dd className="inline">{capability.source}</dd></div><div><dt className="inline">{copy.access}: </dt><dd className="inline">{capability.requirement}</dd></div><div><dt className="inline">{copy.cost}: </dt><dd className="inline">{capability.estimatedCredits ? `${capability.estimatedCredits} ${copy.credits}` : copy.noCredits}</dd></div></dl></div>)}</CardContent><CardContent className="pt-0"><Button asChild size="lg"><a href={upgradeHref}>{copy.locked}</a></Button></CardContent></Card> : null}
+      {report ? <Card className="border-primary/25 bg-card/90"><CardHeader><div className="flex items-center gap-2 text-primary"><LockKeyhole className="h-5 w-5" /><CardTitle className="text-xl">{copy.locked}</CardTitle></div><CardDescription>{copy.lockedDescription}</CardDescription></CardHeader><CardContent className="grid gap-3 md:grid-cols-3">{getLocalizedPaidSeoCapabilities(language).map((capability) => <div key={capability.id} className="rounded-xl border border-border/70 bg-background/70 p-4"><p className="font-medium">{capability.title}</p><p className="mt-2 text-sm leading-6 text-muted-foreground">{capability.description}</p><dl className="mt-4 space-y-1 text-xs text-muted-foreground"><div><dt className="inline">{copy.source}: </dt><dd className="inline">{capability.source}</dd></div><div><dt className="inline">{copy.access}: </dt><dd className="inline">{capability.requirement}</dd></div><div><dt className="inline">{copy.cost}: </dt><dd className="inline">{capability.estimatedCredits ? `${capability.estimatedCredits} ${copy.credits}` : copy.noCredits}</dd></div></dl></div>)}</CardContent><CardContent className="pt-0"><Button asChild size="lg"><a href={upgradeHref}>{copy.locked}</a></Button></CardContent></Card> : null}
     </div>
   )
 }

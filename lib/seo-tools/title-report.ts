@@ -215,3 +215,33 @@ export const paidSeoCapabilities = [
     description: "Check query ownership, cannibalization, landing-page engagement, and conversion performance.",
   },
 ] as const
+
+export function getLocalizedPaidSeoCapabilities(language: SeoTitleInput["language"]) {
+  if (language !== "zh-CN") return paidSeoCapabilities
+
+  const localized = {
+    "live-serp": {
+      title: "实时 SERP 页面格局",
+      description: "对比当前 Top 10 标题、域名、排名位置与 SERP 特征。",
+      source: "DataForSEO",
+      requirement: "订阅或积分",
+    },
+    "keyword-demand": {
+      title: "关键词需求与难度",
+      description: "获取当前搜索量、关键词难度与 SERP 特征信号，为页面优先级提供依据。",
+      source: "DataForSEO",
+      requirement: "订阅或积分",
+    },
+    "performance-review": {
+      title: "GSC 与 GA4 表现复盘",
+      description: "检查查询归属、关键词互食、落地页参与度与转化表现。",
+      source: "已连接的网站资源",
+      requirement: "已连接资源并完成授权",
+    },
+  } as const
+
+  return paidSeoCapabilities.map((capability) => ({
+    ...capability,
+    ...localized[capability.id],
+  }))
+}

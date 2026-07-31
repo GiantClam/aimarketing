@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { getPublicSeoToolIds } from "./public-runtime-policy"
-import { buildMockSeoTitlePlan, buildSeoTitleReport, paidSeoCapabilities, seoTitleInputSchema } from "./title-report"
+import { buildMockSeoTitlePlan, buildSeoTitleReport, getLocalizedPaidSeoCapabilities, paidSeoCapabilities, seoTitleInputSchema } from "./title-report"
 import { scoreSeoTitle } from "./title-score"
 
 test("anonymous SEO title reports use fixed input and do not expose paid tools", () => {
@@ -54,4 +54,11 @@ test("fallback title reports retain the supplied page context", () => {
   assert.match(report.intentHypothesis, /产品页/)
   assert.match(report.intentHypothesis, /提升自然流量与点击率/)
   assert.match(report.candidates[0]?.rationale || "", /旧标题/)
+})
+
+test("paid SEO capability cards are localized for the Chinese tool page", () => {
+  const capabilities = getLocalizedPaidSeoCapabilities("zh-CN")
+
+  assert.deepEqual(capabilities.map((capability) => capability.title), ["实时 SERP 页面格局", "关键词需求与难度", "GSC 与 GA4 表现复盘"])
+  assert.equal(capabilities[2]?.requirement, "已连接资源并完成授权")
 })
