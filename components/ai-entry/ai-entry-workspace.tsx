@@ -2165,7 +2165,7 @@ export function AiEntryWorkspace({
   }, [isPptAssistantRoute, isZh, shouldLockModel, shouldPreferAgentDefaultModel])
 
   useEffect(() => {
-    if (!isPptAssistantRoute || shouldLockModel) return
+    if (shouldLockModel) return
 
     if (!restoredConversationModelId) {
       appliedRestoredConversationModelIdRef.current = null
@@ -2184,7 +2184,7 @@ export function AiEntryWorkspace({
 
     appliedRestoredConversationModelIdRef.current = restoredConversationModelId
     setSelectedModelId(resolvedModelId)
-  }, [isPptAssistantRoute, models, restoredConversationModelId, shouldLockModel])
+  }, [models, restoredConversationModelId, shouldLockModel])
 
   useEffect(() => {
     let cancelled = false
@@ -2429,7 +2429,7 @@ export function AiEntryWorkspace({
             ? payload.conversation.current_model_id.trim()
             : null
 
-        setRestoredConversationModelId(isPptAssistantRoute ? conversationModelId : null)
+        setRestoredConversationModelId(conversationModelId)
       } catch (error) {
         if (cancelled) return
         setMessages((current) => (current.length > 0 ? current : []))
