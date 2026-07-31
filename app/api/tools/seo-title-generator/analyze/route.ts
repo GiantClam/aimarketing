@@ -8,6 +8,9 @@ import {
   type SeoTitleProviderOptions,
 } from "@/lib/lead-tools/generation"
 import { getEnterpriseTextRuntimeProviderConfigsForUser } from "@/lib/platform/enterprise-runtime-config"
+import {
+  getConfiguredAiEntryProviderForModel,
+} from "@/lib/ai-entry/provider-routing"
 import { paidSeoCapabilities, seoTitleInputSchema } from "@/lib/seo-tools/title-report"
 
 export const runtime = "nodejs"
@@ -40,14 +43,29 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireSessionUser(request)
     if (!("response" in auth) && auth.user.isDemo) {
+      const requestedModel =
+        process.env.LEAD_TOOLS_SEO_TITLE_PREVIEW_MODEL?.trim() ||
+        process.env.LEAD_TOOLS_SEO_PREVIEW_MODEL?.trim() ||
+        "deepseek-v4-flash"
+      const isGrokModel = /^grok(?:[-_.]|$)/iu.test(requestedModel)
+      if (isGrokModel) {
+        const grokProvider = getConfiguredAiEntryProviderForModel("pptoken", requestedModel)
+        if (grokProvider) {
+          providerOptions = {
+            preferredProviderId: "pptoken",
+            preferredModel: requestedModel,
+            forcePreferredProvider: true,
+            disableProviderFailover: true,
+            disableSameProviderModelFallback: true,
+            providerConfigs: [grokProvider],
+          }
+        }
+      }
       const enterpriseRuntime = await getEnterpriseTextRuntimeProviderConfigsForUser(auth.user)
-      if (enterpriseRuntime?.selectedProviderId && enterpriseRuntime.providerConfigs.length > 0) {
+      if (!providerOptions && enterpriseRuntime?.selectedProviderId && enterpriseRuntime.providerConfigs.length > 0) {
         providerOptions = {
           preferredProviderId: enterpriseRuntime.selectedProviderId,
-          preferredModel:
-            process.env.AI_ENTRY_DEEPSEEK_MODEL?.trim() ||
-            process.env.DEEPSEEK_MODEL?.trim() ||
-            "deepseek-v4-flash",
+          preferredModel: requestedModel,
           forcePreferredProvider: true,
           disableProviderFailover: true,
           disableSameProviderModelFallback: true,
