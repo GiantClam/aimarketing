@@ -1,4 +1,4 @@
-import { generateText } from "ai"
+import { generateText, streamText } from "ai"
 import { createOpenAI } from "@ai-sdk/openai"
 
 import {
@@ -493,7 +493,7 @@ async function generateSeoTitlePlanWithDefaultProvider(params: {
   try {
     const providerResult = await executeAiEntryWithProviderFailover(
       async (providerRun) => {
-        const response = await generateText({
+        const response = streamText({
           model: providerRun.provider.chat(providerRun.model),
           prompt: [
             params.systemPrompt,
@@ -505,7 +505,11 @@ async function generateSeoTitlePlanWithDefaultProvider(params: {
           maxOutputTokens: 2_200,
           abortSignal: controller.signal,
         })
-        const text = response.text.trim()
+        let text = ""
+        for await (const delta of response.textStream) {
+          text += delta
+        }
+        text = text.trim()
         if (!text) throw new Error("seo_title_empty_response")
         return text
       },
