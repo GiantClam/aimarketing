@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ZodError } from "zod"
 
+import { requireSessionUser } from "@/lib/auth/guards"
 import { allowLeadToolMockFallback } from "@/lib/lead-tools/config"
-import { generateSeoTitleReportWithFallback } from "@/lib/lead-tools/generation"
+import {
+  generateSeoTitleReportWithFallback,
+  type SeoTitleProviderOptions,
+} from "@/lib/lead-tools/generation"
+import { getEnterpriseTextRuntimeProviderConfigsForUser } from "@/lib/platform/enterprise-runtime-config"
 import { paidSeoCapabilities, seoTitleInputSchema } from "@/lib/seo-tools/title-report"
 
 export const runtime = "nodejs"
@@ -31,12 +36,39 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 400 })
   }
 
+  let providerOptions: SeoTitleProviderOptions | undefined
+  try {
+    const auth = await requireSessionUser(request)
+    if (!("response" in auth) && auth.user.isDemo) {
+      const enterpriseRuntime = await getEnterpriseTextRuntimeProviderConfigsForUser(auth.user)
+      if (enterpriseRuntime?.selectedProviderId && enterpriseRuntime.providerConfigs.length > 0) {
+        providerOptions = {
+          preferredProviderId: enterpriseRuntime.selectedProviderId,
+          preferredModel:
+            process.env.AI_ENTRY_DEEPSEEK_MODEL?.trim() ||
+            process.env.DEEPSEEK_MODEL?.trim() ||
+            "deepseek-v4-flash",
+          forcePreferredProvider: true,
+          disableProviderFailover: true,
+          disableSameProviderModelFallback: true,
+          providerConfigs: enterpriseRuntime.providerConfigs,
+        }
+      }
+    }
+  } catch {
+    // Public SEO generation remains available without a session cookie.
+  }
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
         controller.enqueue(encodeEvent("stage", { stage: "input_analyzing" }))
         controller.enqueue(encodeEvent("stage", { stage: "titles_generating" }))
-        const report = await generateSeoTitleReportWithFallback(input, allowLeadToolMockFallback())
+        const report = await generateSeoTitleReportWithFallback(
+          input,
+          allowLeadToolMockFallback(),
+          providerOptions,
+        )
         controller.enqueue(encodeEvent("insight_completed", { kind: "intent", value: report.intentHypothesis }))
         controller.enqueue(encodeEvent("stage", { stage: "titles_scoring" }))
         for (const [index, title] of report.candidates.entries()) {

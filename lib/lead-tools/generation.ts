@@ -1,7 +1,12 @@
 import { generateText } from "ai"
 import { createOpenAI } from "@ai-sdk/openai"
 
-import { executeAiEntryWithProviderFailover, getConfiguredAiEntryProviders } from "@/lib/ai-entry/provider-routing"
+import {
+  executeAiEntryWithProviderFailover,
+  getConfiguredAiEntryProviders,
+  type AiEntryProviderConfig,
+  type AiEntryProviderId,
+} from "@/lib/ai-entry/provider-routing"
 import { generateStructuredObjectWithWriterModel, generateTextWithWriterModel, hasAibermApiKey, hasCrazyrouteApiKey } from "@/lib/writer/aiberm"
 import { getLeadToolFinalModel, getLeadToolPreviewModel } from "@/lib/lead-tools/config"
 import {
@@ -467,10 +472,20 @@ export async function generateLeadToolPptPreview(request: PptPreviewRequest): Pr
   }
 }
 
+export type SeoTitleProviderOptions = {
+  preferredProviderId?: AiEntryProviderId | null
+  preferredModel?: string | null
+  forcePreferredProvider?: boolean
+  disableProviderFailover?: boolean
+  disableSameProviderModelFallback?: boolean
+  providerConfigs?: AiEntryProviderConfig[]
+}
+
 async function generateSeoTitlePlanWithDefaultProvider(params: {
   input: SeoTitleInput
   systemPrompt: string
   userPrompt: string
+  providerOptions?: SeoTitleProviderOptions
 }) {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 40_000)
@@ -495,8 +510,10 @@ async function generateSeoTitlePlanWithDefaultProvider(params: {
         return text
       },
       {
-        preferredProviderId: "deepseek",
-        preferredModel: getLeadToolPreviewModel("seo-title-generator"),
+        preferredProviderId: params.providerOptions?.preferredProviderId || "deepseek",
+        preferredModel:
+          params.providerOptions?.preferredModel || getLeadToolPreviewModel("seo-title-generator"),
+        ...(params.providerOptions || {}),
       },
     )
 
@@ -536,7 +553,10 @@ export async function generateLeadToolSeoPreview(request: SeoMetaRequest): Promi
   }
 }
 
-export async function generateSeoTitleReport(request: SeoTitleInput): Promise<SeoTitleReport> {
+export async function generateSeoTitleReport(
+  request: SeoTitleInput,
+  providerOptions?: SeoTitleProviderOptions,
+): Promise<SeoTitleReport> {
   const skillInstruction = await loadPublicSeoSkillInstruction("headline-generator")
   const systemPrompt = [
     "You are producing a free SEO title analysis report.",
@@ -546,7 +566,12 @@ export async function generateSeoTitleReport(request: SeoTitleInput): Promise<Se
     skillInstruction,
   ].join("\n\n")
   const userPrompt = buildSeoTitleUserPrompt(request)
-  const plan: SeoTitleGeneratedPlan = await generateSeoTitlePlanWithDefaultProvider({ input: request, systemPrompt, userPrompt })
+  const plan: SeoTitleGeneratedPlan = await generateSeoTitlePlanWithDefaultProvider({
+    input: request,
+    systemPrompt,
+    userPrompt,
+    providerOptions,
+  })
 
   return buildSeoTitleReport({
     ...plan,
@@ -561,6 +586,7 @@ export async function generateSeoTitleReport(request: SeoTitleInput): Promise<Se
 export async function generateSeoTitleReportWithFallback(
   request: SeoTitleInput,
   allowMockFallback: boolean,
+  providerOptions?: SeoTitleProviderOptions,
 ): Promise<SeoTitleReport> {
   if (!hasLeadToolGenerationProvider()) {
     if (allowMockFallback) return buildSeoTitleReport(buildMockSeoTitlePlan(request))
@@ -568,7 +594,7 @@ export async function generateSeoTitleReportWithFallback(
   }
 
   try {
-    return await generateSeoTitleReport(request)
+    return await generateSeoTitleReport(request, providerOptions)
   } catch (error) {
     if (allowMockFallback) {
       console.warn("lead-tools.seo-title.fallback", {
