@@ -1303,7 +1303,7 @@ export async function POST(request: NextRequest) {
       currentUser.isDemo && !requestedModelConfig?.providerId && !requestedModelConfig?.modelId
         ? process.env.AI_ENTRY_DEEPSEEK_MODEL?.trim() ||
           process.env.DEEPSEEK_MODEL?.trim() ||
-          "deepseek-v4-flash"
+          "deepseek-v4-pro"
         : ""
     const preferredExecutionModel =
       publicDemoModelOverride ||

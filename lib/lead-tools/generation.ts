@@ -503,11 +503,6 @@ async function generateSeoTitlePlanWithDefaultProvider(params: {
           ].join("\n\n"),
           temperature: 0.35,
           maxOutputTokens: 2_200,
-          providerOptions: {
-            openai: {
-              reasoningEffort: "none",
-            },
-          },
           abortSignal: controller.signal,
         })
         let text = ""

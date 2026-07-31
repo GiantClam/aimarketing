@@ -195,7 +195,7 @@ vercel_set PPT_WORKER_INTERNAL_TOKEN "$PPT_MASTER_TOKEN" secret
 vercel_set PPT_WORKER_RUNTIME_PROFILE railway-linux
 vercel_set LEAD_TOOLS_PPT_EXECUTION_TRANSPORT remote-worker
 vercel_set LEAD_TOOLS_PPT_PREVIEW_RUNTIME ppt-master-agent
-vercel_set LEAD_TOOLS_SEO_TITLE_PREVIEW_MODEL deepseek-v4-flash
+vercel_set LEAD_TOOLS_SEO_TITLE_PREVIEW_MODEL deepseek-v4-pro
 
 log "Deploying Worker and applying Queue/Workflow/R2 bindings"
 cf deploy --no-install-skills
