@@ -3,27 +3,35 @@ import test from "node:test"
 
 import { routeAiEntrySkills } from "./skill-router"
 
-test("skill router recognizes PPT intent and selects ppt-master", () => {
+test("plain AI Chat never loads skills from PPT wording", () => {
   const decision = routeAiEntrySkills({
     latestUserPrompt: "请帮我做一份面向 CEO 的 AI 营销方案汇报 PPT，并导出可编辑 PPTX。",
     requestedAgentId: null,
   })
 
-  assert.deepEqual(decision.selectedSkillIds, ["ppt-master"])
-  assert.equal(decision.reasons[0]?.skillId, "ppt-master")
-  assert.equal(decision.reasons[0]?.reason, "ppt_intent")
+  assert.deepEqual(decision.selectedSkillIds, [])
+  assert.deepEqual(decision.reasons, [])
 })
 
-test("skill router respects explicit skill selection before heuristics", () => {
+test("explicit Agent skill selection remains supported", () => {
   const decision = routeAiEntrySkills({
     latestUserPrompt: "写一篇长文，也顺便整理成 deck。",
-    requestedAgentId: null,
+    requestedAgentId: "business-content-growth",
     requestedSkillIds: ["longform-writing"],
   })
 
-  assert.ok(decision.selectedSkillIds.includes("longform-writing"))
-  assert.ok(decision.selectedSkillIds.includes("ppt-master"))
+  assert.deepEqual(decision.selectedSkillIds, ["longform-writing"])
   assert.equal(decision.reasons[0]?.reason, "explicit_selection")
+})
+
+test("editable PPT agent keeps its explicit default skill", () => {
+  const decision = routeAiEntrySkills({
+    latestUserPrompt: "请做一份 PPT",
+    requestedAgentId: "executive-ppt",
+  })
+
+  assert.deepEqual(decision.selectedSkillIds, ["ppt-master"])
+  assert.equal(decision.reasons[0]?.reason, "agent_default")
 })
 
 test("presentation PPT agent routes to Dashi without legacy brief tools", () => {

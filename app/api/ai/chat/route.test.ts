@@ -386,7 +386,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
         skillRouteDecision: emitArtifactFlow
           ? {
               selectedSkillIds: ["ppt-master"],
-              reasons: [{ skillId: "ppt-master", reason: "ppt_intent" }],
+              reasons: [{ skillId: "ppt-master", reason: "explicit_selection" }],
             }
           : null,
         selectedSkills: emitArtifactFlow
