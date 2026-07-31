@@ -1,6 +1,7 @@
 import type { AgentRuntimeInputV2, OpenCodeProviderConfig } from "../../../../lib/ai-runtime/contracts"
 import type { createOpencode } from "@cloudflare/sandbox/opencode"
 import { providerRuntimeKey } from "./opencode-provider"
+import { buildOpenCodeModelConfig } from "./deepseek-model-config"
 
 type RuntimeConfig = NonNullable<NonNullable<Parameters<typeof createOpencode>[1]>["config"]>
 
@@ -52,7 +53,7 @@ export function buildRuntimeConfig(input: AgentRuntimeInputV2, provider: OpenCod
             baseURL: provider.baseUrl,
             apiKey: `{env:${runtime.envKey}}`,
           },
-          models: { [provider.modelId]: { name: provider.modelId } },
+          models: { [provider.modelId]: buildOpenCodeModelConfig(provider) },
         },
       }
     })(),

@@ -132,6 +132,42 @@ test("routes Grok through the signed PPToken provider", async () => {
   assert.ok(config.provider?.pptoken?.models?.["grok-4.5"])
 })
 
+test("configures DeepSeek V4 Flash with the max reasoning variant", async () => {
+  const input = {
+    runId: "11111111-1111-4111-8111-111111111111",
+    conversationId: null,
+    enterpriseId: null,
+    userId: 1,
+    agentId: "executive-presentation-ppt",
+    systemPrompt: "system",
+    messages: [{ role: "user" as const, content: "Create a deck" }],
+    attachments: [],
+    artifactContext: [],
+    workflowContext: null,
+    artifactContract: { manifestPath: "artifact-manifest.json" as const, artifactDir: "artifacts" as const, maxArtifacts: 8, maxArtifactBytes: 100, maxArtifactTotalBytes: 100, allowedExtensions: [".pptx"] },
+    policy: { allowPlatformTools: false as const, allowTools: false as const, allowMcp: false as const, allowSkillInstall: false as const, allowNetwork: true },
+  }
+  const provider = {
+    providerId: "deepseek",
+    modelId: "deepseek-v4-flash",
+    baseUrl: "https://api.deepseek.example/v1",
+    apiKey: "deepseek-test-key",
+  }
+  const config = buildRuntimeConfig(input as never, provider) as { provider: { deepseek: { models: Record<string, { variants?: Record<string, Record<string, unknown>> }> } } }
+  assert.deepEqual(config.provider.deepseek.models["deepseek-v4-flash"].variants?.max, {
+    reasoningEffort: "max",
+    body: { thinking: { type: "enabled" } },
+  })
+
+  let scriptContent = ""
+  const sandbox = {
+    async writeFile(_path: string, content: string) { scriptContent = content },
+    async exec(_command: string, _options: Record<string, unknown>) { return { success: true, exitCode: 0 } },
+  }
+  for await (const _event of runOpenCode(sandbox, "/workspace/runs/11111111-1111-4111-8111-111111111111", input as never, undefined, 1000, provider)) { void _event }
+  assert.match(scriptContent, /'--variant' 'max'/u)
+})
+
 test("Dashi auto-authorizes system permissions without answering user questions", async () => {
   const input = {
     runId: "11111111-1111-4111-8111-111111111111",

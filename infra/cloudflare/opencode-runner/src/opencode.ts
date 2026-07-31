@@ -1,5 +1,6 @@
 import type { AgentRuntimeEvent, AgentRuntimeInput, OpenCodeProviderConfig } from "../../../../lib/ai-runtime/contracts"
 import { providerRuntimeKey } from "./opencode-provider"
+import { buildOpenCodeModelConfig, DEEPSEEK_V4_FLASH_MAX_VARIANT, isDeepSeekV4Flash } from "./deepseek-model-config"
 
 type SandboxExecApi = {
   writeFile(path: string, content: string): Promise<unknown>
@@ -91,6 +92,7 @@ export async function* runOpenCode(
     ...command.args,
     ...(execution.sessionId ? ["--session", execution.sessionId] : []),
     ...(execution.continueSession ? ["--continue"] : []),
+    ...(isDeepSeekV4Flash(provider) ? ["--variant", DEEPSEEK_V4_FLASH_MAX_VARIANT] : []),
     "--dir",
     workingDir,
     ...(execution.agent ? ["--agent", execution.agent] : []),
@@ -166,7 +168,7 @@ export async function* runOpenCode(
             npm: "@ai-sdk/openai-compatible",
             name: runtime.configKey,
             options: { baseURL: provider.baseUrl, apiKey: `{env:${runtime.envKey}}` },
-            models: { [provider.modelId]: { name: provider.modelId } },
+            models: { [provider.modelId]: buildOpenCodeModelConfig(provider) },
           },
         }
       })(),
