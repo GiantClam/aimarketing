@@ -134,6 +134,12 @@ import { resolveAiEntryTargetConversationId } from "@/lib/ai-entry/route-sync"
 import { resolveAiEntryTaskPollIntervalMs } from "@/lib/ai-entry/task-run-runtime"
 import type { KnowledgeScope } from "@/lib/knowledge/types"
 import { cn } from "@/lib/utils"
+import {
+  getReasoningCapabilities,
+  normalizeReasoningEffort,
+  REASONING_EFFORTS,
+  type ReasoningEffort,
+} from "@/lib/ai-entry/reasoning"
 
 const AI_ENTRY_PENDING_TASK_MAX_POLL_ERRORS = 5
 const AI_ENTRY_PENDING_TASK_MAX_AGE_MS = 70 * 60 * 1000
@@ -160,6 +166,8 @@ type Copy = {
   restoring: string
   quickStart: string
   modelLabel: string
+  reasoningLabel: string
+  reasoningAuto: string
   modelLoading: string
   modelEmpty: string
   agentLabel: string
@@ -528,6 +536,7 @@ type AgentApiResponse = {
 // Bump the key when the product default changes so an old Grok/Claude choice
 // does not silently override the DeepSeek V4 Pro default on first load.
 const AI_ENTRY_SELECTED_MODEL_STORAGE_KEY = "ai-entry-selected-model-id-v2"
+const AI_ENTRY_SELECTED_REASONING_STORAGE_KEY = "ai-entry-selected-reasoning-v1"
 const SHOULD_PREFER_CATALOG_MODEL_DEFAULT = process.env.NODE_ENV === "development"
 const AI_ENTRY_PENDING_CONVERSATION_STORAGE_PREFIX = "ai-entry-pending-conversation-v1:"
 const AI_ENTRY_SHARED_PENDING_CONVERSATION_STORAGE_PREFIX = "ai-entry-shared-pending-conversation-v1:"
@@ -659,6 +668,16 @@ function readPersistedSelectedModelId() {
     return normalized || null
   } catch {
     return null
+  }
+}
+
+function readPersistedReasoningEffort(): ReasoningEffort {
+  if (typeof window === "undefined") return "auto"
+  try {
+    const raw = window.localStorage.getItem(AI_ENTRY_SELECTED_REASONING_STORAGE_KEY)
+    return REASONING_EFFORTS.includes(raw as ReasoningEffort) ? raw as ReasoningEffort : "auto"
+  } catch {
+    return "auto"
   }
 }
 
@@ -1347,6 +1366,8 @@ export function AiEntryWorkspace({
             restoring: "正在恢复会话...",
             quickStart: "快速提问",
             modelLabel: "Standard",
+            reasoningLabel: "推理",
+            reasoningAuto: "自动",
             modelLoading: "加载模型中...",
             modelEmpty: "无可用模型",
             agentLabel: "顾问",
@@ -1384,6 +1405,8 @@ export function AiEntryWorkspace({
             restoring: "Restoring conversation...",
             quickStart: "Quick tips",
             modelLabel: "Standard",
+            reasoningLabel: "Reasoning",
+            reasoningAuto: "Auto",
             modelLoading: "Loading models...",
             modelEmpty: "No models",
             agentLabel: "Advisor",
@@ -1452,6 +1475,8 @@ export function AiEntryWorkspace({
   const [modelGroups, setModelGroups] = useState<ModelGroupOption[]>([])
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
   const [modelSelectOpen, setModelSelectOpen] = useState(false)
+  const [selectedReasoningEffort, setSelectedReasoningEffort] = useState<ReasoningEffort>("auto")
+  const [reasoningSelectOpen, setReasoningSelectOpen] = useState(false)
   const [restoredConversationModelId, setRestoredConversationModelId] = useState<string | null>(null)
 
   const [agents, setAgents] = useState<AgentOption[]>([])
@@ -1618,6 +1643,20 @@ export function AiEntryWorkspace({
     () => models.find((item) => item.id === selectedModelId) || null,
     [models, selectedModelId],
   )
+  const reasoningCapabilities = useMemo(
+    () => getReasoningCapabilities({
+      providerId: selectedModel?.providerId || modelProviderId,
+      modelId: selectedModel?.modelId || selectedModel?.runtimeId || selectedModelId,
+    }),
+    [modelProviderId, selectedModel, selectedModelId],
+  )
+  const resolvedReasoningEffort = useMemo(
+    () => normalizeReasoningEffort(selectedReasoningEffort, {
+      providerId: selectedModel?.providerId || modelProviderId,
+      modelId: selectedModel?.modelId || selectedModel?.runtimeId || selectedModelId,
+    }),
+    [modelProviderId, selectedModel, selectedModelId, selectedReasoningEffort],
+  )
   const hasStreamRecoveryPending = useMemo(
     () => pendingTaskEvents.some((event) => event.type === "stream_recovery"),
     [pendingTaskEvents],
@@ -1738,6 +1777,26 @@ export function AiEntryWorkspace({
       // ignore localStorage write failures
     }
   }, [selectedModelId, shouldLockModel])
+
+  useEffect(() => {
+    if (modelsLoading) return
+    setSelectedReasoningEffort((current) => {
+      const candidate = current === "auto" ? readPersistedReasoningEffort() : current
+      return normalizeReasoningEffort(candidate, {
+        providerId: selectedModel?.providerId || modelProviderId,
+        modelId: selectedModel?.modelId || selectedModel?.runtimeId || selectedModelId,
+      })
+    })
+  }, [modelProviderId, modelsLoading, selectedModel, selectedModelId])
+
+  useEffect(() => {
+    if (shouldLockModel || modelsLoading || typeof window === "undefined") return
+    try {
+      window.localStorage.setItem(AI_ENTRY_SELECTED_REASONING_STORAGE_KEY, resolvedReasoningEffort)
+    } catch {
+      // ignore localStorage write failures
+    }
+  }, [modelsLoading, resolvedReasoningEffort, shouldLockModel])
 
   const selectedAgent = useMemo(
     () => agents.find((item) => item.id === selectedAgentId) || null,
@@ -2823,6 +2882,15 @@ export function AiEntryWorkspace({
     ))
   }, [copy.modelEmpty, copy.modelLoading, modelGroups, models.length, modelsLoading])
 
+  const renderReasoningSelectContent = useCallback(
+    () => reasoningCapabilities.map((item) => (
+      <SelectItem key={item.effort} value={item.effort}>
+        {isZh ? item.zh : item.en}
+      </SelectItem>
+    )),
+    [isZh, reasoningCapabilities],
+  )
+
   const handleCopyMessage = useCallback(async (messageId: string, content: string) => {
     try {
       await navigator.clipboard.writeText(content)
@@ -3074,6 +3142,7 @@ export function AiEntryWorkspace({
                     selectedModel?.runtimeId ||
                     selectedModel?.canonicalId ||
                     selectedModelId,
+                  reasoningEffort: resolvedReasoningEffort === "auto" ? undefined : resolvedReasoningEffort,
                 }
               : undefined,
           agentConfig:
@@ -3745,36 +3814,79 @@ export function AiEntryWorkspace({
     routeAgentId,
     selectedModel,
     selectedModelId,
+    resolvedReasoningEffort,
   ])
 
   const renderSelectors = (buttonHeight: "h-10" | "h-9") => (
     <div className="flex min-w-0 items-center gap-2 px-1">
       {shouldLockModel ? (
-        <div
-          className={`model-select inline-flex min-w-0 max-w-[44vw] items-center text-xs text-foreground sm:max-w-[260px] ${buttonHeight}`}
-          title={selectedModel?.name || lockedConsultingModelId}
-        >
-          <span className="truncate">
-            {copy.modelLabel}: {selectedModel?.name || lockedConsultingModelId}
-          </span>
-        </div>
+        <>
+          <div
+            className={`model-select inline-flex min-w-0 max-w-[44vw] items-center text-xs text-foreground sm:max-w-[260px] ${buttonHeight}`}
+            title={selectedModel?.name || lockedConsultingModelId}
+          >
+            <span className="truncate">
+              {copy.modelLabel}: {selectedModel?.name || lockedConsultingModelId}
+            </span>
+          </div>
+          <Select
+            open={reasoningSelectOpen}
+            onOpenChange={setReasoningSelectOpen}
+            value={resolvedReasoningEffort}
+            onValueChange={(nextValue) => {
+              setSelectedReasoningEffort(normalizeReasoningEffort(nextValue, {
+                providerId: selectedModel?.providerId || modelProviderId,
+                modelId: selectedModel?.modelId || selectedModel?.runtimeId || selectedModelId,
+              }))
+              setReasoningSelectOpen(false)
+            }}
+            disabled={isResponseLoading || modelsLoading || reasoningCapabilities.length <= 1}
+          >
+            <SelectTrigger className={`model-select min-w-0 w-[112px] max-w-[36vw] rounded-[8px] px-3 text-xs text-foreground outline-none focus:border-primary sm:w-[150px] sm:max-w-[150px] ${buttonHeight}`}>
+              <span className="model-select-label">{copy.reasoningLabel}</span>
+              <SelectValue placeholder={copy.reasoningAuto} />
+            </SelectTrigger>
+            <SelectContent>{renderReasoningSelectContent()}</SelectContent>
+          </Select>
+        </>
       ) : (
-        <Select
-          open={modelSelectOpen}
-          onOpenChange={setModelSelectOpen}
-          value={selectedModelId ?? undefined}
-          onValueChange={(nextValue) => {
-            setSelectedModelId(nextValue || null)
-            setModelSelectOpen(false)
-          }}
-          disabled={isResponseLoading || modelsLoading || models.length === 0}
-        >
-            <SelectTrigger className={`model-select min-w-0 w-[140px] max-w-[44vw] rounded-[8px] px-3 text-xs text-foreground outline-none focus:border-primary sm:w-[220px] sm:max-w-[220px] ${buttonHeight}`}>
-            <span className="model-select-label">{copy.modelLabel}</span>
-            <SelectValue placeholder={modelsLoading ? copy.modelLoading : copy.modelEmpty} />
-          </SelectTrigger>
-          <SelectContent>{renderModelSelectContent()}</SelectContent>
-        </Select>
+        <>
+          <Select
+            open={modelSelectOpen}
+            onOpenChange={setModelSelectOpen}
+            value={selectedModelId ?? undefined}
+            onValueChange={(nextValue) => {
+              setSelectedModelId(nextValue || null)
+              setModelSelectOpen(false)
+            }}
+            disabled={isResponseLoading || modelsLoading || models.length === 0}
+          >
+              <SelectTrigger className={`model-select min-w-0 w-[140px] max-w-[44vw] rounded-[8px] px-3 text-xs text-foreground outline-none focus:border-primary sm:w-[220px] sm:max-w-[220px] ${buttonHeight}`}>
+              <span className="model-select-label">{copy.modelLabel}</span>
+              <SelectValue placeholder={modelsLoading ? copy.modelLoading : copy.modelEmpty} />
+            </SelectTrigger>
+            <SelectContent>{renderModelSelectContent()}</SelectContent>
+          </Select>
+          <Select
+            open={reasoningSelectOpen}
+            onOpenChange={setReasoningSelectOpen}
+            value={resolvedReasoningEffort}
+            onValueChange={(nextValue) => {
+              setSelectedReasoningEffort(normalizeReasoningEffort(nextValue, {
+                providerId: selectedModel?.providerId || modelProviderId,
+                modelId: selectedModel?.modelId || selectedModel?.runtimeId || selectedModelId,
+              }))
+              setReasoningSelectOpen(false)
+            }}
+            disabled={isResponseLoading || modelsLoading || reasoningCapabilities.length <= 1}
+          >
+            <SelectTrigger className={`model-select min-w-0 w-[112px] max-w-[36vw] rounded-[8px] px-3 text-xs text-foreground outline-none focus:border-primary sm:w-[150px] sm:max-w-[150px] ${buttonHeight}`}>
+              <span className="model-select-label">{copy.reasoningLabel}</span>
+              <SelectValue placeholder={copy.reasoningAuto} />
+            </SelectTrigger>
+            <SelectContent>{renderReasoningSelectContent()}</SelectContent>
+          </Select>
+        </>
       )}
     </div>
   )

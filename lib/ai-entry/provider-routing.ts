@@ -123,6 +123,39 @@ function normalizeText(raw: unknown) {
   return quoted ? quoted[2].trim() : trimmed
 }
 
+function createProviderFetch() {
+  return async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ) => {
+    const headers = new Headers(init?.headers)
+    const requestedReasoning = headers.get("x-ai-entry-reasoning-effort")
+    if (!requestedReasoning) return fetch(input, init)
+
+    headers.delete("x-ai-entry-reasoning-effort")
+    if (typeof init?.body !== "string") {
+      return fetch(input, { ...init, headers })
+    }
+
+    try {
+      const body = JSON.parse(init.body) as Record<string, unknown>
+      const model = typeof body.model === "string" ? body.model.toLowerCase() : ""
+      if (model.includes("deepseek")) {
+        if (requestedReasoning === "none") {
+          body.thinking = { type: "disabled" }
+          delete body.reasoning_effort
+        } else if (requestedReasoning === "max") {
+          body.thinking = { type: "enabled" }
+          body.reasoning_effort = "max"
+        }
+      }
+      return fetch(input, { ...init, headers, body: JSON.stringify(body) })
+    } catch {
+      return fetch(input, { ...init, headers })
+    }
+  }
+}
+
 function canonicalModelFingerprint(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "")
 }
@@ -732,6 +765,7 @@ async function buildProviderRuntimes(
       apiKey: item.apiKey,
       baseURL: item.baseURL,
       headers: item.headers,
+      fetch: createProviderFetch(),
     })
 
     const selectedModel =

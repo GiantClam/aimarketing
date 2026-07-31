@@ -53,7 +53,14 @@ export function buildRuntimeConfig(input: AgentRuntimeInputV2, provider: OpenCod
             baseURL: provider.baseUrl,
             apiKey: `{env:${runtime.envKey}}`,
           },
-          models: { [provider.modelId]: buildOpenCodeModelConfig(provider) },
+          models: {
+            [provider.modelId]: buildOpenCodeModelConfig(
+              provider,
+              input.reasoningEffort === "none" || input.reasoningEffort === "low" || input.reasoningEffort === "high" || input.reasoningEffort === "max"
+                ? input.reasoningEffort
+                : "auto",
+            ),
+          },
         },
       }
     })(),

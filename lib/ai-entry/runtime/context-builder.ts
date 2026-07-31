@@ -105,6 +105,7 @@ export function buildAgentRuntimeInput(input: {
   conversationSummary?: string | null
   projectSnapshot?: RuntimeProjectSnapshot | null
   modelHint?: string | null
+  reasoningEffort?: AgentRuntimeInput["reasoningEffort"]
   allowNetwork?: boolean
   maxContextChars?: number
   recentMessagesLimit?: number
@@ -155,6 +156,7 @@ export function buildAgentRuntimeInput(input: {
       : {}),
     ...(input.sharedSkillSetSelection ? { sharedSkillSetSelection: input.sharedSkillSetSelection } : {}),
     modelHint: text(input.modelHint) || null,
+    ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
     ...(input.projectSnapshot ? { projectSnapshot: input.projectSnapshot } : {}),
     systemPrompt: normalizedSystemPrompt,
     messages: [currentUserMessage],

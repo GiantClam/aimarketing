@@ -92,7 +92,9 @@ export async function* runOpenCode(
     ...command.args,
     ...(execution.sessionId ? ["--session", execution.sessionId] : []),
     ...(execution.continueSession ? ["--continue"] : []),
-    ...(isDeepSeekV4Flash(provider) ? ["--variant", DEEPSEEK_V4_FLASH_MAX_VARIANT] : []),
+    ...(isDeepSeekV4Flash(provider)
+      ? ["--variant", input.reasoningEffort === "none" ? "none" : input.reasoningEffort === "low" || input.reasoningEffort === "high" || input.reasoningEffort === "max" ? input.reasoningEffort : DEEPSEEK_V4_FLASH_MAX_VARIANT]
+      : []),
     "--dir",
     workingDir,
     ...(execution.agent ? ["--agent", execution.agent] : []),

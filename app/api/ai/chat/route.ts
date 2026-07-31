@@ -110,6 +110,7 @@ import { runOpenCodeAgent } from "@/lib/ai-entry/runtime/opencode-adapter"
 import { createBackgroundOpenCodeRun } from "@/lib/ai-entry/runtime/background-run-service"
 import { publishRuntimeArtifact, publishRuntimeArtifactReference } from "@/lib/ai-entry/runtime/artifact-publisher"
 import { resolveOpenCodeModelHint } from "@/lib/ai-runtime/opencode-model"
+import { normalizeReasoningEffort } from "@/lib/ai-entry/reasoning"
 import { buildAgentRuntimeSessionKey } from "@/lib/ai-runtime/session-key"
 import type { OpenCodeProviderConfig, RuntimeProjectSnapshot } from "@/lib/ai-runtime/contracts"
 
@@ -135,6 +136,7 @@ type ChatRequestBody = {
   modelConfig?: {
     providerId?: string
     modelId?: string
+    reasoningEffort?: string
   }
   agentConfig?: {
     agentId?: string
@@ -491,6 +493,7 @@ function parseModelConfig(input: ChatRequestBody["modelConfig"]) {
   return {
     providerId,
     modelId,
+    reasoningEffort: typeof input?.reasoningEffort === "string" ? input.reasoningEffort.trim().toLowerCase() : "auto",
   }
 }
 
@@ -904,6 +907,13 @@ export async function POST(request: NextRequest) {
       consultingModelMode: agentConfig.consultingModelMode,
       allowUnavailableRequestedModelFallback: body.executionContext === "workflow",
     })
+    const resolvedReasoningEffort = normalizeReasoningEffort(
+      requestedModelConfig?.reasoningEffort,
+      {
+        providerId: modelConfig?.providerId || requestedModelConfig?.providerId,
+        modelId: modelConfig?.providerModelId || modelConfig?.modelId || requestedModelConfig?.modelId,
+      },
+    )
     if (attachments.some((attachment) => attachment.mediaType.startsWith("image/"))) {
       const resolvedModelId = modelConfig?.providerModelId || modelConfig?.modelId || null
       if (!modelSupportsImageInput(resolvedModelId)) {
@@ -1328,6 +1338,7 @@ export async function POST(request: NextRequest) {
     const providerOptions: ProviderOptions = {
       preferredProviderId: selectedProviderId,
       preferredModel: preferredExecutionModel || undefined,
+      reasoningEffort: resolvedReasoningEffort,
       disableProviderFailover: true,
       disableSameProviderModelFallback: true,
       directProviderFailoverOnError: false,
@@ -1502,6 +1513,7 @@ export async function POST(request: NextRequest) {
               providerId: modelConfig?.providerId,
               modelId: modelConfig?.providerModelId,
             }),
+      reasoningEffort: resolvedReasoningEffort,
       allowNetwork: true,
       profileLimits: {
         maxArtifacts: runtimeProfile.maxArtifacts,

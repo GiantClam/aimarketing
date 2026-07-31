@@ -21,6 +21,7 @@ export type ProviderOptions = {
   forceModelAcrossProviders?: boolean
   disableSameProviderModelFallback?: boolean
   directProviderFailoverOnError?: boolean
+  reasoningEffort?: "auto" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
   providerConfigs?: AiEntryProviderConfig[]
 }
 
@@ -81,6 +82,21 @@ function toAiEntryExecutionError(error: unknown, retryable: boolean) {
 
 function isAiEntryEmptyResponseError(error: unknown) {
   return extractErrorMessage(error) === AI_ENTRY_EMPTY_RESPONSE_ERROR
+}
+
+function buildReasoningProviderOptions(reasoningEffort: ProviderOptions["reasoningEffort"]) {
+  if (!reasoningEffort || reasoningEffort === "auto" || reasoningEffort === "none") return undefined
+  // @ai-sdk/openai currently validates the OpenAI effort union and does not
+  // include DeepSeek's vendor-specific `max` value. Keep the UI/API contract
+  // model-aware while using the closest supported SDK value for native calls.
+  const sdkEffort = reasoningEffort === "max" ? "high" : reasoningEffort
+  return { openai: { reasoningEffort: sdkEffort } } as any
+}
+
+function buildReasoningHeaders(reasoningEffort: ProviderOptions["reasoningEffort"]) {
+  return reasoningEffort === "max" || reasoningEffort === "none"
+    ? { "x-ai-entry-reasoning-effort": reasoningEffort }
+    : undefined
 }
 
 export function getAiEntryTextDeltaFromStreamPart(part: FullStreamPart) {
@@ -206,6 +222,12 @@ export async function runAiEntryConsultingBlocking(params: {
             tools: params.selectedTools,
             ...(params.toolChoice ? { toolChoice: params.toolChoice } : {}),
             stopWhen: params.stopWhen as any,
+            ...(buildReasoningHeaders(params.providerOptions?.reasoningEffort)
+              ? { headers: buildReasoningHeaders(params.providerOptions?.reasoningEffort) }
+              : {}),
+            ...(buildReasoningProviderOptions(params.providerOptions?.reasoningEffort)
+              ? { providerOptions: buildReasoningProviderOptions(params.providerOptions?.reasoningEffort) }
+              : {}),
           })
           const resolvedText = (result.text || "").trim()
           if (!resolvedText) {
@@ -278,6 +300,12 @@ export async function runAiEntryConsultingStreaming(params: {
             tools: params.selectedTools,
             ...(params.toolChoice ? { toolChoice: params.toolChoice } : {}),
             stopWhen: params.stopWhen as any,
+            ...(buildReasoningHeaders(params.providerOptions?.reasoningEffort)
+              ? { headers: buildReasoningHeaders(params.providerOptions?.reasoningEffort) }
+              : {}),
+            ...(buildReasoningProviderOptions(params.providerOptions?.reasoningEffort)
+              ? { providerOptions: buildReasoningProviderOptions(params.providerOptions?.reasoningEffort) }
+              : {}),
           })
 
           let accumulated = ""

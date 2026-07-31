@@ -1,6 +1,7 @@
 import type { OpenCodeProviderConfig } from "../../../../lib/ai-runtime/contracts"
 
 export const DEEPSEEK_V4_FLASH_MAX_VARIANT = "max"
+export type DeepSeekReasoningEffort = "auto" | "none" | "low" | "high" | "max"
 
 export function isDeepSeekV4Flash(provider: OpenCodeProviderConfig) {
   // The platform also exposes this model through the enterprise
@@ -14,15 +15,20 @@ export function isDeepSeekV4Flash(provider: OpenCodeProviderConfig) {
  * The body override keeps thinking mode explicit for the OpenAI-compatible
  * provider instead of relying on its default.
  */
-export function buildOpenCodeModelConfig(provider: OpenCodeProviderConfig) {
+export function buildOpenCodeModelConfig(
+  provider: OpenCodeProviderConfig,
+  reasoningEffort: DeepSeekReasoningEffort = "auto",
+) {
+  const variant = reasoningEffort === "auto" ? DEEPSEEK_V4_FLASH_MAX_VARIANT : reasoningEffort
+  const thinking = reasoningEffort === "none" ? "disabled" : "enabled"
   return {
     name: provider.modelId,
     ...(isDeepSeekV4Flash(provider)
       ? {
           variants: {
-            [DEEPSEEK_V4_FLASH_MAX_VARIANT]: {
-              reasoningEffort: "max",
-              body: { thinking: { type: "enabled" } },
+            [variant]: {
+              ...(variant !== "none" ? { reasoningEffort: variant } : {}),
+              body: { thinking: { type: thinking } },
             },
           },
         }

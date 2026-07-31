@@ -96,6 +96,7 @@ export type AgentRuntimeInput = {
     textSummary: string
   }>
   modelHint?: string | null
+  reasoningEffort?: "auto" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | null
   projectSnapshot?: RuntimeProjectSnapshot | null
   artifactContext: Array<{
     artifactId: number
