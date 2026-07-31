@@ -133,7 +133,7 @@ export function ArtifactPartView({
             </a>
           ) : null}
           {part.downloadUrl ? (
-            <a className="artifact-action" href={part.downloadUrl} target="_blank" rel="noreferrer">
+            <a className="artifact-action" href={part.downloadUrl} download={part.fileName || undefined}>
               <Download className="h-3.5 w-3.5" />
               {isZh ? "下载" : "Download"}
             </a>

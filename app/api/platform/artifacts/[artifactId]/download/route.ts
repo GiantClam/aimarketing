@@ -8,7 +8,7 @@ import {
 } from "@/lib/platform/artifact-actions"
 import { buildAttachmentContentDisposition, buildInlineContentDisposition } from "@/lib/platform/minimax-audio"
 import { getPlatformArtifact } from "@/lib/platform/task-run-store"
-import { getR2BucketName, getR2Object, getR2SignedUrl, headR2Object } from "@/lib/r2"
+import { getR2BucketName, getR2Object, headR2Object } from "@/lib/r2"
 import { toUint8Array } from "@/lib/utils/binary"
 
 export const runtime = "nodejs"
@@ -113,6 +113,8 @@ export async function GET(
           "Content-Type",
           normalizePlatformArtifactContentType(artifact.mimeType || response.headers.get("content-type") || "application/octet-stream"),
         )
+        const contentLength = response.headers.get("content-length")
+        if (contentLength) headers.set("Content-Length", contentLength)
 
         return new NextResponse(response.body, {
           status: response.status,
@@ -133,37 +135,15 @@ export async function GET(
           const object = await headR2Object(artifact.storageKey, { bucketName: artifactBucket })
           if (!object) continue
 
-          const signedUrl = await getR2SignedUrl(artifact.storageKey, {
-            bucketName: artifactBucket,
-            contentDisposition: headers.get("Content-Disposition") || undefined,
-            contentType: normalizePlatformArtifactContentType(artifact.mimeType || object.contentType || "application/octet-stream"),
-          })
-          if (signedUrl) {
-            return NextResponse.redirect(signedUrl, {
-              status: 307,
-              headers: { "Cache-Control": "private, no-store" },
-            })
-          }
-        } catch (error) {
-          console.warn("platform_artifact_r2_read_failed", {
-            artifactId: numericArtifactId,
-            storageKey: artifact.storageKey,
-            bucket: artifactBucket,
-            message: error instanceof Error ? error.message : String(error),
-          })
-        }
-      }
-
-      for (const artifactBucket of getArtifactR2BucketCandidates()) {
-        try {
-          const object = await getR2Object(artifact.storageKey, { bucketName: artifactBucket })
-          if (!object) continue
+          const storedObject = await getR2Object(artifact.storageKey, { bucketName: artifactBucket })
+          if (!storedObject) continue
 
           headers.set(
             "Content-Type",
-            normalizePlatformArtifactContentType(artifact.mimeType || object.contentType || "application/octet-stream"),
+            normalizePlatformArtifactContentType(artifact.mimeType || storedObject.contentType || object.contentType || "application/octet-stream"),
           )
-          return new NextResponse(Buffer.from(object.bytes), {
+          headers.set("Content-Length", String(storedObject.bytes.byteLength))
+          return new NextResponse(Buffer.from(storedObject.bytes), {
             status: 200,
             headers,
           })

@@ -442,7 +442,7 @@ function ArtifactResultBlock({ artifact }: { artifact: ParsedArtifactResult }) {
             </a>
           ) : null}
           {artifact.downloadHref ? (
-            <a className="artifact-action" href={artifact.downloadHref} target="_blank" rel="noreferrer">
+            <a className="artifact-action" href={artifact.downloadHref} download>
               <Download className="h-3.5 w-3.5" />
               Download
             </a>
@@ -4241,7 +4241,7 @@ export function AiEntryWorkspace({
                                   </a>
                                 ) : null}
                                 {downloadHref ? (
-                                  <a className="message-feedback-btn" href={downloadHref} target="_blank" rel="noreferrer" aria-label={isZh ? "导出" : "Export"}>
+                                  <a className="message-feedback-btn" href={downloadHref} download aria-label={isZh ? "导出" : "Export"}>
                                     <Download className="h-4 w-4" />
                                   </a>
                                 ) : null}

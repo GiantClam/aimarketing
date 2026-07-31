@@ -15,9 +15,7 @@ const originalPlatformArtifactBucket = process.env.PLATFORM_ARTIFACT_R2_BUCKET
 let r2BucketName = "saleagent"
 let r2HeadByBucket: Record<string, { contentType?: string | null } | null> = {}
 let r2ObjectByBucket: Record<string, { bytes: Uint8Array; contentType?: string | null } | null> = {}
-let r2SignedUrl: string | null = null
 let r2HeadCalls: string[] = []
-let r2SignedUrlCalls: string[] = []
 let r2ObjectCalls: string[] = []
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
@@ -109,10 +107,6 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/r2") {
     return {
       getR2BucketName: () => r2BucketName,
-      getR2SignedUrl: async (_storageKey: string, options?: { bucketName?: string }) => {
-        r2SignedUrlCalls.push(options?.bucketName || "")
-        return r2SignedUrl
-      },
       headR2Object: async (_storageKey: string, options?: { bucketName?: string }) => {
         const bucket = options?.bucketName || ""
         r2HeadCalls.push(bucket)
@@ -143,9 +137,7 @@ test.beforeEach(() => {
   r2BucketName = "saleagent"
   r2HeadByBucket = {}
   r2ObjectByBucket = {}
-  r2SignedUrl = null
   r2HeadCalls = []
-  r2SignedUrlCalls = []
   r2ObjectCalls = []
   globalThis.fetch = originalFetch
   artifact = {
@@ -281,7 +273,7 @@ test("artifact download uses the payload file name when the display title has no
   )
 })
 
-test("artifact download falls back from the runtime bucket to the upload bucket", async () => {
+test("artifact download falls back from the runtime bucket to the upload bucket without redirecting", async () => {
   process.env.PLATFORM_ARTIFACT_R2_BUCKET = "aimarketing-opencode-runtime"
   artifact = {
     ...artifact,
@@ -292,17 +284,20 @@ test("artifact download falls back from the runtime bucket to the upload bucket"
     payload: { source: "opencode" },
   }
   r2HeadByBucket.saleagent = { contentType: artifact.mimeType }
-  r2SignedUrl = "https://signed.example/final-deck.pptx"
+  r2ObjectByBucket.saleagent = { bytes: new TextEncoder().encode("pptx-bytes"), contentType: artifact.mimeType }
 
   const response = await GET(
     new Request("http://localhost:3000/api/platform/artifacts/145/download?download=1") as any,
     { params: Promise.resolve({ artifactId: "145" }) },
   )
 
-  assert.equal((response as any).status, 307)
-  assert.equal((response as any).headers.get("location"), r2SignedUrl)
+  assert.equal((response as any).status, 200)
+  assert.equal((response as any).headers.get("location"), null)
+  assert.equal((response as any).headers.get("content-disposition"), 'attachment; filename="final-deck.pptx"')
+  assert.equal((response as any).headers.get("content-length"), "10")
   assert.deepEqual(r2HeadCalls, ["aimarketing-opencode-runtime", "saleagent"])
-  assert.deepEqual(r2SignedUrlCalls, ["saleagent"])
+  assert.deepEqual(r2ObjectCalls, ["saleagent"])
+  assert.equal(Buffer.from((response as any).body as Uint8Array).toString("utf8"), "pptx-bytes")
 })
 
 test("artifact download still reports unavailable when no source or inline content exists", async () => {
