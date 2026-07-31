@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
           preferredModel:
             process.env.AI_ENTRY_DEEPSEEK_MODEL?.trim() ||
             process.env.DEEPSEEK_MODEL?.trim() ||
-            "deepseek-v4-pro",
+            "deepseek-v4-flash",
           forcePreferredProvider: true,
           disableProviderFailover: true,
           disableSameProviderModelFallback: true,

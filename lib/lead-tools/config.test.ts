@@ -79,7 +79,7 @@ test("ai-ppt-preview defaults to deepseek v4 pro for planning", () => {
   }
 })
 
-test("anonymous SEO title generation defaults to deepseek v4 pro", () => {
+test("anonymous SEO title generation defaults to deepseek v4 flash", () => {
   const previousTitleModel = process.env.LEAD_TOOLS_SEO_TITLE_PREVIEW_MODEL
   const previousSeoModel = process.env.LEAD_TOOLS_SEO_PREVIEW_MODEL
   const previousGlobalModel = process.env.LEAD_TOOLS_PREVIEW_MODEL
@@ -89,7 +89,7 @@ test("anonymous SEO title generation defaults to deepseek v4 pro", () => {
     delete process.env.LEAD_TOOLS_SEO_PREVIEW_MODEL
     delete process.env.LEAD_TOOLS_PREVIEW_MODEL
 
-    assert.equal(getLeadToolPreviewModel("seo-title-generator"), "deepseek-v4-pro")
+    assert.equal(getLeadToolPreviewModel("seo-title-generator"), "deepseek-v4-flash")
   } finally {
     if (previousTitleModel === undefined) delete process.env.LEAD_TOOLS_SEO_TITLE_PREVIEW_MODEL
     else process.env.LEAD_TOOLS_SEO_TITLE_PREVIEW_MODEL = previousTitleModel
