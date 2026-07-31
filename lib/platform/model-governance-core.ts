@@ -1,4 +1,4 @@
-import type { AiEntryModelCatalog, AiEntryModelGroup, AiEntryModelOption } from "@/lib/ai-entry/model-catalog"
+import type { AiEntryModelCatalog, AiEntryModelOption } from "@/lib/ai-entry/model-catalog"
 import { serializeAiEntryModelSelection } from "@/lib/ai-entry/model-selection"
 import { getConfiguredAiEntryProviderForModel, type AiEntryProviderId } from "@/lib/ai-entry/provider-routing"
 import type { EnterpriseModelRouteAssignment } from "@/lib/platform/model-config"
@@ -148,12 +148,29 @@ function buildCatalogModel(provider: GovernedTextProviderOption): AiEntryModelOp
   }
 }
 
-function buildCatalogGroup(provider: GovernedTextProviderOption): AiEntryModelGroup {
-  return {
-    family: provider.providerId,
-    label: provider.label,
-    models: [buildCatalogModel(provider)],
+function buildCatalogGroups(providers: GovernedTextProviderOption[]) {
+  const grouped = new Map<string, GovernedTextProviderOption[]>()
+  for (const provider of providers) {
+    const family = grouped.get(provider.providerId) || []
+    family.push(provider)
+    grouped.set(provider.providerId, family)
   }
+
+  return [...grouped.values()].map((family) => ({
+    family: family[0]!.providerId,
+    label: family[0]!.label,
+    models: family.map(buildCatalogModel),
+  }))
+}
+
+function buildDeepseekModelCandidates(provider: GovernedTextProviderOption) {
+  if (provider.providerId !== "deepseek") return [provider]
+
+  const candidates = [provider]
+  if (provider.modelId !== "deepseek-v4-flash") {
+    candidates.push({ ...provider, modelId: "deepseek-v4-flash" })
+  }
+  return candidates
 }
 
 export function buildGovernedAiEntryModelCatalog(params: {
@@ -225,7 +242,7 @@ export function buildGovernedAiEntryModelCatalog(params: {
     accessibleProviders.find((provider) => provider.active) ||
     accessibleProviders[0] ||
     null
-  const modelGroups = accessibleProviders.map(buildCatalogGroup)
+  const modelGroups = buildCatalogGroups(accessibleProviders.flatMap(buildDeepseekModelCandidates))
   const models = modelGroups.flatMap((group) => group.models)
 
   return {
@@ -245,10 +262,17 @@ export function buildGovernedAiEntryModelCatalog(params: {
     fetchedAt: Date.now(),
     recentDays: null,
     recentStrict: false,
-    providers: accessibleProviders.map((provider) => ({
-      id: provider.providerId,
-      label: provider.label,
-    })),
+    providers: [
+      ...new Map(
+        accessibleProviders.map((provider) => [
+          provider.providerId,
+          {
+            id: provider.providerId,
+            label: provider.label,
+          },
+        ]),
+      ).values(),
+    ],
   } satisfies AiEntryModelCatalog & {
     providers: Array<{ id: AiEntryProviderId; label: string }>
   }

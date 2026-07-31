@@ -40,6 +40,7 @@ const ALLOWED_DISPLAY_MODEL_IDS = [
   "gpt-5.4",
   "gpt-5.4-mini",
   "deepseek-v4-pro",
+  "deepseek-v4-flash",
   "grok-4.5",
   "gemini-3.1-pro-preview",
   "gemini-3-flash-preview",

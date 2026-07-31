@@ -630,6 +630,12 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
             providerId: "deepseek",
           },
           {
+            id: "deepseek::deepseek-v4-flash",
+            modelId: "deepseek-v4-flash",
+            runtimeId: "deepseek-v4-flash",
+            providerId: "deepseek",
+          },
+          {
             id: "pptoken::gpt-5.4",
             modelId: "gpt-5.4",
             runtimeId: "gpt-5.4",
@@ -770,19 +776,19 @@ test("ordinary AI Chat preserves the explicitly selected provider on the native 
   }
 })
 
-test("ai chat route preserves an explicitly selected DeepSeek provider", async () => {
+test("ai chat route preserves an explicitly selected DeepSeek flash model", async () => {
   const response = await POST({
     json: async () => ({
       messages: [{ role: "user", content: "请直接总结这段内容。" }],
       stream: true,
-      modelConfig: { providerId: "deepseek", modelId: "deepseek-v4-pro" },
+      modelConfig: { providerId: "deepseek", modelId: "deepseek-v4-flash" },
     }),
     nextUrl: { origin: "https://example.com" },
   })
   await response.text()
 
   assert.equal(lastNativeProviderOptions?.preferredProviderId, "deepseek")
-  assert.equal(lastNativeProviderOptions?.preferredModel, "deepseek-v4-pro")
+  assert.equal(lastNativeProviderOptions?.preferredModel, "deepseek-v4-flash")
 })
 
 test("workflow chat falls back to the current provider model when a saved model is stale", async () => {

@@ -70,9 +70,24 @@ test("buildGovernedAiEntryModelCatalog keeps only account-visible runtime models
   assert.deepEqual(catalog.providers.map((item) => item.id), ["deepseek", "pptoken", "aiberm"])
   assert.deepEqual(catalog.models.map((item) => item.id), [
     "deepseek::deepseek-v4-pro",
+    "deepseek::deepseek-v4-flash",
     "pptoken::gpt-5.4-mini",
     "aiberm::gpt-5.4",
   ])
+})
+
+test("buildGovernedAiEntryModelCatalog exposes both selectable DeepSeek text models", () => {
+  const catalog = buildGovernedAiEntryModelCatalog({
+    user: null,
+    runtimeProviders: [runtimeProviders[0]!],
+  })
+
+  assert.deepEqual(catalog.modelGroups.map((group) => group.label), ["DeepSeek"])
+  assert.deepEqual(catalog.modelGroups[0]?.models.map((item) => item.id), [
+    "deepseek::deepseek-v4-pro",
+    "deepseek::deepseek-v4-flash",
+  ])
+  assert.equal(catalog.models.find((item) => item.modelId === "deepseek-v4-flash")?.providerId, "deepseek")
 })
 
 test("buildGovernedAiEntryModelCatalog exposes PPToken Grok when its dedicated account is configured", () => {
@@ -188,6 +203,7 @@ test("buildGovernedAiEntryModelCatalog keeps platform models visible when enterp
   assert.deepEqual(catalog.models.map((item) => item.id), [
     "enterprise-openai-compatible::deepseek-v4-pro",
     "deepseek::deepseek-v4-pro",
+    "deepseek::deepseek-v4-flash",
     "pptoken::gpt-5.4-mini",
     "openrouter::claude-sonnet-4.6",
     "aiberm::gpt-5.4",
