@@ -3,7 +3,10 @@ import type { OpenCodeProviderConfig } from "../../../../lib/ai-runtime/contract
 export const DEEPSEEK_V4_FLASH_MAX_VARIANT = "max"
 
 export function isDeepSeekV4Flash(provider: OpenCodeProviderConfig) {
-  return provider.providerId === "deepseek" && provider.modelId === "deepseek-v4-flash"
+  // The platform also exposes this model through the enterprise
+  // OpenAI-compatible route. The model ID, not the provider label, is the
+  // stable signal that DeepSeek's reasoning_effort contract applies.
+  return provider.modelId === "deepseek-v4-flash"
 }
 
 /**

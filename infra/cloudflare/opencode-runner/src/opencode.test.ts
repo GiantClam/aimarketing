@@ -67,7 +67,7 @@ test("shared Agent runtime grants only governed read and Skill capabilities", ()
     policy: { allowPlatformTools: false as const, allowTools: false as const, allowMcp: false as const, allowSkillInstall: false as const, allowNetwork: false },
   }
   const config = buildRuntimeConfig(input, {
-    providerId: "deepseek",
+    providerId: "enterprise-openai-compatible",
     modelId: "deepseek-v4-pro",
     baseUrl: "https://api.example.com/v1",
     apiKey: "test-deepseek-key",
@@ -148,13 +148,13 @@ test("configures DeepSeek V4 Flash with the max reasoning variant", async () => 
     policy: { allowPlatformTools: false as const, allowTools: false as const, allowMcp: false as const, allowSkillInstall: false as const, allowNetwork: true },
   }
   const provider = {
-    providerId: "deepseek",
+    providerId: "enterprise-openai-compatible",
     modelId: "deepseek-v4-flash",
     baseUrl: "https://api.deepseek.example/v1",
     apiKey: "deepseek-test-key",
   }
-  const config = buildRuntimeConfig(input as never, provider) as { provider: { deepseek: { models: Record<string, { variants?: Record<string, Record<string, unknown>> }> } } }
-  assert.deepEqual(config.provider.deepseek.models["deepseek-v4-flash"].variants?.max, {
+  const config = buildRuntimeConfig(input as never, provider) as { provider: { enterprise_openai_compatible: { models: Record<string, { variants?: Record<string, Record<string, unknown>> }> } } }
+  assert.deepEqual(config.provider.enterprise_openai_compatible.models["deepseek-v4-flash"].variants?.max, {
     reasoningEffort: "max",
     body: { thinking: { type: "enabled" } },
   })
