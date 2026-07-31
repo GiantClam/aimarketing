@@ -3,6 +3,9 @@ import test from "node:test"
 
 import { getAiEntryModelCatalog } from "./model-catalog"
 
+const serialTest = (name: string, run: () => Promise<void>) =>
+  test(name, { concurrency: false }, run)
+
 const PROVIDER_ENV_KEYS = [
   "AI_ENTRY_DEEPSEEK_API_KEY",
   "AI_ENTRY_DEEPSEEK_BASE_URL",
@@ -44,7 +47,9 @@ const PROVIDER_ENV_KEYS = [
   "CRAZYROUTER_BASE_URL",
 ] as const
 
-test("model catalog keeps deepseek-v4-pro visible for the deepseek provider", async () => {
+let providerEnvLock = Promise.resolve()
+
+serialTest("model catalog keeps deepseek-v4-pro visible for the deepseek provider", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_DEEPSEEK_API_KEY: "deepseek-key",
@@ -81,7 +86,7 @@ test("model catalog keeps deepseek-v4-pro visible for the deepseek provider", as
   )
 })
 
-test("model catalog only advertises PPToken Grok when the Grok account is configured", async () => {
+serialTest("model catalog only advertises PPToken Grok when the Grok account is configured", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_PPTOKEN_API_KEY: "gpt-account-key",
@@ -145,6 +150,13 @@ async function withProviderEnv<T>(
   overrides: Partial<Record<(typeof PROVIDER_ENV_KEYS)[number], string>>,
   run: () => Promise<T>,
 ) {
+  const previousLock = providerEnvLock
+  let releaseLock: (() => void) | undefined
+  providerEnvLock = new Promise<void>((resolve) => {
+    releaseLock = resolve
+  })
+  await previousLock
+
   const previous = new Map<string, string | undefined>()
   for (const key of PROVIDER_ENV_KEYS) {
     previous.set(key, process.env[key])
@@ -168,10 +180,11 @@ async function withProviderEnv<T>(
       }
     }
     resetCatalogState()
+    releaseLock?.()
   }
 }
 
-test("model catalog selects configured default model when /models omits it", async () => {
+serialTest("model catalog selects configured default model when /models omits it", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key",
@@ -204,7 +217,7 @@ test("model catalog selects configured default model when /models omits it", asy
   )
 })
 
-test("model catalog does not duplicate configured default model when already present", async () => {
+serialTest("model catalog does not duplicate configured default model when already present", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key",
@@ -238,7 +251,7 @@ test("model catalog does not duplicate configured default model when already pre
   )
 })
 
-test("model catalog selects fast sonnet as normal chat default when no configured model is present", async () => {
+serialTest("model catalog selects fast sonnet as normal chat default when no configured model is present", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key",
@@ -269,7 +282,7 @@ test("model catalog selects fast sonnet as normal chat default when no configure
   )
 })
 
-test("model catalog product policy overrides stale provider haiku default", async () => {
+serialTest("model catalog product policy overrides stale provider haiku default", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key",
@@ -303,7 +316,7 @@ test("model catalog product policy overrides stale provider haiku default", asyn
   )
 })
 
-test("model catalog keeps high-tier model families and prioritized order", async () => {
+serialTest("model catalog keeps high-tier model families and prioritized order", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key",
@@ -348,7 +361,7 @@ test("model catalog keeps high-tier model families and prioritized order", async
   )
 })
 
-test("model catalog recent-year filter excludes old models when created is present", async () => {
+serialTest("model catalog recent-year filter excludes old models when created is present", async () => {
   const nowSeconds = Math.floor(Date.now() / 1000)
   const oldSeconds = nowSeconds - 800 * 24 * 60 * 60
 
@@ -387,7 +400,7 @@ test("model catalog recent-year filter excludes old models when created is prese
   )
 })
 
-test("model catalog strict recent filter excludes models without created timestamp", async () => {
+serialTest("model catalog strict recent filter excludes models without created timestamp", async () => {
   const nowSeconds = Math.floor(Date.now() / 1000)
 
   await withProviderEnv(
@@ -421,7 +434,7 @@ test("model catalog strict recent filter excludes models without created timesta
   )
 })
 
-test("model catalog falls back to unfiltered high-tier chat models when recent filter is empty in non-strict mode", async () => {
+serialTest("model catalog falls back to unfiltered high-tier chat models when recent filter is empty in non-strict mode", async () => {
   const oldSeconds = Math.floor(Date.now() / 1000) - 800 * 24 * 60 * 60
 
   await withProviderEnv(
@@ -457,7 +470,7 @@ test("model catalog falls back to unfiltered high-tier chat models when recent f
   )
 })
 
-test("model catalog filters out non-target provider families under high-tier policy", async () => {
+serialTest("model catalog filters out non-target provider families under high-tier policy", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key",
@@ -496,7 +509,7 @@ test("model catalog filters out non-target provider families under high-tier pol
   )
 })
 
-test("model catalog infers target families from bare ids and keeps only high-tier versions", async () => {
+serialTest("model catalog infers target families from bare ids and keeps only high-tier versions", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key",
@@ -539,7 +552,7 @@ test("model catalog infers target families from bare ids and keeps only high-tie
   )
 })
 
-test("model catalog keeps verified whitelist models for a configured provider", async () => {
+serialTest("model catalog keeps verified whitelist models for a configured provider", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key",
@@ -581,7 +594,7 @@ test("model catalog keeps verified whitelist models for a configured provider", 
   )
 })
 
-test("model catalog can load crazyroute and inject verified whitelist models", async () => {
+serialTest("model catalog can load crazyroute and inject verified whitelist models", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key-a",
@@ -637,7 +650,7 @@ test("model catalog can load crazyroute and inject verified whitelist models", a
   )
 })
 
-test("model catalog can be aggregated across configured providers", async () => {
+serialTest("model catalog can be aggregated across configured providers", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_PPTOKEN_API_KEY: "pptoken-key",
@@ -747,7 +760,7 @@ test("model catalog can be aggregated across configured providers", async () => 
   )
 })
 
-test("model catalog keeps canonical bare id when provider and separator variants coexist", async () => {
+serialTest("model catalog keeps canonical bare id when provider and separator variants coexist", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key",
@@ -795,7 +808,7 @@ test("model catalog keeps canonical bare id when provider and separator variants
   )
 })
 
-test("model catalog filters out unsupported codex and thinking variants", async () => {
+serialTest("model catalog filters out unsupported codex and thinking variants", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key",
@@ -837,7 +850,7 @@ test("model catalog filters out unsupported codex and thinking variants", async 
   )
 })
 
-test("model catalog keeps only the approved claude whitelist entries", async () => {
+serialTest("model catalog keeps only the approved claude whitelist entries", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key",
@@ -878,7 +891,7 @@ test("model catalog keeps only the approved claude whitelist entries", async () 
   )
 })
 
-test("model catalog dedupes provider and separator variants across the approved families", async () => {
+serialTest("model catalog dedupes provider and separator variants across the approved families", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key",
@@ -926,7 +939,7 @@ test("model catalog dedupes provider and separator variants across the approved 
   )
 })
 
-test("model catalog falls back to crazyroute when aiberm is unavailable", async () => {
+serialTest("model catalog falls back to crazyroute when aiberm is unavailable", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "aiberm-key",
@@ -986,7 +999,7 @@ test("model catalog falls back to crazyroute when aiberm is unavailable", async 
   )
 })
 
-test("model catalog falls back to configured default when aiberm and crazyroute are unavailable", async () => {
+serialTest("model catalog falls back to configured default when aiberm and crazyroute are unavailable", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "aiberm-key",

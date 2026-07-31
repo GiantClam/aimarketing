@@ -541,6 +541,7 @@ function addVerifiedProviderModels(
   provider: AiEntryProviderConfig,
   models: ParsedModel[],
 ) {
+  if (provider.id === "openrouter") return models
   const verifiedIds = VERIFIED_PROVIDER_MODEL_IDS[provider.id] || []
   if (verifiedIds.length === 0) return models
 
@@ -563,13 +564,39 @@ function addVerifiedProviderModels(
   return additions.length > 0 ? [...models, ...additions] : models
 }
 
-function restrictProviderModels(provider: AiEntryProviderConfig, models: ParsedModel[]) {
+function restrictProviderModels(
+  provider: AiEntryProviderConfig,
+  models: ParsedModel[],
+  configuredDefaultModel = "",
+) {
   if (provider.id !== "pptoken") return models
 
   const supported = new Set(
     (VERIFIED_PROVIDER_MODEL_IDS.pptoken || []).map((modelId) => equivalentModelFingerprint(modelId)),
   )
-  return models.filter((model) => supported.has(equivalentModelFingerprint(model.id)))
+  const configuredDefaultFingerprint = equivalentModelFingerprint(configuredDefaultModel)
+  return models.filter(
+    (model) =>
+      supported.has(equivalentModelFingerprint(model.id)) ||
+      (configuredDefaultFingerprint.length > 0 &&
+        equivalentModelFingerprint(model.id) === configuredDefaultFingerprint),
+  )
+}
+
+function hasExplicitProviderModel(providerId: AiEntryProviderConfig["id"]) {
+  const keysByProvider: Partial<Record<AiEntryProviderConfig["id"], string[]>> = {
+    deepseek: ["AI_ENTRY_DEEPSEEK_MODEL", "DEEPSEEK_MODEL"],
+    pptoken: ["AI_ENTRY_PPTOKEN_MODEL", "PPTOKEN_MODEL"],
+    openrouter: ["AI_ENTRY_OPENROUTER_MODEL", "OPENROUTER_TEXT_MODEL"],
+    aiberm: ["AI_ENTRY_AIBERM_MODEL", "AIBERM_MODEL", "WRITER_AIBERM_MODEL"],
+    crazyroute: [
+      "AI_ENTRY_CRAZYROUTE_MODEL",
+      "AI_ENTRY_CRAZYROUTER_MODEL",
+      "CRAZYROUTE_MODEL",
+      "CRAZYROUTER_MODEL",
+    ],
+  }
+  return (keysByProvider[providerId] || []).some((key) => Boolean(normalizeText(process.env[key])))
 }
 
 function applyRecentFilter(
@@ -706,12 +733,16 @@ function filterHighTierDisplayModels(models: ParsedModel[]) {
   )
 }
 
-function pickPreferredNormalChatModelId(models: AiEntryModelOption[]) {
+function pickPreferredNormalChatModelId(
+  models: AiEntryModelOption[],
+  configuredDefaultModel = "",
+) {
   const explicitDefault = normalizeText(process.env.AI_ENTRY_NORMAL_DEFAULT_MODEL)
   const preferenceHints = [
     explicitDefault,
     normalizeText(process.env.AI_ENTRY_NORMAL_FAST_MODEL),
     AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT,
+    "claude-sonnet-4.6",
   ].filter(Boolean)
 
   const scoreModel = (model: AiEntryModelOption, hint: string) => {
@@ -723,7 +754,7 @@ function pickPreferredNormalChatModelId(models: AiEntryModelOption[]) {
         model.canonicalId,
         ...(Array.isArray(model.aliases) ? model.aliases : []),
       ]
-        .filter(Boolean)
+        .filter((value): value is string => Boolean(value))
         .join(" "),
     )
     const hintFingerprint = normalizeModelFingerprint(hint)
@@ -735,6 +766,24 @@ function pickPreferredNormalChatModelId(models: AiEntryModelOption[]) {
     if (!model.id.includes(".")) score += 5
     score -= model.id.length / 100
     return score
+  }
+
+  const configuredDefaultFingerprint = equivalentModelFingerprint(configuredDefaultModel)
+  const configuredDefaultIsStale = configuredDefaultFingerprint.includes("claudehaiku")
+  if (configuredDefaultFingerprint && !configuredDefaultIsStale) {
+    const configuredDefaultCandidate = models.find((model) => {
+      const fingerprints = [
+        model.id,
+        model.name,
+        model.runtimeId,
+        model.canonicalId,
+        ...(Array.isArray(model.aliases) ? model.aliases : []),
+      ]
+        .filter((value): value is string => Boolean(value))
+        .map((value) => equivalentModelFingerprint(value))
+      return fingerprints.some((fingerprint) => fingerprint === configuredDefaultFingerprint)
+    })
+    if (configuredDefaultCandidate?.id) return configuredDefaultCandidate.id
   }
 
   for (const hint of preferenceHints) {
@@ -871,19 +920,26 @@ export async function getAiEntryModelCatalog(options?: AiEntryModelCatalogOption
     try {
       const fetchedModels = await fetchProviderModels(provider)
       const configuredDefaultModel = provider.model.trim()
+      const hasExplicitModel = hasExplicitProviderModel(provider.id)
 
-      // The unscoped catalog powers the model picker used by AI Chat. Keep
-      // verified, credential-gated provider models visible there as well as
-      // in provider-scoped queries; an upstream /models response may omit a
-      // model even though its dedicated account is configured.
-      const modelsWithDefault = addVerifiedProviderModels(provider, [...fetchedModels])
+      // Verified models are provider-scoped capabilities. Keep the unscoped
+      // catalog faithful to the upstream aggregate response so it does not
+      // inject unrelated families into a shared model picker.
+      const modelsWithDefault = requestedProviderId || provider.id === "pptoken"
+        ? addVerifiedProviderModels(provider, [...fetchedModels])
+        : [...fetchedModels]
       const hasConfiguredDefaultInList =
         configuredDefaultModel.length > 0 &&
         modelsWithDefault.some((item) => item.id === configuredDefaultModel)
       const configuredDefaultProvider = configuredDefaultModel
         ? getConfiguredAiEntryProviderForModel(provider.id, configuredDefaultModel)
         : null
-      if (!hasConfiguredDefaultInList && configuredDefaultModel && configuredDefaultProvider) {
+      if (
+        !hasConfiguredDefaultInList &&
+        hasExplicitModel &&
+        configuredDefaultModel &&
+        configuredDefaultProvider
+      ) {
         modelsWithDefault.push({
           id: configuredDefaultModel,
           name: configuredDefaultModel,
@@ -896,7 +952,7 @@ export async function getAiEntryModelCatalog(options?: AiEntryModelCatalogOption
         })
       }
 
-      const chatModels = restrictProviderModels(provider, modelsWithDefault).filter(
+      const chatModels = restrictProviderModels(provider, modelsWithDefault, configuredDefaultModel).filter(
         (model) => model.isLikelyChat || model.id === configuredDefaultModel,
       )
       const allowedChatModels = filterHighTierDisplayModels(
@@ -935,7 +991,10 @@ export async function getAiEntryModelCatalog(options?: AiEntryModelCatalogOption
       }
 
       const selectedModelId =
-        pickPreferredNormalChatModelId(grouped.flattened) || null
+        pickPreferredNormalChatModelId(
+          grouped.flattened,
+          hasExplicitModel ? configuredDefaultModel : "",
+        ) || null
 
       const value: AiEntryModelCatalog = {
         providerId: provider.id,
