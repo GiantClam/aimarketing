@@ -1276,7 +1276,17 @@ export async function POST(request: NextRequest) {
       currentUser,
     )
     const selectedProviderId = modelConfig?.providerId || enterpriseTextRuntime?.selectedProviderId || undefined
+    // Public demo sessions must use the low-latency lead-generation model even
+    // when the demo account inherits an enterprise provider selection. Keep
+    // explicit model choices and authenticated workspace governance intact.
+    const publicDemoModelOverride =
+      currentUser.isDemo && !requestedModelConfig?.providerId && !requestedModelConfig?.modelId
+        ? process.env.AI_ENTRY_DEEPSEEK_MODEL?.trim() ||
+          process.env.DEEPSEEK_MODEL?.trim() ||
+          "deepseek-v4-flash"
+        : ""
     const preferredExecutionModel =
+      publicDemoModelOverride ||
       modelConfig?.providerModelId ||
       modelConfig?.modelId ||
       enterpriseTextRuntime?.selectedModelId ||
