@@ -327,11 +327,11 @@ export function SeoTitleAnalyzer({
           <CardTitle className="text-2xl">{copy.title}</CardTitle>
           <CardDescription className="max-w-3xl text-muted-foreground">{copy.description}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-8 border-t border-border/70 pt-6 lg:h-[660px] lg:grid-cols-[minmax(300px,0.82fr)_minmax(0,1.18fr)]">
+        <CardContent className="grid gap-8 border-t border-border/70 pt-6 lg:h-[760px] lg:grid-cols-[minmax(300px,0.82fr)_minmax(0,1.18fr)]">
           <datalist id="seo-title-regions">{formOptions.regions.map((option) => <option key={option} value={option} />)}</datalist>
           <datalist id="seo-title-audiences">{formOptions.audiences.map((option) => <option key={option} value={option} />)}</datalist>
           <datalist id="seo-title-value-propositions">{formOptions.valuePropositions.map((option) => <option key={option} value={option} />)}</datalist>
-          <section className="space-y-5 lg:h-full lg:overflow-y-auto lg:pr-2">
+          <section className="space-y-5 lg:h-full lg:overflow-visible lg:pr-2">
             <div className="grid gap-5">
               <div className="space-y-2"><label htmlFor="seo-title-keyword" className="text-sm font-medium">{copy.keyword}</label><Input id="seo-title-keyword" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={isChinese ? "例如：AI 营销自动化" : "For example: AI marketing automation"} /></div>
               <div className="space-y-2"><label htmlFor="seo-title-audience" className="text-sm font-medium">{copy.audience}</label><Input id="seo-title-audience" list="seo-title-audiences" value={audience} onChange={(event) => setAudience(event.target.value)} /></div>
