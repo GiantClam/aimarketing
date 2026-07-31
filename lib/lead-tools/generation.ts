@@ -495,12 +495,12 @@ async function generateSeoTitlePlanWithDefaultProvider(params: {
       async (providerRun) => {
         const response = await generateText({
           model: providerRun.provider.chat(providerRun.model),
-          system: [
+          prompt: [
             params.systemPrompt,
             "Return only one valid JSON object. Do not use markdown, code fences, or commentary.",
             "The object must contain keyword, pageType, audience, region, language, intentHypothesis, candidates, recommendedCandidateId, abTests, and risks.",
+            params.userPrompt,
           ].join("\n\n"),
-          prompt: params.userPrompt,
           temperature: 0.35,
           maxOutputTokens: 2_200,
           abortSignal: controller.signal,
