@@ -163,15 +163,6 @@ function buildSeoTitleUserPrompt(request: SeoTitleInput) {
   ].join("\n")
 }
 
-function isUnsupportedReasoningEffortError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error)
-  const normalized = message.toLowerCase()
-  return (
-    normalized.includes("reasoning_effort") &&
-    /(unsupported|not supported|invalid|unknown|unrecognized|must be one)/.test(normalized)
-  )
-}
-
 export function hasLeadToolGenerationProvider() {
   return (
     hasLeadToolMinimaxProvider() ||
@@ -508,55 +499,24 @@ async function generateSeoTitlePlanWithDefaultProvider(params: {
           "The object must contain keyword, pageType, audience, region, language, intentHypothesis, candidates, recommendedCandidateId, abTests, and risks.",
           params.userPrompt,
         ].join("\n\n")
-        let lastError: unknown = null
-        const reasoningEfforts = ["xhigh", "high", "none"] as const
-
-        for (const [attemptIndex, reasoningEffort] of reasoningEfforts.entries()) {
-          try {
-            const response = streamText({
-              model: providerRun.provider.chat(providerRun.model),
-              prompt,
-              maxOutputTokens: 2_200,
-              providerOptions: {
-                openai: {
-                  reasoningEffort,
-                },
-              },
-              abortSignal: controller.signal,
-            })
-            let text = ""
-            for await (const delta of response.textStream) {
-              text += delta
-            }
-            text = text.trim()
-            if (!text) throw new Error("seo_title_empty_response")
-            extractJsonObjectBlock(text, "seo_title_json_missing")
-            console.info("lead-tools.seo-title.reasoning", {
-              provider: providerRun.providerId,
-              model: providerRun.model,
-              reasoningEffort,
-            })
-            return text
-          } catch (error) {
-            lastError = error
-            const nextReasoningEffort = reasoningEfforts[attemptIndex + 1]
-            const canRetryWithNextEffort =
-              nextReasoningEffort !== undefined &&
-              (isUnsupportedReasoningEffortError(error) ||
-                (error instanceof Error &&
-                  ["seo_title_json_missing", "seo_title_empty_response"].includes(error.message)))
-            if (!canRetryWithNextEffort) throw error
-            console.warn("lead-tools.seo-title.reasoning-fallback", {
-              provider: providerRun.providerId,
-              model: providerRun.model,
-              from: reasoningEffort,
-              to: nextReasoningEffort,
-              message: error instanceof Error ? error.message : String(error),
-            })
-          }
+        const response = streamText({
+          model: providerRun.provider.chat(providerRun.model),
+          prompt,
+          maxOutputTokens: 2_200,
+          providerOptions: {
+            openai: {
+              reasoningEffort: "none",
+            },
+          },
+          abortSignal: controller.signal,
+        })
+        let text = ""
+        for await (const delta of response.textStream) {
+          text += delta
         }
-
-        throw lastError instanceof Error ? lastError : new Error("seo_title_generation_failed")
+        text = text.trim()
+        if (!text) throw new Error("seo_title_empty_response")
+        return text
       },
       {
         preferredProviderId: params.providerOptions?.preferredProviderId || "deepseek",
