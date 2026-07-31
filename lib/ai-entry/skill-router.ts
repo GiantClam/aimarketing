@@ -1,17 +1,9 @@
 import { getAiEntrySkillById, isAiEntrySkillId, type AiEntrySkillDefinition } from "@/lib/ai-entry/skill-registry"
 import { isAiEntryPptAgentId } from "@/lib/ai-entry/model-policy"
 
-const PPT_INTENT_PATTERN =
-  /(?:\bpptx?\b|\bdeck\b|\bslide(?:s| deck)?\b|\bpresentation\b|\bpitch deck\b|\bproposal deck\b|演示文稿|幻灯片|汇报(?:材料|PPT)?|路演|提案PPT|方案汇报)/iu
-
-const LONGFORM_WRITING_PATTERN =
-  /(?:\barticle\b|\bblog\b|\bnewsletter\b|\bwhitepaper\b|\bpress release\b|\bpost\b|长文|稿件|新闻稿|白皮书|文章|专栏)/iu
-
 type SkillRouteReason =
   | "explicit_selection"
   | "agent_default"
-  | "ppt_intent"
-  | "longform_writing_intent"
 
 export type AiEntrySkillRouteDecision = {
   selectedSkillIds: string[]
@@ -32,8 +24,14 @@ export function routeAiEntrySkills(input: {
 }): AiEntrySkillRouteDecision {
   const selected = new Set<string>()
   const reasons: AiEntrySkillRouteDecision["reasons"] = []
-  const normalizedPrompt = input.latestUserPrompt.trim()
   const requestedSkillIds = dedupeSkillIds(input.requestedSkillIds ?? [])
+
+  // Plain AI Chat is intentionally skill-free. Skill selection belongs to an
+  // explicit Agent surface, so routing cannot depend on language-specific
+  // keyword heuristics or a user's wording.
+  if (!input.requestedAgentId?.trim()) {
+    return { selectedSkillIds: [], reasons: [] }
+  }
 
   for (const skillId of requestedSkillIds) {
     if (!selected.has(skillId)) {
@@ -46,25 +44,6 @@ export function routeAiEntrySkills(input: {
   if (isAiEntryPptAgentId(input.requestedAgentId) && !selected.has(defaultPptSkill)) {
     selected.add(defaultPptSkill)
     reasons.push({ skillId: defaultPptSkill, reason: "agent_default" })
-  }
-
-  if (
-    normalizedPrompt &&
-    input.requestedAgentId !== "executive-presentation-ppt" &&
-    PPT_INTENT_PATTERN.test(normalizedPrompt) &&
-    !selected.has("ppt-master")
-  ) {
-    selected.add("ppt-master")
-    reasons.push({ skillId: "ppt-master", reason: "ppt_intent" })
-  }
-
-  if (
-    normalizedPrompt &&
-    LONGFORM_WRITING_PATTERN.test(normalizedPrompt) &&
-    !selected.has("longform-writing")
-  ) {
-    selected.add("longform-writing")
-    reasons.push({ skillId: "longform-writing", reason: "longform_writing_intent" })
   }
 
   return {
