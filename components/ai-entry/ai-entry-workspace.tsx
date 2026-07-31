@@ -539,6 +539,7 @@ const AI_ENTRY_SELECTED_MODEL_STORAGE_KEY = "ai-entry-selected-model-id-v2"
 const AI_ENTRY_SELECTED_REASONING_STORAGE_KEY = "ai-entry-selected-reasoning-v1"
 const SHOULD_PREFER_CATALOG_MODEL_DEFAULT = process.env.NODE_ENV === "development"
 const AI_ENTRY_PENDING_CONVERSATION_STORAGE_PREFIX = "ai-entry-pending-conversation-v1:"
+const AI_ENTRY_PENDING_CONVERSATION_SELECTION_STORAGE_PREFIX = "ai-entry-pending-conversation-selection-v1:"
 const AI_ENTRY_SHARED_PENDING_CONVERSATION_STORAGE_PREFIX = "ai-entry-shared-pending-conversation-v1:"
 const AI_ENTRY_SHARED_PENDING_CONVERSATION_EVENT = "ai-entry:shared-pending-conversation-updated"
 const AI_ENTRY_MAX_ATTACHMENTS = 4
@@ -550,6 +551,46 @@ function getPendingConversationStorageKey(conversationId: string) {
 
 function getSharedPendingConversationStorageKey(conversationId: string) {
   return `${AI_ENTRY_SHARED_PENDING_CONVERSATION_STORAGE_PREFIX}${conversationId}`
+}
+
+function getPendingConversationSelectionStorageKey(conversationId: string) {
+  return `${AI_ENTRY_PENDING_CONVERSATION_SELECTION_STORAGE_PREFIX}${conversationId}`
+}
+
+function savePendingConversationSelection(input: {
+  conversationId: string | null
+  modelId: string | null
+  reasoningEffort: ReasoningEffort
+}) {
+  if (!input.conversationId || !input.modelId || typeof window === "undefined") return
+  try {
+    window.sessionStorage.setItem(
+      getPendingConversationSelectionStorageKey(input.conversationId),
+      JSON.stringify({
+        modelId: input.modelId,
+        reasoningEffort: input.reasoningEffort,
+      }),
+    )
+  } catch {
+    // sessionStorage is a best-effort bridge across the first route transition.
+  }
+}
+
+function readPendingConversationSelection(conversationId: string | null) {
+  if (!conversationId || typeof window === "undefined") return null
+  try {
+    const raw = window.sessionStorage.getItem(getPendingConversationSelectionStorageKey(conversationId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { modelId?: unknown; reasoningEffort?: unknown }
+    const modelId = typeof parsed.modelId === "string" && parsed.modelId.trim() ? parsed.modelId.trim() : null
+    if (!modelId) return null
+    const reasoningEffort = REASONING_EFFORTS.includes(parsed.reasoningEffort as ReasoningEffort)
+      ? parsed.reasoningEffort as ReasoningEffort
+      : "auto"
+    return { modelId, reasoningEffort }
+  } catch {
+    return null
+  }
 }
 
 function isSharedPendingConversationStorageKey(key: string | null, conversationId: string | null) {
@@ -2428,8 +2469,12 @@ export function AiEntryWorkspace({
           payload.conversation.current_model_id.trim()
             ? payload.conversation.current_model_id.trim()
             : null
+        const pendingConversationSelection = readPendingConversationSelection(initialConversationId)
 
-        setRestoredConversationModelId(conversationModelId)
+        setRestoredConversationModelId(pendingConversationSelection?.modelId || conversationModelId)
+        if (pendingConversationSelection) {
+          setSelectedReasoningEffort(pendingConversationSelection.reasoningEffort)
+        }
       } catch (error) {
         if (cancelled) return
         setMessages((current) => (current.length > 0 ? current : []))
@@ -3061,6 +3106,13 @@ export function AiEntryWorkspace({
       if (!nextConversationId) return
       latestConversationIdRef.current = nextConversationId
       savePendingConversationMessages(nextConversationId, [...baseMessages, userMessage, assistantDraft])
+      if (!shouldLockModel) {
+        savePendingConversationSelection({
+          conversationId: nextConversationId,
+          modelId: selectedModelId,
+          reasoningEffort: resolvedReasoningEffort,
+        })
+      }
     }
 
     const refreshSidebarForConversation = (nextConversationId: string | null, force = false) => {
