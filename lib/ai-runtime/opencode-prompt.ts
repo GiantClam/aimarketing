@@ -10,6 +10,7 @@ function clipPromptText(value: string, maxLength: number) {
 export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
   const isEditablePpt = input.agentId === "executive-ppt" || (input.selectedSkillIds || []).includes("ppt-master")
   const isDashiPresentation = input.agentId === "executive-presentation-ppt" || (input.selectedSkillIds || []).includes("dashiai-ppt")
+  const isKhazixWechatWriter = input.agentId === "writer" && (input.selectedSkillIds || []).includes("khazix-writer")
   const isBusinessAgent = input.agentId?.startsWith("business-") === true
   const isPersistentWorkspace = isDashiPresentation || isBusinessAgent
   const isTurnScopedPptMaster = isEditablePpt
@@ -73,6 +74,15 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
           `Write the final PPTX and artifact-manifest.json under ./turns/${input.runId}/artifacts/ (all artifact paths must remain relative to the current workspace).`,
           "At the end of every turn, write ./project-state.json containing only a JSON object with schemaVersion 1, projectKind ppt-master, and the minimal structured state required to rebuild ./workspace/ppt-master. Never include SVG, PPTX, images, base64, logs, caches, temporary files, or absolute paths.",
           "Run the ppt-master skill's own SVG quality check and repair loop before reporting a final PPTX.",
+        ]
+      : isKhazixWechatWriter
+      ? [
+          "This is the WeChat Official Account Writer Agent. khazix-writer is the authoritative writing workflow and style guide for this turn.",
+          "Read and follow .opencode/skills/khazix-writer/SKILL.md completely. Read its references when the article type or source material calls for them.",
+          "The application has prepared the brief, research context, enterprise knowledge, memory guidance, and output contract. Use those inputs as the factual boundary.",
+          "Do not invent first-person experiences, customer facts, metrics, product claims, citations, or source details. When the supplied material lacks a personal experience, write around that gap instead of fabricating one.",
+          "The application owns conversation state, enterprise truth, billing, image assets, and persistence. Do not access databases, platform APIs, secrets, or install skills.",
+          "Return only the final WeChat article draft. Do not describe the OpenCode runtime or the skill-loading process.",
         ]
       : []),
     `Application system instruction:\n${promptSystem}`,

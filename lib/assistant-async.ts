@@ -100,6 +100,8 @@ type WriterTurnTaskPayload = {
   language: WriterLanguage
   history: WriterHistoryEntry[]
   conversationStatus?: WriterConversationStatus
+  selectedProviderId?: string | null
+  selectedModelId?: string | null
 }
 
 type ImageTurnTaskPayload = {
@@ -657,6 +659,8 @@ async function handleWriterTurn(taskId: number, userId: number, payload: WriterT
         history: payload.history,
         conversationStatus: payload.conversationStatus,
         enterpriseId: payload.enterpriseId,
+        selectedProviderId: payload.selectedProviderId,
+        selectedModelId: payload.selectedModelId,
         onProgress: async (event) => {
           await persistProgressEvent({
             type: event.type,

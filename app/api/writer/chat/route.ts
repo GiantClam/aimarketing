@@ -53,6 +53,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "query is required" }, { status: 400 })
     }
     const preloadedBrief = normalizeWriterPreloadedBrief(body?.brief)
+    const selectedProviderId =
+      typeof body?.modelConfig?.providerId === "string" && body.modelConfig.providerId.trim()
+        ? body.modelConfig.providerId.trim()
+        : typeof body?.selectedProviderId === "string" && body.selectedProviderId.trim()
+          ? body.selectedProviderId.trim()
+          : null
+    const selectedModelId =
+      typeof body?.modelConfig?.modelId === "string" && body.modelConfig.modelId.trim()
+        ? body.modelConfig.modelId.trim()
+        : typeof body?.selectedModelId === "string" && body.selectedModelId.trim()
+          ? body.selectedModelId.trim()
+          : null
 
     const conversationId = typeof body?.conversation_id === "string" ? body.conversation_id : null
     const existingConversation = conversationId ? await getWriterConversation(auth.user.id, conversationId) : null
@@ -83,6 +95,8 @@ export async function POST(req: NextRequest) {
         language,
         history,
         conversationStatus: existingConversation?.status as WriterConversationStatus | undefined,
+        selectedProviderId,
+        selectedModelId,
       },
     })
 

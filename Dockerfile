@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   make \
   g++ \
   && rm -rf /var/lib/apt/lists/* \
-  && npm install --global opencode-ai@1.17.13
+  && npm install --global opencode-ai@1.18.11
 
 WORKDIR /app
 

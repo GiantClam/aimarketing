@@ -6,6 +6,9 @@ const HAN_ALLOWED_ROOTS = [
   path.join(SKILLS_ROOT, "agency-agents"),
   path.join(SKILLS_ROOT, "customer-intelligence-risk"),
   path.join(SKILLS_ROOT, "executive-consulting-suite"),
+  // The upstream khazix-writer skill is intentionally Chinese because it is
+  // the source-of-truth writing guide for the Chinese WeChat workflow.
+  path.join(SKILLS_ROOT, "khazix-writer"),
 ]
 const MARKDOWN_EXT = ".md"
 const CJK_PATTERN = /[\p{Script=Han}]/u

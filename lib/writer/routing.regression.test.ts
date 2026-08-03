@@ -20,6 +20,14 @@ test("wechat article routing works for Chinese article request", () => {
     targetPlatform: "WeChat Official Account",
     renderPlatform: "wechat",
     renderMode: "article",
+    selectedStyleSkillId: "khazix-writer",
+  })
+})
+
+test("khazix writer is scoped to WeChat articles", () => {
+  assertRoute("写一篇小红书种草笔记，介绍 AI 获客工作流", {
+    renderPlatform: "xiaohongshu",
+    selectedStyleSkillId: null,
   })
 })
 

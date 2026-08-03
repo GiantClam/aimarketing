@@ -684,6 +684,25 @@ export function getConfiguredAiEntryProviderForModel(
   }
 }
 
+export function resolveAiEntryOpenCodeProvider(input: {
+  providerId?: string | null
+  modelId?: string | null
+} = {}) {
+  const requestedProviderId = normalizeText(input.providerId).toLowerCase()
+  const requestedModelId = normalizeText(input.modelId)
+  const provider = requestedProviderId
+    ? getConfiguredAiEntryProviderForModel(requestedProviderId, requestedModelId)
+    : getConfiguredAiEntryProviders()[0] || null
+  if (!provider) return null
+
+  return {
+    providerId: provider.id,
+    modelId: requestedModelId || provider.model,
+    baseUrl: provider.baseURL,
+    apiKey: provider.apiKey,
+  }
+}
+
 export function getAiEntryCurrentProviderConfig() {
   const providers = getConfiguredAiEntryProviders()
   if (providers.length === 0) return null

@@ -172,6 +172,18 @@
   ],
   "styleSkills": [
     {
+      "id": "khazix-writer",
+      "dirName": "khazix-writer",
+      "label": "Khazix Writer",
+      "aliases": [
+        "khazix",
+        "khazix writer",
+        "卡兹克",
+        "卡兹克风格",
+        "按卡兹克风格写"
+      ]
+    },
+    {
       "id": "analytical",
       "dirName": "style-analytical",
       "label": "Analytical",

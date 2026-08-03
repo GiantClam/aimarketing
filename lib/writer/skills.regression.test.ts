@@ -46,6 +46,7 @@ let writerTestHooks: {
     mode: "article" | "thread",
     markdown: string,
     languageLabel: string,
+    options?: { ensureCoverPlaceholder?: boolean; preserveTitle?: boolean },
   ) => string
 }
 
@@ -1390,7 +1391,7 @@ test("compiled writer prompt includes soul card hints when available", async () 
   assert.match(systemPrompt, /factual accuracy, compliance, or safety/i)
 })
 
-test("compiled wechat prompt enforces viral title and retention structure guidance", async () => {
+test("compiled wechat prompt delegates editorial authority to khazix-writer", async () => {
   const systemPrompt = await writerTestHooks.buildSystemPrompt(
     "Write a WeChat article about AI outbound.",
     createRouting({
@@ -1405,8 +1406,9 @@ test("compiled wechat prompt enforces viral title and retention structure guidan
     },
   )
 
-  assert.match(systemPrompt, /H1 must be specific and share-worthy/i)
-  assert.match(systemPrompt, /retention-oriented flow/i)
+  assert.match(systemPrompt, /khazix-writer/i)
+  assert.match(systemPrompt, /HKR topic check/i)
+  assert.doesNotMatch(systemPrompt, /retention-oriented flow/i)
 })
 
 test("wechat title post-process upgrades flat titles to structured viral titles", () => {
@@ -1419,6 +1421,33 @@ test("wechat title post-process upgrades flat titles to structured viral titles"
 
   assert.match(processed, /^# .+/)
   assert.match(processed.split("\n")[0] || "", /(怎么做|关键方法|避坑点|关键步骤)/u)
+})
+
+test("khazix wechat post-process preserves a cover generation slot for new articles", () => {
+  const processed = writerTestHooks.postProcessWriterDraft(
+    "wechat",
+    "article",
+    "# AI 销售自动化\n\n事情是这样的。\n\n正文。",
+    "Chinese",
+    { ensureCoverPlaceholder: true },
+  )
+
+  assert.match(processed, /!\[Cover\]\(writer-asset:\/\/cover\)/u)
+  assert.match(processed, /^# .+\n\n!\[Cover\]\(writer-asset:\/\/cover\)/u)
+})
+
+test("khazix wechat post-process preserves the skill-authored title", () => {
+  const title = "我观察了 30 天：AI Agent 真正改变的，不是效率"
+  const processed = writerTestHooks.postProcessWriterDraft(
+    "wechat",
+    "article",
+    `# ${title}\n\n事情是这样的。\n\n正文。`,
+    "Chinese",
+    { ensureCoverPlaceholder: true, preserveTitle: true },
+  )
+
+  assert.equal(processed.split("\n")[0], `# ${title}`)
+  assert.doesNotMatch(processed, /关键方法\+3个避坑点/u)
 })
 
 test("english Topic/Audience labels are enough to draft immediately without model extraction", async () => {

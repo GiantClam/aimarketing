@@ -90,6 +90,25 @@ export function resolveDefaultAgentRuntimeProfile(env: Readonly<Record<string, s
   return profile
 }
 
+/** The WeChat Writer is the only Writer surface that is pinned to khazix-writer/OpenCode. */
+export function resolveWriterOpenCodeRuntimeProfile(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): RuntimeProfile {
+  const enabled =
+    readBoolean(env.AI_ENTRY_WRITER_OPENCODE_ENABLED, true) &&
+    readBoolean(env.AI_ENTRY_SAAS_OPENCODE_ENABLED, false)
+  const runnerUrl = normalizeUrl(env.RAILWAY_OPENCODE_RUNTIME_URL)
+  const hasRunnerSecret = Boolean(env.RAILWAY_OPENCODE_RUNTIME_TOKEN?.trim())
+  return buildProfile({
+    env,
+    backend: "railway-opencode",
+    deploymentMode: "saas-railway",
+    enabled,
+    runnerUrl,
+    hasRunnerSecret,
+  })
+}
+
 /** Railway is intentionally opt-in for the editable PPT assistant only. */
 export function resolveEditablePptRailwayRuntimeProfile(
   env: Readonly<Record<string, string | undefined>> = process.env,

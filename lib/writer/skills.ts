@@ -1,5 +1,10 @@
 import type { EnterpriseKnowledgeContext, EnterpriseKnowledgeScope } from "@/lib/knowledge/types"
+import { randomUUID } from "node:crypto"
 import type { AiEntryProviderId } from "@/lib/ai-entry/provider-routing"
+import { resolveAiEntryOpenCodeProvider } from "@/lib/ai-entry/provider-routing"
+import { buildAgentRuntimeInput } from "@/lib/ai-entry/runtime/context-builder"
+import { runOpenCodeAgent } from "@/lib/ai-entry/runtime/opencode-adapter"
+import { resolveWriterOpenCodeRuntimeProfile } from "@/lib/ai-entry/runtime/profile-store"
 /* eslint-disable no-useless-escape */
 import { z } from "zod"
 import {
@@ -3055,15 +3060,43 @@ function _legacyNormalizeWechatTitle(markdown: string, languageLabel: string) {
   return [`# ${title}`, ...rest].join("\n").trim()
 }
 
-function postProcessWriterDraft(platform: WriterPlatform, mode: WriterMode, markdown: string, languageLabel: string) {
+function ensureWechatCoverPlaceholder(markdown: string) {
+  if (/writer-asset:\/\/cover(?![a-z0-9-])/iu.test(markdown)) {
+    return markdown
+  }
+
+  const lines = markdown.split("\n")
+  const titleIndex = lines.findIndex((line) => /^#\s+/u.test(line.trim()))
+  const insertionIndex = titleIndex >= 0 ? titleIndex + 1 : 0
+  lines.splice(insertionIndex, 0, "", "![Cover](writer-asset://cover)", "")
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim()
+}
+
+function postProcessWriterDraft(
+  platform: WriterPlatform,
+  mode: WriterMode,
+  markdown: string,
+  languageLabel: string,
+  options?: {
+    ensureCoverPlaceholder?: boolean
+    preserveTitle?: boolean
+  },
+) {
   const normalized = normalizeLineBreaks(markdown)
 
   if (platform !== "wechat" || mode !== "article") {
     return normalized
   }
 
-  let next = safeNormalizeWechatTitle(normalized, languageLabel)
+  // khazix-writer owns its WeChat headline. The legacy viral-title rewriter
+  // can turn an intentional, natural headline into a generic template.
+  let next = options?.preserveTitle
+    ? _normalizeWechatTitle(normalized, languageLabel)
+    : safeNormalizeWechatTitle(normalized, languageLabel)
   next = safeStripWechatMetaSections(next)
+  if (options?.ensureCoverPlaceholder) {
+    next = ensureWechatCoverPlaceholder(next)
+  }
   return next.replace(/\n{3,}/g, "\n\n").trim()
 }
 
@@ -3883,6 +3916,10 @@ function detectWriterTransformModeFromPrompt(query: string) {
   return null
 }
 
+function isKhazixWechatRoute(routing: WriterRoutingDecision) {
+  return routing.renderPlatform === "wechat" && routing.renderMode === "article"
+}
+
 async function buildSystemPrompt(
   query: string,
   routing: WriterRoutingDecision,
@@ -3892,12 +3929,46 @@ async function buildSystemPrompt(
   personalizationBlock?: string | null,
 ) {
   const transformMode = detectWriterTransformModeFromPrompt(query)
+  const khazixWechatRoute = isKhazixWechatRoute(routing)
   const [guide, contentGuide, styleGuide] = await Promise.all([
     getWriterRuntimeGuide(routing),
     getWriterContentGuide(routing.contentType),
     routing.selectedStyleSkillId ? getWriterStyleGuide(routing.selectedStyleSkillId) : Promise.resolve(null),
   ])
   const modeLabel = routing.renderMode === "thread" ? "thread or multi-part post" : "single structured draft"
+
+  if (khazixWechatRoute) {
+    return [
+      "You are producing a WeChat Official Account article under the khazix-writer skill.",
+      "The khazix-writer skill is the authoritative source for voice, structure, editorial judgment, and self-checking.",
+      `Scenario routing: ${describeWriterRoute(routing)}.`,
+      `Length target: ${routing.lengthTarget}.`,
+      languageInstruction,
+      personalizationBlock ? "Personalization guidance:" : null,
+      personalizationBlock || null,
+      personalizationBlock
+        ? "If personalization conflicts with factual accuracy, compliance, or safety policy, prioritize accuracy/compliance/safety."
+        : null,
+      enterpriseKnowledge?.snippets?.length
+        ? "Enterprise knowledge is provided separately. Treat it as first-party brand truth and prefer it over generic assumptions."
+        : "No enterprise knowledge is attached for this request.",
+      transformMode
+        ? "This request is a direct source-text transformation task. Follow the skill's transformation boundary and return only the transformed text."
+        : "Use the skill's HKR topic check, article archetype selection, narrative progression, and four-layer self-check before returning the article.",
+      research.status === "ready"
+        ? "Absorb the supplied research before writing and keep external claims grounded in it."
+        : research.status === "skipped"
+          ? "Live web research was intentionally skipped. Do not imply that outside research was performed."
+          : "External research may be partial or unavailable. Avoid precise unsupported claims.",
+      "Do not invent first-person experiences, customer facts, metrics, product claims, citations, or source details.",
+      "Return only the final Markdown article. Do not explain the process or reveal hidden reasoning.",
+      transformMode
+        ? "Do not add writer asset placeholders for a direct translation or rewrite unless they already exist in the source."
+        : "Preserve the application's writer-asset:// placeholder contract when an image placeholder is genuinely needed.",
+    ]
+      .filter((line): line is string => Boolean(line))
+      .join("\n")
+  }
 
   return [
     `You are a ${contentGuide.runtimeLabel}.`,
@@ -3969,6 +4040,7 @@ async function buildUserPrompt(
   enterpriseKnowledge?: EnterpriseKnowledgeContext | null,
 ) {
   const transformMode = detectWriterTransformModeFromPrompt(query)
+  const khazixWechatRoute = isKhazixWechatRoute(routing)
   const transformRequirement = transformMode === "translate"
     ? "- This is a translation task. Translate the supplied source text directly and do not expand it into a brand-new article."
     : transformMode === "rewrite"
@@ -4004,8 +4076,9 @@ async function buildUserPrompt(
     : ""
 
   const guide = await getWriterRuntimeGuide(routing)
-  const platformStructureGuide =
-    routing.renderPlatform === "wechat" || routing.renderPlatform === "xiaohongshu"
+  const platformStructureGuide = khazixWechatRoute
+    ? ""
+    : routing.renderPlatform === "wechat" || routing.renderPlatform === "xiaohongshu"
       ? guide.articleStructureGuidance
       : routing.renderMode === "thread"
         ? guide.threadStructureGuidance || WRITER_PLATFORM_GUIDE[routing.renderPlatform]?.threadStructureGuidance || ""
@@ -4031,8 +4104,10 @@ async function buildUserPrompt(
     "Extracted source material:",
     extracts || "No extracted source text.",
     "",
-    "Platform-specific writing guidance:",
-    platformStructureGuide,
+    khazixWechatRoute ? "khazix-writer application context:" : "Platform-specific writing guidance:",
+    khazixWechatRoute
+      ? "The khazix-writer skill is loaded separately and is authoritative. The material below is factual and product context only."
+      : platformStructureGuide,
     "",
     "Requirements:",
     languageInstruction,
@@ -4054,11 +4129,11 @@ async function buildUserPrompt(
       : research.extracts.length > 0
         ? "- Depth requirement: keep the draft insight-dense; each major section should include concrete source-grounded details and explain why they matter."
         : "- Depth requirement: keep the draft insight-dense with concrete mechanisms, trade-offs, and practical implications.",
-    !transformMode && routing.renderPlatform === "wechat" && routing.renderMode === "article"
-      ? "- Title requirement: produce one strong publish-ready H1, not a generic working title."
+    !transformMode && khazixWechatRoute
+      ? "- Follow khazix-writer's title, opening, pacing, callback, and ending rules."
       : "",
-    !transformMode && routing.renderPlatform === "wechat" && routing.renderMode === "article"
-      ? "- Structure requirement: use a high-retention WeChat flow (hook opening -> problem framing -> method breakdown -> evidence/case -> pitfalls -> actionable close)."
+    !transformMode && khazixWechatRoute
+      ? "- Apply the skill's HKR topic check and four-layer self-check; do not fabricate personal experience to fill missing material."
       : "",
     "- The result must be clean Markdown suitable for continued editing and publishing.",
     "- Keep the structure native to the selected scenario, platform, and output form.",
@@ -4067,21 +4142,34 @@ async function buildUserPrompt(
 }
 
 export function isWriterSkillsAvailable() {
-  return hasWriterTextProvider() && isWriterR2Available() && (hasWriterResearchConfig() || !WRITER_REQUIRE_WEB_RESEARCH)
+  const openCodeWriterAvailable = hasWriterOpenCodeRuntime()
+  return (hasWriterTextProvider() || openCodeWriterAvailable) && isWriterR2Available() && (hasWriterResearchConfig() || !WRITER_REQUIRE_WEB_RESEARCH)
 }
 
 export type WriterSkillsAvailability = {
   enabled: boolean
-  provider: "aiberm" | "crazyroute" | "unavailable"
+  provider: "aiberm" | "crazyroute" | "opencode" | "unavailable"
   reason: "ok" | "llm_api_key_missing" | "research_config_missing" | "writer_r2_config_missing"
   requiresWebResearch: boolean
   webResearchEnabled: boolean
 }
 
-export function getWriterSkillsAvailability(): WriterSkillsAvailability {
-  const preferredProvider = hasAibermApiKey() ? "aiberm" : hasCrazyrouteApiKey() ? "crazyroute" : "unavailable"
+function hasWriterOpenCodeRuntime() {
+  const profile = resolveWriterOpenCodeRuntimeProfile()
+  return profile.enabled && profile.backend === "railway-opencode" && Boolean(resolveAiEntryOpenCodeProvider())
+}
 
-  if (!hasWriterTextProvider()) {
+export function getWriterSkillsAvailability(): WriterSkillsAvailability {
+  const openCodeWriterAvailable = hasWriterOpenCodeRuntime()
+  const preferredProvider = openCodeWriterAvailable
+    ? "opencode"
+    : hasAibermApiKey()
+      ? "aiberm"
+      : hasCrazyrouteApiKey()
+        ? "crazyroute"
+        : "unavailable"
+
+  if (!hasWriterTextProvider() && !openCodeWriterAvailable) {
     return {
       enabled: false,
       provider: "unavailable",
@@ -4125,6 +4213,9 @@ export async function generateWriterDraftWithSkills(
   routing: WriterRoutingDecision,
   preferredLanguage: WriterLanguage = "auto",
   options?: {
+    userId?: number
+    conversationId?: string | null
+    history?: WriterHistoryEntry[]
     enterpriseId?: number | null
     researchQuery?: string
     retrievalStrategy?: WriterRetrievalStrategy
@@ -4196,16 +4287,109 @@ export async function generateWriterDraftWithSkills(
     buildSystemPrompt(query, routing, language.instruction, research, enterpriseKnowledge, options?.personalizationBlock),
     buildUserPrompt(query, routing, research, language.instruction, enterpriseKnowledge),
   ])
-  const answer = await generateTextWithWriterModel(systemPrompt, userPrompt, options?.selectedModelId || WRITER_TEXT_MODEL, {
-    timeoutMs: WRITER_DRAFT_PROVIDER_TIMEOUT_MS,
-    totalTimeoutMs: WRITER_DRAFT_GENERATION_TIMEOUT_MS,
-    providerTimeoutMs: WRITER_DRAFT_PROVIDER_TIMEOUT_MS,
-    preferredProviderId: options?.selectedProviderId,
+
+  if (!isKhazixWechatRoute(routing)) {
+    const answer = await generateTextWithWriterModel(
+      systemPrompt,
+      userPrompt,
+      options?.selectedModelId || WRITER_TEXT_MODEL,
+      {
+        timeoutMs: WRITER_DRAFT_PROVIDER_TIMEOUT_MS,
+        totalTimeoutMs: WRITER_DRAFT_GENERATION_TIMEOUT_MS,
+        providerTimeoutMs: WRITER_DRAFT_PROVIDER_TIMEOUT_MS,
+        preferredProviderId: options?.selectedProviderId,
+      },
+    )
+
+    return {
+      answer: enforceWriterHardLengthTarget(
+        postProcessWriterDraft(routing.renderPlatform, routing.renderMode, answer, language.label),
+        routing,
+      ),
+      diagnostics: buildWriterTurnDiagnostics({
+        retrievalStrategy,
+        enterpriseKnowledge,
+        enterpriseKnowledgeEnabled: shouldUseEnterpriseKnowledge,
+        research,
+        memoryRetrievedCount: options?.memoryRetrievedCount,
+        memoryAppliedIds: options?.memoryAppliedIds,
+        soulCardVersion: options?.soulCardVersion,
+        soulCardConfidence: options?.soulCardConfidence,
+        memoryScope: options?.memoryScope,
+        routing,
+      }),
+    }
+  }
+
+  const runtimeProfile = resolveWriterOpenCodeRuntimeProfile()
+  if (!runtimeProfile.enabled || runtimeProfile.backend !== "railway-opencode") {
+    throw new Error("writer_opencode_runtime_not_configured")
+  }
+
+  const provider = resolveAiEntryOpenCodeProvider({
+    providerId: options?.selectedProviderId,
+    modelId: options?.selectedModelId,
   })
+  if (!provider) {
+    throw new Error("writer_opencode_provider_not_configured")
+  }
+
+  const historyMessages = (options?.history || [])
+    .flatMap((entry) => {
+      const content = (entry.content || entry.answer || entry.query || "").trim()
+      if (!content) return []
+      return [{
+        role: entry.role === "assistant" || entry.answer ? "assistant" as const : "user" as const,
+        content,
+      }]
+    })
+  const runtimeInput = buildAgentRuntimeInput({
+    runId: randomUUID(),
+    sessionKey: null,
+    conversationId: options?.conversationId || null,
+    enterpriseId: options?.enterpriseId || null,
+    userId: options?.userId || 0,
+    agentId: "writer",
+    selectedSkillIds: ["khazix-writer"],
+    systemPrompt,
+    messages: [...historyMessages, { role: "user", content: userPrompt }],
+    attachments: [],
+    artifactContext: [],
+    workflowContext: null,
+    modelHint: `${provider.providerId}/${provider.modelId}`,
+    allowNetwork: false,
+    profileLimits: {
+      maxArtifacts: 0,
+      maxArtifactBytes: 0,
+      maxArtifactTotalBytes: 0,
+    },
+  })
+
+  let answer = ""
+  for await (const event of runOpenCodeAgent(runtimeInput, {
+    runnerUrl: runtimeProfile.runnerUrl,
+    backend: "railway-opencode",
+    railway: true,
+    timeoutMs: runtimeProfile.timeoutMs,
+    provider,
+    session: runtimeProfile.sessionEnabled,
+  })) {
+    if (event.event === "text_delta") {
+      answer += event.delta
+    } else if (event.event === "runtime_error") {
+      throw new Error(`writer_opencode_failed:${event.message}`)
+    }
+  }
+  if (!answer.trim()) {
+    throw new Error("writer_opencode_empty_response")
+  }
 
   return {
     answer: enforceWriterHardLengthTarget(
-      postProcessWriterDraft(routing.renderPlatform, routing.renderMode, answer, language.label),
+      postProcessWriterDraft(routing.renderPlatform, routing.renderMode, answer, language.label, {
+        ensureCoverPlaceholder: true,
+        preserveTitle: true,
+      }),
       routing,
     ),
     diagnostics: buildWriterTurnDiagnostics({
@@ -4619,6 +4803,9 @@ export async function runWriterSkillsTurnWithRuntime(
   })
   const preferredEnterpriseScopes = getPreferredEnterpriseScopesSafe(params.query, mergedBrief, retrievalStrategy)
   const draftResult = await runtime.generateDraft(compiledPrompt, routing, preferredLanguage, {
+    userId: params.userId,
+    conversationId: params.conversationId,
+    history: contextHistory,
     enterpriseId: params.enterpriseId,
     researchQuery: groundingQuery,
     retrievalStrategy,

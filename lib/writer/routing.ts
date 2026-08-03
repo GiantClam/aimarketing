@@ -10,6 +10,7 @@ import {
   getWriterPlatformSkillByTargetPlatform,
   matchWriterPlatformSkill,
   matchWriterStyleSkill,
+  getWriterStyleSkillMeta,
 } from "@/lib/writer/skill-catalog"
 import type { WriterRoutingDecision } from "@/lib/writer/types"
 
@@ -385,7 +386,10 @@ export function buildWriterRoutingDecision(input: RoutingInput): WriterRoutingDe
   const renderProfile = inferWriterRenderProfile({ contentType, targetPlatform, outputForm, query: input.query })
   const selectedPlatformSkill =
     getWriterPlatformSkillByTargetPlatform(targetPlatform) || matchWriterPlatformSkill(input.query)
-  const selectedStyleSkill = matchWriterStyleSkill(input.query)
+  const explicitStyleSkill = matchWriterStyleSkill(input.query)
+  const isKhazixWechatRoute = renderProfile.renderPlatform === "wechat" && renderProfile.renderMode === "article"
+  const selectedStyleSkill =
+    isKhazixWechatRoute ? explicitStyleSkill || getWriterStyleSkillMeta("khazix-writer") : explicitStyleSkill
 
   return {
     contentType,
