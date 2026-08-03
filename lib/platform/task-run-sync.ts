@@ -78,6 +78,7 @@ const RUNNINGHUB_VIDEO_ITEM_SLUGS = new Set([
   "ai-video",
   "text-to-video",
   "image-to-video",
+  "reference-to-video",
   "digital-human",
   "video-enhance",
 ])

@@ -179,6 +179,7 @@ const SUPPORTED_MODEL_CARDS: Record<EnterpriseModelCategory, SupportedModelDescr
         "Seedance Pro Image to Video",
         "Seedance Fast",
         "Seedance Mini",
+        "MiniMax-H3 多模态参考生视频",
       ],
     },
   ],

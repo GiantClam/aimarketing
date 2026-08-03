@@ -522,7 +522,7 @@ function buildEnterpriseVideoRuntime(
     kind: "runninghub",
     providerId: "runninghub",
     label: normalizeText(provider.label) || provider.providerId,
-    model: normalizeText(provider.modelId) || null,
+    model: normalizeText(provider.modelId) || "MiniMax-H3",
     config: {
       ...fallback,
       baseUrl,

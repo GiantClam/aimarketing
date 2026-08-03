@@ -66,6 +66,7 @@ export type RunningHubConfig = {
   seedanceProImageToVideoEndpoint?: string | null
   seedanceMiniTextToVideoEndpoint: string | null
   seedanceMiniImageToVideoEndpoint: string | null
+  minimaxH3MultimodalToVideoEndpoint?: string | null
   digitalHumanWorkflowId: string | null
   videoEnhanceWorkflowId: string | null
   image: RunningHubTargetConfig
@@ -111,6 +112,9 @@ export function getRunningHubConfig(): RunningHubConfig {
   const seedanceMiniImageToVideoEndpoint = normalizeEndpoint(
     process.env.RUNNINGHUB_SEEDANCE_MINI_IMAGE_TO_VIDEO_ENDPOINT,
   ) || "/openapi/v2/rhart-video/sparkvideo-2.0-mini/image-to-video"
+  const minimaxH3MultimodalToVideoEndpoint = normalizeEndpoint(
+    process.env.RUNNINGHUB_MINIMAX_H3_MULTIMODAL_TO_VIDEO_ENDPOINT,
+  ) || "/openapi/v2/minimax/hailuo-h3/multimodal-to-video"
   const workflowCreatePath = normalizeApiPath(process.env.RUNNINGHUB_WORKFLOW_CREATE_PATH, "/task/openapi/create")
   const digitalHumanWorkflowId = process.env.RUNNINGHUB_DIGITAL_HUMAN_WORKFLOW_ID?.trim() || null
   const videoEnhanceWorkflowId = process.env.RUNNINGHUB_VIDEO_ENHANCE_WORKFLOW_ID?.trim() || null
@@ -122,6 +126,7 @@ export function getRunningHubConfig(): RunningHubConfig {
       seedanceProImageToVideoEndpoint ||
       seedanceMiniTextToVideoEndpoint ||
       seedanceMiniImageToVideoEndpoint ||
+      minimaxH3MultimodalToVideoEndpoint ||
       (workflowCreatePath && digitalHumanWorkflowId) ||
       (workflowCreatePath && videoEnhanceWorkflowId),
   )
@@ -138,6 +143,7 @@ export function getRunningHubConfig(): RunningHubConfig {
     seedanceProImageToVideoEndpoint,
     seedanceMiniTextToVideoEndpoint,
     seedanceMiniImageToVideoEndpoint,
+    minimaxH3MultimodalToVideoEndpoint,
     digitalHumanWorkflowId,
     videoEnhanceWorkflowId,
     image: {
@@ -154,6 +160,7 @@ export function getRunningHubConfig(): RunningHubConfig {
         seedanceProImageToVideoEndpoint ||
         seedanceMiniTextToVideoEndpoint ||
         seedanceMiniImageToVideoEndpoint ||
+        minimaxH3MultimodalToVideoEndpoint ||
         workflowCreatePath,
     },
   }

@@ -18,7 +18,7 @@ import type {
 
 function inferFeatureId(model: ModelDefinition) {
   const value = model.providerMetadata?.featureId
-  if (value === "image-to-video" || value === "digital-human" || value === "video-enhance") {
+  if (value === "image-to-video" || value === "reference-to-video" || value === "digital-human" || value === "video-enhance") {
     return value
   }
   return "text-to-video"
@@ -36,7 +36,7 @@ function toOutputs(task: Pick<RunningHubVideoTask, "results">): CapabilityOutput
 
 export const runninghubVideoAdapter: ProviderAdapter = {
   provider: "runninghub",
-  capabilities: ["video.text_to_video", "video.image_to_video", "video.digital_human"],
+  capabilities: ["video.text_to_video", "video.image_to_video", "video.reference_to_video", "video.digital_human"],
   isConfigured(input: ProviderConfigContext) {
     return isRunningHubConfiguredForTarget("ai-video", input.runtimeContext?.runningHubConfig)
   },

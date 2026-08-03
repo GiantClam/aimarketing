@@ -27,7 +27,12 @@ import {
   uploadRunningHubBinary,
 } from "@/lib/platform/runninghub"
 
-export type RunningHubVideoFeatureId = "text-to-video" | "image-to-video" | "digital-human" | "video-enhance"
+export type RunningHubVideoFeatureId =
+  | "text-to-video"
+  | "image-to-video"
+  | "reference-to-video"
+  | "digital-human"
+  | "video-enhance"
 
 type RunningHubVideoRuntimeUser = {
   id: number
@@ -92,6 +97,25 @@ function normalizeBoolean(value: unknown, fallback = false) {
     if (normalized === "false") return false
   }
   return fallback
+}
+
+function normalizeMediaUrls(value: unknown, maxCount: number) {
+  const values = Array.isArray(value)
+    ? value.flatMap((item) => (typeof item === "string" ? item.split(/[\n,]/u) : []))
+    : typeof value === "string"
+      ? value.split(/[\n,]/u)
+      : []
+
+  return [...new Set(values.map((item) => item.trim()).filter(Boolean))].slice(0, maxCount)
+}
+
+function isMiniMaxH3VideoModel(params: Record<string, unknown>) {
+  const candidates = [params.modelId, params.model, params.nativeModel]
+  return candidates.some((value) => {
+    if (typeof value !== "string") return false
+    const normalized = value.trim().toLowerCase()
+    return normalized.includes("minimax-h3") || normalized.includes("hailuo-h3")
+  })
 }
 
 function isSeedanceMiniVideoModel(params: Record<string, unknown>) {
@@ -229,6 +253,7 @@ async function getRunningHubVideoRunForUser(runId: number, currentUser: RunningH
 
 function resolveRequestedTarget(run: HydratedPlatformTaskRun): RunningHubVideoFeatureId {
   if (run.itemSlug === "image-to-video") return "image-to-video"
+  if (run.itemSlug === "reference-to-video") return "reference-to-video"
   if (run.itemSlug === "digital-human") return "digital-human"
   if (run.itemSlug === "video-enhance") return "video-enhance"
   return "text-to-video"
@@ -466,6 +491,69 @@ async function submitTextToVideoTask(
   })
 }
 
+export function buildMiniMaxH3MultimodalVideoPayload(
+  featureId: RunningHubVideoFeatureId,
+  params: Record<string, unknown>,
+) {
+  const prompt = normalizeOptionalText(params.prompt)
+  if (!prompt) {
+    throw new Error("video_prompt_required")
+  }
+
+  const imageUrls = normalizeMediaUrls(
+    [
+      ...normalizeMediaUrls(params.imageUrls ?? params.referenceImageUrls ?? params.referenceImages, 9),
+      ...normalizeMediaUrls(params.firstFrameUrl, 1),
+    ],
+    9,
+  )
+  const videoUrls = normalizeMediaUrls(
+    params.videoUrls ?? params.referenceVideoUrls ?? params.referenceVideos ??
+      (params.sourceVideoUrl ? [params.sourceVideoUrl] : undefined),
+    3,
+  )
+  const audioUrls = normalizeMediaUrls(
+    params.audioUrls ?? params.referenceAudioUrls ?? params.referenceAudios ??
+      (params.audioUrl ? [params.audioUrl] : undefined),
+    3,
+  )
+
+  if (featureId === "image-to-video" && imageUrls.length === 0) {
+    throw new Error("video_first_frame_required")
+  }
+  if (featureId === "reference-to-video" && imageUrls.length + videoUrls.length + audioUrls.length === 0) {
+    throw new Error("video_reference_required")
+  }
+
+  return {
+    prompt,
+    ...(imageUrls.length > 0 ? { imageUrls } : {}),
+    ...(videoUrls.length > 0 ? { videoUrls } : {}),
+    ...(audioUrls.length > 0 ? { audioUrls } : {}),
+    resolution: "2K",
+    duration: String(Math.max(5, Math.min(15, normalizeInteger(params.duration) ?? 5))),
+    ratio: normalizeOptionalText(params.ratio) || "adaptive",
+  }
+}
+
+async function submitMiniMaxH3MultimodalVideoTask(
+  featureId: RunningHubVideoFeatureId,
+  params: Record<string, unknown>,
+  config?: ReturnType<typeof getRunningHubConfig>,
+) {
+  const resolvedConfig = config ?? getRunningHubConfig()
+  const endpoint = resolvedConfig.minimaxH3MultimodalToVideoEndpoint
+  if (!endpoint) {
+    throw new Error("runninghub_not_configured")
+  }
+
+  return submitRunningHubRawTask({
+    endpoint,
+    config: resolvedConfig,
+    payload: buildMiniMaxH3MultimodalVideoPayload(featureId, params),
+  })
+}
+
 async function submitImageToVideoTask(
   params: Record<string, unknown>,
   config?: ReturnType<typeof getRunningHubConfig>,
@@ -583,7 +671,13 @@ async function submitVideoEnhanceTask(
 }
 
 export function resolveRunningHubVideoFeatureId(value: unknown): RunningHubVideoFeatureId | null {
-  if (value === "text-to-video" || value === "image-to-video" || value === "digital-human" || value === "video-enhance") {
+  if (
+    value === "text-to-video" ||
+    value === "image-to-video" ||
+    value === "reference-to-video" ||
+    value === "digital-human" ||
+    value === "video-enhance"
+  ) {
     return value
   }
   if (value === "ai-video") return "text-to-video"
@@ -603,7 +697,9 @@ export async function executeRunningHubVideoFeature(input: {
   })
 
   const task =
-    input.featureId === "image-to-video"
+    isMiniMaxH3VideoModel(input.params) || input.featureId === "reference-to-video"
+      ? await submitMiniMaxH3MultimodalVideoTask(input.featureId, input.params, input.config)
+      : input.featureId === "image-to-video"
       ? await submitImageToVideoTask(input.params, input.config)
       : input.featureId === "digital-human"
         ? await submitDigitalHumanTask(input.params, input.config)

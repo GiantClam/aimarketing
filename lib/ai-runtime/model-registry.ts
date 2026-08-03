@@ -76,6 +76,20 @@ const SEEDANCE_VIDEO_RESOLUTION_OPTIONS = [
   { label: "4k", value: "4k" },
 ]
 
+const MINIMAX_H3_DURATION_OPTIONS = Array.from({ length: 11 }, (_, index) => {
+  const value = String(index + 5)
+  return { label: `${value}s`, value }
+})
+
+const MINIMAX_H3_RATIO_OPTIONS = VIDEO_RATIO_OPTIONS
+
+const MINIMAX_H3_ALIASES = [
+  "MiniMax-H3",
+  "minimax-h3",
+  "MiniMax-H3 多模态参考生视频",
+  "MiniMax-H3 Multimodal Reference-to-Video",
+]
+
 const models: ModelDefinition[] = [
   {
     id: "bailian:image:qwen-image-3.0-pro",
@@ -595,6 +609,73 @@ const models: ModelDefinition[] = [
     providerMetadata: {
       nativeModel: "seedance-mini-image-to-video",
       featureId: "image-to-video",
+    },
+  },
+  {
+    id: "runninghub:video:minimax-h3-text-to-video",
+    provider: "runninghub",
+    capability: "video.text_to_video",
+    label: "MiniMax-H3 Text to Video",
+    async: true,
+    outputKind: "video",
+    defaultTimeoutMs: 30 * 60_000,
+    parameterSchema: [
+      { id: "prompt", label: "Prompt", type: "textarea", required: true },
+      selectParameter("resolution", "Resolution", "2K", [{ label: "2K", value: "2K" }]),
+      selectParameter("duration", "Duration", "5", MINIMAX_H3_DURATION_OPTIONS),
+      selectParameter("ratio", "Aspect ratio", "adaptive", MINIMAX_H3_RATIO_OPTIONS),
+    ],
+    providerMetadata: {
+      nativeModel: "minimax-h3-text-to-video",
+      aliases: MINIMAX_H3_ALIASES,
+      featureId: "text-to-video",
+    },
+  },
+  {
+    id: "runninghub:video:minimax-h3-image-to-video",
+    provider: "runninghub",
+    capability: "video.image_to_video",
+    label: "MiniMax-H3 Image to Video",
+    async: true,
+    outputKind: "video",
+    defaultTimeoutMs: 30 * 60_000,
+    parameterSchema: [
+      { id: "firstFrameUrl", label: "First frame URL", type: "url", required: true },
+      { id: "imageUrls", label: "Additional image URLs", type: "textarea" },
+      { id: "prompt", label: "Prompt", type: "textarea", required: true },
+      selectParameter("resolution", "Resolution", "2K", [{ label: "2K", value: "2K" }]),
+      selectParameter("duration", "Duration", "5", MINIMAX_H3_DURATION_OPTIONS),
+      selectParameter("ratio", "Aspect ratio", "adaptive", MINIMAX_H3_RATIO_OPTIONS),
+    ],
+    providerMetadata: {
+      nativeModel: "minimax-h3-image-to-video",
+      aliases: MINIMAX_H3_ALIASES,
+      featureId: "image-to-video",
+    },
+  },
+  {
+    id: "runninghub:video:minimax-h3-reference-to-video",
+    provider: "runninghub",
+    capability: "video.reference_to_video",
+    label: "MiniMax-H3 Reference to Video",
+    async: true,
+    outputKind: "video",
+    defaultTimeoutMs: 30 * 60_000,
+    parameterSchema: [
+      { id: "referenceImageUrls", label: "Reference image URLs", type: "textarea" },
+      { id: "videoUrls", label: "Reference video URLs", type: "textarea" },
+      { id: "sourceVideoUrl", label: "Reference video URL", type: "url" },
+      { id: "audioUrls", label: "Reference audio URLs", type: "textarea" },
+      { id: "audioUrl", label: "Reference audio URL", type: "url" },
+      { id: "prompt", label: "Prompt", type: "textarea", required: true },
+      selectParameter("resolution", "Resolution", "2K", [{ label: "2K", value: "2K" }]),
+      selectParameter("duration", "Duration", "5", MINIMAX_H3_DURATION_OPTIONS),
+      selectParameter("ratio", "Aspect ratio", "adaptive", MINIMAX_H3_RATIO_OPTIONS),
+    ],
+    providerMetadata: {
+      nativeModel: "minimax-h3-reference-to-video",
+      aliases: MINIMAX_H3_ALIASES,
+      featureId: "reference-to-video",
     },
   },
   {

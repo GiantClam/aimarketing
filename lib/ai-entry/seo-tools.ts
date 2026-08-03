@@ -29,10 +29,10 @@ function canUsePaidSeoData(entitlement: Awaited<ReturnType<typeof getBillingEnti
 
 export function buildAiEntrySeoTools(input: { currentUser: AuthUser }): ToolSet {
   return {
-    dataforseo_serp: tool<unknown, Record<string, unknown>>({
+    dataforseo_serp: tool<DataForSeoSerpInput, Record<string, unknown>, Record<string, unknown>>({
       description: "Run a paid, live Google organic SERP query. Requires an authenticated user with enough credits or a paid subscription. Use only after confirming the keyword, location code, and language code.",
       inputSchema: dataForSeoSerpSchema as any,
-      execute: async (rawInput: unknown): Promise<Record<string, unknown>> => {
+      execute: async (rawInput: DataForSeoSerpInput): Promise<Record<string, unknown>> => {
         if (!isDataForSeoConfigured()) throw new Error("dataforseo_not_configured")
         const request = dataForSeoSerpSchema.parse(rawInput) as DataForSeoSerpInput
         const entitlement = await getBillingEntitlementForUser(input.currentUser)

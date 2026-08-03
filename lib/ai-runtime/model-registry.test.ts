@@ -98,6 +98,21 @@ test("model registry exposes RunningHub Seedance Pro text and image video models
   assert.equal(imageModel?.providerMetadata?.nativeModel, "seedance-pro-image-to-video")
 })
 
+test("model registry exposes MiniMax-H3 multimodal RunningHub video models", () => {
+  const textModel = getModelDefinition("runninghub:video:minimax-h3-text-to-video")
+  const imageModel = getModelDefinition("runninghub:video:minimax-h3-image-to-video")
+  const referenceModel = getModelDefinition("runninghub:video:minimax-h3-reference-to-video")
+
+  assert.equal(textModel?.capability, "video.text_to_video")
+  assert.equal(imageModel?.capability, "video.image_to_video")
+  assert.equal(referenceModel?.capability, "video.reference_to_video")
+  assert.equal(referenceModel?.providerMetadata?.nativeModel, "minimax-h3-reference-to-video")
+  assert.equal(
+    findModelByCapabilityAndAlias({ capability: "video.reference_to_video", value: "MiniMax-H3" })?.id,
+    "runninghub:video:minimax-h3-reference-to-video",
+  )
+})
+
 test("model registry exposes only the supported MiniMax video models", () => {
   const videoModels = listModels()
     .filter((model) => model.provider === "minimax" && model.outputKind === "video")

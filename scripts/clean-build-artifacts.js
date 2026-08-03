@@ -38,6 +38,11 @@ for (const target of targets) {
     continue
   }
 
-  fs.rmSync(targetPath, { force: true, recursive: true })
+  fs.rmSync(targetPath, {
+    force: true,
+    recursive: true,
+    maxRetries: 5,
+    retryDelay: 100,
+  })
   console.log(`removed ${target}`)
 }
