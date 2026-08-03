@@ -16,6 +16,7 @@ import { getWriterConversation, listWriterMessages, updateWriterLatestAssistantM
 import type { WriterConversationStatus, WriterPreloadedBrief } from "@/lib/writer/types"
 
 export const runtime = "nodejs"
+export const maxDuration = 300
 
 const WRITER_CHAT_HISTORY_LIMIT = 12
 const STREAM_HEADERS = {
@@ -227,6 +228,20 @@ export async function POST(req: NextRequest) {
           at: Date.now(),
         })
 
+        // OpenCode can spend a while planning and loading a skill before its
+        // first text delta. Keep the browser-facing SSE response active during
+        // that silent period so an otherwise successful Railway run is not
+        // mistaken for a disconnected Writer request.
+        const writerHeartbeat = setInterval(() => {
+          sendProgressEvent({
+            type: "runtime_waiting",
+            label: "Writer is preparing the draft",
+            detail: "OpenCode is still working on the article.",
+            status: "running",
+            at: Date.now(),
+          })
+        }, 10_000)
+
         try {
           const writerSkillRunner = loadWriterSkillRunner()
           const turnResult = await writerSkillRunner.runBlocking({
@@ -348,6 +363,8 @@ export async function POST(req: NextRequest) {
             error: error instanceof Error ? error.message : "writer_stream_failed",
           })
           closeStream()
+        } finally {
+          clearInterval(writerHeartbeat)
         }
       },
     })
