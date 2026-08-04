@@ -8,12 +8,6 @@ import { resolveWriterOpenCodeRuntimeProfile } from "@/lib/ai-entry/runtime/prof
 /* eslint-disable no-useless-escape */
 import { z } from "zod"
 import {
-  generateTextWithWriterModel,
-  hasAibermApiKey,
-  hasCrazyrouteApiKey,
-  hasWriterTextProvider,
-} from "@/lib/writer/aiberm"
-import {
   WRITER_CONTENT_TYPE_CONFIG,
   WRITER_PLATFORM_CONFIG,
   isWriterContentType,
@@ -25,7 +19,7 @@ import {
 import { writerRequestJson, writerRequestText } from "@/lib/writer/network"
 import { isWriterR2Available } from "@/lib/writer/r2"
 import { buildWriterRoutingDecision, describeWriterRoute, hasWriterXPlatformSignal } from "@/lib/writer/routing"
-import { listWriterPlatformSkills } from "@/lib/writer/skill-catalog"
+import { listWriterPlatformSkills, resolveWriterOpenCodeSkillIds } from "@/lib/writer/skill-catalog"
 import { hasSerperWebSearchConfig, searchWithSerperWeb } from "@/lib/skills/tools/web-search"
 import { getWriterSoulProfile, listWriterMemories } from "@/lib/writer/memory/repository"
 import { rankWriterMemories } from "@/lib/writer/memory/retrieval"
@@ -54,8 +48,6 @@ const SERPER_API_KEY = process.env.SERPER_API_KEY || ""
 const SERPER_API_BASE = (process.env.SERPER_API_BASE || "https://google.serper.dev").replace(/\/+$/, "")
 const SERPER_SCRAPE_API_BASE = (process.env.SERPER_SCRAPE_API_BASE || "https://scrape.serper.dev").replace(/\/+$/, "")
 
-const WRITER_TEXT_MODEL = process.env.WRITER_TEXT_MODEL || "gpt-4-mini"
-const WRITER_SKILL_MODEL = process.env.WRITER_SKILL_MODEL || "gpt-5.3-codex"
 const WRITER_ENABLE_WEB_RESEARCH = process.env.WRITER_ENABLE_WEB_RESEARCH !== "false"
 const WRITER_REQUIRE_WEB_RESEARCH = process.env.WRITER_REQUIRE_WEB_RESEARCH === "true"
 const WRITER_RESEARCH_CACHE_TTL_MS = Math.max(
@@ -69,25 +61,6 @@ const WRITER_RESEARCH_BUDGET_MS = Math.max(
 const WRITER_ENTERPRISE_KNOWLEDGE_BUDGET_MS = Math.max(
   0,
   Number.parseInt(process.env.WRITER_ENTERPRISE_KNOWLEDGE_BUDGET_MS || "6000", 10) || 6_000,
-)
-const WRITER_BRIEF_EXTRACTION_TIMEOUT_MS = Math.min(
-  120_000,
-  Math.max(10_000, Number.parseInt(process.env.WRITER_BRIEF_EXTRACTION_TIMEOUT_MS || "35000", 10) || 35_000),
-)
-const WRITER_BRIEF_EXTRACTION_PROVIDER_TIMEOUT_MS = Math.min(
-  WRITER_BRIEF_EXTRACTION_TIMEOUT_MS,
-  Math.max(
-    8_000,
-    Number.parseInt(process.env.WRITER_BRIEF_EXTRACTION_PROVIDER_TIMEOUT_MS || "25000", 10) || 25_000,
-  ),
-)
-const WRITER_DRAFT_GENERATION_TIMEOUT_MS = Math.min(
-  300_000,
-  Math.max(20_000, Number.parseInt(process.env.WRITER_DRAFT_GENERATION_TIMEOUT_MS || "120000", 10) || 120_000),
-)
-const WRITER_DRAFT_PROVIDER_TIMEOUT_MS = Math.min(
-  WRITER_DRAFT_GENERATION_TIMEOUT_MS,
-  Math.max(15_000, Number.parseInt(process.env.WRITER_DRAFT_PROVIDER_TIMEOUT_MS || "75000", 10) || 75_000),
 )
 const WRITER_SEARCH_RESULT_LIMIT = Math.min(
   10,
@@ -489,6 +462,108 @@ type WriterBriefPlan = {
 type WriterDraftGenerationResult = {
   answer: string
   diagnostics: WriterTurnDiagnostics
+  usage?: WriterRuntimeUsage
+}
+
+export type WriterRuntimeUsage = {
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+  toolCallCount: number
+}
+
+function emptyWriterRuntimeUsage(): WriterRuntimeUsage {
+  return { inputTokens: 0, outputTokens: 0, costUsd: 0, toolCallCount: 0 }
+}
+
+function combineWriterRuntimeUsage(...values: Array<WriterRuntimeUsage | null | undefined>): WriterRuntimeUsage {
+  return values.reduce<WriterRuntimeUsage>((total, value) => value
+    ? {
+        inputTokens: total.inputTokens + value.inputTokens,
+        outputTokens: total.outputTokens + value.outputTokens,
+        costUsd: total.costUsd + value.costUsd,
+        toolCallCount: total.toolCallCount + value.toolCallCount,
+      }
+    : total, emptyWriterRuntimeUsage())
+}
+
+async function runWriterOpenCodeText(params: {
+  systemPrompt: string
+  userPrompt: string
+  history?: WriterHistoryEntry[]
+  selectedSkillIds: string[]
+  writerPhase: "briefing" | "draft"
+  allowNetwork: boolean
+  userId?: number
+  conversationId?: string | null
+  enterpriseId?: number | null
+  selectedProviderId?: AiEntryProviderId | null
+  selectedModelId?: string | null
+}) {
+  const runtimeProfile = resolveWriterOpenCodeRuntimeProfile()
+  if (!runtimeProfile.enabled || runtimeProfile.backend !== "railway-opencode") {
+    throw new Error("writer_opencode_runtime_not_configured")
+  }
+
+  const provider = resolveAiEntryOpenCodeProvider({
+    providerId: params.selectedProviderId,
+    modelId: params.selectedModelId,
+  })
+  if (!provider) throw new Error("writer_opencode_provider_not_configured")
+
+  const historyMessages = (params.history || [])
+    .flatMap((entry) => {
+      const content = (entry.content || entry.answer || entry.query || "").trim()
+      if (!content) return []
+      return [{
+        role: entry.role === "assistant" || entry.answer ? "assistant" as const : "user" as const,
+        content,
+      }]
+    })
+  const runtimeInput = buildAgentRuntimeInput({
+    runId: randomUUID(),
+    sessionKey: null,
+    conversationId: params.conversationId || null,
+    enterpriseId: params.enterpriseId || null,
+    userId: params.userId || 0,
+    agentId: "writer",
+    writerPhase: params.writerPhase,
+    selectedSkillIds: params.selectedSkillIds,
+    systemPrompt: params.systemPrompt,
+    messages: [...historyMessages, { role: "user", content: params.userPrompt }],
+    attachments: [],
+    artifactContext: [],
+    workflowContext: null,
+    modelHint: `${provider.providerId}/${provider.modelId}`,
+    allowNetwork: params.allowNetwork,
+    profileLimits: {
+      maxArtifacts: 0,
+      maxArtifactBytes: 0,
+      maxArtifactTotalBytes: 0,
+    },
+  })
+
+  let answer = ""
+  const usage = emptyWriterRuntimeUsage()
+  for await (const event of runOpenCodeAgent(runtimeInput, {
+    runnerUrl: runtimeProfile.runnerUrl,
+    backend: "railway-opencode",
+    railway: true,
+    timeoutMs: runtimeProfile.timeoutMs,
+    provider,
+    session: runtimeProfile.sessionEnabled,
+  })) {
+    if (event.event === "text_delta") answer += event.delta
+    if (event.event === "tool_event" && event.phase === "started") usage.toolCallCount += 1
+    if (event.event === "usage") {
+      if (Number.isFinite(event.inputTokens) && (event.inputTokens || 0) >= 0) usage.inputTokens += event.inputTokens || 0
+      if (Number.isFinite(event.outputTokens) && (event.outputTokens || 0) >= 0) usage.outputTokens += event.outputTokens || 0
+      if (Number.isFinite(event.costUsd) && (event.costUsd || 0) >= 0) usage.costUsd += event.costUsd || 0
+    }
+    if (event.event === "runtime_error") throw new Error(`writer_opencode_failed:${event.message}`)
+  }
+  if (!answer.trim()) throw new Error("writer_opencode_empty_response")
+  return { answer, usage }
 }
 
 export type WriterSkillsTurnResult =
@@ -496,11 +571,13 @@ export type WriterSkillsTurnResult =
       outcome: "needs_clarification"
       answer: string
       diagnostics: WriterTurnDiagnostics
+      usage?: WriterRuntimeUsage
     } & WriterBriefPlan)
   | ({
       outcome: "draft_ready"
       answer: string
       diagnostics: WriterTurnDiagnostics
+      usage?: WriterRuntimeUsage
     } & WriterBriefPlan)
 
 type WriterSkillsRuntime = {
@@ -624,10 +701,6 @@ function detectExplicitEnterpriseKnowledgeRequestNormalized(text: string) {
 
 function detectFreshResearchNeedConservative(query: string, brief: WriterConversationBrief) {
   const haystack = [query, brief.topic, brief.objective].filter(Boolean).join("\n")
-  if (collectWriterSourceUrls({ query, brief }).length > 0) {
-    return true
-  }
-
   return WRITER_FRESH_RESEARCH_SIGNAL_RE.test(haystack) || WRITER_SOURCE_REFERENCE_SIGNAL_RE.test(haystack)
 }
 
@@ -637,15 +710,6 @@ function inferWriterRetrievalHintsFromSignals(query: string, brief: WriterConver
   const explicitEnterpriseReference = detectExplicitEnterpriseReference(haystack)
   const enterpriseFactSignals = detectEnterpriseGroundingNeedSafe(query, brief)
   const freshResearchSignals = detectFreshResearchNeedConservative(query, brief)
-  const hasSourceUrls = collectWriterSourceUrls({ query, brief }).length > 0
-
-  if (hasSourceUrls) {
-    return createWriterRetrievalHints({
-      freshResearchNeeded: true,
-      confidence: 0.99,
-      reason: "source_url_reference",
-    })
-  }
 
   if (detectRewriteOnlyIntentSafe(query)) {
     return createWriterRetrievalHints({ confidence: 0.98, reason: "rewrite_only" })
@@ -701,11 +765,6 @@ function decideWriterRetrievalStrategy(params: {
 }): WriterRetrievalStrategy {
   const confirmationReply = safeIsWriterConfirmationReply(params.query)
   const rewriteOnly = detectRewriteOnlyIntentSafe(params.query)
-  const hasSourceUrls = collectWriterSourceUrls({
-    query: params.query,
-    brief: params.brief,
-    history: params.history,
-  }).length > 0
   const fallbackHints = inferWriterRetrievalHintsFromSignals(params.query, params.brief)
   const structuredHints = params.retrievalHints
   const useStructuredHints = Boolean(structuredHints && structuredHints.confidence >= 0.7)
@@ -715,7 +774,6 @@ function decideWriterRetrievalStrategy(params: {
   )
   const enterpriseContinuation = Boolean(params.enterpriseId) && detectEnterpriseBriefFactSignals(params.brief)
   const freshResearchNeeded = Boolean(
-    hasSourceUrls ||
     fallbackHints.freshResearchNeeded ||
       (useStructuredHints &&
         structuredHints?.freshResearchNeeded &&
@@ -723,12 +781,6 @@ function decideWriterRetrievalStrategy(params: {
         !genericWritingOnly),
   )
 
-  if (hasSourceUrls) {
-    if (enterpriseNeeded || enterpriseContinuation) {
-      return "hybrid_grounded"
-    }
-    return "fresh_external"
-  }
 
   if (rewriteOnly && !enterpriseNeeded && !freshResearchNeeded) {
     return "rewrite_only"
@@ -957,17 +1009,11 @@ function buildWriterGroundingQuery(
       .map((entry) => normalizeBriefValue(entry.query || entry.inputs?.contents || ""))
       .reverse()
       .find((query) => query && !safeIsWriterConfirmationReply(query)) || ""
-  const sourceUrls = collectWriterSourceUrls({
-    query: fallbackQuery,
-    brief,
-    history,
-  })
   const sections = [
     brief.topic ? `Topic: ${brief.topic}` : "",
     brief.audience ? `Audience: ${brief.audience}` : "",
     brief.objective ? `Objective: ${brief.objective}` : "",
     brief.constraints ? `Constraints: ${brief.constraints}` : "",
-    sourceUrls.length > 0 ? `Source URLs: ${sourceUrls.join(" ")}` : "",
     lastSubstantiveUserQuery ? `Original request: ${lastSubstantiveUserQuery}` : "",
   ].filter(Boolean)
 
@@ -1206,6 +1252,7 @@ type WriterBriefExtractionResult = {
   briefSufficient: boolean
   retrievalHints: WriterRetrievalHints
   confidence: number
+  usage?: WriterRuntimeUsage
 }
 
 function _legacyExtractTopicFromText(text: string) {
@@ -1937,30 +1984,6 @@ function extractUrlsFromText(text: string) {
   return [...urls].slice(0, 5)
 }
 
-function collectWriterSourceUrls(params: {
-  query: string
-  brief?: WriterConversationBrief | null
-  history?: WriterHistoryEntry[]
-}) {
-  const urls = new Set<string>()
-  const register = (value: string) => {
-    for (const url of extractUrlsFromText(value)) {
-      urls.add(url)
-    }
-  }
-
-  register(params.query)
-  register(params.brief?.topic || "")
-  register(params.brief?.constraints || "")
-  register(params.brief?.objective || "")
-  for (const entry of params.history || []) {
-    register(entry.query || "")
-    register(entry.inputs?.contents || "")
-  }
-
-  return [...urls].slice(0, 5)
-}
-
 function inferWriterBriefFromPromptedReply(
   query: string,
   requestedFields: WriterBriefFieldId[],
@@ -2142,21 +2165,20 @@ async function extractWriterBriefWithModel(params: {
     return extractWriterBriefWithFixture(params)
   }
 
-  if (!hasWriterTextProvider()) {
-    return null
-  }
-
   try {
     const { systemPrompt, userPrompt } = buildWriterBriefExtractionPrompt(params)
-    const raw = await generateTextWithWriterModel(systemPrompt, userPrompt, params.selectedModelId || WRITER_SKILL_MODEL, {
-      temperature: 0,
-      maxTokens: 900,
-      timeoutMs: WRITER_BRIEF_EXTRACTION_PROVIDER_TIMEOUT_MS,
-      totalTimeoutMs: WRITER_BRIEF_EXTRACTION_TIMEOUT_MS,
-      providerTimeoutMs: WRITER_BRIEF_EXTRACTION_PROVIDER_TIMEOUT_MS,
-      preferredProviderId: params.selectedProviderId,
+    const result = await runWriterOpenCodeText({
+      systemPrompt,
+      userPrompt,
+      history: params.history,
+      selectedSkillIds: ["writer-briefing"],
+      writerPhase: "briefing",
+      allowNetwork: false,
+      conversationId: null,
+      selectedProviderId: params.selectedProviderId,
+      selectedModelId: params.selectedModelId,
     })
-    const parsed = WRITER_BRIEF_EXTRACTION_SCHEMA.safeParse(JSON.parse(extractJsonObjectFromText(raw)))
+    const parsed = WRITER_BRIEF_EXTRACTION_SCHEMA.safeParse(JSON.parse(extractJsonObjectFromText(result.answer)))
     if (!parsed.success) {
       console.warn("writer.brief-extraction.invalid", parsed.error.flatten())
       return null
@@ -2173,6 +2195,7 @@ async function extractWriterBriefWithModel(params: {
       briefSufficient: parsed.data.briefSufficient,
       retrievalHints: parsed.data.retrievalHints,
       confidence: parsed.data.confidence,
+      usage: result.usage,
     }
   } catch (error) {
     console.warn("writer.brief-extraction.failed", error instanceof Error ? error.message : String(error))
@@ -4147,12 +4170,12 @@ async function buildUserPrompt(
 
 export function isWriterSkillsAvailable() {
   const openCodeWriterAvailable = hasWriterOpenCodeRuntime()
-  return (hasWriterTextProvider() || openCodeWriterAvailable) && isWriterR2Available() && (hasWriterResearchConfig() || !WRITER_REQUIRE_WEB_RESEARCH)
+  return openCodeWriterAvailable && isWriterR2Available()
 }
 
 export type WriterSkillsAvailability = {
   enabled: boolean
-  provider: "aiberm" | "crazyroute" | "opencode" | "unavailable"
+  provider: "opencode" | "unavailable"
   reason: "ok" | "llm_api_key_missing" | "research_config_missing" | "writer_r2_config_missing"
   requiresWebResearch: boolean
   webResearchEnabled: boolean
@@ -4165,30 +4188,14 @@ function hasWriterOpenCodeRuntime() {
 
 export function getWriterSkillsAvailability(): WriterSkillsAvailability {
   const openCodeWriterAvailable = hasWriterOpenCodeRuntime()
-  const preferredProvider = openCodeWriterAvailable
-    ? "opencode"
-    : hasAibermApiKey()
-      ? "aiberm"
-      : hasCrazyrouteApiKey()
-        ? "crazyroute"
-        : "unavailable"
+  const preferredProvider = openCodeWriterAvailable ? "opencode" : "unavailable"
 
-  if (!hasWriterTextProvider() && !openCodeWriterAvailable) {
+  if (!openCodeWriterAvailable) {
     return {
       enabled: false,
       provider: "unavailable",
       reason: "llm_api_key_missing",
       requiresWebResearch: WRITER_REQUIRE_WEB_RESEARCH,
-      webResearchEnabled: WRITER_ENABLE_WEB_RESEARCH,
-    }
-  }
-
-  if (WRITER_REQUIRE_WEB_RESEARCH && !hasWriterResearchConfig()) {
-    return {
-      enabled: false,
-      provider: preferredProvider,
-      reason: "research_config_missing",
-      requiresWebResearch: true,
       webResearchEnabled: WRITER_ENABLE_WEB_RESEARCH,
     }
   }
@@ -4225,7 +4232,6 @@ export async function generateWriterDraftWithSkills(
     retrievalStrategy?: WriterRetrievalStrategy
     enterpriseQueryVariants?: string[]
     preferredEnterpriseScopes?: EnterpriseKnowledgeScope[]
-    sourceUrls?: string[]
     personalizationBlock?: string | null
     memoryRetrievedCount?: number
     memoryAppliedIds?: string[]
@@ -4238,14 +4244,9 @@ export async function generateWriterDraftWithSkills(
 ): Promise<WriterDraftGenerationResult> {
   const contextQuery = options?.researchQuery?.trim() || query
   const retrievalStrategy = options?.retrievalStrategy || "no_retrieval"
-  const sourceUrls = [
-    ...new Set((options?.sourceUrls || []).map(normalizeResearchUrl).filter(Boolean)),
-  ].slice(0, 5)
   const shouldUseEnterpriseKnowledge =
     Boolean(options?.enterpriseId) &&
     (retrievalStrategy === "enterprise_grounded" || retrievalStrategy === "hybrid_grounded")
-  const shouldUseWebResearch =
-    retrievalStrategy === "fresh_external" || retrievalStrategy === "hybrid_grounded" || sourceUrls.length > 0
 
   const enterpriseKnowledgePromise = shouldUseEnterpriseKnowledge
     ? withTimeout(
@@ -4270,7 +4271,7 @@ export async function generateWriterDraftWithSkills(
         retrievalStrategy,
         enterpriseKnowledge,
         enterpriseKnowledgeEnabled: shouldUseEnterpriseKnowledge,
-        research: createEmptyResearchResult(shouldUseWebResearch ? "unavailable" : "skipped"),
+        research: createEmptyResearchResult("skipped"),
         memoryRetrievedCount: options?.memoryRetrievedCount,
         memoryAppliedIds: options?.memoryAppliedIds,
         soulCardVersion: options?.soulCardVersion,
@@ -4282,111 +4283,32 @@ export async function generateWriterDraftWithSkills(
   }
 
   const language = safeDetectRequestedLanguage(query, preferredLanguage)
-  const researchPromise = buildResearchContext(contextQuery, {
-    skip: !shouldUseWebResearch,
-    sourceUrls,
-  })
-  const [enterpriseKnowledge, research] = await Promise.all([enterpriseKnowledgePromise, researchPromise])
+  const [enterpriseKnowledge] = await Promise.all([enterpriseKnowledgePromise])
+  const research = createEmptyResearchResult("skipped")
   const [systemPrompt, userPrompt] = await Promise.all([
     buildSystemPrompt(query, routing, language.instruction, research, enterpriseKnowledge, options?.personalizationBlock),
     buildUserPrompt(query, routing, research, language.instruction, enterpriseKnowledge),
   ])
 
-  if (!isKhazixWechatRoute(routing)) {
-    const answer = await generateTextWithWriterModel(
-      systemPrompt,
-      userPrompt,
-      options?.selectedModelId || WRITER_TEXT_MODEL,
-      {
-        timeoutMs: WRITER_DRAFT_PROVIDER_TIMEOUT_MS,
-        totalTimeoutMs: WRITER_DRAFT_GENERATION_TIMEOUT_MS,
-        providerTimeoutMs: WRITER_DRAFT_PROVIDER_TIMEOUT_MS,
-        preferredProviderId: options?.selectedProviderId,
-      },
-    )
-
-    return {
-      answer: enforceWriterHardLengthTarget(
-        postProcessWriterDraft(routing.renderPlatform, routing.renderMode, answer, language.label),
-        routing,
-      ),
-      diagnostics: buildWriterTurnDiagnostics({
-        retrievalStrategy,
-        enterpriseKnowledge,
-        enterpriseKnowledgeEnabled: shouldUseEnterpriseKnowledge,
-        research,
-        memoryRetrievedCount: options?.memoryRetrievedCount,
-        memoryAppliedIds: options?.memoryAppliedIds,
-        soulCardVersion: options?.soulCardVersion,
-        soulCardConfidence: options?.soulCardConfidence,
-        memoryScope: options?.memoryScope,
-        routing,
-      }),
-    }
-  }
-
-  const runtimeProfile = resolveWriterOpenCodeRuntimeProfile()
-  if (!runtimeProfile.enabled || runtimeProfile.backend !== "railway-opencode") {
-    throw new Error("writer_opencode_runtime_not_configured")
-  }
-
-  const provider = resolveAiEntryOpenCodeProvider({
-    providerId: options?.selectedProviderId,
-    modelId: options?.selectedModelId,
+  const selectedSkillIds = resolveWriterOpenCodeSkillIds({
+    contentType: routing.contentType,
+    targetPlatform: routing.targetPlatform,
+    styleSkillId: routing.selectedStyleSkillId,
   })
-  if (!provider) {
-    throw new Error("writer_opencode_provider_not_configured")
-  }
-
-  const historyMessages = (options?.history || [])
-    .flatMap((entry) => {
-      const content = (entry.content || entry.answer || entry.query || "").trim()
-      if (!content) return []
-      return [{
-        role: entry.role === "assistant" || entry.answer ? "assistant" as const : "user" as const,
-        content,
-      }]
-    })
-  const runtimeInput = buildAgentRuntimeInput({
-    runId: randomUUID(),
-    sessionKey: null,
-    conversationId: options?.conversationId || null,
-    enterpriseId: options?.enterpriseId || null,
-    userId: options?.userId || 0,
-    agentId: "writer",
-    selectedSkillIds: ["khazix-writer"],
+  const result = await runWriterOpenCodeText({
     systemPrompt,
-    messages: [...historyMessages, { role: "user", content: userPrompt }],
-    attachments: [],
-    artifactContext: [],
-    workflowContext: null,
-    modelHint: `${provider.providerId}/${provider.modelId}`,
-    allowNetwork: false,
-    profileLimits: {
-      maxArtifacts: 0,
-      maxArtifactBytes: 0,
-      maxArtifactTotalBytes: 0,
-    },
+    userPrompt,
+    history: options?.history,
+    selectedSkillIds,
+    writerPhase: "draft",
+    allowNetwork: true,
+    userId: options?.userId,
+    conversationId: options?.conversationId,
+    enterpriseId: options?.enterpriseId,
+    selectedProviderId: options?.selectedProviderId,
+    selectedModelId: options?.selectedModelId,
   })
-
-  let answer = ""
-  for await (const event of runOpenCodeAgent(runtimeInput, {
-    runnerUrl: runtimeProfile.runnerUrl,
-    backend: "railway-opencode",
-    railway: true,
-    timeoutMs: runtimeProfile.timeoutMs,
-    provider,
-    session: runtimeProfile.sessionEnabled,
-  })) {
-    if (event.event === "text_delta") {
-      answer += event.delta
-    } else if (event.event === "runtime_error") {
-      throw new Error(`writer_opencode_failed:${event.message}`)
-    }
-  }
-  if (!answer.trim()) {
-    throw new Error("writer_opencode_empty_response")
-  }
+  const answer = result.answer
 
   return {
     answer: enforceWriterHardLengthTarget(
@@ -4408,6 +4330,7 @@ export async function generateWriterDraftWithSkills(
       memoryScope: options?.memoryScope,
       routing,
     }),
+    usage: result.usage,
   }
 }
 
@@ -4682,6 +4605,7 @@ export async function runWriterSkillsTurnWithRuntime(
       outcome: "needs_clarification",
       answer,
       diagnostics: { ...createEmptyWriterDiagnostics(retrievalStrategy), routing },
+      usage: structuredExtraction?.usage,
       brief: mergedBrief,
       routing,
       missingFields: actionableMissingFields,
@@ -4719,6 +4643,7 @@ export async function runWriterSkillsTurnWithRuntime(
         chinese,
       }),
       diagnostics: { ...createEmptyWriterDiagnostics(retrievalStrategy), routing },
+      usage: structuredExtraction?.usage,
       brief: mergedBrief,
       routing,
       missingFields: [],
@@ -4800,11 +4725,6 @@ export async function runWriterSkillsTurnWithRuntime(
   const groundingQuery = clipWriterEnterpriseRetrievalQuery(
     buildWriterGroundingQuery(mergedBrief, params.query, contextHistory),
   )
-  const sourceUrls = collectWriterSourceUrls({
-    query: params.query,
-    brief: mergedBrief,
-    history: contextHistory,
-  })
   const preferredEnterpriseScopes = getPreferredEnterpriseScopesSafe(params.query, mergedBrief, retrievalStrategy)
   const draftResult = await runtime.generateDraft(compiledPrompt, routing, preferredLanguage, {
     userId: params.userId,
@@ -4813,7 +4733,6 @@ export async function runWriterSkillsTurnWithRuntime(
     enterpriseId: params.enterpriseId,
     researchQuery: groundingQuery,
     retrievalStrategy,
-    sourceUrls,
     enterpriseQueryVariants: normalizeWriterEnterpriseQueryVariants(
       buildRuntimeEnterpriseQueryVariants(groundingQuery, preferredEnterpriseScopes),
     ),
@@ -4833,6 +4752,7 @@ export async function runWriterSkillsTurnWithRuntime(
     outcome: "draft_ready",
     answer: finalAnswer,
     diagnostics: draftResult.diagnostics,
+    usage: combineWriterRuntimeUsage(structuredExtraction?.usage, draftResult.usage),
     brief: mergedBrief,
     routing,
     missingFields: getWriterBriefMissingFields(mergedBrief),

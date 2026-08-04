@@ -282,8 +282,8 @@ export async function POST(req: NextRequest) {
 
           const actualCost = estimateTextCredits({
             featureKey: "writer_copy",
-            inputTokens,
-            outputTokens: estimateWriterTokens(turnResult.answer),
+            inputTokens: turnResult.usage?.inputTokens && turnResult.usage.inputTokens > 0 ? turnResult.usage.inputTokens : inputTokens,
+            outputTokens: turnResult.usage?.outputTokens && turnResult.usage.outputTokens > 0 ? turnResult.usage.outputTokens : estimateWriterTokens(turnResult.answer),
             provider: "writer",
             model: "writer-skills",
           })
@@ -297,7 +297,10 @@ export async function POST(req: NextRequest) {
             model: actualCost.model,
             officialCostUsd: actualCost.officialCostUsd,
             costBasisUsd: actualCost.costBasisUsd,
-            usagePayload: actualCost.metadata,
+            usagePayload: {
+              ...actualCost.metadata,
+              writerRuntimeUsage: turnResult.usage || null,
+            },
             metadata: {
               route: "writer.chat.stream",
               conversationId: pending.conversationId,

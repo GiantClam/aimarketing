@@ -301,7 +301,7 @@ export class OpenCodeServeManager {
         const state = asRecord(part?.state)
         const status = stringValue(state?.status, part?.status).toLowerCase()
         const phase = status === "error" || status === "failed" ? "failed" : status === "completed" || status === "success" ? "completed" : "started"
-        run.emit({ event: "tool_event", tool: stringValue(part?.tool, part?.name) || "tool", phase, ...(stringValue(state?.title, state?.message) ? { message: diagnostic(stringValue(state?.title, state?.message), "") } : {}), runId: run.runId })
+        run.emit({ event: "tool_event", tool: stringValue(part?.tool, part?.name) || "tool", ...(stringValue(part?.id) ? { toolCallId: stringValue(part?.id) } : {}), phase, ...(stringValue(state?.title, state?.message) ? { message: diagnostic(stringValue(state?.title, state?.message), "") } : {}), runId: run.runId })
         return
       }
       if (partType === "step-finish" || partType === "step_finish") {

@@ -1103,7 +1103,7 @@ test("retrieval strategy matrix covers broader writer intents", async () => {
           reason: "generic_writing",
         },
       }),
-      expected: "hybrid_grounded",
+      expected: "no_retrieval",
     },
     {
       name: "explicit knowledge-base wording forces enterprise grounding",
@@ -1207,7 +1207,7 @@ test("retrieval strategy matrix covers broader writer intents", async () => {
   }
 })
 
-test("history URL keeps retrieval in fresh_external mode for follow-up drafting", async () => {
+test("history URL is passed to OpenCode instead of forcing app-side retrieval", async () => {
   let generationOptions: any = null
 
   const result = await runWriterSkillsTurnWithRuntime(
@@ -1252,10 +1252,10 @@ test("history URL keeps retrieval in fresh_external mode for follow-up drafting"
   )
 
   assert.equal(result.outcome, "draft_ready")
-  assert.equal(generationOptions?.retrievalStrategy, "fresh_external")
+  assert.equal(generationOptions?.retrievalStrategy, "no_retrieval")
 })
 
-test("history URL extraction trims full-width punctuation suffix from chinese sentence", async () => {
+test("URL punctuation is preserved for OpenCode and not extracted by the app", async () => {
   let generationOptions: any = null
 
   const result = await runWriterSkillsTurnWithRuntime(
@@ -1294,10 +1294,10 @@ test("history URL extraction trims full-width punctuation suffix from chinese se
 
   assert.equal(result.outcome, "draft_ready")
   assert.equal(generationOptions?.retrievalStrategy, "fresh_external")
-  assert.deepEqual(generationOptions?.sourceUrls, ["https://example.com/agent-report"])
+  assert.equal(generationOptions?.sourceUrls, undefined)
 })
 
-test("adjacent source URLs separated by a Chinese conjunction are extracted independently", async () => {
+test("adjacent source URLs remain in the raw request for OpenCode research", async () => {
   let generationOptions: any = null
 
   const result = await runWriterSkillsTurnWithRuntime(
@@ -1329,10 +1329,7 @@ test("adjacent source URLs separated by a Chinese conjunction are extracted inde
   )
 
   assert.equal(result.outcome, "draft_ready")
-  assert.deepEqual(generationOptions?.sourceUrls, [
-    "https://example.com/first",
-    "https://example.com/second",
-  ])
+  assert.equal(generationOptions?.sourceUrls, undefined)
 })
 
 test("source URL research falls back to direct fetch and avoids search-config hard failure", async () => {

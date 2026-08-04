@@ -1,20 +1,25 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-03T07:12:14.751Z",
+  "generatedAt": "2026-08-04T08:14:39.671Z",
   "skills": [
     "ads-writing",
     "canvas-design-execution",
     "case-study-writing",
+    "content-analyzer",
     "content-briefing",
     "customer-intelligence-risk",
     "email-writing",
     "enterprise-ad-image",
     "executive-consulting-suite",
     "graphic-design-brief",
+    "headline-generator",
+    "keyword-mapper",
     "khazix-writer",
     "longform-writing",
+    "meta-creator",
     "newsletter-writing",
     "product-writing",
+    "seo-optimizer",
     "social-writing-cn",
     "social-writing-global",
     "speech-writing",
@@ -23,13 +28,23 @@
     "style-story-driven",
     "website-copy",
     "writer-briefing",
+    "writer-douyin",
     "writer-facebook",
+    "writer-instagram",
+    "writer-linkedin",
+    "writer-orchestrator",
+    "writer-reddit",
+    "writer-tiktok",
     "writer-wechat",
+    "writer-weibo",
     "writer-x",
     "writer-xiaohongshu"
   ],
   "agentBundles": [
     "agency-agents",
     "business-agents"
+  ],
+  "tools": [
+    "writer_webfetch.ts"
   ]
 }

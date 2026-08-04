@@ -154,6 +154,24 @@ function isRailwayPptMasterInput(input: AgentRuntimeInput | AgentRuntimeInputV2)
   return input.agentId === "executive-ppt" || (input.selectedSkillIds || []).includes("ppt-master")
 }
 
+function validateWriterRuntimeInput(input: AgentRuntimeInput | AgentRuntimeInputV2) {
+  if (input.agentId !== "writer") return
+  const selected = [...new Set(input.selectedSkillIds || [])]
+  if (input.writerPhase === "briefing") {
+    if (selected.length !== 1 || selected[0] !== "writer-briefing" || input.policy.allowNetwork) {
+      throw new Error("writer_briefing_contract_invalid")
+    }
+    return
+  }
+  if (input.writerPhase !== "draft" || !selected.includes("writer-orchestrator") || !input.policy.allowNetwork) {
+    throw new Error("writer_draft_contract_invalid")
+  }
+}
+
+function safeSkillId(value: string) {
+  return /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$/.test(value)
+}
+
 async function readProjectSnapshot(runDir: string): Promise<RuntimeProjectSnapshot | null> {
   const paths = [join(runDir, "project-state.json"), join(runDir, "workspace", "ppt-master", "project-state.json")]
   for (const path of paths) {
@@ -514,6 +532,7 @@ async function prepareRunDirectory(input: AgentRuntimeInput | AgentRuntimeInputV
   const workingDir = runDir
   await mkdir(join(sessionDir, ".opencode", "skills"), { recursive: true })
   await mkdir(join(sessionDir, ".opencode", "agents"), { recursive: true })
+  await mkdir(join(sessionDir, ".opencode", "tools"), { recursive: true })
   await mkdir(join(sessionDir, "workspace"), { recursive: true })
   await mkdir(join(sessionDir, ".runtime"), { recursive: true })
   if (isPersistentPresentationInput(input)) {
@@ -531,9 +550,32 @@ async function prepareRunDirectory(input: AgentRuntimeInput | AgentRuntimeInputV
   // image-baked read-only bundle and fall back to a copy for local tests.
   await rm(join(sessionDir, ".opencode", "skills"), { recursive: true, force: true })
   await rm(join(sessionDir, ".opencode", "agents"), { recursive: true, force: true })
+  await rm(join(sessionDir, ".opencode", "tools"), { recursive: true, force: true })
   await mkdir(join(sessionDir, ".opencode"), { recursive: true })
-  await symlink(join(bundleDir, "skills"), join(sessionDir, ".opencode", "skills"), "dir")
-    .catch(() => cp(join(bundleDir, "skills"), join(sessionDir, ".opencode", "skills"), { recursive: true, force: true }))
+  if (input.agentId === "writer") {
+    const bundleSkills = new Set(
+      (await readdir(join(bundleDir, "skills"), { withFileTypes: true }))
+        .filter((entry) => entry.isDirectory() && safeSkillId(entry.name))
+        .map((entry) => entry.name),
+    )
+    const selectedSkillIds = [...new Set(input.selectedSkillIds || [])]
+    for (const skillId of selectedSkillIds) {
+      if (!safeSkillId(skillId) || !bundleSkills.has(skillId)) throw new Error(`writer_skill_not_in_bundle:${skillId}`)
+      const target = join(sessionDir, ".opencode", "skills", skillId)
+      await symlink(join(bundleDir, "skills", skillId), target, "dir")
+        .catch(() => cp(join(bundleDir, "skills", skillId), target, { recursive: true, force: true }))
+    }
+  } else {
+    await symlink(join(bundleDir, "skills"), join(sessionDir, ".opencode", "skills"), "dir")
+      .catch(() => cp(join(bundleDir, "skills"), join(sessionDir, ".opencode", "skills"), { recursive: true, force: true }))
+  }
+  if (input.agentId === "writer" && input.writerPhase === "draft") {
+    const toolSource = join(bundleDir, "tools", "writer_webfetch.ts")
+    const toolTarget = join(sessionDir, ".opencode", "tools", "writer_webfetch.ts")
+    await mkdir(join(sessionDir, ".opencode", "tools"), { recursive: true })
+    await symlink(toolSource, toolTarget, "file")
+      .catch(() => cp(toolSource, toolTarget, { force: true }))
+  }
   await symlink(join(bundleDir, "agents"), join(sessionDir, ".opencode", "agents"), "dir")
     .catch(() => cp(join(bundleDir, "agents"), join(sessionDir, ".opencode", "agents"), { recursive: true, force: true }))
   await writeFile(join(runDir, "input.json"), JSON.stringify(input), "utf8")
@@ -545,13 +587,30 @@ async function prepareRunDirectory(input: AgentRuntimeInput | AgentRuntimeInputV
   return { sessionDir, runDir, workingDir }
 }
 
-async function writeOpenCodeSessionConfig(runDir: string, provider: OpenCodeProviderConfig) {
+async function writeOpenCodeSessionConfig(runDir: string, provider: OpenCodeProviderConfig, input: AgentRuntimeInput | AgentRuntimeInputV2) {
   // Transitional local implementation: the provider configuration is scoped
   // to this run directory and deleted in executeRun.finally. The production
   // R1 path replaces apiKey with the Provider Credential Proxy route.
   const configPath = join(runDir, "opencode.json")
+  const writerPermissions = input.agentId === "writer" ? {
+    "*": "deny",
+    read: "allow",
+    list: "allow",
+    glob: "allow",
+    grep: "allow",
+    skill: "allow",
+    webfetch: "deny",
+    websearch: process.env.OPENCODE_ENABLE_EXA === "true" && input.writerPhase === "draft" ? "allow" : "deny",
+    writer_webfetch: input.writerPhase === "draft" ? "allow" : "deny",
+    edit: "deny",
+    write: "deny",
+    bash: "deny",
+    task: "deny",
+    question: "deny",
+    external_directory: "deny",
+  } : "allow"
   await writeFile(configPath, JSON.stringify({
-    permission: "allow",
+    permission: writerPermissions,
     provider: {
       [provider.providerId]: {
         npm: "@ai-sdk/openai-compatible",
@@ -599,7 +658,8 @@ async function executeRun(
     const prepared = await prepareRunDirectory(input)
     runDir = prepared.runDir
     const { sessionDir, workingDir } = prepared
-    await writeOpenCodeSessionConfig(runDir, resolvedProvider)
+    validateWriterRuntimeInput(input)
+    await writeOpenCodeSessionConfig(runDir, resolvedProvider, input)
     await writeBundleAttachment(sessionDir, input)
     attachedSessionId = await residentOpenCode.createTransientSession(input, workingDir, resolvedProvider)
     activeRuns.set(input.runId, { sessionId: attachedSessionId, abort: () => residentOpenCode.abort(attachedSessionId as string) })

@@ -37,6 +37,7 @@ type WriterStyleSkillMeta = {
 }
 
 type WriterSkillCatalog = {
+  orchestratorSkillDir: string
   briefingSkillDirs: string[]
   contentSkills: WriterContentSkillMeta[]
   platformSkills: WriterPlatformSkillMeta[]
@@ -55,6 +56,7 @@ function normalizeArray(values: unknown) {
 
 function createDefaultCatalog(): WriterSkillCatalog {
   return {
+    orchestratorSkillDir: "writer-orchestrator",
     briefingSkillDirs: ["writer-briefing", "content-briefing"],
     contentSkills: (Object.entries(WRITER_CONTENT_TYPE_CONFIG) as Array<[WriterContentType, (typeof WRITER_CONTENT_TYPE_CONFIG)[WriterContentType]]>).map(
       ([id, value]) => ({
@@ -108,6 +110,10 @@ function loadCatalog(): WriterSkillCatalog {
   try {
     const parsed = JSON.parse(readFileSync(CATALOG_PATH, "utf8")) as Record<string, unknown>
     cachedCatalog = {
+      orchestratorSkillDir:
+        typeof parsed.orchestratorSkillDir === "string" && parsed.orchestratorSkillDir.trim()
+          ? parsed.orchestratorSkillDir.trim()
+          : fallback.orchestratorSkillDir,
       briefingSkillDirs: normalizeArray(parsed.briefingSkillDirs).length
         ? normalizeArray(parsed.briefingSkillDirs)
         : fallback.briefingSkillDirs,
@@ -222,6 +228,31 @@ export function getWriterSkillCatalog() {
 
 export function getWriterBriefingSkillDirs() {
   return [...loadCatalog().briefingSkillDirs]
+}
+
+export function getWriterOrchestratorSkillDir() {
+  return loadCatalog().orchestratorSkillDir
+}
+
+export function resolveWriterOpenCodeSkillIds(input: {
+  contentType: WriterContentType
+  targetPlatform: string
+  styleSkillId?: string | null
+}) {
+  const catalog = loadCatalog()
+  const ids = [catalog.orchestratorSkillDir]
+  const content = getWriterContentSkillMeta(input.contentType)
+  if (content?.dirName) ids.push(content.dirName)
+  const platform = getWriterPlatformSkillByTargetPlatform(input.targetPlatform)
+  if (platform?.dirName) ids.push(platform.dirName)
+  const isWechat = /wechat|公众号|微信公众/iu.test(input.targetPlatform)
+  const style = input.styleSkillId
+    ? getWriterStyleSkillMeta(input.styleSkillId)
+    : isWechat
+      ? getWriterStyleSkillMeta("khazix-writer")
+      : null
+  if (style?.dirName) ids.push(style.dirName)
+  return [...new Set(ids)]
 }
 
 export function getWriterContentSkillMeta(contentType: WriterContentType) {

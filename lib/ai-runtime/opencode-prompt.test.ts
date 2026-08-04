@@ -262,3 +262,30 @@ test("speaker PPT keeps system and oversized user messages separate", () => {
   assert.ok(userPrompt.length < 33_000)
   assert.match(userPrompt, /context clipped for provider request size/u)
 })
+
+test("Writer briefing and draft prompts enforce phase-specific Skill contracts", () => {
+  const base = {
+    runId: "00000000-0000-4000-8000-000000000008",
+    conversationId: "writer-contract",
+    enterpriseId: null,
+    userId: 42,
+    agentId: "writer",
+    selectedSkillIds: ["writer-briefing"],
+    systemPrompt: "Writer application context",
+    messages: [{ role: "user" as const, content: "请写一篇关于 AI 的公众号文章" }],
+    attachments: [],
+    artifactContext: [],
+    workflowContext: null,
+    artifactContract: { manifestPath: "artifact-manifest.json" as const, artifactDir: "artifacts" as const, maxArtifacts: 0, maxArtifactBytes: 0, maxArtifactTotalBytes: 0, allowedExtensions: [] },
+    policy: { allowPlatformTools: false as const, allowTools: false as const, allowMcp: false as const, allowSkillInstall: false as const, allowNetwork: false },
+  }
+  const briefing = buildOpenCodeSystemPrompt({ ...base, writerPhase: "briefing" })
+  assert.match(briefing, /exactly one valid JSON object/u)
+  assert.match(briefing, /Do not draft, research, fetch URLs/u)
+
+  const draft = buildOpenCodeSystemPrompt({ ...base, writerPhase: "draft", selectedSkillIds: ["writer-orchestrator", "social-writing-cn", "writer-wechat"] })
+  assert.match(draft, /writer-orchestrator/u)
+  assert.match(draft, /writer_webfetch/u)
+  assert.match(draft, /Return only the final platform-native draft/u)
+  assert.match(draft, /asset:\/\//u)
+})

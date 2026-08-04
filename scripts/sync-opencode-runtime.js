@@ -8,6 +8,8 @@ const sourceRoot = path.join(repoRoot, "content", "skills")
 const runtimeRoot = path.join(repoRoot, "infra", "cloudflare", "opencode-runner", "runtime")
 const skillRoot = path.join(runtimeRoot, "skills")
 const agentRoot = path.join(runtimeRoot, "agents")
+const toolSourceRoot = path.join(repoRoot, "content", "opencode-tools")
+const toolRoot = path.join(runtimeRoot, "tools")
 
 const agentColorMap = {
   teal: "#14B8A6",
@@ -71,6 +73,7 @@ function main() {
   fs.rmSync(runtimeRoot, { recursive: true, force: true })
   fs.mkdirSync(skillRoot, { recursive: true })
   fs.mkdirSync(agentRoot, { recursive: true })
+  fs.mkdirSync(toolRoot, { recursive: true })
 
   const skillIds = listSkillIds()
   for (const id of skillIds) copyTree(path.join(sourceRoot, id), path.join(skillRoot, id))
@@ -79,6 +82,11 @@ function main() {
     if (fs.existsSync(source)) copyTree(source, path.join(agentRoot, id))
   }
   normalizeAgentBundle()
+  if (fs.existsSync(toolSourceRoot)) {
+    for (const entry of fs.readdirSync(toolSourceRoot, { withFileTypes: true })) {
+      if (entry.isFile() && /\.(?:ts|js)$/u.test(entry.name)) fs.copyFileSync(path.join(toolSourceRoot, entry.name), path.join(toolRoot, entry.name))
+    }
+  }
   const catalog = path.join(sourceRoot, "writer-catalog.json")
   if (fs.existsSync(catalog)) fs.copyFileSync(catalog, path.join(runtimeRoot, "writer-catalog.json"))
 
@@ -87,6 +95,7 @@ function main() {
     generatedAt: new Date().toISOString(),
     skills: skillIds,
     agentBundles: ["agency-agents", "business-agents"].filter((id) => fs.existsSync(path.join(agentRoot, id))),
+    tools: fs.existsSync(toolRoot) ? fs.readdirSync(toolRoot).sort() : [],
   }
   fs.writeFileSync(path.join(runtimeRoot, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`)
   console.log(`synced ${skillIds.length} OpenCode skills and ${manifest.agentBundles.length} agent bundles`)

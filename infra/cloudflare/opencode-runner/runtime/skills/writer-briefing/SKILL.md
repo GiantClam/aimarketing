@@ -5,6 +5,44 @@ description: Use when the writing assistant should collect the article brief thr
 
 # Writer Briefing
 
+## Machine Contract
+
+This phase is an intake step, not a drafting step. Return exactly one valid JSON object and no Markdown, commentary, code fence, or prose outside the object:
+
+```json
+{
+  "resolvedBrief": {
+    "contentType": "",
+    "targetPlatform": "",
+    "topic": "",
+    "audience": "",
+    "objective": "",
+    "tone": ""
+  },
+  "routingDecision": {
+    "contentType": "",
+    "targetPlatform": "",
+    "outputForm": "",
+    "lengthTarget": ""
+  },
+  "answeredFields": [],
+  "suggestedFollowUpFields": [],
+  "suggestedFollowUpQuestion": "",
+  "turnIntent": "briefing",
+  "userWantsDirectOutput": false,
+  "briefSufficient": false,
+  "retrievalHints": {
+    "enterpriseKnowledgeNeeded": false,
+    "freshResearchNeeded": false,
+    "confidence": 0.0,
+    "reason": ""
+  },
+  "confidence": 0.0
+}
+```
+
+Use `suggestedFollowUpFields` and `suggestedFollowUpQuestion` when the missing fields prevent a useful draft. Ask at most two questions. Never fetch URLs or write an article in this phase.
+
 ## Runtime Label
 
 Writer Brief Intake

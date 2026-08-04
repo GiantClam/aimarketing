@@ -62,7 +62,7 @@ export type AgentRuntimeEvent =
   | { event: "skill_completed"; skillId: string; runId: string }
   | { event: "skill_failed"; skillId: string; message: string; runId: string }
   | { event: "text_delta"; delta: string; runId: string }
-  | { event: "tool_event"; tool: string; phase: "started" | "completed" | "failed"; message?: string; runId: string }
+  | { event: "tool_event"; tool: string; toolCallId?: string; phase: "started" | "completed" | "failed"; message?: string; runId: string }
   | { event: "usage"; inputTokens?: number; outputTokens?: number; costUsd?: number; runId: string }
   | { event: "artifact_payload"; artifact: RuntimeArtifactPayload; runId: string }
   | { event: "artifact_reference"; artifact: RuntimeArtifactReference; runId: string }
@@ -82,6 +82,7 @@ export type AgentRuntimeInput = {
   enterpriseId: number | null
   userId: number
   agentId: string | null
+  writerPhase?: "briefing" | "draft"
   selectedSkillIds?: string[]
   sharedSkillSetSelection?: SharedSkillSetSelection | null
   systemPrompt: string

@@ -95,6 +95,7 @@ export function buildAgentRuntimeInput(input: {
   enterpriseId: number | null
   userId: number
   agentId: string | null
+  writerPhase?: AgentRuntimeInput["writerPhase"]
   selectedSkillIds?: string[]
   sharedSkillSetSelection?: SharedSkillSetSelection | null
   systemPrompt: string
@@ -117,7 +118,7 @@ export function buildAgentRuntimeInput(input: {
   }
 }): AgentRuntimeInput {
   const maxContextChars = resolveRuntimeContextBytes(
-    input.maxContextChars || envPositiveInt("AI_ENTRY_OPENCODE_MAX_CONTEXT_CHARS", DEFAULT_MAX_CONTEXT_CHARS),
+    input.maxContextChars ?? envPositiveInt("AI_ENTRY_OPENCODE_MAX_CONTEXT_CHARS", DEFAULT_MAX_CONTEXT_CHARS),
   )
   const normalizedSystemPrompt = text(input.systemPrompt)
   const normalizedMessages = input.messages
@@ -138,9 +139,9 @@ export function buildAgentRuntimeInput(input: {
   const artifactContract = resolveRuntimeArtifactLimits({
     agentId: input.agentId,
     selectedSkillIds: input.selectedSkillIds,
-    maxArtifacts: input.profileLimits?.maxArtifacts || 8,
-    maxArtifactBytes: input.profileLimits?.maxArtifactBytes || 2 * 1024 * 1024,
-    maxArtifactTotalBytes: input.profileLimits?.maxArtifactTotalBytes || 4 * 1024 * 1024,
+    maxArtifacts: input.profileLimits?.maxArtifacts ?? 8,
+    maxArtifactBytes: input.profileLimits?.maxArtifactBytes ?? 2 * 1024 * 1024,
+    maxArtifactTotalBytes: input.profileLimits?.maxArtifactTotalBytes ?? 4 * 1024 * 1024,
   })
 
   const baseInput = {
@@ -151,6 +152,7 @@ export function buildAgentRuntimeInput(input: {
     enterpriseId: input.enterpriseId,
     userId: input.userId,
     agentId: input.agentId,
+    ...(input.writerPhase ? { writerPhase: input.writerPhase } : {}),
     ...((input.selectedSkillIds || []).filter(Boolean).length > 0
       ? { selectedSkillIds: [...new Set((input.selectedSkillIds || []).filter(Boolean))] }
       : {}),
@@ -185,7 +187,7 @@ export function buildAgentRuntimeInput(input: {
   }
 
   const workflow = workflowMessage(input.workflowContext || null)
-  const artifactLimit = input.artifactContextLimit || envPositiveInt("AI_ENTRY_OPENCODE_ARTIFACT_CONTEXT_LIMIT", DEFAULT_ARTIFACT_CONTEXT_LIMIT)
+  const artifactLimit = input.artifactContextLimit ?? envPositiveInt("AI_ENTRY_OPENCODE_ARTIFACT_CONTEXT_LIMIT", DEFAULT_ARTIFACT_CONTEXT_LIMIT)
   const artifacts = isAiEntryOpenCodeArtifactContextEnabled()
     ? (input.artifactContext || []).slice(-artifactLimit).map((artifact) => ({
         artifactId: artifact.artifactId,
@@ -196,7 +198,7 @@ export function buildAgentRuntimeInput(input: {
     : []
   const historical = normalizedMessages
     .filter((_, index) => index !== currentUserIndex)
-    .slice(-(input.recentMessagesLimit || envPositiveInt("AI_ENTRY_OPENCODE_RECENT_MESSAGES_LIMIT", DEFAULT_RECENT_MESSAGES_LIMIT)))
+    .slice(-(input.recentMessagesLimit ?? envPositiveInt("AI_ENTRY_OPENCODE_RECENT_MESSAGES_LIMIT", DEFAULT_RECENT_MESSAGES_LIMIT)))
     .map((message) => message.role === "tool"
       ? { ...message, content: clipRuntimeContextText(message.content, MAX_RUNTIME_TOOL_OUTPUT_CHARS) }
       : message)

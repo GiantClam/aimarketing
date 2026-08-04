@@ -686,8 +686,8 @@ async function handleWriterTurn(taskId: number, userId: number, payload: WriterT
 
     const actualCost = estimateTextCredits({
       featureKey: "writer_copy",
-      inputTokens,
-      outputTokens: estimateTextTokens(turnResult.answer),
+      inputTokens: turnResult.usage?.inputTokens && turnResult.usage.inputTokens > 0 ? turnResult.usage.inputTokens : inputTokens,
+      outputTokens: turnResult.usage?.outputTokens && turnResult.usage.outputTokens > 0 ? turnResult.usage.outputTokens : estimateTextTokens(turnResult.answer),
       provider: "writer",
       model: "writer-skills",
     })
@@ -701,7 +701,10 @@ async function handleWriterTurn(taskId: number, userId: number, payload: WriterT
       model: actualCost.model,
       officialCostUsd: actualCost.officialCostUsd,
       costBasisUsd: actualCost.costBasisUsd,
-      usagePayload: actualCost.metadata,
+      usagePayload: {
+        ...actualCost.metadata,
+        writerRuntimeUsage: turnResult.usage || null,
+      },
       metadata: {
         taskId,
         conversationId: payload.conversationId,

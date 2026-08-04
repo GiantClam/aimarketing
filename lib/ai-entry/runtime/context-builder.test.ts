@@ -125,6 +125,25 @@ test("passes the lightweight ppt-master project snapshot to the runtime", () => 
   assert.deepEqual(input.projectSnapshot, snapshot)
 })
 
+test("preserves Writer phase and explicit zero artifact limits", () => {
+  const input = buildAgentRuntimeInput({
+    runId: "run-writer-contract",
+    conversationId: "writer-contract",
+    enterpriseId: null,
+    userId: 2,
+    agentId: "writer",
+    writerPhase: "draft",
+    selectedSkillIds: ["writer-orchestrator"],
+    systemPrompt: "system",
+    messages: [{ role: "user", content: "draft" }],
+    profileLimits: { maxArtifacts: 0, maxArtifactBytes: 0, maxArtifactTotalBytes: 0 },
+  })
+  assert.equal(input.writerPhase, "draft")
+  assert.equal(input.artifactContract.maxArtifacts, 0)
+  assert.equal(input.artifactContract.maxArtifactBytes, 0)
+  assert.equal(input.artifactContract.maxArtifactTotalBytes, 0)
+})
+
 test("bounds context and keeps the newest artifact summaries first", () => {
   const input = buildAgentRuntimeInput({
     runId: "run-2",

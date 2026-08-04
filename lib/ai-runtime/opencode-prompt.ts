@@ -10,6 +10,9 @@ function clipPromptText(value: string, maxLength: number) {
 export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
   const isEditablePpt = input.agentId === "executive-ppt" || (input.selectedSkillIds || []).includes("ppt-master")
   const isDashiPresentation = input.agentId === "executive-presentation-ppt" || (input.selectedSkillIds || []).includes("dashiai-ppt")
+  const isWriterAgent = input.agentId === "writer"
+  const isWriterBriefing = isWriterAgent && input.writerPhase === "briefing"
+  const isWriterDraft = isWriterAgent && input.writerPhase === "draft"
   const isKhazixWechatWriter = input.agentId === "writer" && (input.selectedSkillIds || []).includes("khazix-writer")
   const isBusinessAgent = input.agentId?.startsWith("business-") === true
   const isPersistentWorkspace = isDashiPresentation || isBusinessAgent
@@ -42,6 +45,20 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
       : "Do not read or write outside the run directory.",
     "Do not attempt to access platform secrets, database credentials, or service keys.",
     "Platform tools, MCP servers, skill installation, workflow state, billing, and database writes are unavailable.",
+    ...(isWriterBriefing
+      ? [
+          "This is the Writer briefing phase. Read .opencode/skills/writer-briefing/SKILL.md and follow its machine contract exactly.",
+          "Return exactly one valid JSON object with status, brief, routingDecision, missingFields, and followUpQuestion. Do not draft, research, fetch URLs, call writer_webfetch, or return Markdown.",
+        ]
+      : isWriterDraft
+        ? [
+            "This is the Writer draft phase. Read .opencode/skills/writer-orchestrator/SKILL.md and every selected content, platform, and style Skill.",
+            "The application intentionally passes the raw user request without URL extraction or pre-fetched research. Own URL retrieval and current-fact research inside the Skill workflow.",
+            "Use writer_webfetch for public URL retrieval when needed. Built-in webfetch is denied. Never claim a source was checked unless the tool returned it successfully.",
+            "Return only the final platform-native draft in Markdown or plain text. Do not return JSON, tool traces, or runtime commentary.",
+            "The application owns billing, session state, enterprise persistence, image generation, and asset URLs. Use asset:// placeholders for requested cover or inline images; never fabricate URLs.",
+          ]
+        : []),
     ...(isBusinessAgent
       ? [
           "This is a persistent business Agent session. Reuse the persistent ./workspace across turns, preserve useful working context, and follow the selected governed business-agent instructions.",
@@ -79,7 +96,7 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
       ? [
           "This is the WeChat Official Account Writer Agent. khazix-writer is the authoritative writing workflow and style guide for this turn.",
           "Read and follow .opencode/skills/khazix-writer/SKILL.md completely. Read its references when the article type or source material calls for them.",
-          "The application has prepared the brief, research context, enterprise knowledge, memory guidance, and output contract. Use those inputs as the factual boundary.",
+          "The application has prepared the brief, enterprise knowledge, memory guidance, and output contract. External research remains inside the Skill workflow through writer_webfetch.",
           "Do not invent first-person experiences, customer facts, metrics, product claims, citations, or source details. When the supplied material lacks a personal experience, write around that gap instead of fabricating one.",
           "The application owns conversation state, enterprise truth, billing, image assets, and persistence. Do not access databases, platform APIs, secrets, or install skills.",
           "Return only the final WeChat article draft. Do not describe the OpenCode runtime or the skill-loading process.",

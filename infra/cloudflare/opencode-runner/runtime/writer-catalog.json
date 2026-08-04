@@ -1,4 +1,5 @@
 {
+  "orchestratorSkillDir": "writer-orchestrator",
   "briefingSkillDirs": ["writer-briefing", "content-briefing"],
   "contentSkills": [
     {
@@ -105,6 +106,7 @@
     },
     {
       "id": "weibo",
+      "dirName": "writer-weibo",
       "label": "Weibo",
       "targetPlatform": "Weibo",
       "renderPlatform": "weibo",
@@ -114,6 +116,7 @@
     },
     {
       "id": "douyin",
+      "dirName": "writer-douyin",
       "label": "Douyin",
       "targetPlatform": "Douyin",
       "renderPlatform": "douyin",
@@ -134,6 +137,7 @@
     },
     {
       "id": "linkedin",
+      "dirName": "writer-linkedin",
       "label": "LinkedIn",
       "targetPlatform": "LinkedIn",
       "renderPlatform": "linkedin",
@@ -143,6 +147,7 @@
     },
     {
       "id": "instagram",
+      "dirName": "writer-instagram",
       "label": "Instagram",
       "targetPlatform": "Instagram",
       "renderPlatform": "instagram",
@@ -152,6 +157,7 @@
     },
     {
       "id": "tiktok",
+      "dirName": "writer-tiktok",
       "label": "TikTok",
       "targetPlatform": "TikTok",
       "renderPlatform": "tiktok",
