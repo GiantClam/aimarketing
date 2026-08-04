@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { executeImageProviderPlan } from "../image-generation/provider-orchestration"
 import { parseWriterDataUrl } from "./r2"
 
 test("parseWriterDataUrl decodes normal data urls", () => {
@@ -25,4 +26,31 @@ test("parseWriterDataUrl tolerates whitespace in payload", () => {
 
 test("parseWriterDataUrl rejects non-base64 data urls", () => {
   assert.throws(() => parseWriterDataUrl("data:image/png,plain-text"), /writer_asset_data_url_invalid/)
+})
+
+test("parseWriterDataUrl rejects malformed base64 payloads", () => {
+  assert.throws(
+    () => parseWriterDataUrl("data:image/png;base64,not-a-valid-data-url!"),
+    /writer_asset_data_url_invalid/,
+  )
+  assert.throws(() => parseWriterDataUrl("data:image/png;base64,===="), /writer_asset_data_url_invalid/)
+})
+
+test("invalid provider image payload triggers provider fallback before upload", async () => {
+  const failures: string[] = []
+  const validDataUrl = `data:image/png;base64,${Buffer.from("valid-image").toString("base64")}`
+  const result = await executeImageProviderPlan({
+    providerPlan: ["pptoken", "aiberm"],
+    handlers: {
+      pptoken: async () => {
+        parseWriterDataUrl("data:image/png;base64,not-a-valid-data-url!")
+        return { dataUrl: "unreachable" }
+      },
+      aiberm: async () => ({ dataUrl: validDataUrl }),
+    },
+    onProviderFailure: ({ provider }) => failures.push(provider),
+  })
+
+  assert.equal(result.provider, "aiberm")
+  assert.deepEqual(failures, ["pptoken"])
 })

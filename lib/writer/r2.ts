@@ -37,9 +37,30 @@ export function parseWriterDataUrl(dataUrl: string) {
     throw new Error("writer_asset_data_url_invalid")
   }
 
+  // Buffer.from(value, "base64") is intentionally permissive: it silently
+  // drops invalid characters and accepts an empty decoded buffer. Validate
+  // the provider payload before allowing it into storage or fallback logic.
+  if (
+    base64.length % 4 === 1 ||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(base64) ||
+    (base64.includes("=") && base64.length % 4 !== 0)
+  ) {
+    throw new Error("writer_asset_data_url_invalid")
+  }
+
+  const buffer = Buffer.from(base64, "base64")
+  if (!buffer.length) {
+    throw new Error("writer_asset_data_url_invalid")
+  }
+
+  const canonicalBase64 = buffer.toString("base64").replace(/=+$/, "")
+  if (canonicalBase64 !== base64.replace(/=+$/, "")) {
+    throw new Error("writer_asset_data_url_invalid")
+  }
+
   return {
     contentType,
-    buffer: Buffer.from(base64, "base64"),
+    buffer,
   }
 }
 
