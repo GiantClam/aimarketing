@@ -7,7 +7,7 @@ import { z } from "zod"
 const MAX_BYTES = 1_500_000
 const MAX_REDIRECTS = 3
 
-function blockedIp(address: string) {
+function blockedIp(address: string): boolean {
   const normalized = address.toLowerCase().replace(/^\[|\]$/g, "")
   if (isIP(normalized) === 4) {
     const octets = normalized.split(".").map(Number)

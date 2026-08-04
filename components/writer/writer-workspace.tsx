@@ -187,23 +187,6 @@ function isAbortLikeError(error: unknown) {
   return false
 }
 
-type WriterChatStreamOutcome = "needs_clarification" | "draft_ready"
-
-type WriterChatStreamEvent = {
-  event?: "conversation_init" | "progress" | "message" | "message_end" | "error"
-  conversation_id?: string
-  conversation?: WriterConversationSummary
-  answer?: string
-  type?: string
-  label?: string
-  detail?: string
-  status?: PendingTaskEvent["status"]
-  at?: number
-  diagnostics?: WriterTurnDiagnostics | null
-  outcome?: WriterChatStreamOutcome
-  error?: string
-}
-
 type WriterAssetGenerationStreamEvent = {
   event?: "start" | "asset" | "done" | "error"
   index?: number
@@ -219,12 +202,11 @@ type WriterAssetGenerationStreamEvent = {
   }
 }
 
-const WRITER_STREAM_UNSUPPORTED_ERROR = "writer_stream_not_supported"
 type WriterProgressPhaseType = (typeof WRITER_PROGRESS_PHASE_ORDER)[number]
 type WriterTaskLocale = WriterProgressLocale
 type WriterProgressLabelMap = Record<string, string>
 
-function consumeWriterSseBuffer<T extends object = WriterChatStreamEvent>(buffer: string) {
+function consumeWriterSseBuffer<T extends object = WriterAssetGenerationStreamEvent>(buffer: string) {
   const blocks = buffer.split(/\r?\n\r?\n/)
   const rest = blocks.pop() ?? ""
   const events: T[] = []
@@ -249,21 +231,6 @@ function consumeWriterSseBuffer<T extends object = WriterChatStreamEvent>(buffer
   return { events, rest }
 }
 
-function createWriterStreamUnsupportedError() {
-  return new Error(WRITER_STREAM_UNSUPPORTED_ERROR)
-}
-
-function isWriterStreamUnsupportedError(error: unknown) {
-  return error instanceof Error && error.message === WRITER_STREAM_UNSUPPORTED_ERROR
-}
-
-
-function formatWriterDuration(durationMs: number, durationPrefix: string) {
-  const seconds = (Math.max(0, durationMs) / 1000).toFixed(1)
-  return `${durationPrefix}${seconds}s`
-}
-
-
 function localizeWriterTaskEvent(
   event: PendingTaskEvent,
   taskLocale: WriterTaskLocale,
@@ -275,49 +242,6 @@ function localizeWriterTaskEvent(
     label: localizedLabel,
     detail: localizeWriterProgressDetail(event.detail, taskLocale),
   }
-}
-
-function upsertWriterTaskEvent(
-  current: PendingTaskEvent[],
-  incoming: PendingTaskEvent,
-  taskLocale: WriterTaskLocale,
-  progressLabelMap: WriterProgressLabelMap,
-  durationPrefix: string,
-) {
-  const localizedIncoming = localizeWriterTaskEvent(incoming, taskLocale, progressLabelMap)
-  const previous = current.at(-1)
-  if (
-    previous &&
-    previous.type === localizedIncoming.type &&
-    previous.label === localizedIncoming.label &&
-    previous.detail === localizedIncoming.detail &&
-    previous.status === localizedIncoming.status
-  ) {
-    return current
-  }
-
-  let replaceIndex = -1
-  for (let index = current.length - 1; index >= 0; index -= 1) {
-    if (current[index]?.type === localizedIncoming.type) {
-      replaceIndex = index
-      break
-    }
-  }
-
-  const shouldReplace = replaceIndex >= 0 && (localizedIncoming.status === "completed" || localizedIncoming.status === "failed")
-  const next = shouldReplace ? [...current] : [...current, localizedIncoming]
-  if (shouldReplace) {
-    const before = current[replaceIndex]
-    const durationMs = localizedIncoming.at - before.at
-    const durationSuffix = durationMs > 0 ? formatWriterDuration(durationMs, durationPrefix) : ""
-    const detail = [localizedIncoming.detail, durationSuffix].filter(Boolean).join(" · ")
-    next[replaceIndex] = {
-      ...localizedIncoming,
-      detail: detail || undefined,
-    }
-  }
-
-  return next.length > WRITER_PROGRESS_EVENT_LIMIT ? next.slice(next.length - WRITER_PROGRESS_EVENT_LIMIT) : next
 }
 
 function localizeWriterTaskEvents(
@@ -1361,7 +1285,6 @@ export function WriterWorkspace({
   const taskLocale = resolveWriterProgressLocale(locale)
   const writerCopy = i18n.writer
   const progressCurrentStageLabel = taskLocale === "zh" ? "\u5f53\u524d\u9636\u6bb5\uff1a" : "Current stage: "
-  const progressDurationPrefix = taskLocale === "zh" ? "\u8017\u65f6 " : "Duration "
   const recentExecutionTraceLabel = taskLocale === "zh" ? "\u6700\u8fd1\u6267\u884c\u8f68\u8ff9" : "Recent execution trace"
   const progressLabelMap = useMemo<WriterProgressLabelMap>(() => buildWriterProgressLabelMap(taskLocale), [taskLocale])
   const copiedLabel = locale === "zh" ? "\u5df2\u590d\u5236" : "Copied"
@@ -2006,6 +1929,9 @@ export function WriterWorkspace({
               status?: string
               result?: {
                 events?: unknown
+                assets?: WriterAsset[]
+                ok?: boolean
+                error?: string
               } | null
             }
           } | null
@@ -2014,6 +1940,61 @@ export function WriterWorkspace({
           if (normalizedEvents.length > 0) {
             const localizedEvents = localizeWriterTaskEvents(normalizedEvents, taskLocale, progressLabelMap)
             setPendingTaskEvents((current) => (arePendingTaskEventsEqual(current, localizedEvents) ? current : localizedEvents))
+          }
+
+          if (pendingTask.taskType === "writer_assets") {
+            if (status === "success" || status === "failed") {
+              const taskAssets = Array.isArray(payload?.data?.result?.assets)
+                ? ensureWriterAssetOrder(
+                    payload.data.result.assets,
+                    normalizeWriterPlatform(platform),
+                    normalizeWriterMode(normalizeWriterPlatform(platform), mode),
+                  )
+                : []
+              const successCount = taskAssets.filter((asset) => asset.status === "ready" && Boolean(asset.url)).length
+              const taskSucceeded = status === "success" && Boolean(payload?.data?.result?.ok) && successCount > 0
+              const taskPlatform = normalizeWriterPlatform(platform)
+              const taskMode = normalizeWriterMode(taskPlatform, mode)
+              const sourceMarkdown = pendingTask.prompt || ""
+              const resolvedMarkdown = resolveWriterAssetMarkdown(sourceMarkdown, taskAssets, taskPlatform, taskMode)
+              setAssets(taskAssets)
+              setAssetsLoading(false)
+              setAssetsLoadingStartedAt(null)
+              setAssetsError(taskSucceeded ? null : payload?.data?.result?.error || writerCopy.imageGenerationFailed)
+              setImagesRequested(true)
+              setConversationStatus(taskSucceeded ? "ready" : "failed")
+              if (taskSucceeded && resolvedMarkdown && resolvedMarkdown !== sourceMarkdown) {
+                setDraft(resolvedMarkdown)
+                if (latestAssistantMessageId) {
+                  setMessages((current) =>
+                    current.map((message) =>
+                      message.id === latestAssistantMessageId ? { ...message, content: resolvedMarkdown } : message,
+                    ),
+                  )
+                }
+                const targetConversationId = pendingTask.conversationId || conversationId
+                if (targetConversationId) {
+                  void fetch("/api/writer/messages", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      conversation_id: targetConversationId,
+                      content: resolvedMarkdown,
+                      status: "ready",
+                      imagesRequested: true,
+                    }),
+                  })
+                    .then(() => invalidateWriterConversationQueries(queryClient, targetConversationId))
+                    .catch(() => null)
+                }
+              }
+              removePendingAssistantTask(pendingTask.taskId)
+              setPendingTaskEvents([])
+              return
+            }
+
+            await new Promise((resolve) => window.setTimeout(resolve, 1200))
+            continue
           }
 
           if (status === "success") {
@@ -2052,7 +2033,18 @@ export function WriterWorkspace({
     return () => {
       cancelled = true
     }
-  }, [conversationId, pendingTaskRefreshKey, progressLabelMap, queryClient, taskLocale, writerCopy.assistantName])
+  }, [
+    conversationId,
+    latestAssistantMessageId,
+    mode,
+    pendingTaskRefreshKey,
+    platform,
+    progressLabelMap,
+    queryClient,
+    taskLocale,
+    writerCopy.assistantName,
+    writerCopy.imageGenerationFailed,
+  ])
 
   useEffect(() => {
     const viewport = getViewport()
@@ -2181,67 +2173,6 @@ export function WriterWorkspace({
     })
   }
 
-  const refreshConversationSnapshot = useCallback(
-    async (targetConversationId: string) => {
-      const cachedConversation = getWriterConversationCache(targetConversationId)
-      const turnLimit = Math.max(WRITER_INITIAL_TURN_LIMIT, cachedConversation?.loadedTurnCount || 0)
-      await invalidateWriterConversationQueries(queryClient, targetConversationId)
-      const data = await fetchWorkspaceQueryData(queryClient, {
-        queryKey: getWriterMessagesQueryKey(targetConversationId, turnLimit),
-        queryFn: () => getWriterMessagesPage(targetConversationId, turnLimit),
-      })
-
-      const nextMessages = mapHistoryEntriesToMessages(data.data || [], writerCopy.assistantName)
-      const nextDiagnostics = getLatestHistoryDiagnostics(data.data || [])
-      historyEntriesRef.current = data.data || []
-      setMessages(nextMessages)
-      setLatestDiagnostics(nextDiagnostics)
-      setHistoryCursor(data.next_cursor || null)
-      setHasMoreHistory(Boolean(data.has_more))
-      shouldScrollToBottomRef.current = true
-
-      if (data.conversation) {
-        const nextPlatform = normalizeWriterPlatform(data.conversation.platform)
-        const nextMode = normalizeWriterMode(nextPlatform, data.conversation.mode)
-        const nextLanguage = normalizeWriterLanguage(data.conversation.language)
-        const nextStatus = data.conversation.status || "drafting"
-        const nextDraft = inferFinalDraft(nextMessages, nextStatus)
-        setDraft(nextDraft)
-        setPlatform(nextPlatform)
-        setMode(nextMode)
-        setLanguage(nextLanguage)
-        setImagesRequested(Boolean(data.conversation.images_requested))
-        setConversationStatus(nextStatus)
-        saveWriterSessionMeta(targetConversationId, {
-          platform: nextPlatform,
-          mode: nextMode,
-          language: nextLanguage,
-          draft: nextDraft,
-          imagesRequested: Boolean(data.conversation.images_requested),
-          status: nextStatus,
-          diagnostics: nextDiagnostics,
-          updatedAt: Date.now(),
-        })
-        emitWriterRefresh({
-          action: "upsert",
-          conversation: data.conversation,
-        })
-      }
-
-      saveWriterConversationCache(targetConversationId, {
-        entries: historyEntriesRef.current,
-        conversation: data.conversation,
-        historyCursor: data.next_cursor || null,
-        hasMoreHistory: Boolean(data.has_more),
-        loadedTurnCount: historyEntriesRef.current.length,
-        updatedAt: Date.now(),
-      })
-
-      return data.conversation?.status || "drafting"
-    },
-    [queryClient, writerCopy.assistantName],
-  )
-
   const openPreviewForMessage = (messageId: string | null) => {
     setPreviewMessageId(messageId)
     setPreviewOpen(true)
@@ -2340,337 +2271,77 @@ export function WriterWorkspace({
       })
     }
 
-    const syncOptimisticHistoryEntry = (params: {
-      targetConversationId: string
-      answer: string
-      diagnostics?: WriterTurnDiagnostics | null
-      conversation?: WriterConversationSummary | null
-    }) => {
-      const nextEntries = historyEntriesRef.current.some((entry) => entry.id === pendingHistoryEntryId)
-        ? historyEntriesRef.current.map((entry) =>
-            entry.id === pendingHistoryEntryId
-              ? {
-                  ...entry,
-                  conversation_id: params.targetConversationId,
-                  answer: params.answer,
-                  diagnostics: params.diagnostics ?? null,
-                }
-              : entry,
-          )
-        : [
-            ...historyEntriesRef.current,
-            buildOptimisticWriterHistoryEntry(
-              pendingHistoryEntryId,
-              params.targetConversationId,
-              query,
-              params.answer,
-              optimisticCreatedAt,
-            ),
-          ]
-
-      historyEntriesRef.current = nextEntries
-      saveWriterConversationCache(params.targetConversationId, {
-        entries: nextEntries,
-        conversation: params.conversation || getWriterConversationCache(params.targetConversationId)?.conversation || null,
-        historyCursor,
-        hasMoreHistory,
-        loadedTurnCount: nextEntries.length,
-        updatedAt: Date.now(),
-      })
-    }
-
     try {
-      try {
-        const streamResponse = await fetch("/api/writer/chat/stream", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "text/event-stream",
-          },
-          body: JSON.stringify(requestBody),
-        })
-
-        if (streamResponse.status === 404 || streamResponse.status === 405) {
-          throw createWriterStreamUnsupportedError()
-        }
-
-        if (!streamResponse.ok || !streamResponse.body) {
-          const payload = (await streamResponse.json().catch(() => null)) as { error?: string } | null
-          throw new Error(payload?.error || `HTTP ${streamResponse.status}`)
-        }
-
-        const reader = streamResponse.body.getReader()
-        const decoder = new TextDecoder("utf-8")
-        let buffer = ""
-        let streamedAnswer = ""
-        let streamNeedsClarification = false
-        let streamDiagnostics: WriterTurnDiagnostics | null = null
-        let resolvedConversationId = conversationId
-        let resolvedConversation: WriterConversationSummary | null = null
-        let streamedProgressEvents: PendingTaskEvent[] = []
-
-        const applyStreamEvent = (event: WriterChatStreamEvent) => {
-          if (!event || typeof event !== "object") return
-
-          if (event.event === "error") {
-            throw new Error(event.error || "writer_stream_failed")
-          }
-
-          if (event.event === "progress" && typeof event.type === "string" && typeof event.label === "string") {
-            const nextEvent: PendingTaskEvent = {
-              type: event.type,
-              label: event.label,
-              detail: typeof event.detail === "string" ? event.detail : undefined,
-              status:
-                event.status === "running" ||
-                event.status === "completed" ||
-                event.status === "failed" ||
-                event.status === "info"
-                  ? event.status
-                  : "info",
-              at: typeof event.at === "number" && Number.isFinite(event.at) ? event.at : Date.now(),
-            }
-            streamedProgressEvents = upsertWriterTaskEvent(
-              streamedProgressEvents,
-              nextEvent,
-              taskLocale,
-              progressLabelMap,
-              progressDurationPrefix,
-            )
-            setPendingTaskEvents(streamedProgressEvents)
-          }
-
-          if (event.conversation && typeof event.conversation.id === "string") {
-            resolvedConversation = event.conversation
-          }
-
-          const eventConversationId =
-            typeof event.conversation_id === "string"
-              ? event.conversation_id
-              : typeof event.conversation?.id === "string"
-                ? event.conversation.id
-                : null
-
-          if (eventConversationId) {
-            resolvedConversationId = eventConversationId
-            setConversationId(eventConversationId)
-            setMessages((current) =>
-              current.map((message) =>
-                message.conversation_id
-                  ? message
-                  : {
-                      ...message,
-                      conversation_id: eventConversationId,
-                    },
-              ),
-            )
-            if (!conversationId) {
-              replaceWriterUrl(`/dashboard/writer/${eventConversationId}`)
-            }
-          }
-
-          if (event.event === "message" && typeof event.answer === "string") {
-            streamedAnswer += event.answer
-            patchAssistantMessage(assistantId, streamedAnswer)
-            if (resolvedConversationId) {
-              syncOptimisticHistoryEntry({
-                targetConversationId: resolvedConversationId,
-                answer: streamedAnswer,
-                diagnostics: streamDiagnostics,
-                conversation: resolvedConversation,
-              })
-            }
-          }
-
-          if (event.event === "message_end") {
-            if (typeof event.answer === "string" && event.answer.trim()) {
-              streamedAnswer = event.answer
-            }
-            if (event.outcome === "needs_clarification") {
-              streamNeedsClarification = true
-            } else if (event.outcome === "draft_ready") {
-              streamNeedsClarification = false
-            }
-            if (event.diagnostics) {
-              streamDiagnostics = event.diagnostics
-            }
-          }
-        }
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-          const parsed = consumeWriterSseBuffer(buffer)
-          buffer = parsed.rest
-          for (const event of parsed.events) {
-            applyStreamEvent(event)
-          }
-        }
-
-        const flushed = consumeWriterSseBuffer(`${buffer}\n\n`)
-        for (const event of flushed.events) {
-          applyStreamEvent(event)
-        }
-
-        if (!resolvedConversationId) {
-          throw new Error("writer_stream_missing_conversation_id")
-        }
-
-        const finalAnswer = sanitize(streamedAnswer)
-        if (!finalAnswer) {
-          throw new Error("writer_stream_empty_answer")
-        }
-        const finalStatus = streamNeedsClarification ? "drafting" : "text_ready"
-        patchAssistantMessage(assistantId, finalAnswer)
-        setConversationStatus(finalStatus)
-        setDraft(finalStatus === "drafting" ? "" : finalAnswer)
-        setLatestDiagnostics(streamDiagnostics)
-
-        syncOptimisticHistoryEntry({
-          targetConversationId: resolvedConversationId,
-          answer: finalAnswer,
-          diagnostics: streamDiagnostics,
-          conversation: resolvedConversation,
-        })
-
-        const fallbackConversation = getWriterConversationCache(resolvedConversationId)?.conversation || null
-        const conversationSnapshot = resolvedConversation || fallbackConversation
-        const snapshotPlatform = conversationSnapshot
-          ? normalizeWriterPlatform(conversationSnapshot.platform)
-          : platform
-        const snapshotMode = conversationSnapshot ? normalizeWriterMode(snapshotPlatform, conversationSnapshot.mode) : mode
-        const snapshotLanguage = conversationSnapshot ? normalizeWriterLanguage(conversationSnapshot.language) : language
-        saveWriterSessionMeta(resolvedConversationId, {
-          platform: snapshotPlatform,
-          mode: snapshotMode,
-          language: snapshotLanguage,
-          draft: finalStatus === "drafting" ? "" : finalAnswer,
-          imagesRequested: false,
-          status: finalStatus,
-          diagnostics: streamDiagnostics,
-          updatedAt: Date.now(),
-        })
-
-        if (conversationSnapshot) {
-          emitWriterRefresh({
-            action: "upsert",
-            conversation: {
-              ...conversationSnapshot,
-              status: finalStatus,
-            },
-          })
-        }
-
-        let statusAfterRefresh = finalStatus
-        try {
-          statusAfterRefresh = await refreshConversationSnapshot(resolvedConversationId)
-        } catch (refreshError) {
-          console.error("writer.stream.refresh-failed", refreshError)
-        }
-
-        taskAccepted = true
-        if (streamedProgressEvents.length > 0) {
-          setPendingTaskEvents(streamedProgressEvents)
-          setRecentTaskEvents(streamedProgressEvents)
-        }
-        setIsLoading(false)
-        if (statusAfterRefresh !== "drafting") {
-          setPreviewMessageId(null)
-          setPreviewOpen(true)
-        }
-        return
-      } catch (streamError) {
-        if (!isWriterStreamUnsupportedError(streamError)) {
-          throw streamError
-        }
-      }
-
-      const response = await fetch("/api/writer/chat", {
+      const durableResponse = await fetch("/api/writer/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       })
-      const payload = (await response.json().catch(() => null)) as {
+      const durablePayload = (await durableResponse.json().catch(() => null)) as {
         task_id?: string
         conversation_id?: string
         conversation?: WriterConversationSummary
         error?: string
       } | null
-
-      if (!response.ok || !payload?.task_id || !payload.conversation_id || !payload.conversation) {
-        throw new Error(payload?.error || `HTTP ${response.status}`)
+      if (!durableResponse.ok || !durablePayload?.task_id || !durablePayload.conversation_id || !durablePayload.conversation) {
+        throw new Error(durablePayload?.error || `HTTP ${durableResponse.status}`)
       }
 
-      const resolvedConversationId = payload.conversation_id
-      const optimisticCacheEntries = historyEntriesRef.current.some((entry) => entry.id === pendingHistoryEntryId)
+      const durableConversationId = durablePayload.conversation_id
+      const asyncOptimisticEntries = historyEntriesRef.current.some((entry) => entry.id === pendingHistoryEntryId)
         ? historyEntriesRef.current.map((entry) =>
-            entry.id === pendingHistoryEntryId
-              ? {
-                  ...entry,
-                  conversation_id: resolvedConversationId,
-                }
-              : entry,
+            entry.id === pendingHistoryEntryId ? { ...entry, conversation_id: durableConversationId } : entry,
           )
         : [
             ...historyEntriesRef.current,
             buildOptimisticWriterHistoryEntry(
               pendingHistoryEntryId,
-              resolvedConversationId,
+              durableConversationId,
               query,
               writerCopy.generatingDraft,
               optimisticCreatedAt,
             ),
           ]
-
-      historyEntriesRef.current = optimisticCacheEntries
+      historyEntriesRef.current = asyncOptimisticEntries
       setMessages((current) =>
-        current.map((message) =>
-          message.conversation_id
-            ? message
-            : {
-                ...message,
-                conversation_id: resolvedConversationId,
-              },
+          current.map((message) =>
+            message.conversation_id ? message : { ...message, conversation_id: durableConversationId },
         ),
       )
-      saveWriterConversationCache(resolvedConversationId, {
-        entries: optimisticCacheEntries,
-        conversation: payload.conversation,
+      saveWriterConversationCache(durableConversationId, {
+        entries: asyncOptimisticEntries,
+        conversation: durablePayload.conversation,
         historyCursor,
         hasMoreHistory,
-        loadedTurnCount: optimisticCacheEntries.length,
+        loadedTurnCount: asyncOptimisticEntries.length,
         updatedAt: Date.now(),
       })
-      setConversationId(payload.conversation_id)
-      setConversationStatus(payload.conversation.status || "drafting")
-      saveWriterSessionMeta(payload.conversation_id, {
-        platform: payload.conversation.platform,
-        mode: payload.conversation.mode,
-        language: payload.conversation.language,
+      setConversationId(durableConversationId)
+      setConversationStatus(durablePayload.conversation.status || "drafting")
+      saveWriterSessionMeta(durableConversationId, {
+        platform: durablePayload.conversation.platform,
+        mode: durablePayload.conversation.mode,
+        language: durablePayload.conversation.language,
         draft: "",
         imagesRequested: false,
-        status: payload.conversation.status || "drafting",
+        status: durablePayload.conversation.status || "drafting",
         diagnostics: null,
         updatedAt: Date.now(),
       })
       savePendingAssistantTask({
-        taskId: payload.task_id,
+        taskId: durablePayload.task_id,
         scope: "writer",
-        conversationId: payload.conversation_id,
+        conversationId: durableConversationId,
         prompt: query,
+        taskType: "writer_text",
         createdAt: Date.now(),
       })
       taskAccepted = true
       setPendingTaskRefreshKey(Date.now())
-      emitWriterRefresh({
-        action: "upsert",
-        conversation: payload.conversation,
-      })
+      emitWriterRefresh({ action: "upsert", conversation: durablePayload.conversation })
+      if (!conversationId) replaceWriterUrl(`/dashboard/writer/${durableConversationId}`)
+      return
 
-      if (!conversationId) {
-        replaceWriterUrl(`/dashboard/writer/${payload.conversation_id}`)
-      }
     } catch (error) {
       const failedMessage = `${writerCopy.requestFailedPrefix}${error instanceof Error ? error.message : writerCopy.unknownError}`
       setConversationStatus("failed")
@@ -2769,6 +2440,8 @@ export function WriterWorkspace({
   const handleGenerateAssets = async (target: WriterPreviewContext = activePreview) => {
     if (!target.hasDraft || target.assetsLoading || !target.messageId) return
 
+    let asyncAssetTaskAccepted = false
+
     const generationPlatform = target.platform
     const generationMode = target.mode
     const generationStartedAt = Date.now()
@@ -2857,9 +2530,24 @@ export function WriterWorkspace({
           platform: generationPlatform,
           mode: generationMode,
           conversationId: target.isLatest ? conversationId : null,
-          stream: true,
+          async: true,
         }),
       })
+      if (response.status === 202) {
+        const payload = (await response.json().catch(() => null)) as { task_id?: string } | null
+        if (!payload?.task_id) throw new Error("writer_assets_task_missing")
+        asyncAssetTaskAccepted = true
+        savePendingAssistantTask({
+          taskId: payload.task_id,
+          scope: "writer",
+          conversationId,
+          prompt: target.sourceMarkdown,
+          taskType: "writer_assets",
+          createdAt: Date.now(),
+        })
+        setPendingTaskRefreshKey(Date.now())
+        return
+      }
       const responseType = response.headers.get("content-type") || ""
       let nextAssets: WriterAsset[] = []
       let generationError: string | null = null
@@ -3023,10 +2711,10 @@ export function WriterWorkspace({
         }))
       }
     } finally {
-      if (target.isLatest) {
+      if (target.isLatest && !asyncAssetTaskAccepted) {
         setAssetsLoading(false)
         setAssetsLoadingStartedAt(null)
-      } else {
+      } else if (!target.isLatest) {
         setVersionAssetState((current) => ({
           ...current,
           [target.messageId!]: {

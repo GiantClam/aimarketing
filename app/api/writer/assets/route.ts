@@ -15,14 +15,16 @@ import {
 } from "@/lib/image-assistant/openai-compatible-image"
 import { buildImageAssistantProviderPlan } from "@/lib/image-assistant/aiberm"
 import { executeImageProviderPlan, type ImageGenerationProvider } from "@/lib/image-generation/provider-orchestration"
+import { withTaskTimeout } from "@/lib/task-timeout"
 import { buildPendingWriterAssets, ensureWriterAssetOrder, markWriterAssetsFailed } from "@/lib/writer/assets"
 import { normalizeWriterMode, normalizeWriterPlatform, WRITER_PLATFORM_CONFIG } from "@/lib/writer/config"
 import {
   ensureWriterPromptDiversity,
   extractWriterPromptFocus,
 } from "@/lib/writer/prompt-similarity"
+import { writerFetch } from "@/lib/writer/network"
 import { updateWriterConversationMeta } from "@/lib/writer/repository"
-import { isWriterR2Available, uploadWriterImageToR2 } from "@/lib/writer/r2"
+import { isWriterR2Available, parseWriterDataUrl, uploadWriterImageToR2 } from "@/lib/writer/r2"
 
 export const runtime = "nodejs"
 export const maxDuration = 300
@@ -37,6 +39,8 @@ const WRITER_PROMPT_SIMILARITY_MAX = Math.max(
   Math.min(1, Number.parseFloat(process.env.WRITER_PROMPT_SIMILARITY_MAX || "0.82") || 0.82),
 )
 const WRITER_ENFORCE_PROMPT_DIVERSITY = process.env.WRITER_ENFORCE_PROMPT_DIVERSITY !== "false"
+const WRITER_IMAGE_DOWNLOAD_MAX_BYTES = 20 * 1024 * 1024
+const WRITER_IMAGE_DOWNLOAD_TIMEOUT_MS = 30_000
 type WriterImageProvider = OpenAiCompatibleImageProviderId
 type WriterPlannedAsset = ReturnType<typeof buildPendingWriterAssets>[number]
 type WriterGeneratedAsset = WriterPlannedAsset & {
@@ -98,6 +102,52 @@ function createFixtureImageDataUrl(prompt: string, aspectRatio: string) {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`
 }
 
+async function normalizeWriterImageDataUrl(dataUrl: string) {
+  const normalized = dataUrl.trim()
+  if (normalized.startsWith("data:")) {
+    parseWriterDataUrl(normalized)
+    return normalized
+  }
+
+  let imageUrl: URL
+  try {
+    imageUrl = new URL(normalized)
+  } catch {
+    throw new Error("writer_asset_data_url_invalid")
+  }
+
+  if (imageUrl.protocol !== "http:" && imageUrl.protocol !== "https:") {
+    throw new Error("writer_asset_data_url_invalid")
+  }
+
+  const abortController = new AbortController()
+  const response = await withTaskTimeout(
+    writerFetch(imageUrl, { signal: abortController.signal }),
+    WRITER_IMAGE_DOWNLOAD_TIMEOUT_MS,
+    "writer_asset_image_download_timeout",
+    { abortController },
+  )
+  if (!response.ok) {
+    throw new Error(`writer_asset_image_download_http_${response.status}`)
+  }
+
+  const contentLength = Number.parseInt(response.headers.get("content-length") || "", 10)
+  if (Number.isFinite(contentLength) && contentLength > WRITER_IMAGE_DOWNLOAD_MAX_BYTES) {
+    throw new Error("writer_asset_image_download_too_large")
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer())
+  if (!buffer.length || buffer.length > WRITER_IMAGE_DOWNLOAD_MAX_BYTES) {
+    throw new Error("writer_asset_image_download_invalid")
+  }
+
+  const responseContentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase()
+  const contentType = responseContentType?.startsWith("image/") ? responseContentType : "image/png"
+  const converted = `data:${contentType};base64,${buffer.toString("base64")}`
+  parseWriterDataUrl(converted)
+  return converted
+}
+
 function shouldUseWriterE2EFixtures() {
   if (process.env.WRITER_E2E_FIXTURES === "true") {
     console.warn("writer.assets.fixtures_disabled", {
@@ -140,8 +190,14 @@ async function generateWriterImageWithProvider(params: {
     throw new Error(`writer_${params.provider}_image_missing`)
   }
 
+  // Normalize and validate inside the provider handler so malformed output
+  // participates in the normal provider fallback plan instead of failing
+  // during R2 upload. OpenAI-compatible providers may return either b64_json
+  // or a short-lived remote URL even when the request format is identical.
+  const normalizedDataUrl = await normalizeWriterImageDataUrl(dataUrl)
+
   return {
-    dataUrl,
+    dataUrl: normalizedDataUrl,
     model: result.model || config.model,
   }
 }
@@ -562,6 +618,42 @@ export async function POST(request: NextRequest) {
       conversationId,
       status: "image_generating",
     })
+
+    if (body?.async === true || body?.async === "true") {
+      const { enqueueAssistantTask } = await import("@/lib/assistant-async")
+      let task: { id: number | string }
+      try {
+        task = await enqueueAssistantTask({
+          userId: auth.user.id,
+          workflowName: "writer_assets",
+          payload: {
+            kind: "writer_assets",
+            enterpriseId: auth.user.enterpriseId,
+            conversationId,
+            markdown,
+            platform,
+            mode,
+          },
+        })
+      } catch (error) {
+        await updateWriterAssetConversationStatus({ userId: auth.user.id, conversationId, status: "failed" }).catch(() => null)
+        throw error
+      }
+
+      return NextResponse.json(
+        {
+          accepted: true,
+          task_id: String(task.id),
+          conversation_id: conversationId,
+          data: {
+            provider: getPreferredWriterImageProvider(),
+            model: getPreferredWriterImageModel(),
+            assets: plannedAssets,
+          },
+        },
+        { status: 202 },
+      )
+    }
 
     if (baseProviderPlan.length === 0) {
       const errorMessage = "Configure at least one writer image provider: pptoken, aiberm, crazyroute."
