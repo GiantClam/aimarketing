@@ -6,7 +6,9 @@ const PLACEHOLDER_CONNECTION_STRING = "postgresql://user:password@localhost:5432
 const DEFAULT_POOL_MAX = process.env.NODE_ENV === "development" ? 5 : 10
 const DEFAULT_CONNECTION_TIMEOUT_MS = 12_000
 const DEFAULT_IDLE_TIMEOUT_MS = 30_000
+const DEFAULT_IDLE_IN_TRANSACTION_TIMEOUT_MS = 60_000
 const POOL_WARMUP_RETRY_DELAYS_MS = [1_000, 3_000]
+const POOL_SAFETY_OPTIONS = `-c idle_in_transaction_session_timeout=${DEFAULT_IDLE_IN_TRANSACTION_TIMEOUT_MS}`
 
 declare global {
   var __aimarketingPgPool: Pool | undefined
@@ -82,6 +84,7 @@ const getPoolConfig = (connectionString: string): PoolConfig => {
       min: 1,
       connectionTimeoutMillis: DEFAULT_CONNECTION_TIMEOUT_MS,
       idleTimeoutMillis: DEFAULT_IDLE_TIMEOUT_MS,
+      options: POOL_SAFETY_OPTIONS,
       keepAlive: true,
     }
   }
@@ -92,6 +95,7 @@ const getPoolConfig = (connectionString: string): PoolConfig => {
     min: 1,
     connectionTimeoutMillis: DEFAULT_CONNECTION_TIMEOUT_MS,
     idleTimeoutMillis: DEFAULT_IDLE_TIMEOUT_MS,
+    options: POOL_SAFETY_OPTIONS,
     keepAlive: true,
   }
 }

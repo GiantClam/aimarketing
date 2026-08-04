@@ -49,6 +49,7 @@ export async function ensureDefaultFreeBillingForUser(user: AuthUserPayload): Pr
   }
 
   const client = await pool.connect()
+  let transactionClosed = false
   try {
     await client.query("BEGIN")
 
@@ -180,6 +181,7 @@ export async function ensureDefaultFreeBillingForUser(user: AuthUserPayload): Pr
     }
 
     await client.query("COMMIT")
+    transactionClosed = true
 
     const balance = readNumber(accountRow.balance)
     const reservedBalance = readNumber(accountRow.reserved_balance)
@@ -201,10 +203,12 @@ export async function ensureDefaultFreeBillingForUser(user: AuthUserPayload): Pr
       },
     }
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => {})
+    await client.query("ROLLBACK").then(() => {
+      transactionClosed = true
+    }).catch(() => {})
     throw error
   } finally {
-    client.release()
+    client.release(!transactionClosed)
   }
 }
 
@@ -220,6 +224,7 @@ export async function ensureDemoBillingCreditFloor(user: AuthUserPayload): Promi
   }
 
   const client = await pool.connect()
+  let transactionClosed = false
   try {
     await client.query("BEGIN")
 
@@ -240,6 +245,7 @@ export async function ensureDemoBillingCreditFloor(user: AuthUserPayload): Promi
     const accountRow = accountResult.rows[0] || null
     if (!accountRow) {
       await client.query("ROLLBACK")
+      transactionClosed = true
       return state
     }
 
@@ -248,6 +254,7 @@ export async function ensureDemoBillingCreditFloor(user: AuthUserPayload): Promi
     const availableCredits = Math.max(0, balance - reservedBalance)
     if (availableCredits >= minimumAvailableCredits) {
       await client.query("COMMIT")
+      transactionClosed = true
       return {
         ...state,
         creditAccount: {
@@ -307,6 +314,7 @@ export async function ensureDemoBillingCreditFloor(user: AuthUserPayload): Promi
     )
 
     await client.query("COMMIT")
+    transactionClosed = true
 
     return {
       ...state,
@@ -318,9 +326,11 @@ export async function ensureDemoBillingCreditFloor(user: AuthUserPayload): Promi
       },
     }
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => {})
+    await client.query("ROLLBACK").then(() => {
+      transactionClosed = true
+    }).catch(() => {})
     throw error
   } finally {
-    client.release()
+    client.release(!transactionClosed)
   }
 }

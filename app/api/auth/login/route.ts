@@ -4,7 +4,6 @@ import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { ensureDemoBillingCreditFloor } from "@/lib/billing/default-free-plan"
 import { users } from "@/lib/db/schema"
-import { ensureEnterpriseAuthTables } from "@/lib/enterprise/server"
 import {
   applyDemoSessionCookie,
   applySessionCookie,
@@ -46,7 +45,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "email and password are required" }, { status: 400 })
     }
 
-    await ensureEnterpriseAuthTables()
     const rateLimit = await checkRateLimit({
       key: `auth:login:${getRequestIp(request)}`,
       limit: 10,

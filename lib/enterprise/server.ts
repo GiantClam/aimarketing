@@ -47,6 +47,13 @@ const enterpriseEnsureState = globalThis as GlobalWithEnterpriseEnsureState
 let ensureEnterpriseAuthTablesPromise = enterpriseEnsureState.__aimarketingEnsureEnterpriseAuthTablesPromise__ ?? null
 
 export async function ensureEnterpriseAuthTables() {
+  // Schema changes belong to deploy-time migrations. Running ALTER TABLE from
+  // request handlers can take an AccessExclusiveLock and block every auth read
+  // when another request leaves a transaction open.
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_RUNTIME_SCHEMA_MIGRATION !== "true") {
+    return
+  }
+
   if (!ensureEnterpriseAuthTablesPromise) {
     ensureEnterpriseAuthTablesPromise = (async () => {
       await db.execute(sql`
