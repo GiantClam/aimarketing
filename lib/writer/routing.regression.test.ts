@@ -101,6 +101,15 @@ test("email routing works for Chinese business email request", () => {
   })
 })
 
+test("generic email wording does not match Instagram's short ig alias", () => {
+  assertRoute("Write a business follow-up email. Do not include a signature.", {
+    contentType: "email",
+    targetPlatform: "Email",
+    renderPlatform: "generic",
+    selectedPlatformSkillId: null,
+  })
+})
+
 test("newsletter routing works for lifecycle email request", () => {
   assertRoute("帮我写一封 onboarding lifecycle email，欢迎新注册用户开始使用 AI 销售助手", {
     contentType: "newsletter",

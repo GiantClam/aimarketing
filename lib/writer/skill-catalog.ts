@@ -219,7 +219,20 @@ function matchesCatalogEntry(text: string, entry: { aliases?: string[]; queryPat
     return true
   }
 
-  return (entry.aliases || []).some((alias) => normalized.includes(alias.toLowerCase()))
+  return (entry.aliases || []).some((rawAlias) => {
+    const alias = rawAlias.trim().toLowerCase()
+    if (!alias) return false
+
+    // CJK phrases do not have reliable word boundaries. Keep substring matching
+    // for them, but require boundaries for short Latin aliases such as `ig` and
+    // `fb` so ordinary words like "signature" cannot select a platform skill.
+    if (/[\u3400-\u9fff]/u.test(alias)) {
+      return normalized.includes(alias)
+    }
+
+    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")
+    return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, "iu").test(normalized)
+  })
 }
 
 export function getWriterSkillCatalog() {

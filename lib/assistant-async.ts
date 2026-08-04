@@ -53,6 +53,7 @@ import {
 import { normalizeExecutiveAdvisorType } from "@/lib/skills/runtime/executive-advisor-types"
 import { appendWriterConversation, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
 import { generateWriterAssetsForTask } from "@/lib/writer/assets-runtime"
+import { withWriterAssetTaskSlot } from "@/lib/writer/task-concurrency"
 import { persistWriterImplicitMemoryFromTurn } from "@/lib/writer/memory/extractor"
 import { withTaskTimeout } from "@/lib/task-timeout"
 import type { WriterLanguage, WriterMode, WriterPlatform } from "@/lib/writer/config"
@@ -808,27 +809,29 @@ async function handleWriterAssets(taskId: number, userId: number, payload: Write
     at: Date.now(),
   })
 
-  const result = await withTaskTimeout(
-    generateWriterAssetsForTask({
-      markdown: payload.markdown,
-      platform: payload.platform,
-      mode: payload.mode,
-      userId,
-      enterpriseId: payload.enterpriseId,
-      conversationId: payload.conversationId,
-      taskId,
-      onAsset: async (asset, index, total) => {
-        await persistProgressEvent({
-          type: asset.status === "ready" ? "asset_ready" : "asset_failed",
-          label: asset.status === "ready" ? `Image ${index}/${total} ready` : `Image ${index}/${total} failed`,
-          detail: asset.error,
-          status: asset.status === "ready" ? "completed" : "failed",
-          at: Date.now(),
-        })
-      },
-    }),
-    WRITER_ASSETS_TASK_TIMEOUT_MS,
-    "writer_assets_task_timeout",
+  const result = await withWriterAssetTaskSlot(() =>
+    withTaskTimeout(
+      generateWriterAssetsForTask({
+        markdown: payload.markdown,
+        platform: payload.platform,
+        mode: payload.mode,
+        userId,
+        enterpriseId: payload.enterpriseId,
+        conversationId: payload.conversationId,
+        taskId,
+        onAsset: async (asset, index, total) => {
+          await persistProgressEvent({
+            type: asset.status === "ready" ? "asset_ready" : "asset_failed",
+            label: asset.status === "ready" ? `Image ${index}/${total} ready` : `Image ${index}/${total} failed`,
+            detail: asset.error,
+            status: asset.status === "ready" ? "completed" : "failed",
+            at: Date.now(),
+          })
+        },
+      }),
+      WRITER_ASSETS_TASK_TIMEOUT_MS,
+      "writer_assets_task_timeout",
+    ),
   )
 
   await persistProgressEvent({
