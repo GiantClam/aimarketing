@@ -1297,6 +1297,44 @@ test("history URL extraction trims full-width punctuation suffix from chinese se
   assert.deepEqual(generationOptions?.sourceUrls, ["https://example.com/agent-report"])
 })
 
+test("adjacent source URLs separated by a Chinese conjunction are extracted independently", async () => {
+  let generationOptions: any = null
+
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query: "调研https://example.com/first和https://example.com/second，写一篇公众号文章。",
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "zh",
+      conversationStatus: "drafting",
+      history: [],
+    },
+    createRuntime({
+      extractBrief: async () =>
+        createBriefExtraction({
+          resolvedBrief: {
+            topic: "source comparison",
+            audience: "读者",
+            objective: "总结来源",
+            tone: "清晰",
+            constraints: "",
+          },
+          userWantsDirectOutput: true,
+          briefSufficient: true,
+        }),
+      onGenerate: (_prompt, options) => {
+        generationOptions = options
+      },
+    }),
+  )
+
+  assert.equal(result.outcome, "draft_ready")
+  assert.deepEqual(generationOptions?.sourceUrls, [
+    "https://example.com/first",
+    "https://example.com/second",
+  ])
+})
+
 test("source URL research falls back to direct fetch and avoids search-config hard failure", async () => {
   const server = createServer((req, res) => {
     if (req.url === "/source") {

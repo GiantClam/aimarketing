@@ -1899,6 +1899,7 @@ const WRITER_FRESH_RESEARCH_SIGNAL_RE =
 
 const WRITER_SOURCE_URL_RE = /https?:\/\/[^\s<>"'`)\]，。；！？、：）】》」』]+/giu
 const WRITER_SOURCE_URL_BREAK_RE = /[，。；！？、：）】》」』]/u
+const WRITER_ADJACENT_URL_JOINER_RE = /(?:和|以及|与|及)(?=https?:\/\/)/giu
 const WRITER_SOURCE_REFERENCE_SIGNAL_RE =
   /(?:参考|參考|引用|链接|連結|网址|網址|基于链接|根據連結|read the link|read this url|based on (?:the )?(?:link|url|source)|according to (?:the )?(?:link|url|source)|crawl|scrape)/iu
 
@@ -1925,9 +1926,12 @@ function extractUrlsFromText(text: string) {
 
   const urls = new Set<string>()
   for (const match of text.matchAll(WRITER_SOURCE_URL_RE)) {
-    const normalized = normalizeResearchUrl(match[0] || "")
-    if (!normalized) continue
-    urls.add(normalized)
+    const candidates = (match[0] || "").split(WRITER_ADJACENT_URL_JOINER_RE)
+    for (const candidate of candidates) {
+      const normalized = normalizeResearchUrl(candidate)
+      if (!normalized) continue
+      urls.add(normalized)
+    }
   }
 
   return [...urls].slice(0, 5)
