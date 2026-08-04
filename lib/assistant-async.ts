@@ -219,7 +219,7 @@ function estimateTextTokens(text: string) {
   return Math.max(1, Math.ceil(text.length / 4))
 }
 
-const WRITER_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.WRITER_TASK_TIMEOUT_MS, 180_000)
+const WRITER_TASK_TIMEOUT_MS = Math.max(parseTimeoutMs(process.env.WRITER_TASK_TIMEOUT_MS, 600_000), 600_000)
 const WRITER_ASSETS_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.WRITER_ASSETS_TASK_TIMEOUT_MS, 600_000)
 const WRITER_MEMORY_EXTRACT_TIMEOUT_MS = parseTimeoutMs(process.env.WRITER_MEMORY_EXTRACT_TIMEOUT_MS, 2_000, 100, 10_000)
 const IMAGE_ASSISTANT_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.IMAGE_ASSISTANT_TASK_TIMEOUT_MS, 300_000)
