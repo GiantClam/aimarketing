@@ -2427,8 +2427,21 @@ async function recoverAssistantTask(
 }
 
 export async function getAssistantTask(taskId: number, userId?: number) {
-  const task = await getTaskById(taskId, userId)
-  return parseTask(task)
+  const task = parseTask(await getTaskById(taskId, userId))
+  if (!task) return task
+
+  // Async execution can outlive the Vercel request that created it. Let the
+  // status poll act as a lightweight recovery trigger after the lease expires.
+  // This keeps writer image tasks from remaining "running" forever when the
+  // original background invocation is reclaimed.
+  await recoverAssistantTask(task, { waitForCompletion: false }).catch((error) => {
+    console.warn("assistant.task.poll_recovery_failed", {
+      taskId,
+      message: error instanceof Error ? error.message : String(error),
+    })
+  })
+
+  return parseTask(await getTaskById(taskId, userId))
 }
 
 export async function advanceDurableAssistantPptTask(taskId: number, userId: number) {

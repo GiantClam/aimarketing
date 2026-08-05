@@ -14,6 +14,12 @@ const DEFAULT_RETRY_TOKENS = [
   "terminating connection",
   "too many clients",
   "quota",
+  "canceling statement due to statement timeout",
+  "statement timeout",
+  "lock timeout",
+  "deadlock detected",
+  "could not serialize access",
+  "serialization failure",
 ] as const
 
 function sleep(ms: number) {

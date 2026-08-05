@@ -52,6 +52,7 @@ export async function ensureDefaultFreeBillingForUser(user: AuthUserPayload): Pr
   let transactionClosed = false
   try {
     await client.query("BEGIN")
+    await client.query("SET LOCAL lock_timeout = '5000ms'")
 
     const subscriptionResult = await client.query(
       `
@@ -227,6 +228,7 @@ export async function ensureDemoBillingCreditFloor(user: AuthUserPayload): Promi
   let transactionClosed = false
   try {
     await client.query("BEGIN")
+    await client.query("SET LOCAL lock_timeout = '5000ms'")
 
     const accountResult = await client.query(
       `

@@ -1,5 +1,6 @@
 import { pool } from "@/modules/billing-kit/host/db"
 import type { PermissionMap } from "@/lib/enterprise/constants"
+import { createRetryableDbErrorMatcher, withDbRetry } from "@/lib/db/retry"
 
 import { ensureDefaultFreeBillingForUser } from "./default-free-plan"
 import { provisionDefaultBillingForUserId } from "./provision"
@@ -12,6 +13,18 @@ export type BillingReservation = {
 
 export function isBillingCreditEnforcementEnabled() {
   return process.env.BILLING_CREDITS_ENFORCEMENT === "true"
+}
+
+const BILLING_DB_RETRY_DELAYS_MS = [300, 900, 1_800] as const
+const isRetryableBillingDbError = createRetryableDbErrorMatcher()
+
+function withBillingDbRetry<T>(label: string, operation: () => Promise<T>) {
+  return withDbRetry(label, operation, {
+    retryDelaysMs: BILLING_DB_RETRY_DELAYS_MS,
+    isRetryable: isRetryableBillingDbError,
+    logPrefix: "billing.db.retry",
+    exhaustedErrorPrefix: "billing_db_retry_exhausted",
+  })
 }
 
 async function findBillingAccount(client: { query: typeof pool.query }, input: {
@@ -48,7 +61,7 @@ async function createBillingAccount(client: { query: typeof pool.query }, input:
   return created.rows[0]
 }
 
-export async function reserveFeatureCredits(input: {
+async function reserveFeatureCreditsOnce(input: {
   userId: number
   enterpriseId?: number | null
   userName?: string | null
@@ -58,8 +71,7 @@ export async function reserveFeatureCredits(input: {
   amount: number
   idempotencyKey: string
   metadata?: Record<string, unknown> | null
-}): Promise<BillingReservation | null> {
-  const amount = Math.max(1, Math.ceil(input.amount))
+}, amount: number): Promise<BillingReservation | null> {
   if (input.userName && input.userEmail && input.userPermissions) {
     await ensureDefaultFreeBillingForUser({
       id: input.userId,
@@ -79,6 +91,7 @@ export async function reserveFeatureCredits(input: {
   const client = await pool.connect()
   try {
     await client.query("BEGIN")
+    await client.query("SET LOCAL lock_timeout = '5000ms'")
     let account = await findBillingAccount(client, input)
     if (!account && !isBillingCreditEnforcementEnabled()) {
       await client.query("ROLLBACK")
@@ -165,8 +178,23 @@ export async function reserveFeatureCredits(input: {
   }
 }
 
-export async function finalizeReservedCredits(input: {
-  reservation: BillingReservation | null
+export async function reserveFeatureCredits(input: {
+  userId: number
+  enterpriseId?: number | null
+  userName?: string | null
+  userEmail?: string | null
+  userPermissions?: PermissionMap | null
+  featureKey: string
+  amount: number
+  idempotencyKey: string
+  metadata?: Record<string, unknown> | null
+}): Promise<BillingReservation | null> {
+  const amount = Math.max(1, Math.ceil(input.amount))
+  return withBillingDbRetry("reserve-feature-credits", () => reserveFeatureCreditsOnce(input, amount))
+}
+
+async function finalizeReservedCreditsOnce(input: {
+  reservation: BillingReservation
   userId: number
   enterpriseId?: number | null
   actualAmount: number
@@ -178,11 +206,11 @@ export async function finalizeReservedCredits(input: {
   usagePayload?: Record<string, unknown> | null
   metadata?: Record<string, unknown> | null
 }) {
-  if (!input.reservation) return null
   const actualAmount = Math.max(1, Math.min(input.reservation.amount, Math.ceil(input.actualAmount)))
   const client = await pool.connect()
   try {
     await client.query("BEGIN")
+    await client.query("SET LOCAL lock_timeout = '5000ms'")
     const account = (
       await client.query(
         `SELECT id, balance, reserved_balance FROM "AI_MARKETING_credit_accounts" WHERE id = $1 FOR UPDATE`,
@@ -265,17 +293,35 @@ export async function finalizeReservedCredits(input: {
   }
 }
 
-export async function releaseReservedCredits(input: {
+export async function finalizeReservedCredits(input: {
   reservation: BillingReservation | null
+  userId: number
+  enterpriseId?: number | null
+  actualAmount: number
+  idempotencyKey: string
+  provider?: string | null
+  model?: string | null
+  officialCostUsd?: number | null
+  costBasisUsd?: number | null
+  usagePayload?: Record<string, unknown> | null
+  metadata?: Record<string, unknown> | null
+}) {
+  const reservation = input.reservation
+  if (!reservation) return null
+  return withBillingDbRetry("finalize-reserved-credits", () => finalizeReservedCreditsOnce({ ...input, reservation }))
+}
+
+async function releaseReservedCreditsOnce(input: {
+  reservation: BillingReservation
   userId: number
   enterpriseId?: number | null
   idempotencyKey: string
   reason: string
 }) {
-  if (!input.reservation) return null
   const client = await pool.connect()
   try {
     await client.query("BEGIN")
+    await client.query("SET LOCAL lock_timeout = '5000ms'")
     const account = (
       await client.query(
         `SELECT id, balance, reserved_balance FROM "AI_MARKETING_credit_accounts" WHERE id = $1 FOR UPDATE`,
@@ -338,4 +384,16 @@ export async function releaseReservedCredits(input: {
   } finally {
     client.release()
   }
+}
+
+export async function releaseReservedCredits(input: {
+  reservation: BillingReservation | null
+  userId: number
+  enterpriseId?: number | null
+  idempotencyKey: string
+  reason: string
+}) {
+  const reservation = input.reservation
+  if (!reservation) return null
+  return withBillingDbRetry("release-reserved-credits", () => releaseReservedCreditsOnce({ ...input, reservation }))
 }
