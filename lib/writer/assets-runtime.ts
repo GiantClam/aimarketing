@@ -49,6 +49,10 @@ const WRITER_PROMPT_SIMILARITY_MAX = Math.max(
 const WRITER_ENFORCE_PROMPT_DIVERSITY = process.env.WRITER_ENFORCE_PROMPT_DIVERSITY !== "false"
 const WRITER_IMAGE_DOWNLOAD_MAX_BYTES = 20 * 1024 * 1024
 const WRITER_IMAGE_DOWNLOAD_TIMEOUT_MS = 30_000
+const WRITER_IMAGE_REQUEST_TIMEOUT_MS = Math.max(
+  60_000,
+  Math.min(180_000, Number.parseInt(process.env.WRITER_IMAGE_REQUEST_TIMEOUT_MS || "180000", 10) || 180_000),
+)
 
 function isTemporaryProviderError(error: unknown) {
   if (!(error instanceof Error)) return false
@@ -167,6 +171,8 @@ async function generateWriterImageWithProvider(input: {
     candidateCount: 1,
     sizePreset: input.aspectRatio === "3:4" ? "3:4" : input.aspectRatio === "16:9" ? "16:9" : "1:1",
     resolution: "1K",
+    attempts: 1,
+    timeoutMs: WRITER_IMAGE_REQUEST_TIMEOUT_MS,
   })
   const dataUrl = result.images[0]
   if (!dataUrl) throw new Error(`writer_${input.provider}_image_missing`)
@@ -195,10 +201,15 @@ async function generateWriterAssetsBatch(input: {
   conversationId: string | null
   userId: number
   providerPlan: WriterImageProvider[]
-  onAsset?: (asset: WriterGeneratedAsset, index: number, total: number, assets: WriterGeneratedAsset[]) => void
+  onAsset?: (
+    asset: WriterGeneratedAsset,
+    index: number,
+    total: number,
+    assets: WriterGeneratedAsset[],
+  ) => Promise<void> | void
 }) {
-  const assets: WriterGeneratedAsset[] = []
   const acceptedPromptFocuses: Array<{ assetId: string; focus: string }> = []
+  const assets: WriterGeneratedAsset[] = []
   const temporarilyDegradedProviders = new Set<WriterImageProvider>()
 
   for (const asset of input.plannedAssets) {
@@ -229,23 +240,22 @@ async function generateWriterAssetsBatch(input: {
         url: uploaded.url,
         storageKey: uploaded.storageKey,
         contentType: uploaded.contentType,
-        status: "ready",
+        status: "ready" as const,
         provider: generated.provider,
       }
       assets.push(nextAsset)
       acceptedPromptFocuses.push({ assetId: asset.id, focus: promptGuard.focus })
-      input.onAsset?.(nextAsset, assets.length, input.plannedAssets.length, [...assets])
+      await input.onAsset?.(nextAsset, assets.length, input.plannedAssets.length, [...assets])
     } catch (error) {
-      const message = summarizeWriterAssetError(error)
-      const failedAsset: WriterGeneratedAsset = {
+      const failedAsset = {
         ...asset,
         url: "",
-        status: "failed",
-        provider: "error",
-        error: message,
+        status: "failed" as const,
+        provider: "error" as const,
+        error: summarizeWriterAssetError(error),
       }
       assets.push(failedAsset)
-      input.onAsset?.(failedAsset, assets.length, input.plannedAssets.length, [...assets])
+      await input.onAsset?.(failedAsset, assets.length, input.plannedAssets.length, [...assets])
       if (isTemporaryProviderError(error)) {
         for (const provider of input.providerPlan) {
           if (provider === "aiberm") temporarilyDegradedProviders.add(provider)

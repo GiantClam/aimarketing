@@ -221,7 +221,6 @@ function estimateTextTokens(text: string) {
 }
 
 const WRITER_TASK_TIMEOUT_MS = Math.max(parseTimeoutMs(process.env.WRITER_TASK_TIMEOUT_MS, 600_000), 600_000)
-const WRITER_ASSETS_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.WRITER_ASSETS_TASK_TIMEOUT_MS, 600_000)
 const WRITER_MEMORY_EXTRACT_TIMEOUT_MS = parseTimeoutMs(process.env.WRITER_MEMORY_EXTRACT_TIMEOUT_MS, 2_000, 100, 10_000)
 const IMAGE_ASSISTANT_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.IMAGE_ASSISTANT_TASK_TIMEOUT_MS, 300_000)
 const ADVISOR_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.ADVISOR_TASK_TIMEOUT_MS, 240_000, 30_000, 300_000)
@@ -791,15 +790,20 @@ async function handleWriterTurn(taskId: number, userId: number, payload: WriterT
 
 async function handleWriterAssets(taskId: number, userId: number, payload: WriterAssetsTaskPayload) {
   const progressEvents: AssistantTaskProgressEvent[] = []
+  let progressWrite = Promise.resolve()
   const persistProgressEvent = async (event: AssistantTaskProgressEvent) => {
     pushTaskProgressEvent(progressEvents, event)
-    await updateTaskStatus(taskId, {
-      status: "running",
-      result: {
-        conversation_id: payload.conversationId,
-        events: progressEvents,
-      },
-    })
+    const nextWrite = progressWrite.then(() =>
+      updateTaskStatus(taskId, {
+        status: "running",
+        result: {
+          conversation_id: payload.conversationId,
+          events: [...progressEvents],
+        },
+      }),
+    )
+    progressWrite = nextWrite.catch(() => {})
+    await nextWrite
   }
 
   await persistProgressEvent({
@@ -810,29 +814,26 @@ async function handleWriterAssets(taskId: number, userId: number, payload: Write
   })
 
   const result = await withWriterAssetTaskSlot(() =>
-    withTaskTimeout(
-      generateWriterAssetsForTask({
-        markdown: payload.markdown,
-        platform: payload.platform,
-        mode: payload.mode,
-        userId,
-        enterpriseId: payload.enterpriseId,
-        conversationId: payload.conversationId,
-        taskId,
-        onAsset: async (asset, index, total) => {
-          await persistProgressEvent({
-            type: asset.status === "ready" ? "asset_ready" : "asset_failed",
-            label: asset.status === "ready" ? `Image ${index}/${total} ready` : `Image ${index}/${total} failed`,
-            detail: asset.error,
-            status: asset.status === "ready" ? "completed" : "failed",
-            at: Date.now(),
-          })
-        },
-      }),
-      WRITER_ASSETS_TASK_TIMEOUT_MS,
-      "writer_assets_task_timeout",
-    ),
+    generateWriterAssetsForTask({
+      markdown: payload.markdown,
+      platform: payload.platform,
+      mode: payload.mode,
+      userId,
+      enterpriseId: payload.enterpriseId,
+      conversationId: payload.conversationId,
+      taskId,
+      onAsset: async (asset, index, total) => {
+        await persistProgressEvent({
+          type: asset.status === "ready" ? "asset_ready" : "asset_failed",
+          label: asset.status === "ready" ? `Image ${index}/${total} ready` : `Image ${index}/${total} failed`,
+          detail: asset.error,
+          status: asset.status === "ready" ? "completed" : "failed",
+          at: Date.now(),
+        })
+      },
+    }),
   )
+  await progressWrite
 
   await persistProgressEvent({
     type: result.ok ? "assets_ready" : "assets_failed",

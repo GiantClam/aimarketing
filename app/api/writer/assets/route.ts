@@ -41,6 +41,10 @@ const WRITER_PROMPT_SIMILARITY_MAX = Math.max(
 const WRITER_ENFORCE_PROMPT_DIVERSITY = process.env.WRITER_ENFORCE_PROMPT_DIVERSITY !== "false"
 const WRITER_IMAGE_DOWNLOAD_MAX_BYTES = 20 * 1024 * 1024
 const WRITER_IMAGE_DOWNLOAD_TIMEOUT_MS = 30_000
+const WRITER_IMAGE_REQUEST_TIMEOUT_MS = Math.max(
+  60_000,
+  Math.min(180_000, Number.parseInt(process.env.WRITER_IMAGE_REQUEST_TIMEOUT_MS || "180000", 10) || 180_000),
+)
 type WriterImageProvider = OpenAiCompatibleImageProviderId
 type WriterPlannedAsset = ReturnType<typeof buildPendingWriterAssets>[number]
 type WriterGeneratedAsset = WriterPlannedAsset & {
@@ -183,6 +187,8 @@ async function generateWriterImageWithProvider(params: {
     sizePreset: params.aspectRatio === "3:4" ? "3:4" : params.aspectRatio === "16:9" ? "16:9" : "1:1",
     resolution: "1K",
     signal: params.signal,
+    attempts: 1,
+    timeoutMs: WRITER_IMAGE_REQUEST_TIMEOUT_MS,
   })
 
   const dataUrl = result.images[0]
@@ -483,12 +489,14 @@ async function generateWriterAssetsBatch(input: {
   conversationId: string | null
   userId: number
   providerPlan: WriterImageProvider[]
-  onAsset?: (event: { index: number; total: number; asset: WriterGeneratedAsset; assets: WriterGeneratedAsset[] }) => void
+  onAsset?: (
+    event: { index: number; total: number; asset: WriterGeneratedAsset; assets: WriterGeneratedAsset[] },
+  ) => Promise<void> | void
 }) {
-  const assets: WriterGeneratedAsset[] = []
   const acceptedPromptFocuses: Array<{ assetId: string; focus: string }> = []
-  const temporarilyDegradedProviders = new Set<WriterImageProvider>()
   const total = input.plannedAssets.length
+  const assets: WriterGeneratedAsset[] = []
+  const temporarilyDegradedProviders = new Set<WriterImageProvider>()
 
   for (const asset of input.plannedAssets) {
     try {
@@ -540,40 +548,24 @@ async function generateWriterAssetsBatch(input: {
         assetId: asset.id,
         provider: generated.provider,
         dataUrlLength: generated.dataUrl.length,
-        promptAttempt: promptGuard.attempt,
       })
-      let uploaded
-      try {
-        uploaded = await uploadWriterImageToR2({
-          userId: input.userId,
-          conversationId: input.conversationId,
-          assetId: asset.id,
-          dataUrl: generated.dataUrl,
-        })
-      } catch (error) {
-        const summary = summarizeWriterAssetError(error)
-        console.error("writer.assets.upload_failed", {
-          assetId: asset.id,
-          provider: generated.provider,
-          ...summary,
-        })
-        throw error
-      }
-
+      const uploaded = await uploadWriterImageToR2({
+        userId: input.userId,
+        conversationId: input.conversationId,
+        assetId: asset.id,
+        dataUrl: generated.dataUrl,
+      })
       const nextAsset: WriterGeneratedAsset = {
         ...asset,
         url: uploaded.url,
         storageKey: uploaded.storageKey,
         contentType: uploaded.contentType,
-        status: "ready",
+        status: "ready" as const,
         provider: generated.provider,
       }
       assets.push(nextAsset)
-      acceptedPromptFocuses.push({
-        assetId: asset.id,
-        focus: promptGuard.focus,
-      })
-      input.onAsset?.({ index: assets.length, total, asset: nextAsset, assets: [...assets] })
+      acceptedPromptFocuses.push({ assetId: asset.id, focus: promptGuard.focus })
+      await input.onAsset?.({ index: assets.length, total, asset: nextAsset, assets: [...assets] })
     } catch (error: unknown) {
       const summary = summarizeWriterAssetError(error)
       console.error("writer.assets.asset_failed", {
@@ -581,16 +573,15 @@ async function generateWriterAssetsBatch(input: {
         prompt: asset.prompt.slice(0, 100),
         ...summary,
       })
-
       const failedAsset: WriterGeneratedAsset = {
         ...asset,
         url: "",
-        status: "failed",
-        provider: "error",
+        status: "failed" as const,
+        provider: "error" as const,
         error: summary.message,
       }
       assets.push(failedAsset)
-      input.onAsset?.({ index: assets.length, total, asset: failedAsset, assets: [...assets] })
+      await input.onAsset?.({ index: assets.length, total, asset: failedAsset, assets: [...assets] })
     }
   }
 
