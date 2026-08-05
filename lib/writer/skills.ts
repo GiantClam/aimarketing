@@ -2167,11 +2167,23 @@ async function extractWriterBriefWithModel(params: {
 
   try {
     const { systemPrompt, userPrompt } = buildWriterBriefExtractionPrompt(params)
+    const heuristicRouting = resolveWriterRoutingFromSignals({
+      query: params.query,
+      priorRouting: getPriorRoutingFromHistory(params.history),
+      conversationStatus: params.conversationStatus,
+    })
     const result = await runWriterOpenCodeText({
       systemPrompt,
       userPrompt,
       history: params.history,
-      selectedSkillIds: ["writer-briefing"],
+      selectedSkillIds: [
+        "writer-briefing",
+        ...resolveWriterOpenCodeSkillIds({
+          contentType: heuristicRouting.contentType,
+          targetPlatform: heuristicRouting.targetPlatform,
+          styleSkillId: heuristicRouting.selectedStyleSkillId,
+        }),
+      ],
       writerPhase: "briefing",
       allowNetwork: false,
       conversationId: null,
@@ -2376,62 +2388,6 @@ function _buildWriterFollowUpQuestion(params: {
     `I still need ${params.missingFields.length} key detail(s) before drafting.`,
     fieldPrompts.map((prompt, index) => `${index + 1}. ${prompt}`).join("\n"),
     "Once you answer those points, I can move straight into the draft.",
-  ].join("\n")
-}
-
-function buildWriterHandoffPrompt(brief: WriterConversationBrief, routing: WriterRoutingDecision, chinese: boolean) {
-  if (chinese) {
-    return [
-      `请直接写一份 ${routing.outputForm}，使用场景是 ${routing.targetPlatform}。`,
-      `目标受众是 ${brief.audience || "该场景下的核心受众"}，目标是 ${
-        brief.objective || "帮助读者理解主题并建立信任"
-      }。`,
-      `核心主题与必须覆盖的信息：${brief.topic || "围绕用户请求中明确的主题展开"}。`,
-      `请采用 ${brief.tone || "该场景的原生语气"}，篇幅控制在 ${routing.lengthTarget}，结构遵循 ${routing.outputForm} 的原生写法。`,
-      brief.constraints
-        ? `必须遵守这些限制或必带信息：${brief.constraints}。`
-        : "如无额外资料，不要编造具体数据、案例或承诺。",
-      "请直接输出成稿，不要重复 brief；除非存在关键事实缺口，否则不要反问。",
-    ].join(" ")
-  }
-
-  return [
-    `Write a ${routing.outputForm} for ${routing.targetPlatform}.`,
-    `The audience is ${brief.audience || "the core audience for this scenario"}, and the goal is ${
-      brief.objective || "to help the reader understand the topic and build trust"
-    }.`,
-    `Cover this core topic and message: ${brief.topic || "the topic clearly stated in the user request"}.`,
-    `Use a ${brief.tone || "scenario-native"} tone, keep it within ${routing.lengthTarget}, and structure it natively for this format.`,
-    brief.constraints
-      ? `Respect these constraints or must-cover details: ${brief.constraints}.`
-      : "Do not invent exact facts, data, or case studies if they were not provided.",
-    "Generate the draft directly without repeating the brief unless a critical factual gap makes completion impossible.",
-  ].join(" ")
-}
-
-function buildWriterBriefConfirmationPrompt(params: {
-  brief: WriterConversationBrief
-  routing: WriterRoutingDecision
-  chinese: boolean
-}) {
-  if (params.chinese) {
-    return [
-      `我先确认一下理解：${summarizeCollectedWriterBrief(params.brief, true)}。`,
-      "如果这个方向没问题，回复“确认开始写”，或者直接告诉我需要改哪里。",
-      "",
-      "建议写作提示词：",
-      buildWriterHandoffPrompt(params.brief, params.routing, true),
-    ].join("\n")
-  }
-
-  const handoffPrompt = buildWriterHandoffPrompt(params.brief, params.routing, params.chinese)
-
-  return [
-    `Here is my current understanding: ${summarizeCollectedWriterBrief(params.brief, false)}.`,
-    'If this looks right, reply "confirm and write" or tell me what to change.',
-    "",
-    "Suggested writing prompt:",
-    handoffPrompt,
   ].join("\n")
 }
 
@@ -3255,24 +3211,6 @@ function safeIsWriterConfirmationReply(query: string) {
   return /^(?:confirm and write|confirm and draft|looks good[, ]*write(?: it)?|go ahead and write|approved[, ]*write(?: it)?|确认开始写|确认并开始写|确认写作|按这个写|就按这个写|可以开始写了)$/iu.test(
     normalizeBriefValue(query),
   )
-}
-
-function shouldPromptForWriterBriefConfirmation(params: {
-  query: string
-  recentHistoryLength: number
-  answeredFields?: WriterBriefFieldId[]
-}) {
-  if (params.recentHistoryLength < 1) return false
-  if (params.recentHistoryLength >= 2) return true
-
-  const normalized = normalizeBriefValue(params.query)
-  const answeredFieldCount = sanitizeWriterBriefFields(params.answeredFields || []).length
-  const labeledFieldMatches =
-    normalized.match(
-      /(?:^|\b)(?:topic|audience|objective|tone|constraints?|主题|受众|目标|语气|风格|限制)\s*(?::|：)/giu,
-    )?.length || 0
-
-  return answeredFieldCount >= 2 || labeledFieldMatches >= 2 || normalized.length >= 72
 }
 
 function safeSummarizeCollectedWriterBrief(brief: WriterConversationBrief, chinese: boolean) {
@@ -4461,6 +4399,7 @@ export async function runWriterSkillsTurnWithRuntime(
   runtime: WriterSkillsRuntime,
 ): Promise<WriterSkillsTurnResult> {
   const preferredLanguage = params.preferredLanguage || "auto"
+  const conversationStatus = params.conversationStatus === "failed" ? "drafting" : params.conversationStatus
   const contextHistory = (params.history || []).slice(-WRITER_CONTEXT_MAX_TURNS)
   const recentHistory = contextHistory.slice(-WRITER_BRIEF_MAX_TURNS)
   const turnCount = Math.min(WRITER_BRIEF_MAX_TURNS, recentHistory.length + 1)
@@ -4487,7 +4426,7 @@ export async function runWriterSkillsTurnWithRuntime(
     mode: params.mode,
     preferredLanguage,
     briefingGuide,
-    conversationStatus: params.conversationStatus,
+    conversationStatus,
     selectedProviderId: params.selectedProviderId,
     selectedModelId: params.selectedModelId,
   })
@@ -4499,7 +4438,7 @@ export async function runWriterSkillsTurnWithRuntime(
     query: params.query,
     priorRouting,
     structuredRouting: structuredExtraction?.routingDecision,
-    conversationStatus: params.conversationStatus,
+    conversationStatus,
   })
   const retrievalStrategy = decideWriterRetrievalStrategy({
     query: params.query,
@@ -4563,18 +4502,9 @@ export async function runWriterSkillsTurnWithRuntime(
         : "Transform the supplied source text according to the user's request"
     }
   }
-  const modelApprovedBrief = Boolean(
-    structuredExtraction?.briefSufficient &&
-      structuredExtraction.confidence >= 0.6 &&
-      mergedBrief.topic &&
-      (mergedBrief.audience || mergedBrief.objective),
-  )
   const richBriefSignal =
     rewriteSourceAvailable ||
-    turnIntent === "direct_draft" ||
     safeIsWriterConfirmationReply(params.query) ||
-    Boolean(structuredExtraction?.userWantsDirectOutput) ||
-    modelApprovedBrief ||
     isRichFirstMessage({
       query: params.query,
       historyLength: recentHistory.length,
@@ -4583,10 +4513,12 @@ export async function runWriterSkillsTurnWithRuntime(
     })
 
   const shouldClarify =
-    (params.conversationStatus || "drafting") === "drafting" &&
+    (conversationStatus || "drafting") === "drafting" &&
     actionableMissingFields.length > 0 &&
     turnCount < WRITER_BRIEF_MAX_TURNS &&
-    !richBriefSignal
+    (structuredExtraction
+      ? !structuredExtraction.briefSufficient && !structuredExtraction.userWantsDirectOutput
+      : !richBriefSignal && turnIntent !== "direct_draft")
 
   if (shouldClarify) {
     const chinese = isChineseConversation(params.query, preferredLanguage)
@@ -4609,44 +4541,6 @@ export async function runWriterSkillsTurnWithRuntime(
       brief: mergedBrief,
       routing,
       missingFields: actionableMissingFields,
-      turnCount,
-      maxTurns: WRITER_BRIEF_MAX_TURNS,
-      readyForGeneration: false,
-      selectedSkill: {
-        id: "writer-briefing",
-        label: briefingGuide.runtimeLabel,
-        stage: "briefing",
-      },
-    }
-  }
-
-  const shouldConfirmBrief =
-    (params.conversationStatus || "drafting") === "drafting" &&
-    shouldPromptForWriterBriefConfirmation({
-      query: params.query,
-      recentHistoryLength: recentHistory.length,
-      answeredFields: structuredExtraction?.answeredFields,
-    }) &&
-    actionableMissingFields.length === 0 &&
-    !safeIsWriterConfirmationReply(params.query) &&
-    turnIntent !== "direct_draft" &&
-    !structuredExtraction?.userWantsDirectOutput
-
-  if (shouldConfirmBrief) {
-    const chinese = isChineseConversation(params.query, preferredLanguage)
-
-    return {
-      outcome: "needs_clarification",
-      answer: buildWriterBriefConfirmationPrompt({
-        brief: mergedBrief,
-        routing,
-        chinese,
-      }),
-      diagnostics: { ...createEmptyWriterDiagnostics(retrievalStrategy), routing },
-      usage: structuredExtraction?.usage,
-      brief: mergedBrief,
-      routing,
-      missingFields: [],
       turnCount,
       maxTurns: WRITER_BRIEF_MAX_TURNS,
       readyForGeneration: false,
@@ -4718,7 +4612,7 @@ export async function runWriterSkillsTurnWithRuntime(
 
   const compiledPrompt = buildWriterBriefPrompt(params.query, mergedBrief, routing, {
     history: contextHistory,
-    latestDraft: (params.conversationStatus || "drafting") !== "drafting" ? latestDraft : null,
+    latestDraft: (conversationStatus || "drafting") !== "drafting" ? latestDraft : null,
     sourceText: inlineSourceText || null,
     rewriteMode: retrievalStrategy === "rewrite_only" ? (detectTranslationIntentSafe(params.query) ? "translate" : "rewrite") : null,
   })

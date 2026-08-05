@@ -13,7 +13,7 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
   const isWriterAgent = input.agentId === "writer"
   const isWriterBriefing = isWriterAgent && input.writerPhase === "briefing"
   const isWriterDraft = isWriterAgent && input.writerPhase === "draft"
-  const isKhazixWechatWriter = input.agentId === "writer" && (input.selectedSkillIds || []).includes("khazix-writer")
+  const isKhazixWechatWriter = isWriterDraft && (input.selectedSkillIds || []).includes("khazix-writer")
   const isBusinessAgent = input.agentId?.startsWith("business-") === true
   const isPersistentWorkspace = isDashiPresentation || isBusinessAgent
   const isTurnScopedPptMaster = isEditablePpt
@@ -47,7 +47,8 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
     "Platform tools, MCP servers, skill installation, workflow state, billing, and database writes are unavailable.",
     ...(isWriterBriefing
       ? [
-          "This is the Writer briefing phase. Read .opencode/skills/writer-briefing/SKILL.md and follow its machine contract exactly.",
+          "This is the Writer briefing phase. Read .opencode/skills/writer-briefing/SKILL.md and every selected content, platform, and style Skill; let the selected Skills decide whether the brief is sufficient for drafting or requires clarification.",
+          "The selected style Skill may decide whether clarification is needed from the user's actual request and conversation context. Do not force a clarification turn when the Skill says the brief is usable.",
           "Return exactly one valid JSON object with status, brief, routingDecision, missingFields, and followUpQuestion. Do not draft, research, fetch URLs, call writer_webfetch, or return Markdown.",
         ]
       : isWriterDraft

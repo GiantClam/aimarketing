@@ -270,7 +270,7 @@ test("Writer briefing and draft prompts enforce phase-specific Skill contracts",
     enterpriseId: null,
     userId: 42,
     agentId: "writer",
-    selectedSkillIds: ["writer-briefing"],
+    selectedSkillIds: ["writer-briefing", "writer-orchestrator", "writer-wechat", "khazix-writer"],
     systemPrompt: "Writer application context",
     messages: [{ role: "user" as const, content: "请写一篇关于 AI 的公众号文章" }],
     attachments: [],
@@ -282,6 +282,9 @@ test("Writer briefing and draft prompts enforce phase-specific Skill contracts",
   const briefing = buildOpenCodeSystemPrompt({ ...base, writerPhase: "briefing" })
   assert.match(briefing, /exactly one valid JSON object/u)
   assert.match(briefing, /Do not draft, research, fetch URLs/u)
+  assert.match(briefing, /every selected content, platform, and style Skill/u)
+  assert.match(briefing, /selected style Skill may decide whether clarification is needed/u)
+  assert.doesNotMatch(briefing, /Return only the final WeChat article draft/u)
 
   const draft = buildOpenCodeSystemPrompt({ ...base, writerPhase: "draft", selectedSkillIds: ["writer-orchestrator", "social-writing-cn", "writer-wechat"] })
   assert.match(draft, /writer-orchestrator/u)

@@ -251,6 +251,47 @@ test("clarification asks only one missing item early in the briefing flow", asyn
   assert.match(result.answer, /what should it achieve/i)
 })
 
+test("failed writer conversations re-enter skill briefing instead of forcing a draft", async () => {
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query: "继续",
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "zh",
+      conversationStatus: "failed",
+      history: [
+        createHistoryEntry(
+          1,
+          "写一篇关于 AI 视频模型的公众号文章",
+          "Request failed: canceling statement due to statement timeout",
+        ),
+      ],
+    },
+    createRuntime({
+      extractBrief: async () => ({
+        resolvedBrief: {
+          topic: "AI 视频模型",
+          audience: "",
+          objective: "",
+          tone: "",
+          constraints: "",
+        },
+        routingDecision: createRouting(),
+        answeredFields: ["topic"],
+        suggestedFollowUpFields: ["audience", "objective"],
+        suggestedFollowUpQuestion: "请补充文章受众和希望达成的目标。",
+        userWantsDirectOutput: false,
+        briefSufficient: false,
+        confidence: 0.9,
+      }),
+    }),
+  )
+
+  assert.equal(result.outcome, "needs_clarification")
+  assert.equal(result.selectedSkill.stage, "briefing")
+  assert.match(result.answer, /受众和希望达成的目标/u)
+})
+
 test("short reply can fill objective and proceed to drafting", async () => {
   let compiledPrompt = ""
 
@@ -459,7 +500,7 @@ test("turn limit falls back to platform tone and proceeds", async () => {
   assert.equal(result.readyForGeneration, true)
 })
 
-test("multi-turn briefing returns a confirmation prompt before drafting", async () => {
+test("skill-sufficient multi-turn brief proceeds directly to drafting", async () => {
   const result = await runWriterSkillsTurnWithRuntime(
     {
       query: "Professional and restrained.",
@@ -492,13 +533,11 @@ test("multi-turn briefing returns a confirmation prompt before drafting", async 
     }),
   )
 
-  assert.equal(result.outcome, "needs_clarification")
-  assert.equal(result.selectedSkill.stage, "briefing")
-  assert.match(result.answer, /confirm and write/i)
-  assert.match(result.answer, /Suggested writing prompt:/)
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(result.selectedSkill.stage, "execution")
 })
 
-test("second-turn follow-up completion returns confirmation prompt before drafting", async () => {
+test("skill-sufficient second-turn brief proceeds directly to drafting", async () => {
   const result = await runWriterSkillsTurnWithRuntime(
     {
       query:
@@ -534,11 +573,8 @@ test("second-turn follow-up completion returns confirmation prompt before drafti
     }),
   )
 
-  assert.equal(result.outcome, "needs_clarification")
-  assert.equal(result.selectedSkill.stage, "briefing")
-  assert.match(result.answer, /confirm and write/i)
-  assert.match(result.answer, /Topic: our textile products/i)
-  assert.match(result.answer, /Audience: overseas B2B buyers and sourcing managers/i)
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(result.selectedSkill.stage, "execution")
 })
 
 test("confirm-and-write keeps enterprise grounding on the final drafting turn", async () => {

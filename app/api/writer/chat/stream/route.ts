@@ -12,7 +12,7 @@ import {
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 import { loadWriterSkillRunner } from "@/lib/skills/runtime/registry"
 import { normalizeWriterLanguage, normalizeWriterMode, normalizeWriterPlatform } from "@/lib/writer/config"
-import { getWriterConversation, listWriterMessages, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
+import { listWriterMessages, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
 import type { WriterConversationStatus, WriterPreloadedBrief } from "@/lib/writer/types"
 
 export const runtime = "nodejs"
@@ -120,7 +120,6 @@ export async function POST(req: NextRequest) {
 
     const preloadedBrief = normalizeWriterPreloadedBrief(body?.brief)
     const conversationId = typeof body?.conversation_id === "string" ? body.conversation_id : null
-    const existingConversation = conversationId ? await getWriterConversation(auth.user.id, conversationId) : null
     const history = conversationId
       ? (await listWriterMessages(auth.user.id, conversationId, WRITER_CHAT_HISTORY_LIMIT)).data
       : []
@@ -256,7 +255,7 @@ export async function POST(req: NextRequest) {
             history,
             conversationStatus: workflowExecution
               ? "text_ready"
-              : (existingConversation?.status as WriterConversationStatus | undefined),
+              : (pending.conversation.status as WriterConversationStatus),
             enterpriseId: auth.user.enterpriseId,
             selectedProviderId,
             selectedModelId,

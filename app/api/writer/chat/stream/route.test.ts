@@ -71,7 +71,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     return {
       createPendingWriterConversation: async () => ({
         conversationId: "conv-1",
-        conversation: { id: "conv-1" },
+        conversation: { id: "conv-1", status: "drafting" },
       }),
     }
   }
@@ -162,6 +162,7 @@ test("writer chat stream route finalizes credits on success", async () => {
   const text = await new Response(response.body).text()
   assert.match(text, /conversation_init/)
   assert.match(text, /message_end/)
+  assert.equal(lastWriterRunInput?.conversationStatus, "drafting")
   assert.equal(finalizeCalls, 1)
   assert.equal(releaseCalls, 0)
 })
