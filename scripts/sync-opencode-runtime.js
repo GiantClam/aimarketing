@@ -69,7 +69,49 @@ function listSkillIds() {
     .sort()
 }
 
+function listFiles(root, prefix = "") {
+  return fs.readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+    const relative = path.join(prefix, entry.name)
+    const absolute = path.join(root, entry.name)
+    return entry.isDirectory() ? listFiles(absolute, relative) : [relative]
+  })
+}
+
+function assertRuntimeInSync() {
+  const mismatches = []
+  const compareTree = (source, target, label) => {
+    for (const relative of listFiles(source)) {
+      const sourceFile = path.join(source, relative)
+      const targetFile = path.join(target, relative)
+      if (!fs.existsSync(targetFile) || Buffer.compare(fs.readFileSync(sourceFile), fs.readFileSync(targetFile)) !== 0) {
+        mismatches.push(`${label}/${relative}`)
+      }
+    }
+  }
+  for (const skillId of listSkillIds()) {
+    compareTree(path.join(sourceRoot, skillId), path.join(skillRoot, skillId), `skills/${skillId}`)
+  }
+  compareTree(toolSourceRoot, toolRoot, "tools")
+  for (const file of ["writer-catalog.json"]) {
+    const sourceFile = path.join(sourceRoot, file)
+    const targetFile = path.join(runtimeRoot, file)
+    if (!fs.existsSync(targetFile) || Buffer.compare(fs.readFileSync(sourceFile), fs.readFileSync(targetFile)) !== 0) {
+      mismatches.push(file)
+    }
+  }
+  if (mismatches.length) {
+    console.error(`OpenCode runtime drift detected:\n${mismatches.map((item) => `- ${item}`).join("\n")}`)
+    process.exitCode = 1
+    return
+  }
+  console.log("OpenCode runtime is synchronized with canonical content/skills and tools")
+}
+
 function main() {
+  if (process.argv.includes("--check")) {
+    assertRuntimeInSync()
+    return
+  }
   fs.rmSync(runtimeRoot, { recursive: true, force: true })
   fs.mkdirSync(skillRoot, { recursive: true })
   fs.mkdirSync(agentRoot, { recursive: true })

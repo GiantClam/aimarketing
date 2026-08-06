@@ -67,7 +67,7 @@ function parseSseFrame(frame: string) {
 function isRuntimeEvent(value: unknown): value is AgentRuntimeEvent {
   if (!value || typeof value !== "object") return false
   const event = (value as { event?: unknown }).event
-  return event === "session_ready" || event === "runtime_selected" || event === "runtime_started" || event === "agent_resolved" || event === "skill_activated" || event === "skill_completed" || event === "skill_failed" || event === "text_delta" || event === "tool_event" || event === "usage" || event === "artifact_payload" || event === "runtime_warning" || event === "runtime_error" || event === "done"
+  return event === "session_ready" || event === "writer_result_submitted" || event === "runtime_selected" || event === "runtime_started" || event === "agent_resolved" || event === "skill_activated" || event === "skill_completed" || event === "skill_failed" || event === "text_delta" || event === "tool_event" || event === "usage" || event === "artifact_payload" || event === "runtime_warning" || event === "runtime_error" || event === "done"
 }
 
 async function cancelRun(input: {

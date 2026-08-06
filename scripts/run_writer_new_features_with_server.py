@@ -12,7 +12,7 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT_DIR = ROOT / "artifacts" / "writer-new-features"
-NEXT_CLI = ROOT / "node_modules" / ".bin" / "next.CMD"
+NEXT_CLI = ROOT / "node_modules" / ".bin" / ("next.CMD" if os.name == "nt" else "next")
 TSCONFIG_PATH = ROOT / "tsconfig.json"
 VALIDATION_DIST_DIR = os.environ.get("NEXT_DIST_DIR", ".next-writer-new-features")
 SKIP_BUILD = os.environ.get("WRITER_NEW_FEATURES_SKIP_BUILD", "").strip().lower() == "true"

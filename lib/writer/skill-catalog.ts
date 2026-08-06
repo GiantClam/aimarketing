@@ -7,6 +7,7 @@ import {
   type WriterContentType,
   type WriterPlatform,
 } from "@/lib/writer/config"
+import { getWriterPlatformBinding } from "@/lib/writer/platform-registry"
 
 type WriterContentSkillMeta = {
   id: WriterContentType
@@ -257,13 +258,11 @@ export function resolveWriterOpenCodeSkillIds(input: {
   const content = getWriterContentSkillMeta(input.contentType)
   if (content?.dirName) ids.push(content.dirName)
   const platform = getWriterPlatformSkillByTargetPlatform(input.targetPlatform)
-  if (platform?.dirName) ids.push(platform.dirName)
-  const isWechat = /wechat|公众号|微信公众/iu.test(input.targetPlatform)
-  const style = input.styleSkillId
+  const binding = platform ? getWriterPlatformBinding(platform.renderPlatform) : null
+  if (binding?.primary.dirName) ids.push(binding.primary.dirName)
+  const style = input.styleSkillId && binding?.compatibleStyleSkillIds.includes(input.styleSkillId)
     ? getWriterStyleSkillMeta(input.styleSkillId)
-    : isWechat
-      ? getWriterStyleSkillMeta("khazix-writer")
-      : null
+    : null
   if (style?.dirName) ids.push(style.dirName)
   return [...new Set(ids)]
 }

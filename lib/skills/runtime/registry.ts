@@ -1,6 +1,7 @@
 import type { LeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 import type { ExecutiveAdvisorType } from "@/lib/skills/runtime/executive-advisor-types"
-import { runWriterSkillsTurn } from "@/lib/writer/skills"
+import { runWriterSkillFirstTurn } from "@/lib/writer/skills"
+import type { WriterRuntimeContext } from "@/lib/writer/runtime/session-runtime"
 
 type LeadHunterSkillEventPayload = {
   event: string
@@ -33,6 +34,7 @@ type WriterSkillInput = {
   enterpriseId?: number | null
   selectedProviderId?: string | null
   selectedModelId?: string | null
+  writerContext?: WriterRuntimeContext | null
   onProgress?: (event: { type: string; label: string; detail?: string; status: string; at?: number }) => void | Promise<void>
 }
 
@@ -81,7 +83,7 @@ export function loadWriterSkillRunner() {
   return {
     kind: "writer" as const,
     runBlocking: async (input: WriterSkillInput) => {
-      return runWriterSkillsTurn({
+      return runWriterSkillFirstTurn({
         query: input.query,
         preloadedBrief: (input.preloadedBrief || null) as any,
         userId: input.userId,
@@ -95,6 +97,7 @@ export function loadWriterSkillRunner() {
         enterpriseId: input.enterpriseId,
         selectedProviderId: (input.selectedProviderId || null) as any,
         selectedModelId: (input.selectedModelId || null) as any,
+        writerContext: input.writerContext,
         onProgress: input.onProgress as any,
       } as any)
     },

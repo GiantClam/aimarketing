@@ -8,6 +8,7 @@ export const WRITER_PLATFORM_ORDER = [
   "instagram",
   "tiktok",
   "facebook",
+  "reddit",
   "generic",
 ] as const
 
@@ -244,6 +245,24 @@ export const WRITER_PLATFORM_CONFIG: Record<WriterPlatform, WriterPlatformConfig
     skillStack: ["content-creation", "social-native", "image-generation"],
     toolStack: ["Social post packaging"],
     promptKeywords: ["community", "storytelling", "engagement", "shareability"],
+  },
+  reddit: {
+    id: "reddit",
+    label: "Reddit 写作",
+    shortLabel: "Reddit",
+    description: "适合 subreddit 原生讨论、经验分享和高信任长帖。",
+    audience: "兴趣社区成员、问题解决者、专业讨论者",
+    tone: "plainspoken, useful, community-native",
+    formatGuidance: "尊重 subreddit 规则，先提供价值，再自然表达观点或 CTA。",
+    wordRange: "300-1500 字 / 社区长帖",
+    imageAspectRatio: "16:9",
+    imageStyle: "信息清晰、社区原生",
+    imageCount: "0-2 张",
+    copyHint: "适合经验复盘、问题回答和社区讨论，不伪造个人经历。",
+    supportsThread: false,
+    skillStack: ["content-creation", "community-native"],
+    toolStack: ["Community formatting"],
+    promptKeywords: ["subreddit", "community", "经验", "讨论"],
   },
   generic: {
     id: "generic",

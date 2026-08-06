@@ -73,6 +73,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
         conversationId: "conv-1",
         conversation: { id: "conv-1", status: "drafting" },
       }),
+      enqueueAssistantTask: async () => ({ id: 99 }),
     }
   }
   if (request === "@/lib/skills/runtime/registry") {
@@ -113,6 +114,13 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       listWriterMessages: async (_userId: number, _conversationId: string, limit: number) =>
         limit === 1 ? { conversation: { id: "conv-1" }, data: [] } : { data: [] },
       updateWriterLatestAssistantMessage: async () => {},
+      appendWriterAssistantMessage: async () => true,
+    }
+  }
+  if (request === "@/lib/writer/revisions") {
+    return {
+      getWriterRevisionState: async () => ({ activeRevision: 0, activeDraftMessageId: null, activeDraft: null }),
+      persistWriterRevision: async () => ({ revision: 1, messageId: 1 }),
     }
   }
 
@@ -163,6 +171,8 @@ test("writer chat stream route finalizes credits on success", async () => {
   assert.match(text, /conversation_init/)
   assert.match(text, /message_end/)
   assert.equal(lastWriterRunInput?.conversationStatus, "drafting")
+  assert.equal(typeof (lastWriterRunInput?.writerContext as { contextHash?: unknown })?.contextHash, "string")
+  assert.equal(typeof (lastWriterRunInput?.writerContext as { sessionKey?: unknown })?.sessionKey, "string")
   assert.equal(finalizeCalls, 1)
   assert.equal(releaseCalls, 0)
 })

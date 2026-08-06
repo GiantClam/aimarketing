@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 
-import type { CoreMessage } from "ai"
+import type { ModelMessage } from "ai"
 
 import {
   detectExplicitReplyLanguageFromPrompt,
@@ -17,7 +17,7 @@ test("detect explicit reply language from user prompt", () => {
 })
 
 test("forced language persists until an explicit switch", () => {
-  const messages: CoreMessage[] = [
+  const messages: ModelMessage[] = [
     { role: "user", content: "请用英文回复" },
     { role: "assistant", content: "Sure, I will reply in English." },
     { role: "user", content: "你能介绍一下我们的产品吗？" },
@@ -27,7 +27,7 @@ test("forced language persists until an explicit switch", () => {
 })
 
 test("latest explicit language instruction overrides previous one", () => {
-  const messages: CoreMessage[] = [
+  const messages: ModelMessage[] = [
     { role: "user", content: "Please answer in English." },
     { role: "assistant", content: "Sure." },
     { role: "user", content: "后续请用中文回复" },
@@ -35,4 +35,3 @@ test("latest explicit language instruction overrides previous one", () => {
 
   assert.equal(resolveForcedReplyLanguage(messages), "zh")
 })
-

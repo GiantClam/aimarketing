@@ -104,6 +104,7 @@ docs/*
 docs/plans/*
 !docs/plans/2026-07-15-shared-agent-skill-store-cloudflare-plan.zh-CN.md
 !docs/plans/2026-07-16-workflow-canvas-infinite-canvas-optimization-plan.zh-CN.md
+!docs/plans/2026-08-06-writer-assistant-opencode-skill-first-refactor.zh-CN.md
 !docs/upstream/
 !docs/upstream/infinite-canvas-import-manifest.md
 !docs/performance/

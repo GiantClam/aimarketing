@@ -307,8 +307,10 @@ const isWriterMessageListPrefix = (prefix: WriterMessage[], full: WriterMessage[
 }
 const inferDraft = (messages: WriterMessage[]) =>
   [...messages].reverse().find((message) => message.role === "assistant" && message.content.trim())?.content || ""
-const inferFinalDraft = (messages: WriterMessage[], status: WriterConversationStatus) =>
-  status === "drafting" ? "" : inferDraft(messages)
+const inferFinalDraft = (messages: WriterMessage[], _status: WriterConversationStatus) =>
+  // A new turn can be drafting while the last validated revision remains the
+  // active article. Only an empty conversation should render an empty draft.
+  inferDraft(messages)
 const THREAD_SEGMENT_LABEL_RE =
   /^(?:(?:segment|part|thread|post)\s*\d+|绗琝s*\d+\s*(?:娈祙鏉甯東閮ㄥ垎))(?:\s*[:锛?])?(?:\r?\n+|$)/i
 const stripThreadSegmentLabel = (segment: string) => segment.replace(THREAD_SEGMENT_LABEL_RE, "").trim()
@@ -798,7 +800,7 @@ function PlatformPreview({
   editable?: boolean
   onEditChange?: (next: string) => void
   onEditCommit?: () => void
-  saveState?: "idle" | "saving" | "saved" | "error"
+  saveState?: "idle" | "saving" | "saved" | "error" | "conflict"
 }) {
   const { locale } = useI18n()
   const isZh = locale === "zh"
@@ -1167,7 +1169,7 @@ function InlineMarkdownCanvas({
   assets: WriterAsset[]
   onChange: (next: string) => void
   onCommit: () => void
-  saveState?: "idle" | "saving" | "saved" | "error"
+  saveState?: "idle" | "saving" | "saved" | "error" | "conflict"
 }) {
   const editorRef = useRef<HTMLTextAreaElement | null>(null)
   const [isEditing, setIsEditing] = useState(false)
@@ -1202,6 +1204,8 @@ function InlineMarkdownCanvas({
               <span className="text-[11px] text-slate-400">{copy.saving}</span>
             ) : saveState === "saved" ? (
               <span className="text-[11px] text-emerald-600">{copy.saved}</span>
+            ) : saveState === "conflict" ? (
+              <span className="text-[11px] text-amber-700">{copy.revisionConflict}</span>
             ) : saveState === "error" ? (
               <span className="text-[11px] text-destructive">{copy.saveFailed}</span>
             ) : null}
@@ -1337,7 +1341,7 @@ export function WriterWorkspace({
   const [versionAssetState, setVersionAssetState] = useState<Record<string, WriterVersionAssetState>>({})
   const [pendingRichCopyMessageId, setPendingRichCopyMessageId] = useState<string | null>(null)
   const [latestDiagnostics, setLatestDiagnostics] = useState<WriterTurnDiagnostics | null>(null)
-  const [draftSaveState, setDraftSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle")
+  const [draftSaveState, setDraftSaveState] = useState<"idle" | "saving" | "saved" | "error" | "conflict">("idle")
   const [imagesRequested, setImagesRequested] = useState(false)
   const [historyCursor, setHistoryCursor] = useState<string | null>(null)
   const [hasMoreHistory, setHasMoreHistory] = useState(false)
@@ -1351,6 +1355,7 @@ export function WriterWorkspace({
   const [conversationStatus, setConversationStatus] = useState<
     "drafting" | "text_ready" | "image_generating" | "ready" | "failed"
   >("drafting")
+  const [activeRevision, setActiveRevision] = useState(0)
 
   const replaceWriterUrl = (href: string) => {
     if (typeof window === "undefined") return
@@ -1663,6 +1668,7 @@ export function WriterWorkspace({
         setLanguage(nextLanguage)
         setImagesRequested(Boolean(cachedConversation.conversation.images_requested))
         setConversationStatus(nextStatus)
+        setActiveRevision(cachedConversation.conversation.active_revision || 0)
         if (!meta?.draft) {
           setDraft(inferFinalDraft(cachedMessages, nextStatus))
         }
@@ -1692,6 +1698,7 @@ export function WriterWorkspace({
         setLanguage(normalizeWriterLanguage(data.conversation.language))
         setImagesRequested(Boolean(data.conversation.images_requested))
         setConversationStatus(data.conversation.status || "drafting")
+        setActiveRevision(data.conversation.active_revision || 0)
       }
       if (reset) {
         setLatestDiagnostics(nextDiagnostics)
@@ -1893,6 +1900,7 @@ export function WriterWorkspace({
         setLanguage(nextLanguage)
         setImagesRequested(Boolean(data.conversation.images_requested))
         setConversationStatus(nextStatus)
+        setActiveRevision(data.conversation.active_revision || 0)
         saveWriterSessionMeta(conversationId, {
           platform: nextPlatform,
           mode: nextMode,
@@ -1932,6 +1940,9 @@ export function WriterWorkspace({
                 assets?: WriterAsset[]
                 ok?: boolean
                 error?: string
+                asset_task_id?: number | string | null
+                asset_markdown?: string | null
+                expected_revision?: number | null
               } | null
             }
           } | null
@@ -1962,7 +1973,7 @@ export function WriterWorkspace({
               setAssetsLoadingStartedAt(null)
               setAssetsError(taskSucceeded ? null : payload?.data?.result?.error || writerCopy.imageGenerationFailed)
               setImagesRequested(true)
-              setConversationStatus(taskSucceeded ? "ready" : "failed")
+              setConversationStatus(taskSucceeded ? "text_ready" : "failed")
               if (taskSucceeded && resolvedMarkdown && resolvedMarkdown !== sourceMarkdown) {
                 setDraft(resolvedMarkdown)
                 if (latestAssistantMessageId) {
@@ -1973,18 +1984,24 @@ export function WriterWorkspace({
                   )
                 }
                 const targetConversationId = pendingTask.conversationId || conversationId
-                if (targetConversationId) {
+                if (targetConversationId && typeof pendingTask.expectedRevision !== "number") {
                   void fetch("/api/writer/messages", {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                       conversation_id: targetConversationId,
                       content: resolvedMarkdown,
-                      status: "ready",
+                      assetStatus: "ready",
                       imagesRequested: true,
+                      ...(typeof pendingTask.expectedRevision === "number" ? { expectedRevision: pendingTask.expectedRevision } : {}),
                     }),
                   })
-                    .then(() => invalidateWriterConversationQueries(queryClient, targetConversationId))
+                    .then(async (response) => {
+                      if (response.status === 409) {
+                        setDraftSaveState("conflict")
+                      }
+                      await invalidateWriterConversationQueries(queryClient, targetConversationId)
+                    })
                     .catch(() => null)
                 }
               }
@@ -1998,6 +2015,19 @@ export function WriterWorkspace({
           }
 
           if (status === "success") {
+            const assetTaskId = payload?.data?.result?.asset_task_id
+            if (assetTaskId !== null && assetTaskId !== undefined && String(assetTaskId)) {
+              savePendingAssistantTask({
+                taskId: String(assetTaskId),
+                scope: "writer",
+                conversationId: pendingTask.conversationId || conversationId,
+                prompt: payload?.data?.result?.asset_markdown || pendingTask.prompt,
+                taskType: "writer_assets",
+                expectedRevision: typeof payload?.data?.result?.expected_revision === "number" ? payload.data.result.expected_revision : null,
+                createdAt: Date.now(),
+              })
+              setPendingTaskRefreshKey(Date.now())
+            }
             const conversationStatusAfterRefresh = await refreshConversation()
             removePendingAssistantTask(pendingTask.taskId)
             if (!cancelled) {
@@ -2318,6 +2348,7 @@ export function WriterWorkspace({
       })
       setConversationId(durableConversationId)
       setConversationStatus(durablePayload.conversation.status || "drafting")
+      setActiveRevision(durablePayload.conversation.active_revision || 0)
       saveWriterSessionMeta(durableConversationId, {
         platform: durablePayload.conversation.platform,
         mode: durablePayload.conversation.mode,
@@ -2425,10 +2456,22 @@ export function WriterWorkspace({
     void fetch("/api/writer/messages", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversation_id: conversationId, content: draft, status: imagesRequested ? "ready" : "text_ready", imagesRequested }),
+      body: JSON.stringify({ conversation_id: conversationId, content: draft, expectedRevision: activeRevision, status: imagesRequested ? "ready" : "text_ready", imagesRequested }),
     })
-      .then((response) => {
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}))
+        if (response.status === 409 && payload?.error === "writer_revision_conflict") {
+          if (typeof payload.activeRevision === "number") setActiveRevision(payload.activeRevision)
+          void invalidateWriterConversationQueries(queryClient, conversationId)
+          setDraftSaveState("conflict")
+          return null
+        }
         if (!response.ok) throw new Error(writerCopy.saveFailed)
+        return payload
+      })
+      .then((payload) => {
+        if (!payload) return
+        if (typeof payload?.revision === "number") setActiveRevision(payload.revision)
         void invalidateWriterConversationQueries(queryClient, conversationId)
         setDraftSaveState("saved")
       })
@@ -2501,7 +2544,7 @@ export function WriterWorkspace({
             patchPayload.message_id = assistantDbMessageId
           }
           if (target.isLatest) {
-            patchPayload.status = "image_generating"
+            patchPayload.assetStatus = "image_generating"
             patchPayload.imagesRequested = true
           }
           void fetch("/api/writer/messages", {
@@ -3158,7 +3201,9 @@ export function WriterWorkspace({
                               ? "border-amber-300 bg-amber-50 text-amber-900"
                               : draftSaveState === "saved"
                                 ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                                : draftSaveState === "error"
+                                : draftSaveState === "conflict"
+                                  ? "border-amber-300 bg-amber-50 text-amber-900"
+                                  : draftSaveState === "error"
                                   ? "border-destructive/40 bg-destructive/10 text-destructive"
                                   : "border-slate-400 bg-white text-slate-900",
                           )}
@@ -3167,7 +3212,9 @@ export function WriterWorkspace({
                             ? writerCopy.saving
                             : draftSaveState === "saved"
                               ? writerCopy.saved
-                              : draftSaveState === "error"
+                              : draftSaveState === "conflict"
+                                ? writerCopy.revisionConflict
+                                : draftSaveState === "error"
                                 ? writerCopy.saveFailed
                                 : writerCopy.editable}
                         </Badge>

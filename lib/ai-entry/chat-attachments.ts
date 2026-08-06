@@ -1,4 +1,4 @@
-import type { CoreMessage } from "ai"
+import type { ModelMessage } from "ai"
 
 export type IncomingMessage = {
   role?: string
@@ -101,7 +101,7 @@ export function serializeMessageTextWithAttachments(
 }
 
 export function normalizeMessages(messages: IncomingMessage[], attachments: ReturnType<typeof normalizeAttachmentList> = []) {
-  const normalized: CoreMessage[] = []
+  const normalized: ModelMessage[] = []
   for (const [index, item] of messages.entries()) {
     const role = item?.role === "assistant" ? "assistant" : item?.role === "user" ? "user" : null
     const content = normalizeMessageTextContent(item?.content)
@@ -121,7 +121,7 @@ export function normalizeMessages(messages: IncomingMessage[], attachments: Retu
           { type: "text", text: content },
           ...buildAttachmentContextParts(effectiveAttachments),
         ],
-      } as CoreMessage)
+      } as ModelMessage)
       continue
     }
     normalized.push({ role, content })

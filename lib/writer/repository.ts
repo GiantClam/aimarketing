@@ -42,6 +42,14 @@ type WriterConversationRow = {
   language: string
   status: string
   imagesRequested: boolean
+  activeRevision?: number
+  activeDraftMessageId?: number | null
+  turnOutcome?: string | null
+  assetStatus?: string
+  activePlatformSkillId?: string | null
+  contextHash?: string | null
+  skillRelease?: string | null
+  skillDigest?: string | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -52,6 +60,7 @@ type WriterConversationMeta = {
   language: WriterLanguage
   status: WriterConversationStatus
   imagesRequested: boolean
+  assetStatus?: string
 }
 
 type WriterSchemaStatus = {
@@ -67,6 +76,7 @@ type WriterSchemaStatus = {
   hasStatusColumn: boolean
   hasImagesRequestedColumn: boolean
   hasDiagnosticsColumn: boolean
+  hasRevisionColumns: boolean
 }
 
 let writerTablesReadyPromise: Promise<void> | null = null
@@ -178,6 +188,20 @@ async function readWriterSchemaStatus(): Promise<WriterSchemaStatus> {
         WHERE table_name = ${WRITER_MESSAGES_TABLE}
           AND column_name = 'diagnostics'
       ) AS has_diagnostics_column
+      ,
+      (
+        EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = ${WRITER_CONVERSATIONS_TABLE} AND column_name = 'active_revision')
+        AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = ${WRITER_CONVERSATIONS_TABLE} AND column_name = 'active_draft_message_id')
+        AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = ${WRITER_CONVERSATIONS_TABLE} AND column_name = 'turn_outcome')
+        AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = ${WRITER_CONVERSATIONS_TABLE} AND column_name = 'asset_status')
+        AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = ${WRITER_CONVERSATIONS_TABLE} AND column_name = 'active_platform_skill_id')
+        AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = ${WRITER_CONVERSATIONS_TABLE} AND column_name = 'context_hash')
+        AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = ${WRITER_CONVERSATIONS_TABLE} AND column_name = 'skill_release')
+        AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = ${WRITER_CONVERSATIONS_TABLE} AND column_name = 'skill_digest')
+        AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = ${WRITER_MESSAGES_TABLE} AND column_name = 'revision')
+        AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = ${WRITER_MESSAGES_TABLE} AND column_name = 'expected_base_revision')
+        AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = ${WRITER_MESSAGES_TABLE} AND column_name = 'is_active_draft')
+      ) AS has_revision_columns
   `)
 
   const row = (result.rows[0] ?? {}) as Record<string, unknown>
@@ -195,6 +219,7 @@ async function readWriterSchemaStatus(): Promise<WriterSchemaStatus> {
     hasStatusColumn: Boolean(row.has_status_column),
     hasImagesRequestedColumn: Boolean(row.has_images_requested_column),
     hasDiagnosticsColumn: Boolean(row.has_diagnostics_column),
+    hasRevisionColumns: Boolean(row.has_revision_columns),
   }
 }
 
@@ -211,7 +236,8 @@ function isWriterSchemaReady(status: WriterSchemaStatus) {
     status.hasLanguageColumn &&
     status.hasStatusColumn &&
     status.hasImagesRequestedColumn &&
-    status.hasDiagnosticsColumn
+    status.hasDiagnosticsColumn &&
+    status.hasRevisionColumns
   )
 }
 
@@ -228,6 +254,14 @@ async function applyWriterSchemaChanges(status: WriterSchemaStatus) {
         language VARCHAR(32) NOT NULL DEFAULT 'auto',
         status VARCHAR(32) NOT NULL DEFAULT 'drafting',
         images_requested BOOLEAN NOT NULL DEFAULT FALSE,
+        active_revision INTEGER NOT NULL DEFAULT 0,
+        active_draft_message_id INTEGER,
+        turn_outcome VARCHAR(32),
+        asset_status VARCHAR(32) NOT NULL DEFAULT 'none',
+        active_platform_skill_id VARCHAR(120),
+        context_hash VARCHAR(128),
+        skill_release VARCHAR(64),
+        skill_digest VARCHAR(128),
         created_at TIMESTAMP NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
       )
@@ -253,6 +287,14 @@ async function applyWriterSchemaChanges(status: WriterSchemaStatus) {
     if (!status.hasImagesRequestedColumn) {
       await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS images_requested BOOLEAN NOT NULL DEFAULT FALSE`)
     }
+    await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS active_revision INTEGER NOT NULL DEFAULT 0`)
+    await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS active_draft_message_id INTEGER`)
+    await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS turn_outcome VARCHAR(32)`)
+    await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS asset_status VARCHAR(32) NOT NULL DEFAULT 'none'`)
+    await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS active_platform_skill_id VARCHAR(120)`)
+    await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS context_hash VARCHAR(128)`)
+    await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS skill_release VARCHAR(64)`)
+    await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS skill_digest VARCHAR(128)`)
   }
 
   if (!status.conversationsUpdatedIndexExists) {
@@ -277,12 +319,19 @@ async function applyWriterSchemaChanges(status: WriterSchemaStatus) {
         role VARCHAR(20) NOT NULL,
         content TEXT NOT NULL,
         diagnostics JSONB,
+        revision INTEGER,
+        expected_base_revision INTEGER,
+        is_active_draft BOOLEAN NOT NULL DEFAULT FALSE,
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       )
     `)
   } else if (!status.hasDiagnosticsColumn) {
     await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_messages" ADD COLUMN IF NOT EXISTS diagnostics JSONB`)
   }
+  await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_messages" ADD COLUMN IF NOT EXISTS revision INTEGER`)
+  await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_messages" ADD COLUMN IF NOT EXISTS expected_base_revision INTEGER`)
+  await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_messages" ADD COLUMN IF NOT EXISTS is_active_draft BOOLEAN NOT NULL DEFAULT FALSE`)
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS "AI_MARKETING_writer_messages_conversation_revision_idx" ON "AI_MARKETING_writer_messages" (conversation_id, revision DESC)`)
 
   if (!status.messagesRoleIdIndexExists) {
     await db.execute(sql`
@@ -389,6 +438,13 @@ function mapConversation(row: WriterConversationRow): WriterConversationSummary 
     mode: meta.mode,
     language: meta.language,
     images_requested: meta.imagesRequested,
+    active_revision: row.activeRevision || 0,
+    turn_outcome: row.turnOutcome || null,
+    asset_status: row.assetStatus || "none",
+    active_platform_skill_id: row.activePlatformSkillId || null,
+    context_hash: row.contextHash || null,
+    skill_release: row.skillRelease || null,
+    skill_digest: row.skillDigest || null,
     created_at: row.createdAt ? Math.floor(row.createdAt.getTime() / 1000) : Math.floor(Date.now() / 1000),
     updated_at: row.updatedAt ? Math.floor(row.updatedAt.getTime() / 1000) : Math.floor(Date.now() / 1000),
   }
@@ -427,6 +483,14 @@ export async function getWriterConversation(
         language: writerConversations.language,
         status: writerConversations.status,
         imagesRequested: writerConversations.imagesRequested,
+        activeRevision: writerConversations.activeRevision,
+        activeDraftMessageId: writerConversations.activeDraftMessageId,
+        turnOutcome: writerConversations.turnOutcome,
+        assetStatus: writerConversations.assetStatus,
+        activePlatformSkillId: writerConversations.activePlatformSkillId,
+        contextHash: writerConversations.contextHash,
+        skillRelease: writerConversations.skillRelease,
+        skillDigest: writerConversations.skillDigest,
         createdAt: writerConversations.createdAt,
         updatedAt: writerConversations.updatedAt,
       })
@@ -599,6 +663,131 @@ export async function appendWriterConversation({
   }
 }
 
+async function ensureWriterConversationForTurn(input: {
+  userId: number
+  conversationId?: string | null
+  query: string
+  platform: WriterPlatform
+  mode: WriterMode
+  language: WriterLanguage
+  status: WriterConversationStatus
+  imagesRequested: boolean
+}) {
+  const accessScope = await resolveWriterAccessScope(input.userId)
+  let targetConversationId = input.conversationId ?? null
+
+  if (targetConversationId) {
+    const existingConversation = await getWriterConversation(input.userId, targetConversationId)
+    if (!existingConversation) targetConversationId = null
+  }
+
+  if (!targetConversationId) {
+    const createdConversation = await withDbRetry("insert-writer-conversation", () =>
+      db
+        .insert(writerConversations)
+        .values({
+          userId: input.userId,
+          enterpriseId: accessScope.enterpriseId,
+          title: buildConversationTitleSafe(input.query),
+          platform: input.platform,
+          mode: input.mode,
+          language: input.language,
+          status: input.status,
+          imagesRequested: input.imagesRequested,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning({ id: writerConversations.id }),
+    )
+    targetConversationId = String(createdConversation[0].id)
+  } else {
+    const existingConversationId = Number.parseInt(targetConversationId, 10)
+    const messageCountRows = await withDbRetry("count-writer-conversation-messages", () =>
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(writerMessages)
+        .where(eq(writerMessages.conversationId, existingConversationId))
+        .limit(1),
+    )
+    const shouldRetitleFromFirstQuery = Number(messageCountRows[0]?.count || 0) === 0
+    await withDbRetry("touch-writer-conversation", () =>
+      db
+        .update(writerConversations)
+        .set({
+          ...(shouldRetitleFromFirstQuery ? { title: buildConversationTitleSafe(input.query) } : {}),
+          platform: input.platform,
+          mode: input.mode,
+          language: input.language,
+          status: input.status,
+          imagesRequested: input.imagesRequested,
+          updatedAt: new Date(),
+        })
+        .where(eq(writerConversations.id, existingConversationId)),
+    )
+  }
+
+  return { targetConversationId, conversationId: Number.parseInt(targetConversationId, 10) }
+}
+
+export async function appendWriterUserTurn(input: {
+  userId: number
+  conversationId?: string | null
+  query: string
+  platform: WriterPlatform
+  mode: WriterMode
+  language: WriterLanguage
+  status?: WriterConversationStatus
+  imagesRequested?: boolean
+}) {
+  await ensureWriterTables()
+  const target = await ensureWriterConversationForTurn({
+    ...input,
+    status: input.status || "drafting",
+    imagesRequested: Boolean(input.imagesRequested),
+  })
+  await withDbRetry("insert-writer-user-turn", () =>
+    db.insert(writerMessages).values({
+      conversationId: target.conversationId,
+      role: "user",
+      content: input.query,
+      createdAt: new Date(),
+    }),
+  )
+  const persistedConversation = await getWriterConversation(input.userId, target.targetConversationId)
+  if (!persistedConversation) throw new Error("writer_conversation_persist_failed")
+  return { conversationId: target.targetConversationId, conversation: mapConversation(persistedConversation) }
+}
+
+export async function appendWriterAssistantMessage(input: {
+  userId: number
+  conversationId: string
+  content: string
+  diagnostics?: WriterTurnDiagnostics | null
+  meta?: Partial<{
+    status: WriterConversationStatus
+    assetStatus: string
+    imagesRequested: boolean
+    language: WriterLanguage
+    platform: WriterPlatform
+    mode: WriterMode
+  }>
+}) {
+  await ensureWriterTables()
+  const conversation = await getWriterConversation(input.userId, input.conversationId)
+  if (!conversation) return false
+  await withDbRetry("insert-writer-assistant-turn", () =>
+    db.insert(writerMessages).values({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: input.content,
+      diagnostics: input.diagnostics || null,
+      createdAt: new Date(),
+    }),
+  )
+  await updateWriterConversationMeta(input.userId, input.conversationId, input.meta || { status: "drafting" })
+  return true
+}
+
 export async function listWriterConversations(
   userId: number,
   limit: number,
@@ -628,6 +817,14 @@ export async function listWriterConversations(
         language: writerConversations.language,
         status: writerConversations.status,
         imagesRequested: writerConversations.imagesRequested,
+        activeRevision: writerConversations.activeRevision,
+        activeDraftMessageId: writerConversations.activeDraftMessageId,
+        turnOutcome: writerConversations.turnOutcome,
+        assetStatus: writerConversations.assetStatus,
+        activePlatformSkillId: writerConversations.activePlatformSkillId,
+        contextHash: writerConversations.contextHash,
+        skillRelease: writerConversations.skillRelease,
+        skillDigest: writerConversations.skillDigest,
         createdAt: writerConversations.createdAt,
         updatedAt: writerConversations.updatedAt,
       })
@@ -773,6 +970,7 @@ export async function updateWriterConversationMeta(
     language: WriterLanguage
     status: WriterConversationStatus
     imagesRequested: boolean
+    assetStatus: string
   }>,
 ) {
   await ensureWriterTables()
@@ -791,6 +989,7 @@ export async function updateWriterConversationMeta(
         ...(meta.language ? { language: meta.language } : {}),
         ...(typeof meta.status === "string" ? { status: meta.status } : {}),
         ...(typeof meta.imagesRequested === "boolean" ? { imagesRequested: meta.imagesRequested } : {}),
+        ...(typeof meta.assetStatus === "string" ? { assetStatus: meta.assetStatus } : {}),
         updatedAt: new Date(),
       })
       .where(eq(writerConversations.id, conversation.id)),
@@ -805,6 +1004,7 @@ export async function updateWriterLatestAssistantMessage(
   content: string,
   meta?: Partial<{
     status: WriterConversationStatus
+    assetStatus: string
     imagesRequested: boolean
     language: WriterLanguage
     platform: WriterPlatform
@@ -854,6 +1054,7 @@ export async function updateWriterAssistantMessageById(
   content: string,
   meta?: Partial<{
     status: WriterConversationStatus
+    assetStatus: string
     imagesRequested: boolean
     language: WriterLanguage
     platform: WriterPlatform
@@ -908,6 +1109,7 @@ export async function updateWriterAssistantMessageById(
     meta &&
     (typeof meta.status === "string" ||
       typeof meta.imagesRequested === "boolean" ||
+      typeof meta.assetStatus === "string" ||
       Boolean(meta.language) ||
       Boolean(meta.platform) ||
       Boolean(meta.mode))
@@ -915,6 +1117,7 @@ export async function updateWriterAssistantMessageById(
     await updateWriterConversationMeta(userId, conversationId, {
       ...(typeof meta.status === "string" ? { status: meta.status } : {}),
       ...(typeof meta.imagesRequested === "boolean" ? { imagesRequested: meta.imagesRequested } : {}),
+      ...(typeof meta.assetStatus === "string" ? { assetStatus: meta.assetStatus } : {}),
       ...(meta.language ? { language: meta.language } : {}),
       ...(meta.platform ? { platform: meta.platform } : {}),
       ...(meta.mode ? { mode: meta.mode } : {}),

@@ -6,6 +6,10 @@ description: |
 
 # 卡兹克公众号长文写作
 
+## Writer runtime contract
+
+在完成自检后必须调用 `writer_submit_result` 一次。严格使用扁平结构：`schemaVersion: 1`；`outcome` 使用字符串 `draft_ready` 或 `needs_clarification`；`operation` 使用字符串（新稿为 `create`，修改为 `revise`）；`draft` 必须是 `{ title, content, baseRevision }` 对象，其中 `baseRevision` 是当前活动修订号（新稿为 `0`），不能把 Markdown 直接作为字符串；`research` 必须是 `{ requested, completed, sourceUrls }`；图片意图使用 `{ id, kind, prompt, placement, aspectRatio }`。用户已经写出的标题必须原样保留；需要补充关键信息时提交 `needs_clarification`，不要用普通 prose 代替结构化结果。公众号文章默认提交封面意图，并按正文需要提交不超过平台上限的配图意图；不要伪造图片 URL、数据、案例或个人经历。
+
 > **关于这个skill的作者**
 > 这是卡兹克（英文名 Khazix）的个人写作风格skill。账号全称「数字生命卡兹克」，是一个以「激发大家对AI的好奇」为使命的公众号。安装这个skill后，你可以用卡兹克的风格来写公众号长文。
 

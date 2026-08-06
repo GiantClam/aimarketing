@@ -13,11 +13,13 @@ import {
 import { buildImageAssistantProviderPlan } from "@/lib/image-assistant/aiberm"
 import { executeImageProviderPlan, type ImageGenerationProvider } from "@/lib/image-generation/provider-orchestration"
 import { withTaskTimeout } from "@/lib/task-timeout"
-import { buildPendingWriterAssets, ensureWriterAssetOrder, markWriterAssetsFailed, type WriterAsset } from "@/lib/writer/assets"
+import { buildPendingWriterAssets, ensureWriterAssetOrder, markWriterAssetsFailed, resolveWriterAssetMarkdown, type WriterAsset } from "@/lib/writer/assets"
+import type { WriterSubmitResult } from "@/lib/writer/writer-result"
 import { normalizeWriterPlatform, WRITER_PLATFORM_CONFIG, type WriterMode } from "@/lib/writer/config"
 import { writerFetch } from "@/lib/writer/network"
 import { ensureWriterPromptDiversity, extractWriterPromptFocus } from "@/lib/writer/prompt-similarity"
 import { updateWriterConversationMeta } from "@/lib/writer/repository"
+import { persistWriterAssetProgress } from "@/lib/writer/revisions"
 import { isWriterR2Available, parseWriterDataUrl, uploadWriterImageToR2 } from "@/lib/writer/r2"
 
 export type WriterImageProvider = OpenAiCompatibleImageProviderId
@@ -274,7 +276,7 @@ async function updateWriterAssetConversationStatus(input: {
 }) {
   if (!input.conversationId) return
   await updateWriterConversationMeta(input.userId, input.conversationId, {
-    status: input.status,
+    assetStatus: input.status,
     imagesRequested: true,
   })
 }
@@ -331,9 +333,11 @@ export async function generateWriterAssetsForTask(input: {
   enterpriseId?: number | null
   conversationId: string | null
   taskId: number | string
+  expectedRevision?: number | null
+  assetIntents?: WriterSubmitResult["assetIntents"]
   onAsset?: (asset: WriterGeneratedAsset, index: number, total: number, assets: WriterGeneratedAsset[]) => Promise<void> | void
 }): Promise<WriterAssetGenerationResult> {
-  const plannedAssets = buildPendingWriterAssets(input.markdown, input.platform, input.mode)
+  const plannedAssets = buildPendingWriterAssets(input.markdown, input.platform, input.mode, input.assetIntents)
   const providerPlan = getWriterImageProviderPlan()
   const preferredProvider = getPreferredWriterImageProvider()
 
@@ -372,7 +376,18 @@ export async function generateWriterAssetsForTask(input: {
       conversationId: input.conversationId,
       userId: input.userId,
       providerPlan,
-      onAsset: input.onAsset,
+      onAsset: async (asset, index, total, assets) => {
+        if (input.expectedRevision !== null && input.expectedRevision !== undefined && assets.length > 0) {
+          const resolvedMarkdown = resolveWriterAssetMarkdown(input.markdown, assets, input.platform, input.mode)
+          await persistWriterAssetProgress({
+            userId: input.userId,
+            conversationId: input.conversationId,
+            expectedRevision: input.expectedRevision,
+            content: resolvedMarkdown,
+          }).catch(() => false)
+        }
+        await input.onAsset?.(asset, index, total, assets)
+      },
     })
     const assets = ensureWriterAssetOrder(generated, input.platform, input.mode) as WriterGeneratedAsset[]
     const successCount = assets.filter((asset) => asset.status === "ready" && Boolean(asset.url)).length

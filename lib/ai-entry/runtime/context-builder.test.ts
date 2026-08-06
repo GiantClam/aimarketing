@@ -144,6 +144,19 @@ test("preserves Writer phase and explicit zero artifact limits", () => {
   assert.equal(input.artifactContract.maxArtifactTotalBytes, 0)
 })
 
+test("rejects durable Writer context for unrelated agents", () => {
+  assert.throws(() => buildAgentRuntimeInput({
+    runId: "run-writer-context-mismatch",
+    conversationId: "conversation-1",
+    enterpriseId: null,
+    userId: 2,
+    agentId: "general",
+    systemPrompt: "system",
+    messages: [{ role: "user", content: "hello" }],
+    writerContext: { contextHash: "hash" } as never,
+  }), /writer_context_agent_mismatch/)
+})
+
 test("bounds context and keeps the newest artifact summaries first", () => {
   const input = buildAgentRuntimeInput({
     runId: "run-2",

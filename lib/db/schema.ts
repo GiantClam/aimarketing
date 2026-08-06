@@ -301,6 +301,14 @@ export const writerConversations = pgTable(withPrefix("writer_conversations"), {
   language: varchar("language", { length: 32 }).default("auto").notNull(),
   status: varchar("status", { length: 32 }).default("drafting").notNull(),
   imagesRequested: boolean("images_requested").default(false).notNull(),
+  activeRevision: integer("active_revision").default(0).notNull(),
+  activeDraftMessageId: integer("active_draft_message_id"),
+  turnOutcome: varchar("turn_outcome", { length: 32 }),
+  assetStatus: varchar("asset_status", { length: 32 }).default("none").notNull(),
+  activePlatformSkillId: varchar("active_platform_skill_id", { length: 120 }),
+  contextHash: varchar("context_hash", { length: 128 }),
+  skillRelease: varchar("skill_release", { length: 64 }),
+  skillDigest: varchar("skill_digest", { length: 128 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })
@@ -314,6 +322,9 @@ export const writerMessages = pgTable(withPrefix("writer_messages"), {
   role: varchar("role", { length: 20 }).notNull(),
   content: text("content").notNull(),
   diagnostics: jsonb("diagnostics"),
+  revision: integer("revision"),
+  expectedBaseRevision: integer("expected_base_revision"),
+  isActiveDraft: boolean("is_active_draft").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 })
 

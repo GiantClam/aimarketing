@@ -51,6 +51,24 @@ test("writer asset blueprints are planned from article structure and stay unique
   }
 })
 
+test("validated Skill asset intents control cover and inline asset records", () => {
+  const pending = buildPendingWriterAssets(
+    "# Intent-driven article\n\nOpening paragraph.",
+    "wechat",
+    "article",
+    [
+      { id: "hero", kind: "cover", prompt: "A restrained editorial hero", placement: "after_title", aspectRatio: "2:1" },
+      { id: "proof", kind: "inline", prompt: "A supporting diagram", placement: "after_section_1", aspectRatio: "4:3" },
+    ],
+  )
+
+  assert.deepEqual(pending.map((asset) => asset.id), ["hero", "proof"])
+  assert.equal(pending[0]?.role, "cover")
+  assert.equal(pending[0]?.prompt, "A restrained editorial hero")
+  assert.equal(pending[1]?.role, "inline")
+  assert.equal(pending[1]?.prompt, "A supporting diagram")
+})
+
 test("resolved markdown stores managed asset blocks and can round-trip assets", () => {
   const blueprints = buildWriterAssetBlueprints(LONG_WECHAT_DRAFT, "wechat", "article")
   const assets: WriterAsset[] = blueprints.map((asset, index) => ({

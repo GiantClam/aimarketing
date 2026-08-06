@@ -51,13 +51,20 @@ import {
   loadWriterSkillRunner,
 } from "@/lib/skills/runtime/registry"
 import { normalizeExecutiveAdvisorType } from "@/lib/skills/runtime/executive-advisor-types"
-import { appendWriterConversation, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
+import {
+  appendWriterAssistantMessage,
+  appendWriterUserTurn,
+  updateWriterLatestAssistantMessage,
+} from "@/lib/writer/repository"
 import { generateWriterAssetsForTask } from "@/lib/writer/assets-runtime"
 import { withWriterAssetTaskSlot } from "@/lib/writer/task-concurrency"
 import { persistWriterImplicitMemoryFromTurn } from "@/lib/writer/memory/extractor"
+import { persistWriterRevision } from "@/lib/writer/revisions"
 import { withTaskTimeout } from "@/lib/task-timeout"
 import type { WriterLanguage, WriterMode, WriterPlatform } from "@/lib/writer/config"
 import type { WriterConversationStatus, WriterHistoryEntry, WriterPreloadedBrief } from "@/lib/writer/types"
+import type { WriterRuntimeContext } from "@/lib/writer/runtime/session-runtime"
+import type { WriterSubmitResult } from "@/lib/writer/writer-result"
 import type { WriterAgentType } from "@/lib/writer/memory/types"
 import type {
   ImageAssistantBrief,
@@ -104,6 +111,7 @@ type WriterTurnTaskPayload = {
   conversationStatus?: WriterConversationStatus
   selectedProviderId?: string | null
   selectedModelId?: string | null
+  writerContext?: WriterRuntimeContext | null
 }
 
 type WriterAssetsTaskPayload = {
@@ -113,6 +121,8 @@ type WriterAssetsTaskPayload = {
   markdown: string
   platform: WriterPlatform
   mode: WriterMode
+  assetIntents?: WriterSubmitResult["assetIntents"]
+  expectedRevision?: number | null
 }
 
 type ImageTurnTaskPayload = {
@@ -673,6 +683,7 @@ async function handleWriterTurn(taskId: number, userId: number, payload: WriterT
         enterpriseId: payload.enterpriseId,
         selectedProviderId: payload.selectedProviderId,
         selectedModelId: payload.selectedModelId,
+        writerContext: payload.writerContext,
         onProgress: async (event) => {
           await persistProgressEvent({
             type: event.type,
@@ -687,14 +698,49 @@ async function handleWriterTurn(taskId: number, userId: number, payload: WriterT
       "writer_task_timeout",
     )
 
-    await updateWriterLatestAssistantMessage(userId, payload.conversationId, turnResult.answer, {
-      status: turnResult.outcome === "needs_clarification" ? "drafting" : "text_ready",
-      imagesRequested: false,
-      language: payload.language,
-      platform: turnResult.routing.renderPlatform,
-      mode: turnResult.routing.renderMode,
-      diagnostics: turnResult.diagnostics,
-    })
+    let persistedRevisionNumber: number | null = null
+    if (turnResult.outcome === "draft_ready" && payload.writerContext) {
+      const persistedRevision = await persistWriterRevision({
+        userId,
+        conversationId: payload.conversationId,
+        expectedRevision: payload.writerContext.activeDraft?.revision || 0,
+        title: turnResult.answer.split("\n").find((line) => /^#\s+/u.test(line.trim()))?.replace(/^#\s+/u, "").trim() || "",
+        content: turnResult.answer,
+        language: payload.language,
+        platform: turnResult.routing.renderPlatform,
+        mode: turnResult.routing.renderMode,
+        diagnostics: turnResult.diagnostics,
+        turnOutcome: turnResult.outcome,
+        activePlatformSkillId: turnResult.routing.selectedPlatformSkillId || turnResult.routing.renderPlatform,
+        contextHash: payload.writerContext.contextHash,
+      })
+      persistedRevisionNumber = persistedRevision.revision
+    } else {
+      const responseMeta = {
+        status: turnResult.outcome === "needs_clarification" ? "drafting" as const : "text_ready" as const,
+        imagesRequested: false,
+        language: payload.language,
+        platform: turnResult.routing.renderPlatform,
+        mode: turnResult.routing.renderMode,
+        diagnostics: turnResult.diagnostics,
+      }
+      const updated = await updateWriterLatestAssistantMessage(userId, payload.conversationId, turnResult.answer, responseMeta)
+      if (!updated) {
+        await appendWriterAssistantMessage({
+          userId,
+          conversationId: payload.conversationId,
+          content: turnResult.answer,
+          diagnostics: turnResult.diagnostics,
+          meta: {
+            status: responseMeta.status,
+            imagesRequested: responseMeta.imagesRequested,
+            language: responseMeta.language,
+            platform: responseMeta.platform,
+            mode: responseMeta.mode,
+          },
+        })
+      }
+    }
 
     const actualCost = estimateTextCredits({
       featureKey: "writer_copy",
@@ -732,7 +778,25 @@ async function handleWriterTurn(taskId: number, userId: number, payload: WriterT
       })
     })
 
+    let assetTaskId: number | null = null
     if (turnResult.outcome === "draft_ready") {
+      if (turnResult.assetIntents && turnResult.assetIntents.length > 0) {
+        const assetTask = await enqueueAssistantTask({
+          userId,
+          workflowName: "writer_assets",
+          payload: {
+            kind: "writer_assets",
+            enterpriseId: payload.enterpriseId,
+            conversationId: payload.conversationId,
+            markdown: turnResult.answer,
+            platform: turnResult.routing.renderPlatform,
+            mode: turnResult.routing.renderMode,
+            assetIntents: turnResult.assetIntents,
+            expectedRevision: persistedRevisionNumber,
+          },
+        })
+        assetTaskId = Number(assetTask.id)
+      }
       await withTaskTimeout(
         persistWriterImplicitMemoryFromTurn({
           query: payload.query,
@@ -765,6 +829,8 @@ async function handleWriterTurn(taskId: number, userId: number, payload: WriterT
       result: {
         conversation_id: payload.conversationId,
         outcome: turnResult.outcome,
+        asset_task_id: assetTaskId,
+        asset_markdown: assetTaskId ? turnResult.answer : null,
         events: progressEvents,
       },
     })
@@ -822,6 +888,8 @@ async function handleWriterAssets(taskId: number, userId: number, payload: Write
       enterpriseId: payload.enterpriseId,
       conversationId: payload.conversationId,
       taskId,
+      assetIntents: payload.assetIntents,
+      expectedRevision: payload.expectedRevision,
       onAsset: async (asset, index, total) => {
         await persistProgressEvent({
           type: asset.status === "ready" ? "asset_ready" : "asset_failed",
@@ -852,6 +920,7 @@ async function handleWriterAssets(taskId: number, userId: number, payload: Write
       model: result.model,
       ok: result.ok,
       error: result.error,
+      expected_revision: payload.expectedRevision ?? null,
       events: progressEvents,
     },
   })
@@ -2248,15 +2317,24 @@ function launchClaimedTask(taskId: number, workerId: string) {
       }
 
       if (task?.parsedPayload?.kind === "writer_turn") {
-        await updateWriterLatestAssistantMessage(
+        const failedContent = `Request failed: ${primaryErrorMessage || "unknown_error"}`
+        const updated = await updateWriterLatestAssistantMessage(
           task.userId,
           task.parsedPayload.conversationId,
-          `Request failed: ${primaryErrorMessage || "unknown_error"}`,
+          failedContent,
           {
             status: "failed",
             imagesRequested: false,
           },
-        ).catch(() => null)
+        ).catch(() => false)
+        if (!updated) {
+          await appendWriterAssistantMessage({
+            userId: task.userId,
+            conversationId: task.parsedPayload.conversationId,
+            content: failedContent,
+            meta: { status: "failed", imagesRequested: false },
+          }).catch(() => null)
+        }
       }
 
       const imageTaskError = task?.parsedPayload?.kind === "image_turn" ? toSafeImageAssistantTaskErrorMessage(error) : null
@@ -2555,12 +2633,10 @@ export async function createPendingWriterConversation(params: {
   mode: WriterMode
   language: WriterLanguage
 }) {
-  return appendWriterConversation({
+  return appendWriterUserTurn({
     userId: params.userId,
     conversationId: params.conversationId,
     query: params.query,
-    answer: "",
-    diagnostics: null,
     platform: params.platform,
     mode: params.mode,
     language: params.language,

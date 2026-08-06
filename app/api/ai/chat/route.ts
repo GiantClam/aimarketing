@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { randomUUID } from "node:crypto"
 import {
   stepCountIs,
-  type CoreMessage,
+  type ModelMessage,
 } from "ai"
 
 import { requireSessionUser } from "@/lib/auth/guards"
@@ -412,7 +412,7 @@ function buildAiEntrySystemPrompt(
   return sections.join("\n\n")
 }
 
-function normalizeCoreMessageContent(content: CoreMessage["content"]) {
+function normalizeCoreMessageContent(content: ModelMessage["content"]) {
   if (typeof content === "string") return content.trim()
   if (!Array.isArray(content)) return ""
 
@@ -429,13 +429,13 @@ function normalizeCoreMessageContent(content: CoreMessage["content"]) {
     .trim()
 }
 
-function getLatestUserPrompt(messages: CoreMessage[]) {
+function getLatestUserPrompt(messages: ModelMessage[]) {
   const latest = [...messages].reverse().find((item) => item.role === "user")
   if (!latest) return ""
   return extractUserIntentFromMessageContent(latest.content)
 }
 
-function getLatestPersistableUserMessageContent(messages: CoreMessage[]) {
+function getLatestPersistableUserMessageContent(messages: ModelMessage[]) {
   const latest = [...messages].reverse().find((item) => item.role === "user")
   if (!latest) return ""
   return normalizeMessageTextContent(latest.content)
@@ -889,7 +889,7 @@ export async function POST(request: NextRequest) {
     const normalizedMessages =
       requestedMessages.length > 0
         ? requestedMessages
-        : ([{ role: "user", content: fallbackPrompt }] as CoreMessage[])
+        : ([{ role: "user", content: fallbackPrompt }] as ModelMessage[])
 
     const latestUserPrompt = getLatestUserPrompt(normalizedMessages) || fallbackPrompt
     const latestPersistableUserContent =

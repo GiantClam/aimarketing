@@ -47,6 +47,9 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       listWriterMessages: async () => ({ data: [] }),
     }
   }
+  if (request === "@/lib/writer/revisions") {
+    return { getWriterRevisionState: async () => null }
+  }
   if (request === "@/lib/assistant-async") {
     return {
       createPendingWriterConversation: async () => ({
@@ -91,4 +94,29 @@ test("writer chat resumes a failed conversation in drafting status for skill bri
   assert.equal(response.status, 200)
   assert.equal(response.body?.task_id, "1235")
   assert.equal(capturedTaskPayload?.conversationStatus, "drafting")
+})
+
+test("writer chat payload carries raw input without application-classified operation or URL intent", async () => {
+  const query = "把第 3 节翻译成英文，并参考 https://example.com/source 改成小红书版本"
+  const response = await POST({
+    json: async () => ({
+      query,
+      conversation_id: "540",
+      platform: "wechat",
+      mode: "article",
+    }),
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(capturedTaskPayload?.query, query)
+  for (const forbidden of [
+    "intent",
+    "operation",
+    "rewriteIntent",
+    "researchIntent",
+    "sourceUrls",
+    "targetPlatformIntent",
+  ]) {
+    assert.equal(Object.hasOwn(capturedTaskPayload || {}, forbidden), false, forbidden)
+  }
 })

@@ -1,6 +1,6 @@
 import {
   stepCountIs,
-  type CoreMessage,
+  type ModelMessage,
 } from "ai"
 
 import { loadExecutiveSkillForAgent } from "@/lib/ai-entry/executive-skill-loader"
@@ -61,7 +61,7 @@ function buildExecutiveAdvisorSystemPrompt(input: {
   return sections.filter(Boolean).join("\n\n")
 }
 
-function buildMessages(query: string): CoreMessage[] {
+function buildMessages(query: string): ModelMessage[] {
   return [
     {
       role: "user",

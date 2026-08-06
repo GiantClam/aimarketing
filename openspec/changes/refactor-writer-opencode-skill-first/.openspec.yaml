@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-08-06
+goal: Preserve complete article context while making every writing platform
+  independently replaceable behind one contract.

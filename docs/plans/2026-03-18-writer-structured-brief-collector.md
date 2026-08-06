@@ -1,5 +1,7 @@
 # Writer Structured Brief Collector Implementation Plan
 
+> **Status: Superseded.** 本文描述的“应用层 structured brief extraction + deterministic conversation control”不再是目标架构。后续实现统一遵循 [Writer Assistant OpenCode + Skill First 重构实施方案](./2026-08-06-writer-assistant-opencode-skill-first-refactor.zh-CN.md)，由 OpenCode + 当前平台主 Skill 决定追问、写作、修改、调研和跨平台改编。
+
 > Use this plan to execute the work task-by-task with tight verification after each step.
 
 **Goal:** Replace regex-heavy multi-turn brief collection with a structured-output collector while keeping deterministic conversation control in code.

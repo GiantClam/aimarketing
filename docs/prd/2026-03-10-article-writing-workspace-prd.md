@@ -3,6 +3,7 @@
 **状态**: Approved for implementation  
 **日期**: 2026-03-10  
 **适用阶段**: 进入实现、E2E 测试、上线回归测试  
+**运行时架构更新（2026-08-06）**: 产品目标和工作台交互继续以本文为准；Writer 的 OpenCode 会话、平台 Skill、上下文恢复、文章版本、URL 调研和图片任务架构，以 [Writer Assistant OpenCode + Skill First 重构实施方案](../plans/2026-08-06-writer-assistant-opencode-skill-first-refactor.zh-CN.md) 为唯一实施依据。
 **本轮评审结论**:
 - 旧“文案写作专家”下线。
 - “图文一键复制”采用“文本一键复制 + 图片下载/链接复制”口径。

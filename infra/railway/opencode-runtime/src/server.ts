@@ -150,11 +150,16 @@ function isPersistentPresentationInput(input: AgentRuntimeInput | AgentRuntimeIn
   return input.agentId === "executive-ppt" || input.agentId === "executive-presentation-ppt" || (input.selectedSkillIds || []).includes("ppt-master") || (input.selectedSkillIds || []).includes("dashiai-ppt")
 }
 
+function isPersistentWriterInput(input: AgentRuntimeInput | AgentRuntimeInputV2) {
+  return input.agentId === "writer" && typeof input.sessionKey === "string" && /^sess-[0-9a-f]{40}$/u.test(input.sessionKey)
+}
+
 function isRailwayPptMasterInput(input: AgentRuntimeInput | AgentRuntimeInputV2) {
   return input.agentId === "executive-ppt" || (input.selectedSkillIds || []).includes("ppt-master")
 }
 
 function validateWriterRuntimeInput(input: AgentRuntimeInput | AgentRuntimeInputV2) {
+  if (input.writerContext && input.agentId !== "writer") throw new Error("writer_context_agent_mismatch")
   if (input.agentId !== "writer") return
   const selected = [...new Set(input.selectedSkillIds || [])]
   if (input.writerPhase === "briefing") {
@@ -518,6 +523,7 @@ function contextHashForInput(input: AgentRuntimeInput | AgentRuntimeInputV2) {
     messages: input.messages.slice(-20),
     summary: null,
     artifactRefs: input.artifactContext,
+    writerContext: input.writerContext?.contextHash || null,
   })).digest("hex")
   if (input.contextHash && input.contextHash !== computed) throw new Error("runtime_context_hash_mismatch")
   return computed
@@ -525,16 +531,30 @@ function contextHashForInput(input: AgentRuntimeInput | AgentRuntimeInputV2) {
 
 async function prepareRunDirectory(input: AgentRuntimeInput | AgentRuntimeInputV2) {
   if (!validRunId(input.runId)) throw new Error("runtime_request_invalid")
-  // Every turn owns an isolated directory. Supabase context is the only
-  // cross-turn source of truth; this directory is never reused by sessionKey.
-  const sessionDir = join(runtimeDir, "runs", input.runId)
-  const runDir = sessionDir
-  const workingDir = runDir
+  const persistentWriter = isPersistentWriterInput(input)
+  const sessionDir = persistentWriter
+    ? join(runtimeDir, "writer-sessions", input.sessionKey as string)
+    : join(runtimeDir, "runs", input.runId)
+  const runDir = persistentWriter ? join(sessionDir, "turns", input.runId) : sessionDir
+  const workingDir = persistentWriter ? sessionDir : runDir
+  await mkdir(runDir, { recursive: true })
+  if (input.agentId === "writer") {
+    const sharedRuntimeDir = join(runtimeDir, ".runtime")
+    await mkdir(sharedRuntimeDir, { recursive: true })
+    // OpenCode's resident serve process executes custom tools from the shared
+    // runtime cwd. Clear the previous IPC payload before this run owns it.
+    await rm(join(sharedRuntimeDir, "writer-submit-result.json"), { force: true })
+  }
   await mkdir(join(sessionDir, ".opencode", "skills"), { recursive: true })
   await mkdir(join(sessionDir, ".opencode", "agents"), { recursive: true })
   await mkdir(join(sessionDir, ".opencode", "tools"), { recursive: true })
   await mkdir(join(sessionDir, "workspace"), { recursive: true })
   await mkdir(join(sessionDir, ".runtime"), { recursive: true })
+  if (input.agentId === "writer") {
+    await writeFile(join(sessionDir, ".runtime", "writer-context.json"), JSON.stringify({
+      activeRevision: input.writerContext?.activeDraft?.revision ?? 0,
+    }), { encoding: "utf8", mode: 0o600 })
+  }
   if (isPersistentPresentationInput(input)) {
     await mkdir(join(sessionDir, "turns", input.runId, "artifacts"), { recursive: true })
   }
@@ -575,6 +595,10 @@ async function prepareRunDirectory(input: AgentRuntimeInput | AgentRuntimeInputV
     await mkdir(join(sessionDir, ".opencode", "tools"), { recursive: true })
     await symlink(toolSource, toolTarget, "file")
       .catch(() => cp(toolSource, toolTarget, { force: true }))
+    const resultToolSource = join(bundleDir, "tools", "writer_submit_result.ts")
+    const resultToolTarget = join(sessionDir, ".opencode", "tools", "writer_submit_result.ts")
+    await symlink(resultToolSource, resultToolTarget, "file")
+      .catch(() => cp(resultToolSource, resultToolTarget, { force: true }))
   }
   await symlink(join(bundleDir, "agents"), join(sessionDir, ".opencode", "agents"), "dir")
     .catch(() => cp(join(bundleDir, "agents"), join(sessionDir, ".opencode", "agents"), { recursive: true, force: true }))
@@ -602,6 +626,7 @@ async function writeOpenCodeSessionConfig(runDir: string, provider: OpenCodeProv
     webfetch: "deny",
     websearch: process.env.OPENCODE_ENABLE_EXA === "true" && input.writerPhase === "draft" ? "allow" : "deny",
     writer_webfetch: input.writerPhase === "draft" ? "allow" : "deny",
+    writer_submit_result: input.agentId === "writer" && input.writerPhase === "draft" ? "allow" : "deny",
     edit: "deny",
     write: "deny",
     bash: "deny",
@@ -659,15 +684,37 @@ async function executeRun(
     runDir = prepared.runDir
     const { sessionDir, workingDir } = prepared
     validateWriterRuntimeInput(input)
-    await writeOpenCodeSessionConfig(runDir, resolvedProvider, input)
+    await writeOpenCodeSessionConfig(workingDir, resolvedProvider, input)
     await writeBundleAttachment(sessionDir, input)
-    attachedSessionId = await residentOpenCode.createTransientSession(input, workingDir, resolvedProvider)
+    if (input.agentId === "writer") {
+      for (const skillId of input.selectedSkillIds || []) {
+        emit({ event: "skill_activated", skillId, runId: input.runId })
+      }
+    }
+    const persistentWriter = isPersistentWriterInput(input)
+    attachedSessionId = persistentWriter
+      ? await residentOpenCode.createPersistentSession(input, workingDir, resolvedProvider)
+      : await residentOpenCode.createTransientSession(input, workingDir, resolvedProvider)
     activeRuns.set(input.runId, { sessionId: attachedSessionId, abort: () => residentOpenCode.abort(attachedSessionId as string) })
-    console.log(JSON.stringify({ event: "opencode_serve_session_attached", runId: input.runId, sessionId: attachedSessionId, workingDir, transient: true, bundleVersion }))
+    console.log(JSON.stringify({ event: "opencode_serve_session_attached", runId: input.runId, sessionId: attachedSessionId, workingDir, transient: !persistentWriter, persistent: persistentWriter, bundleVersion }))
     const systemPrompt = await readFile(join(runDir, "system.md"), "utf8")
     const userPrompt = await readFile(join(runDir, "prompt.md"), "utf8")
     const completed = await residentOpenCode.prompt(input, attachedSessionId, workingDir, resolvedProvider, systemPrompt, userPrompt, emit)
     if (!completed) return
+    const submittedResultPaths = [
+      join(workingDir, ".runtime", "writer-submit-result.json"),
+      join(runDir, ".runtime", "writer-submit-result.json"),
+      join(runtimeDir, ".runtime", "writer-submit-result.json"),
+    ]
+    let submittedResult: Record<string, unknown> | null = null
+    for (const submittedResultPath of submittedResultPaths) {
+      const candidate = await readFile(submittedResultPath, "utf8")
+        .then((raw) => JSON.parse(raw) as Record<string, unknown>)
+        .catch(() => null)
+      if (candidate) submittedResult = candidate
+      await rm(submittedResultPath, { force: true }).catch(() => undefined)
+    }
+    if (submittedResult) emit({ event: "writer_result_submitted", result: submittedResult, runId: input.runId })
     console.log(JSON.stringify({ event: "opencode_serve_run_complete", runId: input.runId, sessionId: attachedSessionId, transient: true }))
     const completedRunDir = runDir
     if (!completedRunDir) throw new Error("opencode_run_directory_missing")
@@ -711,7 +758,7 @@ async function executeRun(
     emit({ event: "runtime_error", code: "opencode_runtime_failed", message: error instanceof Error ? error.message.slice(0, 1024) : "OpenCode runtime failed.", retryable: true, runId: input.runId })
   } finally {
     activeRuns.delete(input.runId)
-    if (attachedSessionId && runDir) await residentOpenCode.disposeTransientSession(attachedSessionId, runDir)
+    if (attachedSessionId && runDir && !isPersistentWriterInput(input)) await residentOpenCode.disposeTransientSession(attachedSessionId, runDir)
     if (runDir) await rm(runDir, { recursive: true, force: true }).catch(() => undefined)
   }
 }

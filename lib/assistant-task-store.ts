@@ -14,6 +14,7 @@ export type PendingAssistantTask = {
   agentId?: string | null
   prompt?: string
   taskType?: string | null
+  expectedRevision?: number | null
   createdAt: number
 }
 

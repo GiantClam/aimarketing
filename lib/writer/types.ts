@@ -19,6 +19,7 @@ export type WriterTurnDiagnostics = {
   webResearchUsed: boolean
   webResearchStatus: "ready" | "disabled" | "timed_out" | "unavailable" | "skipped"
   webSourceCount: number
+  webSourceUrls?: string[]
   memoryRetrievedCount: number
   memoryAppliedIds: string[]
   soulCardVersion: string | null
@@ -58,6 +59,13 @@ export type WriterConversationSummary = {
   mode: WriterMode
   language: WriterLanguage
   images_requested: boolean
+  active_revision?: number
+  turn_outcome?: string | null
+  asset_status?: string
+  active_platform_skill_id?: string | null
+  context_hash?: string | null
+  skill_release?: string | null
+  skill_digest?: string | null
   created_at: number
   updated_at: number
 }

@@ -92,6 +92,7 @@ export function buildAgentRuntimeInput(input: {
   sessionKey?: string | null
   conversationId: string | null
   conversationRevision?: number | null
+  writerContext?: AgentRuntimeInput["writerContext"]
   enterpriseId: number | null
   userId: number
   agentId: string | null
@@ -117,6 +118,9 @@ export function buildAgentRuntimeInput(input: {
     maxArtifactTotalBytes: number
   }
 }): AgentRuntimeInput {
+  if (input.writerContext && input.agentId !== "writer") {
+    throw new Error("writer_context_agent_mismatch")
+  }
   const maxContextChars = resolveRuntimeContextBytes(
     input.maxContextChars ?? envPositiveInt("AI_ENTRY_OPENCODE_MAX_CONTEXT_CHARS", DEFAULT_MAX_CONTEXT_CHARS),
   )
@@ -149,6 +153,7 @@ export function buildAgentRuntimeInput(input: {
     ...(input.sessionKey ? { sessionKey: input.sessionKey } : {}),
     conversationId: input.conversationId,
     conversationRevision: input.conversationRevision ?? null,
+    ...(input.writerContext ? { writerContext: input.writerContext } : {}),
     enterpriseId: input.enterpriseId,
     userId: input.userId,
     agentId: input.agentId,
@@ -230,6 +235,7 @@ export function buildAgentRuntimeInput(input: {
     messages: finalMessages.slice(-20),
     summary: input.conversationSummary || null,
     artifactRefs: artifacts,
+    writerContext: input.writerContext?.contextHash || null,
   })).digest("hex")
 
   return {

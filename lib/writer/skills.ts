@@ -20,6 +20,7 @@ import { writerRequestJson, writerRequestText } from "@/lib/writer/network"
 import { isWriterR2Available } from "@/lib/writer/r2"
 import { buildWriterRoutingDecision, describeWriterRoute, hasWriterXPlatformSignal } from "@/lib/writer/routing"
 import { listWriterPlatformSkills, resolveWriterOpenCodeSkillIds } from "@/lib/writer/skill-catalog"
+import { resolveWriterPlatformBinding } from "@/lib/writer/platform-registry"
 import { hasSerperWebSearchConfig, searchWithSerperWeb } from "@/lib/skills/tools/web-search"
 import { getWriterSoulProfile, listWriterMemories } from "@/lib/writer/memory/repository"
 import { rankWriterMemories } from "@/lib/writer/memory/retrieval"
@@ -43,6 +44,12 @@ import type {
   WriterRoutingDecision,
   WriterTurnDiagnostics,
 } from "@/lib/writer/types"
+import {
+  buildWriterRecoveryContext,
+  runWriterRuntimeWithRecovery,
+  type WriterRuntimeContext,
+} from "@/lib/writer/runtime/session-runtime"
+import { validateWriterSubmitResult, type WriterSubmitResult } from "@/lib/writer/writer-result"
 
 const SERPER_API_KEY = process.env.SERPER_API_KEY || ""
 const SERPER_API_BASE = (process.env.SERPER_API_BASE || "https://google.serper.dev").replace(/\/+$/, "")
@@ -310,6 +317,23 @@ const WRITER_PLATFORM_GUIDE: Record<WriterPlatform, WriterPlatformGuide> = {
     ].join("\n"),
     threadStructureGuidance: "",
   },
+  reddit: {
+    label: "Reddit writer",
+    tone: "plainspoken, useful, community-native",
+    format: "subreddit-native discussion or answer",
+    length: "300-1500 words",
+    image: "optional 16:9 community visual",
+    promptRules: [
+      "Respect the target subreddit norms and answer the actual question first.",
+      "Separate personal experience from general claims and never fabricate a first-person story.",
+      "Avoid promotional language unless the community context makes it appropriate.",
+    ],
+    articleStructureGuidance: [
+      "Write as a useful Reddit-native post or answer.",
+      "Lead with the practical answer, then provide reasoning, caveats, and concrete examples.",
+    ].join("\n"),
+    threadStructureGuidance: "",
+  },
   generic: {
     label: "Generic content writer",
     tone: "clear, credible, scenario-aware",
@@ -499,6 +523,7 @@ async function runWriterOpenCodeText(params: {
   enterpriseId?: number | null
   selectedProviderId?: AiEntryProviderId | null
   selectedModelId?: string | null
+  writerContext?: WriterRuntimeContext | null
 }) {
   const runtimeProfile = resolveWriterOpenCodeRuntimeProfile()
   if (!runtimeProfile.enabled || runtimeProfile.backend !== "railway-opencode") {
@@ -511,19 +536,22 @@ async function runWriterOpenCodeText(params: {
   })
   if (!provider) throw new Error("writer_opencode_provider_not_configured")
 
-  const historyMessages = (params.history || [])
-    .flatMap((entry) => {
-      const content = (entry.content || entry.answer || entry.query || "").trim()
-      if (!content) return []
-      return [{
-        role: entry.role === "assistant" || entry.answer ? "assistant" as const : "user" as const,
-        content,
-      }]
-    })
+  const historyMessages = (params.history || []).flatMap((entry) => {
+    if (entry.role && entry.content) {
+      return [{ role: entry.role, content: entry.content.trim() }]
+    }
+    return [
+      ...(entry.query.trim() ? [{ role: "user" as const, content: entry.query.trim() }] : []),
+      ...(entry.answer.trim() ? [{ role: "assistant" as const, content: entry.answer.trim() }] : []),
+    ]
+  }).filter((entry) => entry.content)
+  const sessionKey = params.writerContext?.sessionKey || `sess-${randomUUID().replaceAll("-", "").padEnd(40, "0").slice(0, 40)}`
   const runtimeInput = buildAgentRuntimeInput({
     runId: randomUUID(),
-    sessionKey: null,
+    sessionKey,
     conversationId: params.conversationId || null,
+    conversationRevision: params.writerContext?.activeDraft?.revision ?? null,
+    writerContext: params.writerContext,
     enterpriseId: params.enterpriseId || null,
     userId: params.userId || 0,
     agentId: "writer",
@@ -544,6 +572,10 @@ async function runWriterOpenCodeText(params: {
   })
 
   let answer = ""
+  let writerResult: WriterSubmitResult | null = null
+  const activatedSkillIds: string[] = []
+  let resultToolCallCount = 0
+  const countedToolCallIds = new Set<string>()
   const usage = emptyWriterRuntimeUsage()
   for await (const event of runOpenCodeAgent(runtimeInput, {
     runnerUrl: runtimeProfile.runnerUrl,
@@ -554,7 +586,18 @@ async function runWriterOpenCodeText(params: {
     session: runtimeProfile.sessionEnabled,
   })) {
     if (event.event === "text_delta") answer += event.delta
-    if (event.event === "tool_event" && event.phase === "started") usage.toolCallCount += 1
+    if (event.event === "writer_result_submitted") {
+      writerResult = validateWriterSubmitResult(event.result)
+      resultToolCallCount = Math.max(1, resultToolCallCount)
+    }
+    if (event.event === "skill_activated" && !activatedSkillIds.includes(event.skillId)) activatedSkillIds.push(event.skillId)
+    if (event.event === "tool_event" && event.phase === "started") {
+      const toolCallKey = event.toolCallId ? `${event.tool}:${event.toolCallId}` : null
+      const isNewToolCall = !toolCallKey || !countedToolCallIds.has(toolCallKey)
+      if (toolCallKey) countedToolCallIds.add(toolCallKey)
+      if (isNewToolCall && event.tool === "writer_submit_result") resultToolCallCount += 1
+      if (isNewToolCall) usage.toolCallCount += 1
+    }
     if (event.event === "usage") {
       if (Number.isFinite(event.inputTokens) && (event.inputTokens || 0) >= 0) usage.inputTokens += event.inputTokens || 0
       if (Number.isFinite(event.outputTokens) && (event.outputTokens || 0) >= 0) usage.outputTokens += event.outputTokens || 0
@@ -563,7 +606,7 @@ async function runWriterOpenCodeText(params: {
     if (event.event === "runtime_error") throw new Error(`writer_opencode_failed:${event.message}`)
   }
   if (!answer.trim()) throw new Error("writer_opencode_empty_response")
-  return { answer, usage }
+  return { answer, usage, writerResult, activatedSkillIds, resultToolCallCount }
 }
 
 export type WriterSkillsTurnResult =
@@ -572,12 +615,14 @@ export type WriterSkillsTurnResult =
       answer: string
       diagnostics: WriterTurnDiagnostics
       usage?: WriterRuntimeUsage
+      assetIntents?: WriterSubmitResult["assetIntents"]
     } & WriterBriefPlan)
   | ({
       outcome: "draft_ready"
       answer: string
       diagnostics: WriterTurnDiagnostics
       usage?: WriterRuntimeUsage
+      assetIntents?: WriterSubmitResult["assetIntents"]
     } & WriterBriefPlan)
 
 type WriterSkillsRuntime = {
@@ -612,6 +657,7 @@ function createEmptyWriterDiagnostics(
     webResearchUsed: false,
     webResearchStatus: "skipped",
     webSourceCount: 0,
+    webSourceUrls: [],
     memoryRetrievedCount: 0,
     memoryAppliedIds: [],
     soulCardVersion: null,
@@ -1093,6 +1139,7 @@ function buildWriterTurnDiagnostics(params: {
     webResearchUsed: params.research.status === "ready" && params.research.items.length > 0,
     webResearchStatus: params.research.status,
     webSourceCount: params.research.items.length,
+    webSourceUrls: [...new Set(params.research.items.map((item) => item.link).filter((link): link is string => Boolean(link)))].slice(0, 20),
     memoryRetrievedCount: Math.max(0, params.memoryRetrievedCount || 0),
     memoryAppliedIds: params.memoryAppliedIds || [],
     soulCardVersion: params.soulCardVersion ?? null,
@@ -4178,6 +4225,7 @@ export async function generateWriterDraftWithSkills(
     memoryScope?: string | null
     selectedProviderId?: AiEntryProviderId | null
     selectedModelId?: string | null
+    writerContext?: WriterRuntimeContext | null
   },
 ): Promise<WriterDraftGenerationResult> {
   const contextQuery = options?.researchQuery?.trim() || query
@@ -4245,6 +4293,7 @@ export async function generateWriterDraftWithSkills(
     enterpriseId: options?.enterpriseId,
     selectedProviderId: options?.selectedProviderId,
     selectedModelId: options?.selectedModelId,
+    writerContext: options?.writerContext,
   })
   const answer = result.answer
 
@@ -4269,6 +4318,164 @@ export async function generateWriterDraftWithSkills(
       routing,
     }),
     usage: result.usage,
+  }
+}
+
+/**
+ * Production Writer path: one OpenCode execution, one registry-selected
+ * primary platform Skill, and one structured result submission.
+ */
+export function validateWriterSkillFirstTurnResult(params: {
+  platform: WriterPlatform
+  mode: WriterMode
+  platformLabel: string
+  activeRevision: number
+  activeTitle?: string
+  result: WriterSubmitResult
+  activatedSkillIds: string[]
+  resultToolCallCount: number
+}) {
+  if (params.resultToolCallCount !== 1) throw new Error("writer_result_submission_count_invalid")
+  const binding = resolveWriterPlatformBinding(params.platform)
+  const activatedPrimaryCount = params.activatedSkillIds.filter((skillId) => skillId === binding.primary.skillId).length
+  if (activatedPrimaryCount !== 1) throw new Error("writer_primary_skill_activation_invalid")
+
+  const submittedPlatform = params.result.platform.trim().toLowerCase()
+  if (submittedPlatform !== params.platform.toLowerCase() && submittedPlatform !== params.platformLabel.toLowerCase()) {
+    throw new Error("writer_result_platform_mismatch")
+  }
+  if (!binding.operations.includes(params.result.operation)) throw new Error("writer_result_operation_unsupported")
+  if (!binding.modes.includes(params.mode)) throw new Error("writer_result_mode_unsupported")
+  if (params.result.outcome === "draft_ready") {
+    const draft = params.result.draft
+    if (!draft) throw new Error("writer_result_draft_missing")
+    if (draft.baseRevision !== params.activeRevision) throw new Error("writer_result_stale_revision")
+    if (binding.output.titleRequired && !draft.title.trim()) throw new Error("writer_result_title_missing")
+    if (params.activeTitle && draft.title.trim() !== params.activeTitle.trim()) throw new Error("writer_result_title_changed")
+  }
+  if (params.result.assetIntents.length > binding.assets.maxCount) throw new Error("writer_result_asset_limit_exceeded")
+  if (params.result.assetIntents.some((intent) => intent.kind === "cover") && !binding.assets.cover) {
+    throw new Error("writer_result_cover_not_supported")
+  }
+  if (params.result.assetIntents.some((intent) => intent.kind === "inline") && !binding.assets.inline) {
+    throw new Error("writer_result_inline_asset_not_supported")
+  }
+  if (params.platform === "wechat" && params.result.outcome === "draft_ready" && !params.result.assetIntents.some((intent) => intent.kind === "cover")) {
+    throw new Error("writer_result_cover_intent_missing")
+  }
+  return binding
+}
+
+export async function runWriterSkillFirstTurn(params: {
+  query: string
+  platform: WriterPlatform
+  mode: WriterMode
+  preferredLanguage?: WriterLanguage
+  userId?: number
+  conversationId?: string | null
+  enterpriseId?: number | null
+  writerContext?: WriterRuntimeContext | null
+  selectedProviderId?: AiEntryProviderId | null
+  selectedModelId?: string | null
+}): Promise<WriterSkillsTurnResult> {
+  const preferredLanguage = params.preferredLanguage || "auto"
+  const platformConfig = WRITER_PLATFORM_CONFIG[params.platform]
+  const binding = resolveWriterPlatformBinding(params.platform)
+  const contentType: WriterContentType = ["wechat", "xiaohongshu", "weibo", "douyin"].includes(params.platform)
+    ? "social_cn"
+    : "social_global"
+  const platformLabel = platformConfig.shortLabel
+  const routing: WriterRoutingDecision = {
+    contentType,
+    targetPlatform: platformLabel,
+    outputForm: params.mode === "thread" ? "platform-native thread" : "platform-native article",
+    lengthTarget: platformConfig.wordRange,
+    renderPlatform: params.platform,
+    renderMode: params.mode,
+    selectedSkillId: contentType,
+    selectedSkillLabel: contentType === "social_cn" ? "中文社媒" : "海外社媒",
+    selectedPlatformSkillId: binding.primary.skillId,
+    selectedPlatformSkillLabel: binding.primary.skillId,
+    selectedStyleSkillId: null,
+    selectedStyleSkillLabel: null,
+  }
+  const language = preferredLanguage === "zh" ? "Chinese" : preferredLanguage === "en" ? "English" : "the user's language"
+  const systemPrompt = [
+    "You are the production Writer Agent.",
+    "The writer-orchestrator and the selected platform Skill are the only editorial authorities for this turn.",
+    `The active platform is ${platformLabel}; keep it unless the Skill determines that the user explicitly requests a supported platform switch.`,
+    "Read every selected Skill completely. Decide whether to ask a clarification or produce the article from the current request and durable draft.",
+    "Use writer_webfetch only when the Skill decides research is required. Never claim a source was verified if retrieval failed.",
+    "Call writer_submit_result exactly once before finishing. The result must contain the complete draft when ready, the active base revision, research state, and validated cover/inline asset intents.",
+    "Do not write a result as final prose or JSON text; submit it through the tool.",
+    `Respond to the user in ${language}.`,
+  ].join("\n")
+  const selectedSkillIds = resolveWriterOpenCodeSkillIds({
+    contentType,
+    targetPlatform: platformLabel,
+  })
+  const invoke = (writerContext: WriterRuntimeContext | null) => runWriterOpenCodeText({
+    systemPrompt,
+    userPrompt: params.query,
+    selectedSkillIds,
+    writerPhase: "draft",
+    allowNetwork: true,
+    userId: params.userId,
+    conversationId: params.conversationId,
+    enterpriseId: params.enterpriseId,
+    selectedProviderId: params.selectedProviderId,
+    selectedModelId: params.selectedModelId,
+    writerContext,
+  })
+  const result = params.writerContext
+    ? await runWriterRuntimeWithRecovery({
+        normalContext: params.writerContext,
+        recoveryContext: buildWriterRecoveryContext(params.writerContext),
+        invoke: (context) => invoke(context),
+      })
+    : await invoke(null)
+  if (!result.writerResult) throw new Error("writer_result_not_submitted")
+  validateWriterSkillFirstTurnResult({
+    platform: params.platform,
+    mode: params.mode,
+    platformLabel,
+    activeRevision: params.writerContext?.activeDraft?.revision || 0,
+    activeTitle: params.writerContext?.activeDraft?.title,
+    result: result.writerResult,
+    activatedSkillIds: result.activatedSkillIds,
+    resultToolCallCount: result.resultToolCallCount,
+  })
+  const writerResult = result.writerResult
+  const answer = writerResult.draft?.content || writerResult.userMessage
+  const diagnostics = buildWriterTurnDiagnostics({
+    retrievalStrategy: writerResult.research.requested ? "fresh_external" : "no_retrieval",
+    enterpriseKnowledge: null,
+    enterpriseKnowledgeEnabled: Boolean(params.enterpriseId),
+    research: createEmptyResearchResult(writerResult.research.completed ? "ready" : writerResult.research.requested ? "unavailable" : "skipped"),
+    routing,
+  })
+  diagnostics.webResearchUsed = writerResult.research.completed
+  diagnostics.webSourceCount = writerResult.research.sourceUrls.length
+  diagnostics.webSourceUrls = writerResult.research.sourceUrls
+  return {
+    outcome: writerResult.outcome,
+    answer: writerResult.outcome === "draft_ready"
+      ? postProcessWriterDraft(params.platform, params.mode, answer, language, { ensureCoverPlaceholder: false, preserveTitle: true })
+      : writerResult.userMessage,
+    diagnostics,
+    usage: result.usage,
+    brief: createEmptyWriterBrief(),
+    routing,
+    missingFields: [],
+    turnCount: 1,
+    maxTurns: 1,
+    readyForGeneration: writerResult.outcome === "draft_ready",
+    assetIntents: writerResult.assetIntents,
+    selectedSkill: {
+      id: "writer-platform-generation",
+      label: platformLabel,
+      stage: "execution",
+    },
   }
 }
 
@@ -4395,6 +4602,7 @@ export async function runWriterSkillsTurnWithRuntime(
     enterpriseId?: number | null
     selectedProviderId?: AiEntryProviderId | null
     selectedModelId?: string | null
+    writerContext?: WriterRuntimeContext | null
   },
   runtime: WriterSkillsRuntime,
 ): Promise<WriterSkillsTurnResult> {
@@ -4639,6 +4847,7 @@ export async function runWriterSkillsTurnWithRuntime(
     memoryScope,
     selectedProviderId: params.selectedProviderId,
     selectedModelId: params.selectedModelId,
+    writerContext: params.writerContext,
   })
   const finalAnswer = enforceWriterHardLengthTarget(draftResult.answer, routing)
 
@@ -4675,6 +4884,7 @@ export async function runWriterSkillsTurn(params: {
   enterpriseId?: number | null
   selectedProviderId?: AiEntryProviderId | null
   selectedModelId?: string | null
+  writerContext?: WriterRuntimeContext | null
 }): Promise<WriterSkillsTurnResult> {
   return runWriterSkillsTurnWithRuntime(params, defaultWriterSkillsRuntime)
 }

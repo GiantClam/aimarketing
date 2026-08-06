@@ -50,7 +50,9 @@ export async function* runOpenCodeAgent(input: AgentRuntimeInput, options: RunOp
   // exact request-scoped config through both runtime transports.
   const runtimeProvider = options.provider
   if (options.session) {
-    const sessionKey = await buildAgentRuntimeSessionKey({ enterpriseId: input.enterpriseId, userId: input.userId, conversationId: input.conversationId, agentId: input.agentId })
+    const sessionKey = input.agentId === "writer" && input.sessionKey
+      ? input.sessionKey
+      : await buildAgentRuntimeSessionKey({ enterpriseId: input.enterpriseId, userId: input.userId, conversationId: input.conversationId, agentId: input.agentId })
     const sessionInput: AgentRuntimeInputV2 = {
       ...input,
       protocolVersion: 2,

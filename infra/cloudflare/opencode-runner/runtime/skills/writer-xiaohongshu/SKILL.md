@@ -39,3 +39,6 @@ Write as a mobile-first image note.
 Use short paragraphs and punchy pacing.
 Do not force traditional article sections unless explicitly requested.
 Insert `![Cover](writer-asset://cover)` and inline image placeholders that map to visual cards.
+# Writer result contract
+
+After writing Xiaohongshu content, call `writer_submit_result` exactly once. Submit the complete platform-native structure; use `needs_clarification` when needed. Submit only platform-compatible image intents and never fabricate image URLs.

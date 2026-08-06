@@ -1,9 +1,11 @@
 import type { WriterMode, WriterPlatform } from "@/lib/writer/config"
+import type { WriterSubmitResult } from "@/lib/writer/writer-result"
 
 export type WriterAssetId = string
 
 export type WriterAsset = {
   id: WriterAssetId
+  role?: WriterAssetRole
   label: string
   title: string
   prompt: string
@@ -130,6 +132,14 @@ const PLATFORM_IMAGE_META: Record<
     minImages: 1,
     maxImages: 4,
   },
+  reddit: {
+    label: "Reddit",
+    aspectRatio: "16:9",
+    style: "clear, community-native, informative",
+    promptTone: "Optimized for useful community discussion without promotional visual excess.",
+    minImages: 0,
+    maxImages: 2,
+  },
   generic: {
     label: "Generic editorial",
     aspectRatio: "16:9",
@@ -178,6 +188,7 @@ function getAccent(platform: WriterPlatform) {
     instagram: "#EC4899",
     tiktok: "#14B8A6",
     facebook: "#2563EB",
+    reddit: "#F97316",
     generic: "#64748B",
   }
   return accents[platform]
@@ -619,7 +630,20 @@ export function buildPendingWriterAssets(
   markdown: string,
   platform: WriterPlatform,
   mode: WriterMode = "article",
+  intents?: WriterSubmitResult["assetIntents"],
 ): WriterAsset[] {
+  if (intents && intents.length > 0) {
+    return intents.map((intent) => ({
+      id: intent.id,
+      role: intent.kind,
+      label: intent.kind === "cover" ? "Cover" : `Inline Image ${intent.id}`,
+      title: intent.placement || intent.id,
+      prompt: intent.prompt,
+      url: "",
+      status: "loading",
+      provider: "loading",
+    }))
+  }
   return buildWriterAssetBlueprints(markdown, platform, mode).map((asset) => ({
     ...asset,
     url: "",

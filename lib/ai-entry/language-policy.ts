@@ -1,6 +1,6 @@
-import type { CoreMessage } from "ai"
+import type { ModelMessage } from "ai"
 
-function normalizeCoreMessageContent(content: CoreMessage["content"]) {
+function normalizeCoreMessageContent(content: ModelMessage["content"]) {
   if (typeof content === "string") return content.trim()
   if (!Array.isArray(content)) return ""
 
@@ -44,7 +44,7 @@ export function detectExplicitReplyLanguageFromPrompt(prompt: string): "zh" | "e
   return null
 }
 
-export function resolveForcedReplyLanguage(messages: CoreMessage[]) {
+export function resolveForcedReplyLanguage(messages: ModelMessage[]) {
   let forced: "zh" | "en" | null = null
   for (const message of messages) {
     if (message.role !== "user") continue
@@ -54,4 +54,3 @@ export function resolveForcedReplyLanguage(messages: CoreMessage[]) {
   }
   return forced
 }
-

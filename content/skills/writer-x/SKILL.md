@@ -44,3 +44,6 @@ Write as a sequential multi-part post.
 Use `### Segment 1`, `### Segment 2`, etc. so the UI can render thread cards.
 Keep each segment publishable on its own.
 Use only the image placeholders actually needed for this mode.
+# Writer result contract
+
+After writing X content, call `writer_submit_result` exactly once. Submit the complete post or thread and active operation; use `needs_clarification` when needed, and keep image intents within X limits.

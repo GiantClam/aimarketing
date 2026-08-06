@@ -1,3 +1,5 @@
+import type { WriterRuntimeContext } from "@/lib/writer/runtime/session-runtime"
+
 export type AgentRuntimeProvider = "ai-sdk-native" | "opencode"
 
 export type AgentRuntimeBackend = "native" | "local-exec" | "cloudflare-sandbox-exec" | "cloudflare-opencode-session" | "railway-opencode"
@@ -63,6 +65,7 @@ export type AgentRuntimeEvent =
   | { event: "skill_failed"; skillId: string; message: string; runId: string }
   | { event: "text_delta"; delta: string; runId: string }
   | { event: "tool_event"; tool: string; toolCallId?: string; phase: "started" | "completed" | "failed"; message?: string; runId: string }
+  | { event: "writer_result_submitted"; result: Record<string, unknown>; runId: string }
   | { event: "usage"; inputTokens?: number; outputTokens?: number; costUsd?: number; runId: string }
   | { event: "artifact_payload"; artifact: RuntimeArtifactPayload; runId: string }
   | { event: "artifact_reference"; artifact: RuntimeArtifactReference; runId: string }
@@ -78,6 +81,8 @@ export type AgentRuntimeInput = {
   conversationId: string | null
   conversationRevision?: number | null
   contextHash?: string | null
+  /** Durable Writer context; never folded into the clipped chat-history window. */
+  writerContext?: WriterRuntimeContext | null
   credentialRef?: string | null
   enterpriseId: number | null
   userId: number

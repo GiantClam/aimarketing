@@ -9,6 +9,7 @@ type JsonRecord = Record<string, unknown>
 type PendingRun = {
   runId: string
   sessionId: string
+  sessionKey?: string
   emit: (event: AgentRuntimeEvent) => void
   resolve: (completed: boolean) => void
   timer: ReturnType<typeof setTimeout>
@@ -48,6 +49,7 @@ function diagnostic(value: unknown, fallback: string) {
 export class OpenCodeServeManager {
   private readonly options: Required<OpenCodeServeManagerOptions>
   private readonly pending = new Map<string, PendingRun>()
+  private readonly persistentSessions = new Map<string, string>()
   private child: ChildProcess | null = null
   private eventReady: Promise<void> | null = null
   private eventResolve: (() => void) | null = null
@@ -149,6 +151,55 @@ export class OpenCodeServeManager {
     return String(asRecord(payload)?.id)
   }
 
+  async createPersistentSession(input: AgentRuntimeInput | AgentRuntimeInputV2, sessionDir: string, provider: OpenCodeProviderConfig) {
+    await this.start()
+    const sessionKey = input.sessionKey
+    if (!sessionKey) throw new Error("opencode_persistent_session_key_missing")
+    const cached = this.persistentSessions.get(sessionKey)
+    if (cached) return cached
+
+    const listed = await this.request(`/session${this.directoryQuery(sessionDir)}`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    }).then((response) => this.readJson(response).catch(() => null)).catch(() => null)
+    const sessions = Array.isArray(listed) ? listed : asRecord(listed)?.data
+    if (Array.isArray(sessions)) {
+      const existing = sessions.find((item) => {
+        const record = asRecord(item)
+        const metadata = asRecord(record?.metadata)
+        return metadata?.aiMarketingSessionKey === sessionKey
+      })
+      const existingId = asRecord(existing)?.id
+      if (typeof existingId === "string" && existingId) {
+        this.persistentSessions.set(sessionKey, existingId)
+        return existingId
+      }
+    }
+
+    const response = await this.request(`/session${this.directoryQuery(sessionDir)}`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: `AI Marketing Writer ${sessionKey}`,
+        agent: "build",
+        model: { id: provider.modelId, providerID: provider.providerId },
+        metadata: {
+          aiMarketingSessionKey: sessionKey,
+          aiMarketingRunId: input.runId,
+          bundleVersion: this.options.bundleVersion,
+          agentId: input.agentId || "writer",
+          bundleKey: input.sharedSkillSetSelection?.bundleKey || null,
+          transient: false,
+        },
+      }),
+    })
+    const payload = await this.readJson(response)
+    if (!response.ok || !asRecord(payload)?.id) throw new Error(`opencode_session_create_failed:${diagnostic(payload, response.statusText)}`)
+    const sessionId = String(asRecord(payload)?.id)
+    this.persistentSessions.set(sessionKey, sessionId)
+    return sessionId
+  }
+
   async prompt(input: AgentRuntimeInput | AgentRuntimeInputV2, sessionId: string, sessionDir: string, provider: OpenCodeProviderConfig, systemPrompt: string, userPrompt: string, emit: (event: AgentRuntimeEvent) => void) {
     await this.start()
     if (this.pending.values().some((run) => run.sessionId === sessionId)) throw new Error("opencode_session_busy")
@@ -160,6 +211,7 @@ export class OpenCodeServeManager {
       this.pending.set(input.runId, {
         runId: input.runId,
         sessionId,
+        sessionKey: input.agentId === "writer" ? input.sessionKey || undefined : undefined,
         emit,
         resolve,
         timer,
@@ -333,6 +385,9 @@ export class OpenCodeServeManager {
     run.done = true
     clearTimeout(run.timer)
     this.pending.delete(run.runId)
+    if (error && run.sessionKey && this.persistentSessions.get(run.sessionKey) === run.sessionId) {
+      this.persistentSessions.delete(run.sessionKey)
+    }
     if (error) run.emit({ event: "runtime_error", code: error.code, message: error.message, retryable: true, runId: run.runId })
     run.resolve(completed && !error)
   }

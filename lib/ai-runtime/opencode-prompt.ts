@@ -56,8 +56,8 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
             "This is the Writer draft phase. Read .opencode/skills/writer-orchestrator/SKILL.md and every selected content, platform, and style Skill.",
             "The application intentionally passes the raw user request without URL extraction or pre-fetched research. Own URL retrieval and current-fact research inside the Skill workflow.",
             "Use writer_webfetch for public URL retrieval when needed. Built-in webfetch is denied. Never claim a source was checked unless the tool returned it successfully.",
-            "Return only the final platform-native draft in Markdown or plain text. Do not return JSON, tool traces, or runtime commentary.",
-            "The application owns billing, session state, enterprise persistence, image generation, and asset URLs. Use asset:// placeholders for requested cover or inline images; never fabricate URLs.",
+            "Call writer_submit_result exactly once before finishing. Put the complete platform-native draft, research state, and validated asset intents in that structured result.",
+            "The application owns billing, session state, enterprise persistence, image generation, and asset URLs. Never fabricate final image URLs.",
           ]
         : []),
     ...(isBusinessAgent
@@ -100,7 +100,7 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
           "The application has prepared the brief, enterprise knowledge, memory guidance, and output contract. External research remains inside the Skill workflow through writer_webfetch.",
           "Do not invent first-person experiences, customer facts, metrics, product claims, citations, or source details. When the supplied material lacks a personal experience, write around that gap instead of fabricating one.",
           "The application owns conversation state, enterprise truth, billing, image assets, and persistence. Do not access databases, platform APIs, secrets, or install skills.",
-          "Return only the final WeChat article draft. Do not describe the OpenCode runtime or the skill-loading process.",
+          "Submit exactly one writer_submit_result containing the complete WeChat article or a clarification outcome. Do not describe the OpenCode runtime or the skill-loading process.",
         ]
       : []),
     `Application system instruction:\n${promptSystem}`,
@@ -119,7 +119,22 @@ export function buildOpenCodeUserPrompt(input: AgentRuntimeInput, options: { inc
     .map((item) => `[${item.role}]\n${item.content.trim()}`)
     .filter((item) => item.trim())
     .join("\n\n")
+  const writerContext = input.writerContext
+    ? [
+        "[Durable Writer context — authoritative active draft; do not clip or replace with chat history]",
+        `schemaVersion: ${input.writerContext.schemaVersion}`,
+        `sessionKey: ${input.writerContext.sessionKey}`,
+        `conversationId: ${input.writerContext.conversationId}`,
+        `platform: ${input.writerContext.platform}`,
+        `taskStatus: ${input.writerContext.taskStatus}`,
+        `activeDraftRevision: ${input.writerContext.activeDraft?.revision ?? "none"}`,
+        input.writerContext.activeDraft
+          ? `activeDraftTitle: ${input.writerContext.activeDraft.title}\nactiveDraftSourceUrls: ${input.writerContext.activeDraft.sourceUrls.join(", ") || "none"}\nactiveDraftContent:\n${input.writerContext.activeDraft.content}`
+          : "activeDraft: none",
+      ].join("\n")
+    : ""
   const prompt = [
+    writerContext,
     "[Conversation history provided by the application]",
     history,
     "[Current user turn]",

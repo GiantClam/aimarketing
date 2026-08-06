@@ -1,7 +1,7 @@
 import {
   generateText,
   streamText,
-  type CoreMessage,
+  type ModelMessage,
   type ToolChoice,
   type ToolSet,
 } from "ai"
@@ -134,7 +134,7 @@ async function executeWithEmptyResponseAutoRetry<T>(params: {
 export function buildAiEntryProviderMessages(params: {
   providerId: AiEntryProviderId
   systemPrompt: string
-  messages: CoreMessage[]
+  messages: ModelMessage[]
 }) {
   const { providerId, systemPrompt, messages } = params
 
@@ -188,7 +188,7 @@ export function buildAiEntryProviderMessages(params: {
 
 export async function runAiEntryConsultingBlocking(params: {
   systemPrompt: string
-  messages: CoreMessage[]
+  messages: ModelMessage[]
   selectedTools: ToolSet
   toolChoice?: ToolChoice<ToolSet>
   stopWhen: unknown
@@ -251,7 +251,7 @@ export async function runAiEntryConsultingBlocking(params: {
 
 export async function runAiEntryConsultingStreaming(params: {
   systemPrompt: string
-  messages: CoreMessage[]
+  messages: ModelMessage[]
   selectedTools: ToolSet
   toolChoice?: ToolChoice<ToolSet>
   stopWhen: unknown

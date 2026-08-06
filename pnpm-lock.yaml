@@ -9,11 +9,11 @@ importers:
   .:
     dependencies:
       '@ai-sdk/mcp':
-        specifier: ^1.0.35
-        version: 1.0.35(zod@3.25.76)
+        specifier: ^2.0.22
+        version: 2.0.22(zod@3.25.76)
       '@ai-sdk/openai':
-        specifier: ^2.0.102
-        version: 2.0.102(zod@3.25.76)
+        specifier: ^4.0.27
+        version: 4.0.27(zod@3.25.76)
       '@aws-sdk/client-s3':
         specifier: 3.1013.0
         version: 3.1013.0
@@ -129,8 +129,8 @@ importers:
         specifier: latest
         version: 0.10.0
       ai:
-        specifier: ^5.0.169
-        version: 5.0.169(zod@3.25.76)
+        specifier: ^7.0.48
+        version: 7.0.48(zod@3.25.76)
       autoprefixer:
         specifier: ^10.4.20
         version: 10.4.20(postcss@8.5.0)
@@ -288,43 +288,33 @@ importers:
 
 packages:
 
-  '@ai-sdk/gateway@2.0.73':
-    resolution: {integrity: sha512-4c6yRZGvRxaaTeswOpzSWAJixsY16ucSda8PVpLSJC2P5F4MBitPnibkjYLNRgjlK4fqeRouckOiGFq9M3JZpg==}
-    engines: {node: '>=18'}
+  '@ai-sdk/gateway@4.0.37':
+    resolution: {integrity: sha512-YBCTsSlX0ETVsjo0ihfBOeJ3p3y1wXKXDzF9Ygp9dscUY06dzOGmyWJSGsKg+khKVArzBWUW4UCSAKms20ZDmg==}
+    engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/mcp@1.0.35':
-    resolution: {integrity: sha512-YeFHyq3pq/tkD8rp/U0P9sJsQfDTT4F/8WdpRLLo30cCLx2kfuIYafRyTLfERnYayYlLbH5aMBpjttFunvIDCA==}
-    engines: {node: '>=18'}
+  '@ai-sdk/mcp@2.0.22':
+    resolution: {integrity: sha512-j3jPwKFTffZCJzYGpN69yKu/y646uu2gWoEwh1jgVyYVpzfu6ErFU+YAd/+xTPxsUTx8FEIEUHTlEsDuOe+ytQ==}
+    engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/openai@2.0.102':
-    resolution: {integrity: sha512-tYarHJhyMioGegsnhpqz1/tKoCAJJ6zBHoIQaredNkt8V3o/JXj2647NnEOJVe7WHQXGvCfzbfnP1TADFhPmcA==}
-    engines: {node: '>=18'}
+  '@ai-sdk/openai@4.0.27':
+    resolution: {integrity: sha512-6MsWnbNG0ZjZgzYimNNjnTAlOFXn+jdLMFB47dDVUsRNjxdUoTSduCQPZZeTKoUl0ZNwCjsJ31of49l/t1r9MA==}
+    engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider-utils@3.0.23':
-    resolution: {integrity: sha512-60GYsRj5wIJQRcq5YwYJq4KhwLeStceXEJiZdecP1miiH+6FMmrnc7lZDOJoQ6m9lrudEb+uI4LEwddLz5+rPQ==}
-    engines: {node: '>=18'}
+  '@ai-sdk/provider-utils@5.0.18':
+    resolution: {integrity: sha512-UBNCrkxS5llgN2/RXLBRkjCFTIuL6YB1Goq5c+yRecnznhtX4XPjTwLHz2hrsTltTVZ0rqVegtnwFXdPBkjDHA==}
+    engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider-utils@4.0.23':
-    resolution: {integrity: sha512-z8GlDaCmRSDlqkMF2f4/RFgWxdarvIbyuk+m6WXT1LYgsnGiXRJGTD2Z1+SDl3LqtFuRtGX1aghYvQLoHL/9pg==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
-  '@ai-sdk/provider@2.0.1':
-    resolution: {integrity: sha512-KCUwswvsC5VsW2PWFqF8eJgSCu5Ysj7m1TxiHTVA6g7k360bk0RNQENT8KTMAYEs+8fWPD3Uu4dEmzGHc+jGng==}
-    engines: {node: '>=18'}
-
-  '@ai-sdk/provider@3.0.8':
-    resolution: {integrity: sha512-oGMAgGoQdBXbZqNG0Ze56CHjDZ1IDYOwGYxYjO5KLSlz5HiNQ9udIXsPZ61VWaHGZ5XW/jyjmr6t2xz2jGVwbQ==}
-    engines: {node: '>=18'}
+  '@ai-sdk/provider@4.0.4':
+    resolution: {integrity: sha512-tbHKNLirllUNF3ZlkCsXnwab2ZV1Sl4b1H/Cp9ruCce15IBmskE8Gwkk0yo9xDWY+jho2of7lVXtwSsyrq7cwQ==}
+    engines: {node: '>=22'}
 
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
@@ -2652,14 +2642,17 @@ packages:
       react:
         optional: true
 
-  '@vercel/oidc@3.1.0':
-    resolution: {integrity: sha512-Fw28YZpRnA3cAHHDlkt7xQHiJ0fcL+NRcIqsocZQUSmbzeIKRpwttJjik5ZGanXP+vlA4SbTg+AbA3bP363l+w==}
+  '@vercel/oidc@3.2.0':
+    resolution: {integrity: sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug==}
     engines: {node: '>= 20'}
 
   '@vercel/postgres@0.10.0':
     resolution: {integrity: sha512-fSD23DxGND40IzSkXjcFcxr53t3Tiym59Is0jSYIFpG4/0f0KO9SGtcp1sXiebvPaGe7N/tU05cH4yt2S6/IPg==}
     engines: {node: '>=18.14'}
     deprecated: '@vercel/postgres is deprecated. If you are setting up a new database, you can choose an alternate storage solution from the Vercel Marketplace. If you had an existing Vercel Postgres database, it should have been migrated to Neon as a native Vercel integration. You can find more details and the guide to migrate to Neon''s SDKs here: https://neon.com/docs/guides/vercel-postgres-transition-guide'
+
+  '@workflow/serde@4.1.0':
+    resolution: {integrity: sha512-pav4F2BoirECWR7Nf1TKt+2eETcBj7jj4cBefQ8VXQCA6NPkaKeLfj/zMgi+3zYV5ZIBT4GuUiphsj0/b9hPQQ==}
 
   acorn-jsx@5.3.2:
     resolution: {integrity: sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==}
@@ -2678,9 +2671,9 @@ packages:
   ai-motion@0.4.8:
     resolution: {integrity: sha512-9nQVjf8lrYQWSW0sZdb9bES4x8Ei1w9C0S62po2KvRbMjslmjm0WMeszyW771SEauDnu4YGWqurLZ/gCkCTosQ==}
 
-  ai@5.0.169:
-    resolution: {integrity: sha512-lqqujbQc5s2ASSz17qiSk4QNA714A8oXC3zkrBynMOgwybjWSUun/QBAXcdbHSnznfF+ZffShuJ0d5lme89htg==}
-    engines: {node: '>=18'}
+  ai@7.0.48:
+    resolution: {integrity: sha512-QmqshWFEDdkFFqSgdJ4cogaoDIYaedqbv73q/NXEYNkSIocJCzXnGFVyM9lrtAGTSBfm+5hq3/292ooXJ1jDSw==}
+    engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
@@ -3143,8 +3136,8 @@ packages:
   eventemitter3@4.0.7:
     resolution: {integrity: sha512-8guHBZCwKnFhYdHr2ysuRWErTwhoN2X8XELRlrRwpmfeY2jjuUN4taQMsULKUVo1K4DvZl+0pgfyoysHxvmvEw==}
 
-  eventsource-parser@3.0.6:
-    resolution: {integrity: sha512-Vo1ab+QXPzZ4tCa8SwIHJFaSzy4R6SHf7BY79rFBDf0idraZWAkYrDjDj8uWaSm3S2TK+hJ7/t1CEmZ7jXw+pg==}
+  eventsource-parser@3.1.0:
+    resolution: {integrity: sha512-kJezFj9YFAMLeORyi7aCLxLbD5/qWMQnoMVlVPyHIll7lgRJCc3JVln9Vgl9nwQi0YkMnhdGTMNn7CkRRAptMg==}
     engines: {node: '>=18.0.0'}
 
   extend@3.0.2:
@@ -4227,6 +4220,10 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
+  undici@7.29.0:
+    resolution: {integrity: sha512-IDxfleLmmbSskfWSUATiN1nfn2rDuvnMOqb5CWR92iIfojA0Ud+ulOAAEQ57LPr9rWmsreUyf5lwyao+7GNNVw==}
+    engines: {node: '>=20.18.1'}
+
   unified@11.0.5:
     resolution: {integrity: sha512-xKvGhPWw3k84Qjh8bI3ZeJjqnyadK+GEFtazSfZv/rKeTkTjOJho6mFqh2SM96iIcZokxiOpg78GazTSg8+KHA==}
 
@@ -4364,45 +4361,36 @@ packages:
 
 snapshots:
 
-  '@ai-sdk/gateway@2.0.73(zod@3.25.76)':
+  '@ai-sdk/gateway@4.0.37(zod@3.25.76)':
     dependencies:
-      '@ai-sdk/provider': 2.0.1
-      '@ai-sdk/provider-utils': 3.0.23(zod@3.25.76)
-      '@vercel/oidc': 3.1.0
+      '@ai-sdk/provider': 4.0.4
+      '@ai-sdk/provider-utils': 5.0.18(zod@3.25.76)
+      '@vercel/oidc': 3.2.0
       zod: 3.25.76
 
-  '@ai-sdk/mcp@1.0.35(zod@3.25.76)':
+  '@ai-sdk/mcp@2.0.22(zod@3.25.76)':
     dependencies:
-      '@ai-sdk/provider': 3.0.8
-      '@ai-sdk/provider-utils': 4.0.23(zod@3.25.76)
+      '@ai-sdk/provider': 4.0.4
+      '@ai-sdk/provider-utils': 5.0.18(zod@3.25.76)
       pkce-challenge: 5.0.1
       zod: 3.25.76
 
-  '@ai-sdk/openai@2.0.102(zod@3.25.76)':
+  '@ai-sdk/openai@4.0.27(zod@3.25.76)':
     dependencies:
-      '@ai-sdk/provider': 2.0.1
-      '@ai-sdk/provider-utils': 3.0.23(zod@3.25.76)
+      '@ai-sdk/provider': 4.0.4
+      '@ai-sdk/provider-utils': 5.0.18(zod@3.25.76)
       zod: 3.25.76
 
-  '@ai-sdk/provider-utils@3.0.23(zod@3.25.76)':
+  '@ai-sdk/provider-utils@5.0.18(zod@3.25.76)':
     dependencies:
-      '@ai-sdk/provider': 2.0.1
+      '@ai-sdk/provider': 4.0.4
       '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.0.6
+      '@workflow/serde': 4.1.0
+      eventsource-parser: 3.1.0
+      undici: 7.29.0
       zod: 3.25.76
 
-  '@ai-sdk/provider-utils@4.0.23(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.8
-      '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.0.6
-      zod: 3.25.76
-
-  '@ai-sdk/provider@2.0.1':
-    dependencies:
-      json-schema: 0.4.0
-
-  '@ai-sdk/provider@3.0.8':
+  '@ai-sdk/provider@4.0.4':
     dependencies:
       json-schema: 0.4.0
 
@@ -5536,7 +5524,8 @@ snapshots:
   '@next/swc-win32-x64-msvc@15.5.14':
     optional: true
 
-  '@opentelemetry/api@1.9.0': {}
+  '@opentelemetry/api@1.9.0':
+    optional: true
 
   '@page-agent/core@1.10.0(zod@3.25.76)':
     dependencies:
@@ -6908,7 +6897,7 @@ snapshots:
       next: 15.5.14(@babel/core@7.29.0)(@opentelemetry/api@1.9.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       react: 19.2.4
 
-  '@vercel/oidc@3.1.0': {}
+  '@vercel/oidc@3.2.0': {}
 
   '@vercel/postgres@0.10.0':
     dependencies:
@@ -6917,6 +6906,8 @@ snapshots:
       ws: 8.18.3(bufferutil@4.0.9)
     transitivePeerDependencies:
       - utf-8-validate
+
+  '@workflow/serde@4.1.0': {}
 
   acorn-jsx@5.3.2(acorn@8.16.0):
     dependencies:
@@ -6928,12 +6919,11 @@ snapshots:
 
   ai-motion@0.4.8: {}
 
-  ai@5.0.169(zod@3.25.76):
+  ai@7.0.48(zod@3.25.76):
     dependencies:
-      '@ai-sdk/gateway': 2.0.73(zod@3.25.76)
-      '@ai-sdk/provider': 2.0.1
-      '@ai-sdk/provider-utils': 3.0.23(zod@3.25.76)
-      '@opentelemetry/api': 1.9.0
+      '@ai-sdk/gateway': 4.0.37(zod@3.25.76)
+      '@ai-sdk/provider': 4.0.4
+      '@ai-sdk/provider-utils': 5.0.18(zod@3.25.76)
       zod: 3.25.76
 
   ajv@6.14.0:
@@ -7370,7 +7360,7 @@ snapshots:
 
   eventemitter3@4.0.7: {}
 
-  eventsource-parser@3.0.6: {}
+  eventsource-parser@3.1.0: {}
 
   extend@3.0.2: {}
 
@@ -8706,6 +8696,8 @@ snapshots:
   undici-types@6.11.1: {}
 
   undici-types@6.21.0: {}
+
+  undici@7.29.0: {}
 
   unified@11.0.5:
     dependencies:

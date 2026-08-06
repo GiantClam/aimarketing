@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
 import { listWriterMessages, updateWriterAssistantMessageById, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
+import { persistWriterRevision, WriterRevisionConflictError } from "@/lib/writer/revisions"
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
@@ -37,14 +38,40 @@ export async function PATCH(req: NextRequest) {
     const conversationId = typeof body?.conversation_id === "string" ? body.conversation_id : ""
     const messageId = typeof body?.message_id === "string" ? body.message_id : ""
     const content = typeof body?.content === "string" ? body.content : ""
+    const expectedRevision = Number.isInteger(body?.expectedRevision) ? body.expectedRevision : null
+    const hasDiagnosticsField = Object.prototype.hasOwnProperty.call(body || {}, "diagnostics")
 
     if (!conversationId || !content.trim()) {
       return NextResponse.json({ error: "conversation_id and content are required" }, { status: 400 })
     }
 
-    const hasDiagnosticsField = Object.prototype.hasOwnProperty.call(body || {}, "diagnostics")
+    if (expectedRevision !== null) {
+      try {
+        const saved = await persistWriterRevision({
+          userId: auth.user.id,
+          conversationId,
+          expectedRevision,
+          title: content.split("\n").find((line: string) => /^#\s+/u.test(line.trim()))?.replace(/^#\s+/u, "").trim() || "",
+          content,
+          turnOutcome: "draft_ready",
+          assetStatus: body?.imagesRequested ? "ready" : "none",
+          platform: typeof body?.platform === "string" ? body.platform as any : undefined,
+          mode: typeof body?.mode === "string" ? body.mode as any : undefined,
+          language: typeof body?.language === "string" ? body.language as any : undefined,
+          diagnostics: hasDiagnosticsField ? body?.diagnostics || null : null,
+        })
+        return NextResponse.json({ ok: true, revision: saved.revision, message_id: String(saved.messageId) })
+      } catch (error) {
+        if (error instanceof WriterRevisionConflictError) {
+          return NextResponse.json({ error: error.code, activeRevision: error.activeRevision }, { status: 409 })
+        }
+        throw error
+      }
+    }
+
     const optionalMeta = {
       ...(typeof body?.status === "string" ? { status: body.status } : {}),
+      ...(typeof body?.assetStatus === "string" ? { assetStatus: body.assetStatus } : {}),
       ...(typeof body?.imagesRequested === "boolean" ? { imagesRequested: body.imagesRequested } : {}),
       ...(typeof body?.language === "string" ? { language: body.language } : {}),
       ...(typeof body?.platform === "string" ? { platform: body.platform } : {}),
@@ -54,8 +81,9 @@ export async function PATCH(req: NextRequest) {
 
     const updated = messageId
       ? await updateWriterAssistantMessageById(auth.user.id, conversationId, messageId, content, optionalMeta)
-      : await updateWriterLatestAssistantMessage(auth.user.id, conversationId, content, {
+        : await updateWriterLatestAssistantMessage(auth.user.id, conversationId, content, {
           ...(typeof body?.status === "string" ? { status: body.status } : { status: "text_ready" }),
+          ...(typeof body?.assetStatus === "string" ? { assetStatus: body.assetStatus } : {}),
           ...(typeof body?.imagesRequested === "boolean" ? { imagesRequested: body.imagesRequested } : {}),
           ...(typeof body?.language === "string" ? { language: body.language } : {}),
           ...(typeof body?.platform === "string" ? { platform: body.platform } : {}),

@@ -1,6 +1,447 @@
 {
+  "schemaVersion": 2,
+  "platformBindings": [
+    {
+      "platformId": "wechat",
+      "aliases": [
+        "wechat",
+        "公众号",
+        "微信公众号"
+      ],
+      "primary": {
+        "skillId": "khazix-writer",
+        "dirName": "khazix-writer",
+        "interfaceVersion": "writer-result-v1",
+        "release": "2026.08.06",
+        "digest": "sha256:3d37e7e88ed9579b02b47ecc4557879edce9795e157dd96ed06b760858694ba8"
+      },
+      "compatibleStyleSkillIds": [
+        "analytical",
+        "story-driven",
+        "conversion"
+      ],
+      "operations": [
+        "create",
+        "revise",
+        "translate",
+        "shorten",
+        "expand",
+        "adapt_platform"
+      ],
+      "modes": [
+        "article"
+      ],
+      "research": {
+        "enabled": true
+      },
+      "assets": {
+        "cover": true,
+        "inline": true,
+        "maxCount": 6,
+        "aspectRatios": [
+          "16:9",
+          "2.35:1"
+        ]
+      },
+      "output": {
+        "titleRequired": true,
+        "preserveAuthoredTitle": true,
+        "maxChars": 50000
+      }
+    },
+    {
+      "platformId": "xiaohongshu",
+      "aliases": [
+        "xiaohongshu",
+        "rednote",
+        "小红书"
+      ],
+      "primary": {
+        "skillId": "writer-xiaohongshu",
+        "dirName": "writer-xiaohongshu",
+        "interfaceVersion": "writer-result-v1",
+        "release": "2026.08.06",
+        "digest": "sha256:22f93ec0e0ee0c456179c9e04da7b11cd78253846d615a2f939a6c65686bb6be"
+      },
+      "compatibleStyleSkillIds": [],
+      "operations": [
+        "create",
+        "revise",
+        "translate",
+        "shorten",
+        "expand",
+        "adapt_platform"
+      ],
+      "modes": [
+        "article"
+      ],
+      "research": {
+        "enabled": true
+      },
+      "assets": {
+        "cover": true,
+        "inline": true,
+        "maxCount": 9,
+        "aspectRatios": [
+          "3:4",
+          "1:1"
+        ]
+      },
+      "output": {
+        "titleRequired": true,
+        "preserveAuthoredTitle": true,
+        "maxChars": 20000
+      }
+    },
+    {
+      "platformId": "weibo",
+      "aliases": [
+        "weibo",
+        "微博"
+      ],
+      "primary": {
+        "skillId": "writer-weibo",
+        "dirName": "writer-weibo",
+        "interfaceVersion": "writer-result-v1",
+        "release": "2026.08.06",
+        "digest": "sha256:fb707e61dc8553cd0d8881345fe700c892a21c70f068be44488843118c7246ff"
+      },
+      "compatibleStyleSkillIds": [],
+      "operations": [
+        "create",
+        "revise",
+        "translate",
+        "shorten",
+        "expand",
+        "adapt_platform"
+      ],
+      "modes": [
+        "article",
+        "thread"
+      ],
+      "research": {
+        "enabled": true
+      },
+      "assets": {
+        "cover": true,
+        "inline": false,
+        "maxCount": 2,
+        "aspectRatios": [
+          "16:9",
+          "1:1"
+        ]
+      },
+      "output": {
+        "titleRequired": false,
+        "preserveAuthoredTitle": true,
+        "maxChars": 12000
+      }
+    },
+    {
+      "platformId": "douyin",
+      "aliases": [
+        "douyin",
+        "抖音"
+      ],
+      "primary": {
+        "skillId": "writer-douyin",
+        "dirName": "writer-douyin",
+        "interfaceVersion": "writer-result-v1",
+        "release": "2026.08.06",
+        "digest": "sha256:d8160ad53efc8fd514b202056f879a10a237314bf510e0794f53e4775b1c0432"
+      },
+      "compatibleStyleSkillIds": [],
+      "operations": [
+        "create",
+        "revise",
+        "translate",
+        "shorten",
+        "expand",
+        "adapt_platform"
+      ],
+      "modes": [
+        "article"
+      ],
+      "research": {
+        "enabled": true
+      },
+      "assets": {
+        "cover": true,
+        "inline": false,
+        "maxCount": 1,
+        "aspectRatios": [
+          "9:16"
+        ]
+      },
+      "output": {
+        "titleRequired": false,
+        "preserveAuthoredTitle": true,
+        "maxChars": 12000
+      }
+    },
+    {
+      "platformId": "x",
+      "aliases": [
+        "twitter",
+        "x",
+        "X"
+      ],
+      "primary": {
+        "skillId": "writer-x",
+        "dirName": "writer-x",
+        "interfaceVersion": "writer-result-v1",
+        "release": "2026.08.06",
+        "digest": "sha256:b442f3b7aead7710a0466ba2ca968176763c995e6768319564fc433247b67db9"
+      },
+      "compatibleStyleSkillIds": [],
+      "operations": [
+        "create",
+        "revise",
+        "translate",
+        "shorten",
+        "expand",
+        "adapt_platform"
+      ],
+      "modes": [
+        "article",
+        "thread"
+      ],
+      "research": {
+        "enabled": true
+      },
+      "assets": {
+        "cover": true,
+        "inline": false,
+        "maxCount": 3,
+        "aspectRatios": [
+          "16:9",
+          "1:1"
+        ]
+      },
+      "output": {
+        "titleRequired": false,
+        "preserveAuthoredTitle": true,
+        "maxChars": 18000
+      }
+    },
+    {
+      "platformId": "linkedin",
+      "aliases": [
+        "linkedin"
+      ],
+      "primary": {
+        "skillId": "writer-linkedin",
+        "dirName": "writer-linkedin",
+        "interfaceVersion": "writer-result-v1",
+        "release": "2026.08.06",
+        "digest": "sha256:7520ddd0433034df2c8040f26676d2b8d6bb7e003abd36d7977d7c2ce51a2c27"
+      },
+      "compatibleStyleSkillIds": [],
+      "operations": [
+        "create",
+        "revise",
+        "translate",
+        "shorten",
+        "expand",
+        "adapt_platform"
+      ],
+      "modes": [
+        "article"
+      ],
+      "research": {
+        "enabled": true
+      },
+      "assets": {
+        "cover": true,
+        "inline": false,
+        "maxCount": 2,
+        "aspectRatios": [
+          "1.91:1",
+          "1:1"
+        ]
+      },
+      "output": {
+        "titleRequired": false,
+        "preserveAuthoredTitle": true,
+        "maxChars": 20000
+      }
+    },
+    {
+      "platformId": "instagram",
+      "aliases": [
+        "instagram",
+        "ig"
+      ],
+      "primary": {
+        "skillId": "writer-instagram",
+        "dirName": "writer-instagram",
+        "interfaceVersion": "writer-result-v1",
+        "release": "2026.08.06",
+        "digest": "sha256:d76f3c5490d0f0522f1b60f451f556cfedbbe46beb41f4ebef6ccd4e34314dda"
+      },
+      "compatibleStyleSkillIds": [],
+      "operations": [
+        "create",
+        "revise",
+        "translate",
+        "shorten",
+        "expand",
+        "adapt_platform"
+      ],
+      "modes": [
+        "article"
+      ],
+      "research": {
+        "enabled": true
+      },
+      "assets": {
+        "cover": true,
+        "inline": true,
+        "maxCount": 6,
+        "aspectRatios": [
+          "1:1",
+          "4:5"
+        ]
+      },
+      "output": {
+        "titleRequired": false,
+        "preserveAuthoredTitle": true,
+        "maxChars": 18000
+      }
+    },
+    {
+      "platformId": "tiktok",
+      "aliases": [
+        "tiktok"
+      ],
+      "primary": {
+        "skillId": "writer-tiktok",
+        "dirName": "writer-tiktok",
+        "interfaceVersion": "writer-result-v1",
+        "release": "2026.08.06",
+        "digest": "sha256:1658a593b590408c32b3a65d72a2eafc7d0a7eb85101c9df3098faa4756d13ba"
+      },
+      "compatibleStyleSkillIds": [],
+      "operations": [
+        "create",
+        "revise",
+        "translate",
+        "shorten",
+        "expand",
+        "adapt_platform"
+      ],
+      "modes": [
+        "article"
+      ],
+      "research": {
+        "enabled": true
+      },
+      "assets": {
+        "cover": true,
+        "inline": false,
+        "maxCount": 1,
+        "aspectRatios": [
+          "9:16"
+        ]
+      },
+      "output": {
+        "titleRequired": false,
+        "preserveAuthoredTitle": true,
+        "maxChars": 12000
+      }
+    },
+    {
+      "platformId": "facebook",
+      "aliases": [
+        "facebook",
+        "fb"
+      ],
+      "primary": {
+        "skillId": "writer-facebook",
+        "dirName": "writer-facebook",
+        "interfaceVersion": "writer-result-v1",
+        "release": "2026.08.06",
+        "digest": "sha256:a87757a42b900482557052b45c93e5c7684aeae4b352866ad1bc21417260d974"
+      },
+      "compatibleStyleSkillIds": [],
+      "operations": [
+        "create",
+        "revise",
+        "translate",
+        "shorten",
+        "expand",
+        "adapt_platform"
+      ],
+      "modes": [
+        "article",
+        "thread"
+      ],
+      "research": {
+        "enabled": true
+      },
+      "assets": {
+        "cover": true,
+        "inline": true,
+        "maxCount": 4,
+        "aspectRatios": [
+          "16:9",
+          "1:1"
+        ]
+      },
+      "output": {
+        "titleRequired": false,
+        "preserveAuthoredTitle": true,
+        "maxChars": 24000
+      }
+    },
+    {
+      "platformId": "reddit",
+      "aliases": [
+        "reddit",
+        "subreddit"
+      ],
+      "primary": {
+        "skillId": "writer-reddit",
+        "dirName": "writer-reddit",
+        "interfaceVersion": "writer-result-v1",
+        "release": "2026.08.06",
+        "digest": "sha256:660ef3336b69ebf309c83b3398530a9542ac955df562d67ca321e9d6c60dd15d"
+      },
+      "compatibleStyleSkillIds": [],
+      "operations": [
+        "create",
+        "revise",
+        "translate",
+        "shorten",
+        "expand",
+        "adapt_platform"
+      ],
+      "modes": [
+        "article"
+      ],
+      "research": {
+        "enabled": true
+      },
+      "assets": {
+        "cover": false,
+        "inline": false,
+        "maxCount": 2,
+        "aspectRatios": [
+          "16:9"
+        ]
+      },
+      "output": {
+        "titleRequired": true,
+        "preserveAuthoredTitle": true,
+        "maxChars": 30000
+      }
+    }
+  ],
   "orchestratorSkillDir": "writer-orchestrator",
-  "briefingSkillDirs": ["writer-briefing", "content-briefing"],
+  "briefingSkillDirs": [
+    "writer-briefing",
+    "content-briefing"
+  ],
   "contentSkills": [
     {
       "id": "social_cn",
@@ -92,7 +533,12 @@
       "renderPlatform": "wechat",
       "supportsThread": false,
       "listed": true,
-      "aliases": ["wechat", "wechat official account", "\u516c\u4f17\u53f7", "\u5fae\u4fe1\u516c\u4f17\u53f7"]
+      "aliases": [
+        "wechat",
+        "wechat official account",
+        "公众号",
+        "微信公众号"
+      ]
     },
     {
       "id": "xiaohongshu",
@@ -102,7 +548,11 @@
       "renderPlatform": "xiaohongshu",
       "supportsThread": false,
       "listed": true,
-      "aliases": ["xiaohongshu", "rednote", "\u5c0f\u7ea2\u4e66"]
+      "aliases": [
+        "xiaohongshu",
+        "rednote",
+        "小红书"
+      ]
     },
     {
       "id": "weibo",
@@ -112,7 +562,10 @@
       "renderPlatform": "weibo",
       "supportsThread": true,
       "listed": true,
-      "aliases": ["weibo", "\u5fae\u535a"]
+      "aliases": [
+        "weibo",
+        "微博"
+      ]
     },
     {
       "id": "douyin",
@@ -122,7 +575,11 @@
       "renderPlatform": "douyin",
       "supportsThread": false,
       "listed": true,
-      "aliases": ["douyin", "\u6296\u97f3", "tiktok china"]
+      "aliases": [
+        "douyin",
+        "抖音",
+        "tiktok china"
+      ]
     },
     {
       "id": "x",
@@ -132,8 +589,15 @@
       "renderPlatform": "x",
       "supportsThread": true,
       "listed": true,
-      "aliases": ["twitter", "x thread", "x post"],
-      "queryPatterns": ["(^|[^a-z])x( thread| post)?([^a-z]|$)", "twitter"]
+      "aliases": [
+        "twitter",
+        "x thread",
+        "x post"
+      ],
+      "queryPatterns": [
+        "(^|[^a-z])x( thread| post)?([^a-z]|$)",
+        "twitter"
+      ]
     },
     {
       "id": "linkedin",
@@ -143,7 +607,9 @@
       "renderPlatform": "linkedin",
       "supportsThread": false,
       "listed": true,
-      "aliases": ["linkedin"]
+      "aliases": [
+        "linkedin"
+      ]
     },
     {
       "id": "instagram",
@@ -153,7 +619,10 @@
       "renderPlatform": "instagram",
       "supportsThread": false,
       "listed": true,
-      "aliases": ["instagram", "ig"]
+      "aliases": [
+        "instagram",
+        "ig"
+      ]
     },
     {
       "id": "tiktok",
@@ -163,7 +632,9 @@
       "renderPlatform": "tiktok",
       "supportsThread": false,
       "listed": true,
-      "aliases": ["tiktok"]
+      "aliases": [
+        "tiktok"
+      ]
     },
     {
       "id": "facebook",
@@ -173,7 +644,23 @@
       "renderPlatform": "facebook",
       "supportsThread": true,
       "listed": true,
-      "aliases": ["facebook", "fb"]
+      "aliases": [
+        "facebook",
+        "fb"
+      ]
+    },
+    {
+      "id": "reddit",
+      "dirName": "writer-reddit",
+      "label": "Reddit",
+      "targetPlatform": "Reddit",
+      "renderPlatform": "reddit",
+      "supportsThread": false,
+      "listed": true,
+      "aliases": [
+        "reddit",
+        "subreddit"
+      ]
     }
   ],
   "styleSkills": [
@@ -197,10 +684,10 @@
         "analytical",
         "analysis-driven",
         "deep analysis",
-        "\u4e13\u4e1a\u5206\u6790",
-        "\u7406\u6027\u5206\u6790",
-        "\u6df1\u5ea6\u5206\u6790",
-        "\u4e13\u4e1a\u611f"
+        "专业分析",
+        "理性分析",
+        "深度分析",
+        "专业感"
       ]
     },
     {
@@ -211,10 +698,10 @@
         "story-driven",
         "storytelling",
         "narrative",
-        "\u6545\u4e8b\u5316",
-        "\u53d9\u4e8b\u611f",
-        "\u8bb2\u6545\u4e8b",
-        "\u6709\u6545\u4e8b\u611f"
+        "故事化",
+        "叙事感",
+        "讲故事",
+        "有故事感"
       ]
     },
     {
@@ -226,10 +713,10 @@
         "conversion",
         "persuasive",
         "salesy",
-        "\u8f6c\u5316\u5bfc\u5411",
-        "\u8f6c\u5316\u578b",
-        "\u6210\u4ea4\u5bfc\u5411",
-        "\u8bf4\u670d\u578b"
+        "转化导向",
+        "转化型",
+        "成交导向",
+        "说服型"
       ]
     }
   ]

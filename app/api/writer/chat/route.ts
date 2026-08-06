@@ -6,6 +6,8 @@ import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/ser
 import { normalizeWriterLanguage, normalizeWriterMode, normalizeWriterPlatform } from "@/lib/writer/config"
 import { listWriterMessages } from "@/lib/writer/repository"
 import type { WriterConversationStatus, WriterPreloadedBrief } from "@/lib/writer/types"
+import { buildWriterRuntimeContext } from "@/lib/writer/runtime/session-runtime"
+import { getWriterRevisionState } from "@/lib/writer/revisions"
 
 export const runtime = "nodejs"
 const WRITER_CHAT_HISTORY_LIMIT = 12
@@ -78,6 +80,29 @@ export async function POST(req: NextRequest) {
       mode,
       language,
     })
+    const revisionState = conversationId ? await getWriterRevisionState(auth.user.id, conversationId) : null
+    const latestDraft = [...history].reverse().find((entry) => entry.answer.trim())
+    const activeDraftContent = revisionState?.activeDraft || latestDraft?.answer || ""
+    const writerContext = buildWriterRuntimeContext({
+      sessionKey: undefined,
+      conversationId: persisted.conversationId,
+      currentTurn: userQuery,
+      platform,
+      activeDraft: activeDraftContent
+        ? {
+            revision: revisionState?.activeRevision || Math.max(1, history.filter((entry) => entry.answer.trim()).length),
+            title: activeDraftContent.split("\n").find((line) => /^#\s+/u.test(line.trim()))?.replace(/^#\s+/u, "").trim() || "",
+            content: activeDraftContent,
+            sourceUrls: [],
+          }
+        : null,
+      recentTurns: history.flatMap((entry) => [
+        ...(entry.query.trim() ? [{ role: "user" as const, content: entry.query }] : []),
+        ...(entry.answer.trim() ? [{ role: "assistant" as const, content: entry.answer }] : []),
+      ]),
+      recentTurnLimit: 12,
+      taskStatus: "pending",
+    })
 
     const task = await enqueueAssistantTask({
       userId: auth.user.id,
@@ -96,6 +121,7 @@ export async function POST(req: NextRequest) {
         conversationStatus: persisted.conversation.status as WriterConversationStatus,
         selectedProviderId,
         selectedModelId,
+        writerContext,
       },
     })
 

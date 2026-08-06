@@ -10,7 +10,7 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 LOG_PATH = ROOT / "artifacts" / "writer-real-validation-start.log"
-NEXT_CLI = ROOT / "node_modules" / ".bin" / "next.CMD"
+NEXT_CLI = ROOT / "node_modules" / ".bin" / ("next.CMD" if os.name == "nt" else "next")
 VALIDATION_DIST_DIR = ".next-writer-real-validation"
 TSCONFIG_PATH = ROOT / "tsconfig.json"
 

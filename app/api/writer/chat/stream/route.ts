@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { createPendingWriterConversation } from "@/lib/assistant-async"
+import { createPendingWriterConversation, enqueueAssistantTask } from "@/lib/assistant-async"
 import { requireSessionUser } from "@/lib/auth/guards"
 import { estimateTextCredits } from "@/lib/billing/costing"
 import {
@@ -12,7 +12,9 @@ import {
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 import { loadWriterSkillRunner } from "@/lib/skills/runtime/registry"
 import { normalizeWriterLanguage, normalizeWriterMode, normalizeWriterPlatform } from "@/lib/writer/config"
-import { listWriterMessages, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
+import { appendWriterAssistantMessage, listWriterMessages, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
+import { buildWriterRuntimeContext } from "@/lib/writer/runtime/session-runtime"
+import { getWriterRevisionState, persistWriterRevision } from "@/lib/writer/revisions"
 import type { WriterConversationStatus, WriterPreloadedBrief } from "@/lib/writer/types"
 
 export const runtime = "nodejs"
@@ -169,6 +171,29 @@ export async function POST(req: NextRequest) {
       mode,
       language,
     })
+    const revisionState = conversationId ? await getWriterRevisionState(auth.user.id, conversationId) : null
+    const latestDraft = [...history].reverse().find((entry) => entry.answer.trim())
+    const activeDraftContent = revisionState?.activeDraft || latestDraft?.answer || ""
+    const writerContext = buildWriterRuntimeContext({
+      sessionKey: undefined,
+      conversationId: pending.conversationId,
+      currentTurn: userQuery,
+      platform,
+      activeDraft: activeDraftContent
+        ? {
+            revision: revisionState?.activeRevision || Math.max(1, history.filter((entry) => entry.answer.trim()).length),
+            title: activeDraftContent.split("\n").find((line) => /^#\s+/u.test(line.trim()))?.replace(/^#\s+/u, "").trim() || "",
+            content: activeDraftContent,
+            sourceUrls: [],
+          }
+        : null,
+      recentTurns: history.flatMap((entry) => [
+        ...(entry.query.trim() ? [{ role: "user" as const, content: entry.query }] : []),
+        ...(entry.answer.trim() ? [{ role: "assistant" as const, content: entry.answer }] : []),
+      ]),
+      recentTurnLimit: 12,
+      taskStatus: "pending",
+    })
     const taskId = `writer_stream_${Date.now()}`
     const encoder = new TextEncoder()
 
@@ -259,20 +284,63 @@ export async function POST(req: NextRequest) {
             enterpriseId: auth.user.enterpriseId,
             selectedProviderId,
             selectedModelId,
+            writerContext,
             onProgress: async (event) => {
               sendProgressEvent(event)
             },
           })
 
-          const status = turnResult.outcome === "needs_clarification" ? "drafting" : "text_ready"
-          await updateWriterLatestAssistantMessage(auth.user.id, pending.conversationId, turnResult.answer, {
-            status,
-            imagesRequested: false,
-            language,
-            platform: turnResult.routing.renderPlatform,
-            mode: turnResult.routing.renderMode,
-            diagnostics: turnResult.diagnostics,
-          })
+          if (turnResult.outcome === "draft_ready") {
+            const persistedRevision = await persistWriterRevision({
+              userId: auth.user.id,
+              conversationId: pending.conversationId,
+              expectedRevision: writerContext.activeDraft?.revision || 0,
+              title: turnResult.answer.split("\n").find((line) => /^#\s+/u.test(line.trim()))?.replace(/^#\s+/u, "").trim() || "",
+              content: turnResult.answer,
+              language,
+              platform: turnResult.routing.renderPlatform,
+              mode: turnResult.routing.renderMode,
+              diagnostics: turnResult.diagnostics,
+              turnOutcome: turnResult.outcome,
+              activePlatformSkillId: turnResult.routing.selectedPlatformSkillId || turnResult.routing.renderPlatform,
+              contextHash: writerContext.contextHash,
+            })
+            if (turnResult.assetIntents?.length) {
+              await enqueueAssistantTask({
+                userId: auth.user.id,
+                workflowName: "writer_assets",
+                payload: {
+                  kind: "writer_assets",
+                  enterpriseId: auth.user.enterpriseId,
+                  conversationId: pending.conversationId,
+                  markdown: turnResult.answer,
+                  platform: turnResult.routing.renderPlatform,
+                  mode: turnResult.routing.renderMode,
+                  assetIntents: turnResult.assetIntents,
+                  expectedRevision: persistedRevision.revision,
+                },
+              })
+            }
+          } else {
+            const status = turnResult.outcome === "needs_clarification" ? "drafting" : "text_ready"
+            const updated = await updateWriterLatestAssistantMessage(auth.user.id, pending.conversationId, turnResult.answer, {
+              status,
+              imagesRequested: false,
+              language,
+              platform: turnResult.routing.renderPlatform,
+              mode: turnResult.routing.renderMode,
+              diagnostics: turnResult.diagnostics,
+            })
+            if (!updated) {
+              await appendWriterAssistantMessage({
+                userId: auth.user.id,
+                conversationId: pending.conversationId,
+                content: turnResult.answer,
+                diagnostics: turnResult.diagnostics,
+                meta: { status, imagesRequested: false, language, platform: turnResult.routing.renderPlatform, mode: turnResult.routing.renderMode },
+              })
+            }
+          }
 
           const updatedConversation = (await listWriterMessages(auth.user.id, pending.conversationId, 1)).conversation
           if (!updatedConversation) {
@@ -353,10 +421,18 @@ export async function POST(req: NextRequest) {
             })
           }
           const failedMessage = `Request failed: ${error instanceof Error ? error.message : "writer_stream_failed"}`
-          await updateWriterLatestAssistantMessage(auth.user.id, pending.conversationId, failedMessage, {
+          const updated = await updateWriterLatestAssistantMessage(auth.user.id, pending.conversationId, failedMessage, {
             status: "failed",
             imagesRequested: false,
-          }).catch(() => null)
+          }).catch(() => false)
+          if (!updated) {
+            await appendWriterAssistantMessage({
+              userId: auth.user.id,
+              conversationId: pending.conversationId,
+              content: failedMessage,
+              meta: { status: "failed", imagesRequested: false },
+            }).catch(() => null)
+          }
 
           sendEvent({
             event: "error",
