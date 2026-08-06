@@ -24,6 +24,8 @@ COPY tsconfig.json ./tsconfig.json
 RUN npm ci --legacy-peer-deps
 
 COPY lib/ai-runtime ./lib/ai-runtime
+COPY lib/writer/config.ts ./lib/writer/config.ts
+COPY lib/writer/runtime ./lib/writer/runtime
 COPY infra/railway/opencode-runtime ./infra/railway/opencode-runtime
 COPY infra/cloudflare/opencode-runner/runtime ./runtime
 
