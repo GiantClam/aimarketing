@@ -3,6 +3,7 @@ FROM node:22-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates \
   git \
+  ripgrep \
   python3 \
   python3-venv \
   fontconfig \
@@ -13,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   make \
   g++ \
   && rm -rf /var/lib/apt/lists/* \
-  && npm install --global opencode-ai@1.18.11
+  && npm install --global opencode-ai@1.18.14
 
 WORKDIR /app
 
@@ -21,7 +22,10 @@ COPY package.json ./package.json
 COPY package-lock.json ./package-lock.json
 COPY tsconfig.json ./tsconfig.json
 
-RUN npm ci --legacy-peer-deps
+# package-lock.json is maintained by the pnpm application workflow and is not
+# guaranteed to match package.json's npm resolution. Reconcile it in the
+# isolated runtime image instead of failing the Railway build at npm ci.
+RUN npm install --legacy-peer-deps --no-audit --no-fund
 
 COPY lib/ai-runtime ./lib/ai-runtime
 COPY infra/railway/opencode-runtime ./infra/railway/opencode-runtime
