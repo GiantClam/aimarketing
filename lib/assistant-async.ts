@@ -54,6 +54,7 @@ import { normalizeExecutiveAdvisorType } from "@/lib/skills/runtime/executive-ad
 import {
   appendWriterAssistantMessage,
   appendWriterUserTurn,
+  updateWriterAssistantMessageById,
   updateWriterLatestAssistantMessage,
 } from "@/lib/writer/repository"
 import { generateWriterAssetsForTask } from "@/lib/writer/assets-runtime"
@@ -101,6 +102,7 @@ type WriterTurnTaskPayload = {
   kind: "writer_turn"
   enterpriseId?: number | null
   conversationId: string
+  pendingAssistantMessageId?: string | null
   query: string
   agentType?: WriterAgentType
   brief?: WriterPreloadedBrief | null
@@ -703,6 +705,7 @@ async function handleWriterTurn(taskId: number, userId: number, payload: WriterT
       const persistedRevision = await persistWriterRevision({
         userId,
         conversationId: payload.conversationId,
+        pendingAssistantMessageId: payload.pendingAssistantMessageId,
         expectedRevision: payload.writerContext.activeDraft?.revision || 0,
         title: turnResult.answer.split("\n").find((line) => /^#\s+/u.test(line.trim()))?.replace(/^#\s+/u, "").trim() || "",
         content: turnResult.answer,
@@ -724,7 +727,15 @@ async function handleWriterTurn(taskId: number, userId: number, payload: WriterT
         mode: turnResult.routing.renderMode,
         diagnostics: turnResult.diagnostics,
       }
-      const updated = await updateWriterLatestAssistantMessage(userId, payload.conversationId, turnResult.answer, responseMeta)
+      const updated = payload.pendingAssistantMessageId
+        ? await updateWriterAssistantMessageById(
+            userId,
+            payload.conversationId,
+            payload.pendingAssistantMessageId,
+            turnResult.answer,
+            responseMeta,
+          )
+        : await updateWriterLatestAssistantMessage(userId, payload.conversationId, turnResult.answer, responseMeta)
       if (!updated) {
         await appendWriterAssistantMessage({
           userId,
@@ -2318,15 +2329,23 @@ function launchClaimedTask(taskId: number, workerId: string) {
 
       if (task?.parsedPayload?.kind === "writer_turn") {
         const failedContent = `Request failed: ${primaryErrorMessage || "unknown_error"}`
-        const updated = await updateWriterLatestAssistantMessage(
-          task.userId,
-          task.parsedPayload.conversationId,
-          failedContent,
-          {
-            status: "failed",
-            imagesRequested: false,
-          },
-        ).catch(() => false)
+        const updated = task.parsedPayload.pendingAssistantMessageId
+          ? await updateWriterAssistantMessageById(
+              task.userId,
+              task.parsedPayload.conversationId,
+              task.parsedPayload.pendingAssistantMessageId,
+              failedContent,
+              { status: "failed", imagesRequested: false },
+            ).catch(() => false)
+          : await updateWriterLatestAssistantMessage(
+              task.userId,
+              task.parsedPayload.conversationId,
+              failedContent,
+              {
+                status: "failed",
+                imagesRequested: false,
+              },
+            ).catch(() => false)
         if (!updated) {
           await appendWriterAssistantMessage({
             userId: task.userId,

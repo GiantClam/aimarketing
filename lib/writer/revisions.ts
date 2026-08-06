@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm"
 
 import { db } from "@/lib/db"
+import { withDbRetry } from "@/lib/db/retry"
 import { writerConversations, writerMessages } from "@/lib/db/schema"
 import { getWriterConversation } from "@/lib/writer/repository"
 import type { WriterPlatform, WriterMode, WriterLanguage } from "@/lib/writer/config"
@@ -42,6 +43,7 @@ export async function getWriterRevisionState(userId: number, conversationId: str
 export async function persistWriterRevision(input: {
   userId: number
   conversationId: string
+  pendingAssistantMessageId?: string | null
   expectedRevision: number
   title: string
   content: string
@@ -58,7 +60,7 @@ export async function persistWriterRevision(input: {
 }) {
   const conversation = await getWriterConversation(input.userId, input.conversationId)
   if (!conversation) throw new Error("writer_conversation_not_found")
-  const result = await db.transaction(async (tx) => {
+  const result = await withDbRetry("persist-writer-revision", () => db.transaction(async (tx) => {
     const locked = await tx.execute(sql`
       SELECT active_revision, active_draft_message_id
       FROM "AI_MARKETING_writer_conversations"
@@ -77,16 +79,41 @@ export async function persistWriterRevision(input: {
     }
 
     const nextRevision = activeRevision + 1
-    const [message] = await tx.insert(writerMessages).values({
-      conversationId: conversation.id,
-      role: "assistant",
-      content: input.content,
-      diagnostics: input.diagnostics || null,
-      revision: nextRevision,
-      expectedBaseRevision: input.expectedRevision,
-      isActiveDraft: true,
-      createdAt: new Date(),
-    }).returning({ id: writerMessages.id })
+    const pendingMessageId = Number.parseInt(input.pendingAssistantMessageId || "", 10)
+    let message: { id: number } | undefined
+    if (Number.isFinite(pendingMessageId) && pendingMessageId > 0) {
+      const updated = await tx
+        .update(writerMessages)
+        .set({
+          content: input.content,
+          diagnostics: input.diagnostics || null,
+          revision: nextRevision,
+          expectedBaseRevision: input.expectedRevision,
+          isActiveDraft: true,
+        })
+        .where(
+          and(
+            eq(writerMessages.id, pendingMessageId),
+            eq(writerMessages.conversationId, conversation.id),
+            eq(writerMessages.role, "assistant"),
+          ),
+        )
+        .returning({ id: writerMessages.id })
+      message = updated[0]
+    }
+    if (!message) {
+      const inserted = await tx.insert(writerMessages).values({
+        conversationId: conversation.id,
+        role: "assistant",
+        content: input.content,
+        diagnostics: input.diagnostics || null,
+        revision: nextRevision,
+        expectedBaseRevision: input.expectedRevision,
+        isActiveDraft: true,
+        createdAt: new Date(),
+      }).returning({ id: writerMessages.id })
+      message = inserted[0]
+    }
     await tx.update(writerConversations).set({
       activeRevision: nextRevision,
       activeDraftMessageId: message.id,
@@ -103,7 +130,7 @@ export async function persistWriterRevision(input: {
       updatedAt: new Date(),
     }).where(and(eq(writerConversations.id, conversation.id), eq(writerConversations.activeRevision, input.expectedRevision)))
     return { revision: nextRevision, messageId: message.id }
-  })
+  }))
   return result
 }
 

@@ -30,27 +30,43 @@ export const reconcilePendingWriterMessages = <T extends PendingWriterMessageLik
   currentMessages: T[],
   pending: PendingWriterMessageReconciliation,
 ) => {
-  const prompt = normalizeMessageContent(pending.prompt)
   const generatingContent = normalizeMessageContent(pending.generatingContent)
-  if (!prompt) return serverMessages
+  const requestedPrompt = normalizeMessageContent(pending.prompt)
 
-  const currentUserIndex = pending.optimisticUserMessageId
+  const explicitCurrentUserIndex = pending.optimisticUserMessageId
     ? currentMessages.findIndex((message) => message.id === pending.optimisticUserMessageId && message.role === "user")
-    : findLastIndex(
-        currentMessages,
-        (message) => message.role === "user" && normalizeMessageContent(message.content) === prompt,
-      )
-  const currentAssistant =
+    : -1
+  const explicitCurrentAssistant =
     (pending.optimisticAssistantMessageId
       ? currentMessages.find(
           (message) => message.id === pending.optimisticAssistantMessageId && message.role === "assistant",
         )
       : null) ||
-    (currentUserIndex >= 0 && currentMessages[currentUserIndex + 1]?.role === "assistant"
-      ? currentMessages[currentUserIndex + 1]
-      : null)
+    null
 
-  if (!currentAssistant || normalizeMessageContent(currentAssistant.content) !== generatingContent) {
+  const inferredAssistantIndex = findLastIndex(
+    currentMessages,
+    (message, index) =>
+      message.role === "assistant" &&
+      normalizeMessageContent(message.content) === generatingContent &&
+      currentMessages[index - 1]?.role === "user",
+  )
+  const currentAssistantIndex = explicitCurrentAssistant
+    ? currentMessages.findIndex((message) => message.id === explicitCurrentAssistant.id)
+    : inferredAssistantIndex
+  const currentAssistant = explicitCurrentAssistant || currentMessages[currentAssistantIndex] || null
+  const currentUserIndex =
+    explicitCurrentUserIndex >= 0
+      ? explicitCurrentUserIndex
+      : currentAssistantIndex > 0 && currentMessages[currentAssistantIndex - 1]?.role === "user"
+        ? currentAssistantIndex - 1
+        : findLastIndex(
+            currentMessages,
+            (message) => message.role === "user" && normalizeMessageContent(message.content) === requestedPrompt,
+          )
+  const prompt = requestedPrompt || (currentUserIndex >= 0 ? normalizeMessageContent(currentMessages[currentUserIndex].content) : "")
+
+  if (!prompt || !currentAssistant || normalizeMessageContent(currentAssistant.content) !== generatingContent) {
     return serverMessages
   }
 

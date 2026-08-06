@@ -43,3 +43,31 @@ test("keeps the optimistic turn when the server has not persisted it yet", () =>
 
   assert.deepEqual(reconcilePendingWriterMessages(current.slice(0, 2), current, pending), current)
 })
+
+test("infers the pending prompt before the task store entry exists", () => {
+  const current = [
+    message("user_old", "user", "之前的请求"),
+    message("assistant_old", "assistant", "之前的回复"),
+    message("writer_user_new", "user", pending.prompt),
+    message("writer_assistant_new", "assistant", pending.generatingContent),
+  ]
+  const server = [
+    message("user_old", "user", "之前的请求"),
+    message("assistant_old", "assistant", "之前的回复"),
+    message("user_540", "user", pending.prompt),
+    message("assistant_540", "assistant", "上一条错误回复"),
+  ]
+
+  assert.deepEqual(
+    reconcilePendingWriterMessages(server, current, {
+      prompt: "",
+      generatingContent: pending.generatingContent,
+    }),
+    [
+      message("user_old", "user", "之前的请求"),
+      message("assistant_old", "assistant", "之前的回复"),
+      message("user_540", "user", pending.prompt),
+      message("writer_assistant_new", "assistant", pending.generatingContent),
+    ],
+  )
+})

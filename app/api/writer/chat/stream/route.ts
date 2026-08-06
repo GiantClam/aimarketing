@@ -12,7 +12,12 @@ import {
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 import { loadWriterSkillRunner } from "@/lib/skills/runtime/registry"
 import { normalizeWriterLanguage, normalizeWriterMode, normalizeWriterPlatform } from "@/lib/writer/config"
-import { appendWriterAssistantMessage, listWriterMessages, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
+import {
+  appendWriterAssistantMessage,
+  listWriterMessages,
+  updateWriterAssistantMessageById,
+  updateWriterLatestAssistantMessage,
+} from "@/lib/writer/repository"
 import { buildWriterRuntimeContext } from "@/lib/writer/runtime/session-runtime"
 import { getWriterRevisionState, persistWriterRevision } from "@/lib/writer/revisions"
 import type { WriterConversationStatus, WriterPreloadedBrief } from "@/lib/writer/types"
@@ -294,6 +299,7 @@ export async function POST(req: NextRequest) {
             const persistedRevision = await persistWriterRevision({
               userId: auth.user.id,
               conversationId: pending.conversationId,
+              pendingAssistantMessageId: pending.assistantMessageId,
               expectedRevision: writerContext.activeDraft?.revision || 0,
               title: turnResult.answer.split("\n").find((line) => /^#\s+/u.test(line.trim()))?.replace(/^#\s+/u, "").trim() || "",
               content: turnResult.answer,
@@ -322,15 +328,24 @@ export async function POST(req: NextRequest) {
               })
             }
           } else {
-            const status = turnResult.outcome === "needs_clarification" ? "drafting" : "text_ready"
-            const updated = await updateWriterLatestAssistantMessage(auth.user.id, pending.conversationId, turnResult.answer, {
+            const status: WriterConversationStatus = turnResult.outcome === "needs_clarification" ? "drafting" : "text_ready"
+            const responseMeta = {
               status,
               imagesRequested: false,
               language,
               platform: turnResult.routing.renderPlatform,
               mode: turnResult.routing.renderMode,
               diagnostics: turnResult.diagnostics,
-            })
+            }
+            const updated = pending.assistantMessageId
+              ? await updateWriterAssistantMessageById(
+                  auth.user.id,
+                  pending.conversationId,
+                  pending.assistantMessageId,
+                  turnResult.answer,
+                  responseMeta,
+                )
+              : await updateWriterLatestAssistantMessage(auth.user.id, pending.conversationId, turnResult.answer, responseMeta)
             if (!updated) {
               await appendWriterAssistantMessage({
                 userId: auth.user.id,
@@ -421,10 +436,18 @@ export async function POST(req: NextRequest) {
             })
           }
           const failedMessage = `Request failed: ${error instanceof Error ? error.message : "writer_stream_failed"}`
-          const updated = await updateWriterLatestAssistantMessage(auth.user.id, pending.conversationId, failedMessage, {
-            status: "failed",
-            imagesRequested: false,
-          }).catch(() => false)
+          const updated = pending.assistantMessageId
+            ? await updateWriterAssistantMessageById(
+                auth.user.id,
+                pending.conversationId,
+                pending.assistantMessageId,
+                failedMessage,
+                { status: "failed", imagesRequested: false },
+              ).catch(() => false)
+            : await updateWriterLatestAssistantMessage(auth.user.id, pending.conversationId, failedMessage, {
+                status: "failed",
+                imagesRequested: false,
+              }).catch(() => false)
           if (!updated) {
             await appendWriterAssistantMessage({
               userId: auth.user.id,

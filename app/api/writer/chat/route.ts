@@ -112,6 +112,7 @@ export async function POST(req: NextRequest) {
         agentType: "writer",
         enterpriseId: auth.user.enterpriseId,
         conversationId: persisted.conversationId,
+        pendingAssistantMessageId: persisted.assistantMessageId,
         query: userQuery,
         brief: preloadedBrief,
         platform,

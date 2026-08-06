@@ -745,17 +745,36 @@ export async function appendWriterUserTurn(input: {
     status: input.status || "drafting",
     imagesRequested: Boolean(input.imagesRequested),
   })
-  await withDbRetry("insert-writer-user-turn", () =>
-    db.insert(writerMessages).values({
-      conversationId: target.conversationId,
-      role: "user",
-      content: input.query,
-      createdAt: new Date(),
-    }),
-  )
+  const insertedMessages = await withDbRetry("insert-writer-pending-turn", () => {
+    const createdAt = new Date()
+    return db
+      .insert(writerMessages)
+      .values([
+        {
+          conversationId: target.conversationId,
+          role: "user",
+          content: input.query,
+          createdAt,
+        },
+        {
+          conversationId: target.conversationId,
+          role: "assistant",
+          // Reserve an assistant row for this turn so history cannot pair the
+          // previous assistant answer with the newly inserted user prompt.
+          content: "",
+          createdAt,
+        },
+      ])
+      .returning({ id: writerMessages.id, role: writerMessages.role })
+  })
   const persistedConversation = await getWriterConversation(input.userId, target.targetConversationId)
   if (!persistedConversation) throw new Error("writer_conversation_persist_failed")
-  return { conversationId: target.targetConversationId, conversation: mapConversation(persistedConversation) }
+  const assistantMessage = insertedMessages.find((message) => message.role === "assistant")
+  return {
+    conversationId: target.targetConversationId,
+    assistantMessageId: assistantMessage ? String(assistantMessage.id) : null,
+    conversation: mapConversation(persistedConversation),
+  }
 }
 
 export async function appendWriterAssistantMessage(input: {

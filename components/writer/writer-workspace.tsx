@@ -1736,12 +1736,12 @@ export function WriterWorkspace({
         }
 
         const pendingTask = findWriterPendingTask(conversationId)
-        if (pendingTask?.taskType === "writer_text") {
+        if (pendingTask?.taskType === "writer_text" || writerRequestInFlightRef.current) {
           const reconciledMessages = reconcilePendingWriterMessages(nextMessages, current, {
-            prompt: pendingTask.prompt || "",
+            prompt: pendingTask?.prompt || "",
             generatingContent: writerCopy.generatingDraft,
-            optimisticUserMessageId: pendingTask.optimisticUserMessageId,
-            optimisticAssistantMessageId: pendingTask.optimisticAssistantMessageId,
+            optimisticUserMessageId: pendingTask?.optimisticUserMessageId,
+            optimisticAssistantMessageId: pendingTask?.optimisticAssistantMessageId,
           })
           if (reconciledMessages !== nextMessages) return reconciledMessages
         }
@@ -1760,7 +1760,7 @@ export function WriterWorkspace({
       if (reset && !meta?.draft) {
         const currentMessages = messagesRef.current
         const pendingTask = findWriterPendingTask(conversationId)
-        if (pendingTask?.taskType === "writer_text") {
+        if (pendingTask?.taskType === "writer_text" || writerRequestInFlightRef.current) {
           setDraft("")
         } else {
           const resolvedMessages =

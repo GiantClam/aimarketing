@@ -42,11 +42,85 @@ function getDemoCreditFloor() {
   return getDefaultFreeTrialCredits()
 }
 
+async function readExistingDefaultFreeBillingState(
+  user: AuthUserPayload,
+  freePlan: NonNullable<ReturnType<typeof getBillingPlan>>,
+): Promise<DefaultFreeBillingState | null> {
+  const [subscriptionResult, accountResult] = await Promise.all([
+    pool.query(
+      `
+        SELECT id, current_period_start, current_period_end
+        FROM "AI_MARKETING_user_subscriptions"
+        WHERE
+          ($1::integer IS NOT NULL AND enterprise_id = $1)
+          OR ($1::integer IS NULL AND subscribed_by_user_id = $2)
+        ORDER BY updated_at DESC NULLS LAST, id DESC
+        LIMIT 1
+      `,
+      [user.enterpriseId, user.id],
+    ),
+    pool.query(
+      `
+        SELECT id, balance, reserved_balance
+        FROM "AI_MARKETING_credit_accounts"
+        WHERE
+          ($1::integer IS NOT NULL AND enterprise_id = $1)
+          OR ($1::integer IS NULL AND owner_user_id = $2)
+        ORDER BY updated_at DESC NULLS LAST, id DESC
+        LIMIT 1
+      `,
+      [user.enterpriseId, user.id],
+    ),
+  ])
+
+  const subscriptionRow = subscriptionResult.rows[0] || null
+  const accountRow = accountResult.rows[0] || null
+  if (!subscriptionRow || !accountRow) return null
+
+  if (freePlan.trialCredits > 0) {
+    const grantResult = await pool.query(
+      `
+        SELECT id
+        FROM "AI_MARKETING_credit_ledger"
+        WHERE credit_account_id = $1 AND idempotency_key = $2
+        LIMIT 1
+      `,
+      [accountRow.id, `free-trial:${user.enterpriseId || `user-${user.id}`}`],
+    )
+    if (!grantResult.rows[0]) return null
+  }
+
+  const balance = readNumber(accountRow.balance)
+  const reservedBalance = readNumber(accountRow.reserved_balance)
+  return {
+    subscription: {
+      id: Number(subscriptionRow.id || 0),
+      planCode: "free",
+      status: "active",
+      currentPeriodStart: toIsoOrNull(subscriptionRow.current_period_start),
+      currentPeriodEnd: toIsoOrNull(subscriptionRow.current_period_end),
+      cancelAtPeriodEnd: false,
+    },
+    creditAccount: {
+      id: Number(accountRow.id),
+      balance,
+      reservedBalance,
+      availableCredits: Math.max(0, balance - reservedBalance),
+    },
+  }
+}
+
 export async function ensureDefaultFreeBillingForUser(user: AuthUserPayload): Promise<DefaultFreeBillingState> {
   const freePlan = getBillingPlan(FREE_PLAN_CODE)
   if (!freePlan) {
     throw new Error("free_billing_plan_missing")
   }
+
+  // Established accounts do not need to lock subscription and credit rows on
+  // every request. Keep the transactional path for first-time provisioning or
+  // inconsistent data, but use non-locking reads for the normal path.
+  const existingState = await readExistingDefaultFreeBillingState(user, freePlan)
+  if (existingState) return existingState
 
   const client = await pool.connect()
   let transactionClosed = false
@@ -270,7 +344,7 @@ export async function ensureDemoBillingCreditFloor(user: AuthUserPayload): Promi
 
     const topUpAmount = minimumAvailableCredits - availableCredits
     const nextBalance = balance + topUpAmount
-    const topUpIdempotencyKey = `demo-floor:${user.enterpriseId || `user-${user.id}`}:${minimumAvailableCredits}:${Date.now()}`
+    const topUpIdempotencyKey = `demo-floor:${user.enterpriseId || `user-${user.id}`}:${minimumAvailableCredits}`
 
     await client.query(
       `
