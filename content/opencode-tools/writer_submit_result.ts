@@ -26,34 +26,36 @@ const result = z.object({
 })
 
 type WriterResultRecord = Record<string, unknown>
+type WriterToolContext = { directory?: string }
 
-function runtimeDir() {
-  let current = process.cwd()
+function runtimeDir(context?: WriterToolContext) {
+  const contextDirectory = typeof context?.directory === "string" ? context.directory.trim() : ""
+  let current = contextDirectory || process.cwd()
   for (let depth = 0; depth < 5; depth += 1) {
     if (existsSync(join(current, ".runtime", "writer-context.json"))) return join(current, ".runtime")
     const parent = dirname(current)
     if (parent === current) break
     current = parent
   }
-  return join(process.cwd(), ".runtime")
+  return join(contextDirectory || process.cwd(), ".runtime")
 }
 
 function record(value: unknown): WriterResultRecord | null {
   return value && typeof value === "object" ? value as WriterResultRecord : null
 }
 
-function currentRevision() {
+function currentRevision(context?: WriterToolContext) {
   try {
-    const context = JSON.parse(readFileSync(join(runtimeDir(), "writer-context.json"), "utf8")) as WriterResultRecord
-    return typeof context.activeRevision === "number" && Number.isInteger(context.activeRevision) && context.activeRevision >= 0
-      ? context.activeRevision
+    const runtimeContext = JSON.parse(readFileSync(join(runtimeDir(context), "writer-context.json"), "utf8")) as WriterResultRecord
+    return typeof runtimeContext.activeRevision === "number" && Number.isInteger(runtimeContext.activeRevision) && runtimeContext.activeRevision >= 0
+      ? runtimeContext.activeRevision
       : 0
   } catch {
     return 0
   }
 }
 
-function normalizeResult(args: unknown) {
+function normalizeResult(args: unknown, context?: WriterToolContext) {
   const input = record(args)
   if (!input) return args
   if (input.schemaVersion === 1 && (typeof input.outcome === "string" || input.outcome === undefined) && (typeof input.operation === "string" || input.operation === undefined)) {
@@ -66,7 +68,7 @@ function normalizeResult(args: unknown) {
       platform: typeof input.platform === "string" && input.platform ? input.platform : "公众号",
       userMessage: typeof input.userMessage === "string" && input.userMessage ? input.userMessage : "draft_ready",
       draft: draft
-        ? { ...draft, title: typeof draft.title === "string" ? draft.title : "", content: typeof draft.content === "string" ? draft.content : (typeof draft.body === "string" ? draft.body : ""), baseRevision: typeof draft.baseRevision === "number" ? draft.baseRevision : currentRevision() }
+        ? { ...draft, title: typeof draft.title === "string" ? draft.title : "", content: typeof draft.content === "string" ? draft.content : (typeof draft.body === "string" ? draft.body : ""), baseRevision: typeof draft.baseRevision === "number" ? draft.baseRevision : currentRevision(context) }
         : null,
       research: record(input.research) || { requested: false, completed: false, sourceUrls: [] },
       assetIntents: Array.isArray(input.assetIntents) ? input.assetIntents.map((value, index) => {
@@ -99,7 +101,7 @@ function normalizeResult(args: unknown) {
     ? draftRecord.baseRevision
     : typeof legacyOperation?.baseRevision === "number"
       ? legacyOperation.baseRevision
-      : currentRevision()
+      : currentRevision(context)
   const legacyResearch = record(input.research)
   const legacySources = Array.isArray(legacyResearch?.sources)
     ? legacyResearch.sources.filter((value): value is string => typeof value === "string")
@@ -145,9 +147,9 @@ export default {
     research: z.unknown().optional(),
     assetIntents: z.array(z.unknown()).optional(),
   },
-  async execute(args: unknown) {
-    const parsed = result.parse(normalizeResult(args))
-    const outputDir = runtimeDir()
+  async execute(args: unknown, context?: WriterToolContext) {
+    const parsed = result.parse(normalizeResult(args, context))
+    const outputDir = runtimeDir(context)
     mkdirSync(outputDir, { recursive: true })
     const outputPath = join(outputDir, "writer-submit-result.json")
     if (existsSync(outputPath)) throw new Error("writer_result_already_submitted")
