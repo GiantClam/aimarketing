@@ -88,6 +88,7 @@ import {
   resolveWriterProgressLocale,
   type WriterProgressLocale,
 } from "@/lib/writer/progress-events"
+import { reconcilePendingWriterMessages } from "@/lib/writer/message-reconciliation"
 import {
   emitWriterRefresh,
   getWriterConversationCache,
@@ -1651,14 +1652,33 @@ export function WriterWorkspace({
     const applyCachedConversation = () => {
       if (!cachedConversation) return false
 
-      historyEntriesRef.current = cachedConversation.entries
       const cachedMessages = mapHistoryEntriesToMessages(cachedConversation.entries, writerCopy.assistantName)
-      setMessages(cachedMessages)
+      const pendingTask = findWriterPendingTask(conversationId)
+      const currentMessages = messagesRef.current
+      const preservePendingUi =
+        writerRequestInFlightRef.current || pendingTask?.taskType === "writer_text"
+      const resolvedMessages =
+        preservePendingUi && hasMessagesForWriterConversation(currentMessages, conversationId)
+          ? currentMessages
+          : pendingTask?.taskType === "writer_text"
+          ? reconcilePendingWriterMessages(cachedMessages, currentMessages, {
+              prompt: pendingTask.prompt || "",
+              generatingContent: writerCopy.generatingDraft,
+              optimisticUserMessageId: pendingTask.optimisticUserMessageId,
+              optimisticAssistantMessageId: pendingTask.optimisticAssistantMessageId,
+            })
+          : cachedMessages
+      const hasNewerOptimisticHistory =
+        resolvedMessages !== cachedMessages && historyEntriesRef.current.length > cachedConversation.entries.length
+      if (!hasNewerOptimisticHistory) {
+        historyEntriesRef.current = cachedConversation.entries
+      }
+      setMessages(resolvedMessages)
       setHistoryCursor(cachedConversation.historyCursor || null)
       setHasMoreHistory(Boolean(cachedConversation.hasMoreHistory))
-      setLatestDiagnostics(getLatestHistoryDiagnostics(cachedConversation.entries))
+      setLatestDiagnostics(preservePendingUi ? null : getLatestHistoryDiagnostics(cachedConversation.entries))
 
-      if (cachedConversation.conversation) {
+      if (cachedConversation.conversation && !preservePendingUi) {
         const nextPlatform = normalizeWriterPlatform(cachedConversation.conversation.platform)
         const nextMode = normalizeWriterMode(nextPlatform, cachedConversation.conversation.mode)
         const nextLanguage = normalizeWriterLanguage(cachedConversation.conversation.language)
@@ -1672,8 +1692,12 @@ export function WriterWorkspace({
         if (!meta?.draft) {
           setDraft(inferFinalDraft(cachedMessages, nextStatus))
         }
-      } else if (!meta?.draft) {
+      } else if (!preservePendingUi && !meta?.draft) {
         setDraft(inferFinalDraft(cachedMessages, meta?.status || "drafting"))
+      } else if (preservePendingUi) {
+        setDraft("")
+        setImagesRequested(false)
+        setConversationStatus("drafting")
       }
 
       shouldScrollToBottomRef.current = true
@@ -1711,6 +1735,17 @@ export function WriterWorkspace({
           return [...nextMessages, ...current]
         }
 
+        const pendingTask = findWriterPendingTask(conversationId)
+        if (pendingTask?.taskType === "writer_text") {
+          const reconciledMessages = reconcilePendingWriterMessages(nextMessages, current, {
+            prompt: pendingTask.prompt || "",
+            generatingContent: writerCopy.generatingDraft,
+            optimisticUserMessageId: pendingTask.optimisticUserMessageId,
+            optimisticAssistantMessageId: pendingTask.optimisticAssistantMessageId,
+          })
+          if (reconciledMessages !== nextMessages) return reconciledMessages
+        }
+
         if (options.background) {
           if (areWriterMessageListsEquivalent(current, nextMessages)) {
             return current
@@ -1724,13 +1759,18 @@ export function WriterWorkspace({
       })
       if (reset && !meta?.draft) {
         const currentMessages = messagesRef.current
-        const resolvedMessages =
-          options.background &&
-          (areWriterMessageListsEquivalent(currentMessages, nextMessages) ||
-            isWriterMessageListPrefix(nextMessages, currentMessages))
-            ? currentMessages
-            : nextMessages
-        setDraft(inferFinalDraft(resolvedMessages, data.conversation?.status || "drafting"))
+        const pendingTask = findWriterPendingTask(conversationId)
+        if (pendingTask?.taskType === "writer_text") {
+          setDraft("")
+        } else {
+          const resolvedMessages =
+            options.background &&
+            (areWriterMessageListsEquivalent(currentMessages, nextMessages) ||
+              isWriterMessageListPrefix(nextMessages, currentMessages))
+              ? currentMessages
+              : nextMessages
+          setDraft(inferFinalDraft(resolvedMessages, data.conversation?.status || "drafting"))
+        }
       }
       saveWriterConversationCache(conversationId, {
         entries: nextEntries,
@@ -1802,7 +1842,14 @@ export function WriterWorkspace({
       cancelled = true
       stopRecovery()
     }
-  }, [conversationId, queryClient, runSessionRecoveryBootstrap, writerCopy.assistantName, writerCopy.conversationLoadFailed])
+  }, [
+    conversationId,
+    queryClient,
+    runSessionRecoveryBootstrap,
+    writerCopy.assistantName,
+    writerCopy.conversationLoadFailed,
+    writerCopy.generatingDraft,
+  ])
 
   const loadOlderMessages = async () => {
     if (!conversationId || !historyCursor || isHistoryLoading) return
@@ -1869,7 +1916,7 @@ export function WriterWorkspace({
     let cancelled = false
     setIsLoading(true)
 
-    const refreshConversation = async () => {
+    const refreshConversation = async (options?: { preservePending?: boolean }) => {
       const cachedConversation = getWriterConversationCache(conversationId)
       const turnLimit = Math.max(WRITER_INITIAL_TURN_LIMIT, cachedConversation?.loadedTurnCount || 0)
       await invalidateWriterConversationQueries(queryClient, conversationId)
@@ -1882,7 +1929,16 @@ export function WriterWorkspace({
       const nextMessages = mapHistoryEntriesToMessages(data.data || [], writerCopy.assistantName)
       const nextDiagnostics = getLatestHistoryDiagnostics(data.data || [])
       historyEntriesRef.current = data.data || []
-      setMessages(nextMessages)
+      setMessages((current) =>
+        options?.preservePending !== false && pendingTask.taskType === "writer_text"
+          ? reconcilePendingWriterMessages(nextMessages, current, {
+              prompt: pendingTask.prompt || "",
+              generatingContent: writerCopy.generatingDraft,
+              optimisticUserMessageId: pendingTask.optimisticUserMessageId,
+              optimisticAssistantMessageId: pendingTask.optimisticAssistantMessageId,
+            })
+          : nextMessages,
+      )
       setLatestDiagnostics(nextDiagnostics)
       setHistoryCursor(data.next_cursor || null)
       setHasMoreHistory(Boolean(data.has_more))
@@ -2028,7 +2084,7 @@ export function WriterWorkspace({
               })
               setPendingTaskRefreshKey(Date.now())
             }
-            const conversationStatusAfterRefresh = await refreshConversation()
+            const conversationStatusAfterRefresh = await refreshConversation({ preservePending: false })
             removePendingAssistantTask(pendingTask.taskId)
             if (!cancelled) {
               if (conversationStatusAfterRefresh !== "drafting") {
@@ -2042,7 +2098,7 @@ export function WriterWorkspace({
           }
 
           if (status === "failed") {
-            await refreshConversation().catch(() => null)
+            await refreshConversation({ preservePending: false }).catch(() => null)
             removePendingAssistantTask(pendingTask.taskId)
             if (!cancelled) {
               setConversationStatus("failed")
@@ -2073,6 +2129,7 @@ export function WriterWorkspace({
     queryClient,
     taskLocale,
     writerCopy.assistantName,
+    writerCopy.generatingDraft,
     writerCopy.imageGenerationFailed,
   ])
 
@@ -2259,6 +2316,7 @@ export function WriterWorkspace({
     setIsLoading(true)
     setPendingTaskEvents([])
     setRecentTaskEvents([])
+    setDraft("")
     setImagesRequested(false)
     setConversationStatus("drafting")
     setLatestDiagnostics(null)
@@ -2365,6 +2423,8 @@ export function WriterWorkspace({
         conversationId: durableConversationId,
         prompt: query,
         taskType: "writer_text",
+        optimisticUserMessageId: userMessageId,
+        optimisticAssistantMessageId: assistantId,
         createdAt: Date.now(),
       })
       taskAccepted = true
