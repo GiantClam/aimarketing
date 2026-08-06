@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
-import writerSubmitResult from "../../../cloudflare/opencode-runner/runtime/tools/writer_submit_result"
+import writerSubmitResult from "../../../../content/opencode-tools/writer_submit_result"
 
 test("writer_submit_result writes to the OpenCode session directory", async () => {
   const sessionDir = await mkdtemp(join(tmpdir(), "writer-submit-result-"))

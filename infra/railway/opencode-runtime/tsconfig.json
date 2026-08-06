@@ -6,5 +6,6 @@
     "moduleResolution": "NodeNext",
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "../../../lib/ai-runtime/contracts.ts", "../../../lib/ai-runtime/opencode-prompt.ts", "../../../lib/ai-runtime/opencode-protocol.ts"]
+  "include": ["src/**/*.ts", "../../../lib/ai-runtime/contracts.ts", "../../../lib/ai-runtime/opencode-prompt.ts", "../../../lib/ai-runtime/opencode-protocol.ts"],
+  "exclude": ["src/writer-submit-result-tool.test.ts"]
 }
