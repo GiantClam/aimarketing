@@ -15,6 +15,8 @@ export type PendingAssistantTask = {
   prompt?: string
   taskType?: string | null
   expectedRevision?: number | null
+  optimisticUserMessageId?: string | null
+  optimisticAssistantMessageId?: string | null
   createdAt: number
 }
 
