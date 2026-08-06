@@ -157,6 +157,25 @@ test("rejects durable Writer context for unrelated agents", () => {
   }), /writer_context_agent_mismatch/)
 })
 
+test("keeps the outer runtime hash compatible across Writer context revisions", () => {
+  const build = (writerContext: unknown) => buildAgentRuntimeInput({
+    runId: "run-writer-context-hash",
+    conversationId: "writer-context-hash",
+    enterpriseId: null,
+    userId: 2,
+    agentId: "writer",
+    writerPhase: "draft",
+    systemPrompt: "system",
+    messages: [{ role: "user", content: "continue the article" }],
+    writerContext: writerContext as never,
+  })
+
+  assert.equal(
+    build({ contextHash: "writer-context-v1" }).contextHash,
+    build({ contextHash: "writer-context-v2" }).contextHash,
+  )
+})
+
 test("bounds context and keeps the newest artifact summaries first", () => {
   const input = buildAgentRuntimeInput({
     runId: "run-2",

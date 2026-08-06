@@ -230,12 +230,14 @@ export function buildAgentRuntimeInput(input: {
   if (!fits()) throw new AgentRuntimeInputTooLargeError()
 
   const finalMessages = [...selected, currentUserMessage]
+  // Keep this envelope stable across app/runtime deployments. Writer's durable
+  // context has its own hash; including that nested value here would make an
+  // app update incompatible with an older Railway runtime image.
   const contextHash = createHash("sha256").update(JSON.stringify({
     revision: input.conversationRevision ?? null,
     messages: finalMessages.slice(-20),
     summary: input.conversationSummary || null,
     artifactRefs: artifacts,
-    writerContext: input.writerContext?.contextHash || null,
   })).digest("hex")
 
   return {

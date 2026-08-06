@@ -518,12 +518,13 @@ async function executeCompatibilityJob(job: CompatibilityJob, request: Record<st
 }
 
 function contextHashForInput(input: AgentRuntimeInput | AgentRuntimeInputV2) {
+  // This is the legacy-compatible outer envelope. Writer's durable context
+  // hash is carried separately and must not change the transport hash.
   const computed = createHash("sha256").update(JSON.stringify({
     revision: input.conversationRevision ?? null,
     messages: input.messages.slice(-20),
     summary: null,
     artifactRefs: input.artifactContext,
-    writerContext: input.writerContext?.contextHash || null,
   })).digest("hex")
   if (input.contextHash && input.contextHash !== computed) throw new Error("runtime_context_hash_mismatch")
   return computed
