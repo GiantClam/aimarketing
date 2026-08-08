@@ -95,9 +95,11 @@ export async function claimTaskExecution(taskId: number, workerId: string, lease
           OR (
             status = 'running'
             AND (
-              lease_expires_at IS NULL
-              OR lease_expires_at <= NOW()
-              OR updated_at <= NOW() - ${msToPostgresInterval(staleAfterMs)}
+              lease_expires_at <= NOW()
+              OR (
+                lease_expires_at IS NULL
+                AND updated_at <= NOW() - ${msToPostgresInterval(staleAfterMs)}
+              )
             )
           )
         )

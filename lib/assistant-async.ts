@@ -259,8 +259,11 @@ const ADVISOR_UPSTREAM_RETRY_BASE_DELAY_MS = parseTimeoutMs(
   200,
   20_000,
 )
-const ASSISTANT_TASK_LEASE_MS = 30_000
-const ASSISTANT_TASK_HEARTBEAT_MS = 10_000
+// Writer/OpenCode turns can spend several minutes without a database-visible
+// progress event. Keep the lease longer than that silent window so status
+// polling cannot reclaim the same task and submit a second prompt.
+const ASSISTANT_TASK_LEASE_MS = parseTimeoutMs(process.env.ASSISTANT_TASK_LEASE_MS, 10 * 60_000, 60_000, 600_000)
+const ASSISTANT_TASK_HEARTBEAT_MS = 30_000
 const ASSISTANT_TASK_PROGRESS_LIMIT = 40
 const ASSISTANT_TASK_PROGRESS_PERSIST_INTERVAL_MS = 900
 const AI_ENTRY_PPT_PREVIEW_RETRY_ATTEMPTS = parseIntWithRange(
@@ -2434,6 +2437,14 @@ async function recoverAssistantTask(
     }
     const waitResult = await waitForRunningTask(task.id, options.completionTimeoutMs)
     return { task, launched: false, waited: waitResult.waited, timedOut: waitResult.timedOut }
+  }
+
+  // A task may be running on another application instance. An active lease
+  // is authoritative even when its updated_at timestamp is old; reclaiming it
+  // here would submit a duplicate prompt to the same persistent OpenCode
+  // session and can overwrite the first result.
+  if (hasActiveTaskLease(task)) {
+    return { task, launched: false, waited: false, timedOut: false }
   }
 
   if (task.status === "pending") {

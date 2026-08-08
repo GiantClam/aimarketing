@@ -346,6 +346,47 @@ function buildAdvisorTask(input: {
   }
 }
 
+function buildWriterTask(input: {
+  id: number
+  updatedAtMsAgo: number
+  leaseExpiresInMs?: number | null
+}) {
+  const now = Date.now()
+  const leaseExpiresAt =
+    typeof input.leaseExpiresInMs === "number" ? new Date(now + input.leaseExpiresInMs) : null
+
+  return {
+    id: input.id,
+    userId: 60,
+    connectionId: null,
+    workflowName: "writer_turn",
+    webhookPath: "assistant/async",
+    executionId: null,
+    payload: JSON.stringify({
+      kind: "writer_turn",
+      userId: 60,
+      conversationId: "writer-c-1",
+      pendingAssistantMessageId: "writer-message-1",
+      query: "继续修改文章",
+      platform: "wechat",
+      mode: "article",
+      language: "zh",
+      history: [],
+      conversationStatus: "text_ready",
+      writerContext: null,
+    }),
+    result: null,
+    status: "running",
+    workerId: "w-1",
+    attempts: 1,
+    startedAt: new Date(now - input.updatedAtMsAgo - 1_000),
+    leaseExpiresAt,
+    relatedStorageKey: null,
+    createdAt: new Date(now - input.updatedAtMsAgo - 2_000),
+    updatedAt: new Date(now - input.updatedAtMsAgo),
+  } satisfies TaskRow
+}
+
 function buildAiEntryPptPreviewTask(input: {
   id: number
   status: "pending" | "running" | "success" | "failed"
@@ -429,6 +470,19 @@ test("does not fail advisor task as stale while lease is still active", async ()
     }),
   )
   claimResultById.set(taskId, null)
+
+  const result = await runAssistantTaskRecoveryPass({ limit: 1 })
+
+  assert.equal(result.inspected, 1)
+  assert.equal(result.failed, 0)
+  assert.equal(result.launched, 0)
+  assert.equal(updateStatusCalls.length, 0)
+})
+
+test("does not reclaim a Writer task while its lease is still active", async () => {
+  const taskId = 1005
+  tasksById.set(taskId, buildWriterTask({ id: taskId, updatedAtMsAgo: 70_000, leaseExpiresInMs: 120_000 }))
+  claimResultById.set(taskId, { id: taskId })
 
   const result = await runAssistantTaskRecoveryPass({ limit: 1 })
 
