@@ -4,6 +4,7 @@ import { createRequire } from "node:module"
 import test from "node:test"
 
 import type { WriterHistoryEntry, WriterTurnDiagnostics } from "./types"
+import type { WriterSubmitResult } from "./writer-result"
 
 const require = createRequire(import.meta.url)
 const nodeModule = require("node:module") as {
@@ -48,10 +49,28 @@ let writerTestHooks: {
     languageLabel: string,
     options?: { ensureCoverPlaceholder?: boolean; preserveTitle?: boolean },
   ) => string
+  hasWriterResponse: (answer: string, writerResult: WriterSubmitResult | null) => boolean
 }
 
 test.before(async () => {
   ;({ runWriterSkillsTurnWithRuntime, __writerTestHooks: writerTestHooks } = await import("./skills"))
+})
+
+test("accepts a structured Writer result when the tool-only turn has no text delta", () => {
+  const structuredResult = {
+    schemaVersion: 1 as const,
+    outcome: "draft_ready" as const,
+    operation: "revise" as const,
+    platform: "wechat",
+    userMessage: "已完成修改。",
+    draft: { title: "新标题", content: "正文", baseRevision: 1 },
+    research: { requested: false, completed: false, sourceUrls: [] },
+    assetIntents: [],
+  } satisfies WriterSubmitResult
+  const clarificationResult = { ...structuredResult, outcome: "needs_clarification" as const, draft: null }
+  assert.equal(writerTestHooks.hasWriterResponse("", structuredResult), true)
+  assert.equal(writerTestHooks.hasWriterResponse("   ", clarificationResult), true)
+  assert.equal(writerTestHooks.hasWriterResponse("", null), false)
 })
 
 const baseDiagnostics: WriterTurnDiagnostics = {

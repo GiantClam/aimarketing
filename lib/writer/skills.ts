@@ -512,6 +512,12 @@ function combineWriterRuntimeUsage(...values: Array<WriterRuntimeUsage | null | 
     : total, emptyWriterRuntimeUsage())
 }
 
+function hasWriterResponse(answer: string, writerResult: WriterSubmitResult | null) {
+  // A tool-only turn can legitimately have no text_delta. The structured
+  // writer_submit_result is the authoritative response in that case.
+  return Boolean(answer.trim() || writerResult)
+}
+
 async function runWriterOpenCodeText(params: {
   systemPrompt: string
   userPrompt: string
@@ -606,7 +612,7 @@ async function runWriterOpenCodeText(params: {
     }
     if (event.event === "runtime_error") throw new Error(`writer_opencode_failed:${event.message}`)
   }
-  if (!answer.trim()) throw new Error("writer_opencode_empty_response")
+  if (!hasWriterResponse(answer, writerResult)) throw new Error("writer_opencode_empty_response")
   return { answer, usage, writerResult, activatedSkillIds, resultToolCallCount }
 }
 
@@ -4903,4 +4909,5 @@ export const __writerTestHooks = {
   buildResearchContext,
   buildSystemPrompt,
   postProcessWriterDraft,
+  hasWriterResponse,
 }
