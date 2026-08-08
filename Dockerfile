@@ -47,7 +47,7 @@ RUN git init /opt/ppt-master \
   && git -C /opt/ppt-master checkout --detach "$PPT_MASTER_REF" \
   && test "$(git -C /opt/ppt-master rev-parse HEAD)" = "$PPT_MASTER_REF" \
   && python3 -m venv /opt/ppt-master-venv \
-  && /opt/ppt-master-venv/bin/pip install --no-cache-dir --no-require-hashes --retries 10 --timeout 120 -r /opt/ppt-master/requirements.txt \
+  && PIP_REQUIRE_HASHES=0 /opt/ppt-master-venv/bin/pip install --no-cache-dir --retries 10 --timeout 120 -r /opt/ppt-master/requirements.txt \
   && mkdir -p /app/runtime/skills \
   && cp -R /opt/ppt-master/skills/ppt-master /app/runtime/skills/ppt-master \
   && test -f /app/runtime/skills/ppt-master/SKILL.md
