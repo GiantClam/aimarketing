@@ -36,13 +36,18 @@ COPY infra/cloudflare/opencode-runner/runtime ./runtime
 # Editable PPT uses OpenCode as the conversational runtime and the upstream
 # native ppt-master skill for SVG/PPTX generation and quality checks.
 ARG PPT_MASTER_REF=465e3b4149b852d33ddd1cb94ac059401fe4e823
+# Railway's builder may enable PIP_REQUIRE_HASHES globally, but the pinned
+# upstream skill revision ships a range-based requirements file whose
+# published wheel hashes can change. Keep this image build reproducible by
+# pinning the skill revision above, and explicitly disable that incompatible
+# global pip setting for the upstream dependency install.
 RUN git init /opt/ppt-master \
   && git -C /opt/ppt-master remote add origin https://github.com/hugohe3/ppt-master.git \
   && git -C /opt/ppt-master fetch --depth 1 origin "$PPT_MASTER_REF" \
   && git -C /opt/ppt-master checkout --detach "$PPT_MASTER_REF" \
   && test "$(git -C /opt/ppt-master rev-parse HEAD)" = "$PPT_MASTER_REF" \
   && python3 -m venv /opt/ppt-master-venv \
-  && /opt/ppt-master-venv/bin/pip install --no-cache-dir --retries 10 --timeout 120 -r /opt/ppt-master/requirements.txt \
+  && /opt/ppt-master-venv/bin/pip install --no-cache-dir --no-require-hashes --retries 10 --timeout 120 -r /opt/ppt-master/requirements.txt \
   && mkdir -p /app/runtime/skills \
   && cp -R /opt/ppt-master/skills/ppt-master /app/runtime/skills/ppt-master \
   && test -f /app/runtime/skills/ppt-master/SKILL.md
