@@ -13,7 +13,7 @@
         "dirName": "khazix-writer",
         "interfaceVersion": "writer-result-v1",
         "release": "2026.08.06",
-        "digest": "sha256:3d37e7e88ed9579b02b47ecc4557879edce9795e157dd96ed06b760858694ba8"
+        "digest": "sha256:2609df76756fe9c523a84db80c6ade5ce43b994ad06265916ee243c6c78d335e"
       },
       "compatibleStyleSkillIds": [
         "analytical",

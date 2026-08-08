@@ -18,6 +18,16 @@ test("structured Writer result accepts a complete draft and asset intent", () =>
   assert.equal(validateWriterSubmitResult(draft).draft?.baseRevision, 4)
 })
 
+test("structured Writer result canonicalizes clarification plus complete draft", () => {
+  const result = validateWriterSubmitResult({
+    ...draft,
+    outcome: "needs_clarification",
+    userMessage: "已完成草稿，请确认标题。",
+  })
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(result.draft?.content, draft.draft.content)
+})
+
 test("structured Writer result rejects prose fallback, malformed outcome, and duplicate assets", () => {
   assert.throws(() => validateWriterSubmitResult({ ...draft, outcome: "draft_ready", draft: null }), /draft_missing/u)
   assert.throws(() => validateWriterSubmitResult({ ...draft, assetIntents: [draft.assetIntents[0], draft.assetIntents[0]] }), /duplicate_asset/u)

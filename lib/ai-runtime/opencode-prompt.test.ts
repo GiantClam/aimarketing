@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { buildWriterRuntimeContext } from "@/lib/writer/runtime/session-runtime"
+
 import { buildOpenCodeSystemPrompt, buildOpenCodeUserPrompt } from "./opencode-prompt"
 
 test("editable PPT prompt delegates generation to the native ppt-master skill", () => {
@@ -289,6 +291,22 @@ test("Writer briefing and draft prompts enforce phase-specific Skill contracts",
   const draft = buildOpenCodeSystemPrompt({ ...base, writerPhase: "draft", selectedSkillIds: ["writer-orchestrator", "social-writing-cn", "writer-wechat"] })
   assert.match(draft, /writer-orchestrator/u)
   assert.match(draft, /writer_webfetch/u)
-  assert.match(draft, /Return only the final platform-native draft/u)
-  assert.match(draft, /asset:\/\//u)
+  assert.match(draft, /complete platform-native draft/u)
+  assert.match(draft, /validated asset intents/u)
+
+  const revision = buildOpenCodeSystemPrompt({
+    ...base,
+    writerPhase: "draft",
+    selectedSkillIds: ["writer-orchestrator", "khazix-writer"],
+    writerContext: buildWriterRuntimeContext({
+      conversationId: "writer-contract",
+      currentTurn: "只修改标题",
+      platform: "wechat",
+      activeDraft: { revision: 3, title: "旧标题", content: "# 旧标题\n正文", sourceUrls: [] },
+      recentTurns: [],
+      taskStatus: "ready",
+    }),
+  })
+  assert.match(revision, /active draft is authoritative for revisions/u)
+  assert.match(revision, /preserve the active draft body and image placeholders exactly/u)
 })

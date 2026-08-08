@@ -5,6 +5,7 @@ import { resolveAiEntryOpenCodeProvider } from "@/lib/ai-entry/provider-routing"
 import { buildAgentRuntimeInput } from "@/lib/ai-entry/runtime/context-builder"
 import { runOpenCodeAgent } from "@/lib/ai-entry/runtime/opencode-adapter"
 import { resolveWriterOpenCodeRuntimeProfile } from "@/lib/ai-entry/runtime/profile-store"
+import { isWriterTitleOnlyRevisionRequest, reconcileWriterRevisionResult } from "@/lib/writer/revision-guard"
 /* eslint-disable no-useless-escape */
 import { z } from "zod"
 import {
@@ -4331,6 +4332,7 @@ export function validateWriterSkillFirstTurnResult(params: {
   platformLabel: string
   activeRevision: number
   activeTitle?: string
+  allowTitleChange?: boolean
   result: WriterSubmitResult
   activatedSkillIds: string[]
   resultToolCallCount: number
@@ -4351,7 +4353,9 @@ export function validateWriterSkillFirstTurnResult(params: {
     if (!draft) throw new Error("writer_result_draft_missing")
     if (draft.baseRevision !== params.activeRevision) throw new Error("writer_result_stale_revision")
     if (binding.output.titleRequired && !draft.title.trim()) throw new Error("writer_result_title_missing")
-    if (params.activeTitle && draft.title.trim() !== params.activeTitle.trim()) throw new Error("writer_result_title_changed")
+    if (params.activeTitle && draft.title.trim() !== params.activeTitle.trim() && !params.allowTitleChange) {
+      throw new Error("writer_result_title_changed")
+    }
   }
   if (params.result.assetIntents.length > binding.assets.maxCount) throw new Error("writer_result_asset_limit_exceeded")
   if (params.result.assetIntents.some((intent) => intent.kind === "cover") && !binding.assets.cover) {
@@ -4435,17 +4439,22 @@ export async function runWriterSkillFirstTurn(params: {
       })
     : await invoke(null)
   if (!result.writerResult) throw new Error("writer_result_not_submitted")
+  const writerResult = reconcileWriterRevisionResult({
+    query: params.query,
+    result: result.writerResult,
+    activeDraft: params.writerContext?.activeDraft,
+  })
   validateWriterSkillFirstTurnResult({
     platform: params.platform,
     mode: params.mode,
     platformLabel,
     activeRevision: params.writerContext?.activeDraft?.revision || 0,
     activeTitle: params.writerContext?.activeDraft?.title,
-    result: result.writerResult,
+    allowTitleChange: isWriterTitleOnlyRevisionRequest(params.query),
+    result: writerResult,
     activatedSkillIds: result.activatedSkillIds,
     resultToolCallCount: result.resultToolCallCount,
   })
-  const writerResult = result.writerResult
   const answer = writerResult.draft?.content || writerResult.userMessage
   const diagnostics = buildWriterTurnDiagnostics({
     retrievalStrategy: writerResult.research.requested ? "fresh_external" : "no_retrieval",

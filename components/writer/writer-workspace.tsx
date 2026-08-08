@@ -2029,7 +2029,9 @@ export function WriterWorkspace({
               setAssetsLoadingStartedAt(null)
               setAssetsError(taskSucceeded ? null : payload?.data?.result?.error || writerCopy.imageGenerationFailed)
               setImagesRequested(true)
-              setConversationStatus(taskSucceeded ? "text_ready" : "failed")
+              setConversationStatus(taskSucceeded ? "ready" : "failed")
+              setIsLoading(false)
+              writerRequestInFlightRef.current = false
               if (taskSucceeded && resolvedMarkdown && resolvedMarkdown !== sourceMarkdown) {
                 setDraft(resolvedMarkdown)
                 if (latestAssistantMessageId) {

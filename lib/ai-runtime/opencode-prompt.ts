@@ -58,6 +58,12 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
             "Use writer_webfetch for public URL retrieval when needed. Built-in webfetch is denied. Never claim a source was checked unless the tool returned it successfully.",
             "Call writer_submit_result exactly once before finishing. Put the complete platform-native draft, research state, and validated asset intents in that structured result.",
             "The application owns billing, session state, enterprise persistence, image generation, and asset URLs. Never fabricate final image URLs.",
+            ...(input.writerContext?.activeDraft
+              ? [
+                  "An active draft is authoritative for revisions. Return the complete revised Markdown, never a summary, ellipsis, or placeholder saying the application will preserve the rest.",
+                  "When the current turn requests only a title change or title translation, apply that title change directly, preserve the active draft body and image placeholders exactly, and use the active draft revision as draft.baseRevision.",
+                ]
+              : []),
           ]
         : []),
     ...(isBusinessAgent

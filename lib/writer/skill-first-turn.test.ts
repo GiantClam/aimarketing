@@ -54,6 +54,12 @@ test("Skill-first validation rejects missing result evidence, stale revisions, a
   assert.throws(() => validate(draftResult({ draft: { title: "新标题", content: "# 新标题\n\n正文。", baseRevision: 2 } })), /title_changed/)
 })
 
+test("Skill-first validation allows an explicitly requested title-only revision", () => {
+  assert.equal(validate(draftResult({ draft: { title: "New title", content: "# New title\n\n正文。", baseRevision: 2 } }), {
+    allowTitleChange: true,
+  }).platformId, "wechat")
+})
+
 test("Skill-first validation rejects multiple primaries and platform-incompatible inline assets", () => {
   assert.throws(() => validate(draftResult(), { activatedSkillIds: ["khazix-writer", "khazix-writer"] }), /activation_invalid/)
   assert.throws(() => validate(draftResult({ platform: "reddit", assetIntents: [{ id: "inline-1", kind: "inline", prompt: "diagram", placement: "body", aspectRatio: "4:3" }] }), {
