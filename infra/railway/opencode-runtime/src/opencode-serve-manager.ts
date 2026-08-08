@@ -222,7 +222,13 @@ export class OpenCodeServeManager {
     })
     let response: Response
     try {
-      response = await this.request(`/session/${encodeURIComponent(sessionId)}/prompt_async${this.directoryQuery(sessionDir)}`, {
+      // Use the synchronous message endpoint as the run completion barrier.
+      // `prompt_async` returns before the turn finishes, so a missed
+      // session.idle event can leave the in-memory session lock held until
+      // the one-hour watchdog expires. The message endpoint keeps the HTTP
+      // request open until OpenCode has completed the turn, while the global
+      // event stream above continues forwarding progress events.
+      response = await this.request(`/session/${encodeURIComponent(sessionId)}/message${this.directoryQuery(sessionDir)}`, {
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -231,7 +237,7 @@ export class OpenCodeServeManager {
           system: systemPrompt,
           parts: [{ type: "text", text: userPrompt }],
         }),
-      })
+      }, this.options.requestTimeoutMs)
     } catch (error) {
       const run = this.pending.get(input.runId)
       if (run) this.finishRun(run, false, { code: "opencode_prompt_request_failed", message: error instanceof Error ? error.message : String(error) })
@@ -241,6 +247,12 @@ export class OpenCodeServeManager {
       const payload = await this.readJson(response)
       const run = this.pending.get(input.runId)
       if (run) this.finishRun(run, false, { code: "opencode_prompt_failed", message: diagnostic(payload, response.statusText) })
+    } else {
+      // A successful synchronous response is authoritative. Do not wait for
+      // SSE idle: that event may be dropped, delayed, or represent the
+      // pre-prompt idle state of a persistent session.
+      const run = this.pending.get(input.runId)
+      if (run) this.finishRun(run, true)
     }
     return completed
   }
@@ -257,8 +269,8 @@ export class OpenCodeServeManager {
     await this.request(`/session/${encodeURIComponent(sessionId)}${this.directoryQuery(sessionDir)}`, { method: "DELETE", headers: { Accept: "application/json" } }).catch(() => undefined)
   }
 
-  private async request(path: string, init: RequestInit = {}) {
-    return fetch(`${this.baseUrl}${path}`, { ...init, signal: AbortSignal.timeout(Math.min(this.options.requestTimeoutMs, 30_000)) })
+  private async request(path: string, init: RequestInit = {}, timeoutMs = Math.min(this.options.requestTimeoutMs, 30_000)) {
+    return fetch(`${this.baseUrl}${path}`, { ...init, signal: AbortSignal.timeout(Math.min(timeoutMs, this.options.requestTimeoutMs)) })
   }
 
   private async readJson(response: Response) {
@@ -370,14 +382,9 @@ export class OpenCodeServeManager {
       this.finishRun(run, false, { code: "opencode_error", message: diagnostic(properties?.error, "OpenCode runtime failed.") })
       return
     }
-    if (type === "session.idle") {
-      this.finishRun(run, true)
-      return
-    }
-    if (type === "session.status") {
-      const status = asRecord(properties?.status)
-      if (stringValue(status?.type).toLowerCase() === "idle") this.finishRun(run, true)
-    }
+    // Completion is resolved by the synchronous `/message` response. An
+    // idle event alone is not sufficient: it may be emitted before the
+    // prompt starts, or be lost while the native event stream reconnects.
   }
 
   private finishRun(run: PendingRun, completed: boolean, error?: { code: string; message: string }) {
