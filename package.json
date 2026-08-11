@@ -15,6 +15,7 @@
     "start": "next start",
     "migrate:enterprise": "node scripts/run-enterprise-migration.js",
     "migrate:ai-entry": "node scripts/run-ai-entry-chat-migration.js",
+    "migrate:ai-entry:ui-message": "node scripts/run-ai-entry-ui-message-migration.js",
     "migrate:enterprise:dify": "node scripts/run-enterprise-dify-migration.js",
     "migrate:knowledge:ragflow": "node scripts/run-ragflow-knowledge-migration.js",
     "migrate:lead-hunter": "node scripts/run-lead-hunter-migration.js",
@@ -80,6 +81,7 @@
   "dependencies": {
     "@ai-sdk/mcp": "^2.0.22",
     "@ai-sdk/openai": "^4.0.27",
+    "@ai-sdk/react": "4.0.62",
     "@aws-sdk/client-s3": "3.1013.0",
     "@aws-sdk/s3-request-presigner": "3.1013.0",
     "@google/genai": "^1.46.0",

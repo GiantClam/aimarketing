@@ -4,7 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import test from "node:test"
 
-import { MANIFEST_FIELDS, parseManifest, validateManifest } from "./validate-infinite-canvas-import-manifest"
+import { MANIFEST_FIELDS, MAX_SOURCE_SCAN_BYTES, parseManifest, validateManifest } from "./validate-infinite-canvas-import-manifest"
 
 const header = `| ${MANIFEST_FIELDS.join(" | ")} |\n| ${MANIFEST_FIELDS.map(() => "---").join(" | ")} |`
 const commit = "29bff79066e614cb54ffa8e98b1992a14eb285a0"
@@ -54,5 +54,15 @@ test("accepts a complete imported entry and its source annotation", () => {
   fs.writeFileSync(path.join(root, localPath), "// upstream:infinite-canvas/canvas-multiselect\n")
   const row = `| canvas-multiselect | hero8152/Infinite-Canvas | ${commit} | static/js/canvas.js | ${localPath} | 2026-07-16 | adapted | upstream LICENSE; local-test-only | tests/fixture.test.ts | adapted behavior |`
   fs.writeFileSync(path.join(root, "docs/upstream/infinite-canvas-import-manifest.md"), fixture(row))
+  assert.deepEqual(validateManifest(root), [])
+})
+
+test("ignores oversized generated files during source annotation scanning", () => {
+  const root = makeRoot()
+  const filePath = path.join(root, "generated-output.bin")
+  const descriptor = fs.openSync(filePath, "w")
+  fs.ftruncateSync(descriptor, MAX_SOURCE_SCAN_BYTES + 1)
+  fs.closeSync(descriptor)
+
   assert.deepEqual(validateManifest(root), [])
 })

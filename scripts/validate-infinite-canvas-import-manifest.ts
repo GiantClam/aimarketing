@@ -19,6 +19,7 @@ const COMMIT_PATTERN = /^[0-9a-f]{40}$/i
 const CAPABILITY_PATTERN = /^[a-z0-9][a-z0-9._-]*$/
 const SOURCE_ROOTS = ["vendor/infinite-canvas", "public/upstream/infinite-canvas"]
 const IGNORED_ROOTS = new Set([".git", "node_modules", ".next", ".next-build", ".cache", "coverage", "docs"])
+export const MAX_SOURCE_SCAN_BYTES = 16 * 1024 * 1024
 
 export type ManifestEntry = Record<(typeof MANIFEST_FIELDS)[number], string>
 
@@ -81,6 +82,7 @@ function sourceCapabilities(root: string): Set<string> {
   for (const file of listFiles(root)) {
     const relative = file.split(path.sep).join("/")
     if (relative === "scripts/validate-infinite-canvas-import-manifest.ts" || relative === "scripts/validate-infinite-canvas-import-manifest.test.ts") continue
+    if (fs.statSync(path.join(root, file)).size > MAX_SOURCE_SCAN_BYTES) continue
     const contents = fs.readFileSync(path.join(root, file), "utf8")
     for (const match of contents.matchAll(/upstream:infinite-canvas\/([a-z0-9][a-z0-9._-]*)/gi)) {
       capabilities.add(match[1])

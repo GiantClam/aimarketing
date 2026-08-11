@@ -48,6 +48,8 @@ type AiEntryMessageRow = {
   id: number
   role: string
   content: string
+  parts?: unknown[] | null
+  metadata?: Record<string, unknown> | null
   knowledge_source?: string | null
   createdAt?: Date | string | number | null
 }
@@ -79,6 +81,8 @@ export type AiEntryMessageRecord = {
   conversation_id: string
   role: "user" | "assistant"
   content: string
+  parts: unknown[] | null
+  metadata: Record<string, unknown> | null
   knowledge_source: null
   created_at: number
 }
@@ -1048,6 +1052,8 @@ export async function appendAiEntryMessage(params: {
   conversationId: string | number | null | undefined
   role: "user" | "assistant"
   content: string
+  parts?: unknown[] | null
+  metadata?: Record<string, unknown> | null
   idempotencyKey?: string | null
   scope?: AiEntryConversationScope
   agentId?: string | null
@@ -1064,6 +1070,8 @@ export async function appendAiEntryMessage(params: {
   }
 
   const normalizedContent = params.content.trim()
+  const partsJson = Array.isArray(params.parts) ? JSON.stringify(params.parts) : null
+  const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null
   const idempotencyKey = typeof params.idempotencyKey === "string" && params.idempotencyKey.trim()
     ? params.idempotencyKey.trim().slice(0, 255)
     : null
@@ -1113,8 +1121,8 @@ export async function appendAiEntryMessage(params: {
 
   await withAiEntryDbRetry(`insert-ai-entry-message:${params.role}`, () =>
     db.execute(sql`
-      INSERT INTO ${messages} ("conversation_id", "role", "content", "idempotency_key")
-      VALUES (${conversation.id}, ${params.role}, ${normalizedContent}, ${idempotencyKey})
+      INSERT INTO ${messages} ("conversation_id", "role", "content", "parts", "metadata", "idempotency_key")
+      VALUES (${conversation.id}, ${params.role}, ${normalizedContent}, ${partsJson}::jsonb, ${metadataJson}::jsonb, ${idempotencyKey})
       ON CONFLICT DO NOTHING
     `),
   )
@@ -1146,6 +1154,53 @@ export async function appendAiEntryMessage(params: {
   })
 }
 
+export async function updateLatestAiEntryMessageParts(params: {
+  userId: number
+  conversationId: string | number | null | undefined
+  role: "user" | "assistant"
+  content: string
+  parts: unknown[]
+  metadata?: Record<string, unknown> | null
+  idempotencyKey?: string | null
+  scope?: AiEntryConversationScope
+  agentId?: string | null
+}) {
+  const conversation = await getAiEntryConversation(
+    params.userId,
+    params.conversationId,
+    params.scope || "chat",
+    params.agentId,
+  )
+  if (!conversation || !params.content.trim()) return false
+
+  const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null
+  const idempotencyKey = typeof params.idempotencyKey === "string" && params.idempotencyKey.trim()
+    ? params.idempotencyKey.trim().slice(0, 255)
+    : null
+  const idempotencyKeyFilter = idempotencyKey
+    ? sql`AND idempotency_key = ${idempotencyKey}`
+    : sql``
+  const partsJson = JSON.stringify(params.parts)
+  const result = await withAiEntryDbRetry("update-ai-entry-message-parts", () =>
+    db.execute(sql`
+      UPDATE "AI_MARKETING_messages"
+      SET "parts" = ${partsJson}::jsonb,
+          "metadata" = ${metadataJson}::jsonb
+      WHERE id = (
+        SELECT id
+        FROM "AI_MARKETING_messages"
+        WHERE conversation_id = ${conversation.id}
+          AND role = ${params.role}
+          ${idempotencyKeyFilter}
+        ORDER BY (content = ${params.content.trim()}) DESC, id DESC
+        LIMIT 1
+      )
+    `),
+  )
+
+  return Number(result.rowCount || 0) > 0
+}
+
 export async function listAiEntryMessages(
   userId: number,
   conversationId: string,
@@ -1163,6 +1218,8 @@ export async function listAiEntryMessages(
         m.id,
         m.role,
         m.content,
+        m.parts,
+        m.metadata,
         m.created_at as "createdAt"
       FROM "AI_MARKETING_messages" m
       WHERE m.conversation_id = ${conversation.id}
@@ -1178,6 +1235,8 @@ export async function listAiEntryMessages(
       conversation_id: String(conversation.id),
       role: row.role as "user" | "assistant",
       content: row.content || "",
+      parts: Array.isArray(row.parts) ? row.parts : null,
+      metadata: row.metadata && typeof row.metadata === "object" ? row.metadata : null,
       knowledge_source: null,
       created_at: toEpochSeconds(row.createdAt),
     }))

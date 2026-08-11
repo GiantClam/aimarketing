@@ -126,6 +126,7 @@ type ChatRequestBody = {
   executionContext?: "chat" | "workflow"
   attachments?: IncomingAttachment[]
   conversationId?: string | null
+  uiMessageRequestId?: string
   conversationScope?: "chat" | "consulting"
   stream?: boolean
   knowledgeSource?: "industry_kb" | "personal_kb"
@@ -170,6 +171,11 @@ const STREAM_HEADERS = {
 
 function createChatTraceId() {
   return `ai-entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function normalizeUiMessageRequestId(value: unknown, fallback: string) {
+  const candidate = typeof value === "string" ? value.trim() : ""
+  return /^[A-Za-z0-9_-]{8,80}$/.test(candidate) ? candidate : fallback
 }
 
 function buildSseEvent(payload: Record<string, unknown>) {
@@ -806,6 +812,7 @@ async function persistAiEntryTurnSafe(params: {
   userId: number
   conversationId: string
   assistantMessage: string
+  idempotencyKey?: string | null
   scope: AiEntryConversationScope
   agentId?: string | null
 }) {
@@ -816,6 +823,7 @@ async function persistAiEntryTurnSafe(params: {
       conversationId: params.conversationId,
       role: "assistant",
       content: params.assistantMessage,
+      idempotencyKey: params.idempotencyKey,
       scope: params.scope,
       agentId: params.agentId,
     })
@@ -831,6 +839,7 @@ async function persistAiEntryUserPromptSafe(params: {
   userId: number
   conversationId: string
   userPrompt: string
+  idempotencyKey?: string | null
   scope: AiEntryConversationScope
   agentId?: string | null
 }) {
@@ -841,6 +850,7 @@ async function persistAiEntryUserPromptSafe(params: {
       conversationId: params.conversationId,
       role: "user",
       content: params.userPrompt,
+      idempotencyKey: params.idempotencyKey,
       scope: params.scope,
       agentId: params.agentId,
     })
@@ -875,6 +885,9 @@ export async function POST(request: NextRequest) {
     billingEnterpriseId = currentUser.enterpriseId
 
     const body = (await request.json()) as ChatRequestBody
+    const persistenceRequestId = normalizeUiMessageRequestId(body.uiMessageRequestId, traceId)
+    const userMessageIdempotencyKey = `ui:${persistenceRequestId}:user`
+    const assistantMessageIdempotencyKey = `ui:${persistenceRequestId}:assistant`
     const customSystemPrompt =
       typeof body.systemPrompt === "string" ? body.systemPrompt.trim().slice(0, 24_000) : ""
     const enterpriseKnowledgeConfig = parseEnterpriseKnowledgeConfig(body.enterpriseKnowledge)
@@ -974,6 +987,7 @@ export async function POST(request: NextRequest) {
         userId: currentUser.id,
         conversationId,
         userPrompt: latestPersistableUserContent,
+        idempotencyKey: userMessageIdempotencyKey,
         scope: conversationScope,
         agentId: agentConfig.agentId,
       })
@@ -1699,6 +1713,7 @@ export async function POST(request: NextRequest) {
               userId: currentUser.id,
               conversationId,
               assistantMessage: normalizedAssistantMessage,
+              idempotencyKey: assistantMessageIdempotencyKey,
               scope: conversationScope,
               agentId: agentConfig.agentId,
             })
@@ -1840,6 +1855,7 @@ export async function POST(request: NextRequest) {
           userId: currentUser.id,
           conversationId,
           assistantMessage: resolvedAssistantMessage,
+          idempotencyKey: assistantMessageIdempotencyKey,
           scope: conversationScope,
           agentId: agentConfig.agentId,
         })
@@ -2464,6 +2480,7 @@ export async function POST(request: NextRequest) {
               userId: currentUser.id,
               conversationId,
               assistantMessage: resolvedStreamedAnswerWithTools,
+              idempotencyKey: assistantMessageIdempotencyKey,
               scope: conversationScope,
               agentId: agentConfig.agentId,
             })
@@ -2547,6 +2564,7 @@ export async function POST(request: NextRequest) {
               userId: currentUser.id,
               conversationId,
               assistantMessage: extractErrorMessage(error),
+              idempotencyKey: assistantMessageIdempotencyKey,
               scope: conversationScope,
               agentId: agentConfig.agentId,
             })

@@ -15,6 +15,7 @@ async function runStep(label, command) {
 async function main() {
   await runStep("enterprise migration", "scripts/run-enterprise-migration.js")
   await runStep("ai entry chat migration", "scripts/run-ai-entry-chat-migration.js")
+  await runStep("ai entry UI message migration", "scripts/run-ai-entry-ui-message-migration.js")
   await runStep("enterprise dify migration", "scripts/run-enterprise-dify-migration.js")
   await runStep("ragflow knowledge migration", "scripts/run-ragflow-knowledge-migration.js")
   await runStep("lead hunter migration", "scripts/run-lead-hunter-migration.js")
