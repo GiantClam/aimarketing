@@ -62,26 +62,52 @@ pub fn ensure_runtime_before_window() -> Result<(), String> {
 }
 
 fn runtime_ready(resource_roots: &[PathBuf], install_root: &Path) -> bool {
-    let node = [install_root.join("runtime").join("node").join("node.exe"), install_root.join("node").join("node.exe")]
-        .into_iter().find(|path| path.is_file() && executable_works(path, &["--version"])).or_else(|| system_executable("node")).is_some();
-    let opencode = [install_root.join("runtime").join("opencode").join("opencode.exe"), install_root.join("opencode").join("opencode.exe")]
-        .into_iter().find(|path| path.is_file() && executable_works(path, &["--version"])).or_else(|| system_executable("opencode")).is_some();
-    let python = [install_root.join("runtime").join("python").join("python.exe"), install_root.join("python").join("python.exe")]
-        .into_iter().find(|path| path.is_file() && python_works(path)).or_else(|| system_executable("python").filter(|path| python_works(path))).is_some();
-    let host = resource_roots.iter().any(|root| root.join("host.mjs").is_file() || root.join("dist-runtime").join("host.mjs").is_file());
-    let skills = resource_roots.iter().any(|root| {
-        let path = if root.join("skills").join("ppt-master").join("SKILL.md").is_file() { root.join("skills") } else { root.join("dist-runtime").join("skills") };
-        path.join("ppt-master").join("SKILL.md").is_file() && path.join("ppt-master.manifest.json").is_file()
-    });
-    let fonts = resource_roots.iter().any(|root| root.join("fonts").join("msyh.ttc").is_file() || root.join("runtime").join("fonts").join("msyh.ttc").is_file() || root.join("dist-runtime").join("runtime").join("fonts").join("msyh.ttc").is_file());
-    let lancedb = [install_root.join("runtime").join("lancedb"), install_root.join("lancedb")].into_iter().any(|root| root.join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").is_file())
-        || resource_roots.iter().any(|root| root.join("lancedb").join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").is_file() || root.join("runtime").join("lancedb").join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").is_file());
-    let embedding = [install_root.join("runtime").join("embedding").join("local-hash-384-v1.json"), install_root.join("embedding").join("local-hash-384-v1.json")]
-        .into_iter().any(|path| path.is_file())
+    let node = configured_runtime_path(install_root, "nodePath")
+        .into_iter()
+        .chain([install_root.join("runtime").join("node").join("node.exe"), install_root.join("node").join("node.exe")])
+        .find(|path| path.is_file() && executable_works(path, &["--version"]))
+        .or_else(|| system_executable("node"))
+        .is_some();
+    let opencode = configured_runtime_path(install_root, "opencodePath")
+        .into_iter()
+        .chain([install_root.join("runtime").join("opencode").join("opencode.exe"), install_root.join("opencode").join("opencode.exe")])
+        .find(|path| path.is_file() && executable_works(path, &["--version"]))
+        .or_else(|| system_executable("opencode"))
+        .is_some();
+    let python = configured_runtime_path(install_root, "pythonPath")
+        .into_iter()
+        .chain([install_root.join("runtime").join("python").join("python.exe"), install_root.join("python").join("python.exe")])
+        .find(|path| path.is_file() && python_works(path))
+        .or_else(|| system_executable("python").filter(|path| python_works(path)))
+        .is_some();
+    let host = configured_runtime_path(install_root, "hostPath").is_some_and(|path| path.is_file())
+        || resource_roots.iter().any(|root| root.join("host.mjs").is_file() || root.join("dist-runtime").join("host.mjs").is_file());
+    let skills = configured_runtime_path(install_root, "skillsPath").is_some_and(|path| path.join("ppt-master").join("SKILL.md").is_file() && path.join("ppt-master.manifest.json").is_file())
+        || resource_roots.iter().any(|root| {
+            let path = if root.join("skills").join("ppt-master").join("SKILL.md").is_file() { root.join("skills") } else { root.join("dist-runtime").join("skills") };
+            path.join("ppt-master").join("SKILL.md").is_file() && path.join("ppt-master.manifest.json").is_file()
+        });
+    let fonts = configured_runtime_path(install_root, "fontsPath").is_some_and(|path| path.join("msyh.ttc").is_file())
+        || resource_roots.iter().any(|root| root.join("fonts").join("msyh.ttc").is_file() || root.join("runtime").join("fonts").join("msyh.ttc").is_file() || root.join("dist-runtime").join("runtime").join("fonts").join("msyh.ttc").is_file());
+    let lancedb = configured_runtime_path(install_root, "lancedbPath").is_some_and(|path| lancedb_ready(&path))
+        || [install_root.join("runtime").join("lancedb"), install_root.join("lancedb")].into_iter().any(|path| lancedb_ready(&path))
+        || resource_roots.iter().any(|root| lancedb_ready(&root.join("lancedb")) || lancedb_ready(&root.join("runtime").join("lancedb")));
+    let embedding = configured_runtime_path(install_root, "embeddingPath").is_some_and(|path| path.is_file())
+        || [install_root.join("runtime").join("embedding").join("local-hash-384-v1.json"), install_root.join("embedding").join("local-hash-384-v1.json")].into_iter().any(|path| path.is_file())
         || resource_roots.iter().any(|root| root.join("embedding").join("local-hash-384-v1.json").is_file() || root.join("runtime").join("embedding").join("local-hash-384-v1.json").is_file());
     let database = install_root.join("app.db");
     let migrations = crate::storage::initialize(&database).is_ok() && crate::storage::migrations_ready(&database).unwrap_or(false);
     node && opencode && python && host && skills && fonts && lancedb && embedding && migrations
+}
+
+fn configured_runtime_path(install_root: &Path, key: &str) -> Option<PathBuf> {
+    let value = crate::config::read(&install_root.join("config.json"), install_root).ok()?;
+    let configured = value.get("runtime")?.get(key)?.as_str()?;
+    std::fs::canonicalize(configured).ok()
+}
+
+fn lancedb_ready(root: &Path) -> bool {
+    root.join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").is_file()
 }
 
 fn executable_works(path: &Path, args: &[&str]) -> bool {
@@ -202,5 +228,21 @@ mod tests {
     fn pre_window_gate_includes_sqlite_migrations() {
         let source = include_str!("bootstrap.rs");
         assert!(source.contains("migrations_ready"));
+    }
+
+    #[test]
+    fn pre_window_gate_reuses_a_persisted_runtime_path() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-bootstrap-path-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let fixture = root.join("node.exe");
+        std::fs::write(&fixture, b"fixture").unwrap();
+        let canonical = std::fs::canonicalize(&fixture).unwrap();
+        let mut value = crate::config::default_config(&root);
+        value["runtime"]["nodePath"] = serde_json::Value::String(canonical.to_string_lossy().into_owned());
+        crate::config::write(&root.join("config.json"), &value).unwrap();
+
+        assert_eq!(configured_runtime_path(&root, "nodePath"), Some(canonical));
+        let _ = std::fs::remove_dir_all(root);
     }
 }

@@ -6,6 +6,7 @@
   - [x] 2026-08-13 native `runtime_probe` now prefers every persisted runtime path (not only OpenCode), canonicalizes the selected executable/directories, and atomically persists the selection before returning; the Rust regression proves a saved Node path is reused ahead of system fallback.
 - [x] 1.4 对缺失/损坏组件自动调用 UTF-8 安装脚本（pre-window gate 失败时调用 `install-desktop-runtime.ps1`；manifest、配置和 Python probe 均按 UTF-8 读取/写入，并支持离线 ZIP）
 - [x] 1.5 安装结束后完整重复 probe，任一失败则阻止主界面（安装命令成功后再次执行 Node、OpenCode、真实 PPTX/Python、host、Skills、字体、LanceDB、embedding 和 migrations gate）
+  - [x] 2026-08-13 pre-window `runtime_ready` now applies the same persisted-path-first rule as `runtime_probe` for every required component, so a valid configured runtime is reused before any system PATH fallback.
 
 **Quality Gate:**
 - [ ] 缺 WebView2 时仍能显示修复进度
