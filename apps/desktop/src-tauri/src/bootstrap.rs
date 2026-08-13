@@ -79,7 +79,9 @@ fn runtime_ready(resource_roots: &[PathBuf], install_root: &Path) -> bool {
     let embedding = [install_root.join("runtime").join("embedding").join("local-hash-384-v1.json"), install_root.join("embedding").join("local-hash-384-v1.json")]
         .into_iter().any(|path| path.is_file())
         || resource_roots.iter().any(|root| root.join("embedding").join("local-hash-384-v1.json").is_file() || root.join("runtime").join("embedding").join("local-hash-384-v1.json").is_file());
-    node && opencode && python && host && skills && fonts && lancedb && embedding
+    let database = install_root.join("app.db");
+    let migrations = crate::storage::initialize(&database).is_ok() && crate::storage::migrations_ready(&database).unwrap_or(false);
+    node && opencode && python && host && skills && fonts && lancedb && embedding && migrations
 }
 
 fn executable_works(path: &Path, args: &[&str]) -> bool {
@@ -87,7 +89,7 @@ fn executable_works(path: &Path, args: &[&str]) -> bool {
 }
 
 fn python_works(path: &Path) -> bool {
-    Command::new(path).args(["-c", "import pptx, xlsxwriter, skia_pathops, uharfbuzz, fitz, mammoth, markdownify, ebooklib, nbconvert, openpyxl, PIL, numpy, requests, bs4, curl_cffi, edge_tts, flask, google.genai"]).creation_flags(CREATE_NO_WINDOW).output().map(|output| output.status.success()).unwrap_or(false)
+    Command::new(path).args(["-c", crate::PPT_PYTHON_PROBE]).creation_flags(CREATE_NO_WINDOW).output().map(|output| output.status.success()).unwrap_or(false)
 }
 
 fn system_executable(command: &str) -> Option<PathBuf> {
@@ -188,5 +190,17 @@ mod tests {
         let source = include_str!("bootstrap.rs");
         assert!(source.contains("ensure_runtime_before_window"));
         assert!(source.contains("runtime_install_incomplete"));
+    }
+
+    #[test]
+    fn pre_window_python_gate_uses_the_shared_ppt_probe() {
+        let source = include_str!("bootstrap.rs");
+        assert!(source.contains("crate::PPT_PYTHON_PROBE"));
+    }
+
+    #[test]
+    fn pre_window_gate_includes_sqlite_migrations() {
+        let source = include_str!("bootstrap.rs");
+        assert!(source.contains("migrations_ready"));
     }
 }
