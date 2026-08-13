@@ -17,7 +17,7 @@
 ## 2. Local ppt-master runtime
 
 - [ ] 2.1 将实际 `ppt-master` Skill、references 和脚本纳入 desktop runtime manifest
-- [ ] 2.2 为 Python、必要 imports、字体目录和 `ppt-master` 输出建立 capability probe
+- [x] 2.2 为 Python、必要 imports、字体目录和 `ppt-master` 输出建立 capability probe（运行时现在会校验依赖导入、字体门禁，并生成带中英文字段的 16:9 可编辑 PPTX 后再选择 Python 路径）
 - [ ] 2.3 实现本地 PPT service，仅通过 OpenCode session 调用 Skill
 - [ ] 2.4 发现并登记项目目录中的 PPTX、SVG、preview 和诊断产物
 - [ ] 2.5 删除 desktop composition 对 `infra/railway/ppt-master-worker` 的任何依赖

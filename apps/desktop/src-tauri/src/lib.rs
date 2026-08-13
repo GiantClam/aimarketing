@@ -17,6 +17,30 @@ mod logs;
 mod bootstrap;
 mod instance_lock;
 
+pub(crate) const PPT_PYTHON_PROBE: &str = r#"
+import os, tempfile, zipfile
+import pptx, xlsxwriter, skia_pathops, uharfbuzz, fitz, mammoth, markdownify, ebooklib, nbconvert, openpyxl, PIL, numpy, requests, bs4, curl_cffi, edge_tts, flask, google.genai
+from pptx import Presentation
+from pptx.util import Inches
+presentation = Presentation()
+presentation.slide_width = Inches(13.333333)
+presentation.slide_height = Inches(7.5)
+slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+shape = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(10), Inches(1.2))
+run = shape.text_frame.paragraphs[0].add_run()
+run.text = "AIMarketing 中文 PPT probe"
+run.font.name = "Microsoft YaHei"
+descriptor, output = tempfile.mkstemp(suffix=".pptx")
+os.close(descriptor)
+try:
+    presentation.save(output)
+    assert os.path.getsize(output) > 0
+    with zipfile.ZipFile(output) as package:
+        assert "ppt/slides/slide1.xml" in package.namelist()
+finally:
+    if os.path.exists(output): os.remove(output)
+"#;
+
 #[derive(Debug, Serialize)]
 pub struct Health {
     pub status: &'static str,
@@ -68,7 +92,7 @@ fn configured_runtime_executable(data: &std::path::Path, key: &str) -> Option<Pa
 }
 
 fn python_capable(path: &std::path::Path) -> bool {
-    Command::new(path).args(["-c", "import pptx, xlsxwriter, skia_pathops, uharfbuzz, fitz, mammoth, markdownify, ebooklib, nbconvert, openpyxl, PIL, numpy, requests, bs4, curl_cffi, edge_tts, flask, google.genai"]).output().map(|output| output.status.success()).unwrap_or(false)
+    Command::new(path).args(["-c", PPT_PYTHON_PROBE]).output().map(|output| output.status.success()).unwrap_or(false)
 }
 
 fn system_python() -> Option<PathBuf> {

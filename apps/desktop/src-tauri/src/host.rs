@@ -136,7 +136,7 @@ fn python_executable(app: &AppHandle) -> Result<Option<String>, String> {
 }
 
 fn python_capable(path: &std::path::Path) -> bool {
-    Command::new(path).args(["-c", "import pptx, xlsxwriter, skia_pathops, uharfbuzz, fitz, mammoth, markdownify, ebooklib, nbconvert, openpyxl, PIL, numpy, requests, bs4, curl_cffi, edge_tts, flask, google.genai"]).output().map(|output| output.status.success()).unwrap_or(false)
+    Command::new(path).args(["-c", crate::PPT_PYTHON_PROBE]).output().map(|output| output.status.success()).unwrap_or(false)
 }
 
 fn lancedb_runtime_directory(app: &AppHandle) -> Result<Option<String>, String> {
