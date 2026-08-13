@@ -51,6 +51,7 @@
   - [x] 4.6c `lib/workflows/connect.ts` now re-exports shared edge input mapping and port resolution; SaaS retains only canvas feature gating and localized labels.
   - [x] 4.6d `workflow-core` legacy migration assigns deterministic semantic edge keys independent of payload order, matching the SaaS migration rule.
   - [x] 4.6e `lib/workflows/workflow-definition-v2.ts` and `workflow-definition-migrations.ts` now re-export the shared canonical hash, validation and migration contract; SaaS storage stays in `store.ts`.
+  - [x] 4.6f `lib/workflows/plan-compiler.ts` now re-exports shared foreach/collect compilation, limits and deterministic iteration helpers; SaaS iteration persistence remains in host modules.
 
 **Quality Gate:** PASSED for the shared workflow core — workflow-core contract tests/typecheck and desktop host integration tests pass. The SaaS adapter/re-export parity work remains open in 4.5–4.6.
 

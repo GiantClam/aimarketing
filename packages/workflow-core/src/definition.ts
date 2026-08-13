@@ -71,6 +71,8 @@ export function canonicalizeWorkflowDefinition(definition: WorkflowDefinitionEnv
 }
 export function canonicalizeWorkflowDefinitionJson(definition: WorkflowDefinitionEnvelope) { return canonicalJson(canonicalHashPayload(canonicalizeWorkflowDefinition(definition))); }
 export function hashWorkflowDefinition(definition: WorkflowDefinitionEnvelope) { return sha256Hex(canonicalizeWorkflowDefinitionJson(definition)); }
+/** Browser-safe SHA-256 for other deterministic workflow payloads. */
+export function hashWorkflowText(value: string) { return sha256Hex(value); }
 
 const issue = (code: WorkflowValidationIssueCode, message: string, fields: Partial<Pick<WorkflowValidationIssue, "nodeKey" | "edgeKey" | "field">> = {}): WorkflowValidationIssue => ({ code, message, ...fields });
 function validatePortShape(port: unknown, nodeKey: string, field: string): WorkflowValidationIssue[] {

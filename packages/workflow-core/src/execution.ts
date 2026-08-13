@@ -1,4 +1,4 @@
-import { compileWorkflowPlan, type CompiledWorkflowPlan } from "./compiler";
+import { compileWorkflowPlan, type CompiledWorkflowPlan, type CompiledWorkflowPlanStep } from "./compiler";
 import type { WorkflowDefinitionEnvelope } from "./definition";
 import type { WorkflowCapabilityPort, WorkflowClock, WorkflowRunEventSink, WorkflowRunRepository } from "./ports";
 import { workflowNodeRegistry } from "./node-definitions/registry";
@@ -47,8 +47,8 @@ export async function executeWorkflow(definition: WorkflowDefinitionEnvelope, op
         try {
           const recovery = options.recovering?.[node.nodeKey];
           if (recovery) await appendEvent(options, sequence, "node_resumed", { nodeKey: node.nodeKey, executorId, providerTaskId: recovery.providerTaskId });
-          const execution = executorId === "foreach"
-            ? await executeForeach(definition, plan, node.nodeKey, node.config, inputs, outputs, options, sequence, recovery)
+          const execution = step.kind === "foreach"
+            ? await executeForeach(definition, step, node.config, inputs, outputs, options, sequence, recovery)
             : { output: await executeWithRetry(executorId, node.nodeKey, node.config, inputs, options, undefined, recovery), consumedNodeKeys: [] as const };
           return { step, executorId, ...execution } as const;
         } catch (error) {
@@ -98,8 +98,7 @@ type ForeachExecution = { readonly output: Record<string, unknown>; readonly con
 
 async function executeForeach(
   definition: WorkflowDefinitionEnvelope,
-  plan: CompiledWorkflowPlan,
-  foreachNodeKey: string,
+  step: Extract<CompiledWorkflowPlanStep, { kind: "foreach" }>,
   config: Record<string, unknown>,
   inputs: Record<string, unknown>,
   completed: Record<string, Record<string, unknown>>,
@@ -108,25 +107,21 @@ async function executeForeach(
   recovery?: WorkflowRecoveryAttempt,
 ): Promise<ForeachExecution> {
   const inputKind = String(config.inputPortId ?? "image").includes("asset") ? "asset" : "image";
-  const resolved = await executeWithRetry("foreach", foreachNodeKey, config, inputs, options, undefined, recovery);
+  const resolved = await executeWithRetry("foreach", step.nodeKey, config, inputs, options, undefined, recovery);
   const items = extractIterationItems(resolved, inputs, inputKind);
-  const collectNode = findCollectNode(definition, foreachNodeKey, typeof config.collectNodeKey === "string" ? config.collectNodeKey : "");
+  const collectNode = definition.nodes.find((node) => node.nodeKey === step.collectNodeKey && node.type === "collect");
   if (!collectNode) throw new Error("workflow_foreach_collect_required");
-  const bodyNodeKeys = findForeachBody(definition, foreachNodeKey, collectNode.nodeKey);
-  const bodySteps = plan.steps.filter((step) => bodyNodeKeys.has(step.nodeKey)).sort((left, right) => plan.steps.indexOf(left) - plan.steps.indexOf(right));
-  const concurrency = Math.max(1, Math.min(6, Number(config.concurrency ?? 1)) || 1);
-  const failurePolicy = config.failurePolicy === "fail_fast" ? "fail_fast" : "continue";
-  const iterationOutputs = await mapWithConcurrency(items.slice(0, Math.max(1, Math.min(100, Number(config.maxIterations ?? 20) || 20))), concurrency, async (item, index) => {
+  const bodySteps = step.bodyNodeKeys.map((nodeKey) => definition.nodes.find((node) => node.nodeKey === nodeKey)).filter((node): node is WorkflowDefinitionEnvelope["nodes"][number] => Boolean(node));
+  const iterationOutputs = await mapWithConcurrency(items.slice(0, step.maxIterations), step.concurrency, async (item, index) => {
     throwIfCancelled(options.signal);
     const iterationKey = `${inputKind}-${index + 1}`;
     const localOutputs: Record<string, Record<string, unknown>> = {
       ...completed,
-      [foreachNodeKey]: { [inputKind]: item, [`item.${inputKind}`]: item },
+      [step.nodeKey]: { [inputKind]: item, [`item.${inputKind}`]: item },
     };
     try {
-      for (const step of bodySteps) {
+      for (const node of bodySteps) {
         throwIfCancelled(options.signal);
-        const node = definition.nodes.find((candidate) => candidate.nodeKey === step.nodeKey)!;
         const executorId = workflowNodeRegistry.require(node.type).executorId;
         const nodeInputs = collectInputs(definition, node.nodeKey, localOutputs);
         await appendEvent(options, sequence, "node_started", { nodeKey: node.nodeKey, executorId, iterationKey, iterationIndex: index });
@@ -140,7 +135,7 @@ async function executeForeach(
       }
       return localOutputs;
     } catch (error) {
-      if (failurePolicy === "fail_fast") throw error;
+      if (step.failurePolicy === "fail_fast") throw error;
       return null;
     }
   });
@@ -157,33 +152,12 @@ async function executeForeach(
   const output = await executeWithRetry(collectExecutor, collectNode.nodeKey, collectNode.config, collectInputsByPort, options);
   await appendEvent(options, sequence, "node_succeeded", { nodeKey: collectNode.nodeKey, executorId: collectExecutor });
   completed[collectNode.nodeKey] = output;
-  return { output, consumedNodeKeys: [collectNode.nodeKey, ...bodyNodeKeys] };
+  return { output, consumedNodeKeys: [collectNode.nodeKey, ...step.bodyNodeKeys] };
 }
 
 function extractIterationItems(resolved: Record<string, unknown>, inputs: Record<string, unknown>, inputKind: "asset" | "image") {
   const candidates = [resolved[`${inputKind}s`], resolved[inputKind], resolved[`items.${inputKind}`], inputs[`items.${inputKind}`], inputs[`${inputKind}s`], inputs[inputKind]];
   return (candidates.find(Array.isArray) ?? []) as unknown[];
-}
-
-function findCollectNode(definition: WorkflowDefinitionEnvelope, foreachNodeKey: string, requested: string) {
-  if (requested) return definition.nodes.find((node) => node.nodeKey === requested && node.type === "collect");
-  const body = findForeachBody(definition, foreachNodeKey, "");
-  return definition.nodes.find((node) => node.type === "collect" && body.has(node.nodeKey));
-}
-
-function findForeachBody(definition: WorkflowDefinitionEnvelope, foreachNodeKey: string, collectNodeKey: string) {
-  const children = new Map<string, string[]>();
-  for (const edge of definition.edges) children.set(edge.sourceNodeKey, [...(children.get(edge.sourceNodeKey) ?? []), edge.targetNodeKey]);
-  const body = new Set<string>();
-  const queue = [...(children.get(foreachNodeKey) ?? [])];
-  while (queue.length) {
-    const nodeKey = queue.shift()!;
-    if (nodeKey === collectNodeKey || body.has(nodeKey)) continue;
-    const node = definition.nodes.find((candidate) => candidate.nodeKey === nodeKey);
-    if (!node || node.type === "collect") continue;
-    body.add(nodeKey); queue.push(...(children.get(nodeKey) ?? []));
-  }
-  return body;
 }
 
 async function mapWithConcurrency<T, R>(items: readonly T[], concurrency: number, callback: (item: T, index: number) => Promise<R>): Promise<R[]> {
