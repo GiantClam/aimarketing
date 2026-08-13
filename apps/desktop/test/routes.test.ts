@@ -344,10 +344,13 @@ test("desktop conversation history and retry flow consume the injected Workbench
 
 test("desktop media and asset artifact reveals consume the WorkbenchClient file port", () => {
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  const tauriSource = readFileSync(resolve(process.cwd(), "src-tauri/src/lib.rs"), "utf8");
   assert.match(appSource, /onArtifactReveal=\{\(relativePath, mimeType\) => void workbenchClient\.files\.reveal\(relativePath, mimeType\)\}/);
   assert.match(appSource, /onArtifactReveal\(artifact\.relative_path, artifact\.mime_type\)/);
   assert.match(appSource, /onArtifactReveal\(item\.relative_path, item\.mime_type\)/);
   assert.doesNotMatch(appSource, /tauriBridge\.invoke\("open_artifact"/);
+  assert.match(tauriSource, /fn open_artifact\([\s\S]*?Command::new\("explorer\.exe"\)\.args\(\["\/select,"/);
+  assert.match(tauriSource, /fn open_artifact_default\([\s\S]*?Command::new\("cmd\.exe"\)\.args\(\["\/C", "start"/);
 });
 
 test("OpenCode serve errors terminate the shared synchronous turn barrier", () => {

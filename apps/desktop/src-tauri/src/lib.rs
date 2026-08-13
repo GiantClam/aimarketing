@@ -336,7 +336,7 @@ fn open_artifact(app: tauri::AppHandle, relative_path: String, mime_type: String
     let root = project_root(&app)?;
     let metadata = artifacts::inspect(&root, &relative_path, &mime_type)?;
     let target = root.join(metadata.relative_path.replace('/', "\\"));
-    Command::new("cmd.exe").args(["/C", "start", "", &target.to_string_lossy()]).spawn().map(|_| ()).map_err(|error| format!("default_program_spawn_failed: {error}"))
+    Command::new("explorer.exe").args(["/select,", &target.to_string_lossy()]).spawn().map(|_| ()).map_err(|error| format!("explorer_spawn_failed: {error}"))
 }
 
 #[tauri::command]
