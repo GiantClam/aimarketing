@@ -29,8 +29,8 @@
 - [x] 2.1 实现从明文 `config.json` 解析并脱敏传递 Provider 配置。✓ 2026-08-13 — 配置仅在当前内存 Provider payload 中传给 host；workflow save/export/import/dispatch 会递归剔除凭据，真实 LLM/图片 smoke 均通过且未输出密钥。
   - [x] 2.1a `config.json` now persists a normalized configured model list and selected Skill; stale selected models fall back to the first configured model.
   - [x] 2.1b Workflow definitions recursively remove Provider credentials before save, export, import, or host dispatch; credentials remain only in the current in-memory Provider payload.
-- [ ] 2.2 提交前持久化 idempotency key，提交后立即保存 provider task ID
-- [ ] 2.3 实现可恢复 poll 和 provider 支持时的 cancel
+- [x] 2.2 提交前持久化 idempotency key，提交后立即保存 provider task ID（桌面在发送 `workflow.run` 前为每个媒体节点写入 queued attempt；收到 provider task ID 事件后幂等更新同一记录）
+- [x] 2.3 实现可恢复 poll 和 provider 支持时的 cancel（`runMediaJob` 使用持久化 task ID 续 poll，并通过未 aborted 的控制端口发送 provider cancel）
 - [ ] 2.4 从 Rust 请求 canonical temp path，流式下载并原子移动到项目目录
 - [ ] 2.5 验证 MIME、大小、hash 和路径归属后登记 artifact
 - [ ] 2.6 记录 token/请求/媒体任务和预估成本，不执行扣费

@@ -55,5 +55,7 @@ test("desktop host emits terminal media attempt events for recovery idempotency"
   assert.match(host, /phase: "completed"[\s\S]*status: "succeeded"/);
   assert.match(host, /const status = signal\?\.aborted/);
   assert.match(host, /task\.status !== "succeeded"[\s\S]*status: task\.status/);
-  assert.match(app, /status !== "failed" && status !== "cancelled"/);
+  assert.match(app, /mediaNodes = workflowDefinition\.nodes\.filter/);
+  assert.match(app, /status: "queued", payloadJson/);
+  assert.match(app, /payload\.providerTaskId && status !== "failed" && status !== "cancelled"/);
 });
