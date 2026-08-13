@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createBailianVideoAdapter, createHttpMediaAdapter, downloadMediaOutputs, ProviderConfigurationRequiredError, type MediaProviderId } from "../src/index";
-import { mkdtemp, readFile, readdir } from "node:fs/promises";
+import { mkdtemp, open, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -98,6 +98,21 @@ test("reuses an existing content-addressed media artifact on retry", async () =>
   const second = await downloadMediaOutputs(task, root, { fetchImpl, filenamePrefix: "clip" });
   assert.equal(second[0]?.relativePath, first[0]?.relativePath);
   assert.deepEqual(await readdir(root), [first[0]?.relativePath]);
+});
+
+test("does not replace a locked existing content-addressed artifact on retry", async () => {
+  const root = await mkdtemp(join(tmpdir(), "aimarketing-media-lock-"));
+  const task = { providerTaskId: "task-lock", status: "succeeded" as const, outputs: [{ url: "https://files.invalid/clip.mp4" }] };
+  const fetchImpl: typeof fetch = async () => new Response(new Uint8Array([9, 8, 7]), { status: 200, headers: { "content-type": "video/mp4" } });
+  const first = await downloadMediaOutputs(task, root, { fetchImpl, filenamePrefix: "clip" });
+  const locked = await open(join(root, first[0]!.relativePath), "r");
+  try {
+    const second = await downloadMediaOutputs(task, root, { fetchImpl, filenamePrefix: "clip" });
+    assert.equal(second[0]?.relativePath, first[0]?.relativePath);
+    assert.deepEqual([...await readFile(join(root, first[0]!.relativePath))], [9, 8, 7]);
+  } finally {
+    await locked.close();
+  }
 });
 
 test("rejects media output that exceeds the local artifact limit or MIME policy", async () => {

@@ -80,8 +80,9 @@
 
 ## 5. Implement projects, artifacts and bounded logs
 
-- [ ] 5.1 实现项目目录和 canonical temp output 分配
-- [ ] 5.2 实现路径归属、MIME、大小、hash 验证和原子 rename
+- [x] 5.1 实现项目目录和 canonical temp output 分配
+  - 2026-08-14 Tauri derives project-root-relative `artifacts/.tmp/<run>/<node>/<stamp>` directories from sanitized run/node identities; host media downloads use the returned relative temp path and remove it after finalize/failure.
+- [x] 5.2 实现路径归属、MIME、大小、hash 验证和原子 rename
   - [x] 2026-08-14 attachment ingestion now bounds sanitized filenames to 180 characters and adds a process-local sequence to prevent duplicate uploads from clobbering an in-progress `.part` file; Rust regression covers long Unicode names and same-stamp duplicate uploads.
   - [x] 2026-08-14 workflow text artifacts now use `runtime.artifact.write`; Rust validates the configured workspace, rejects parent/absolute paths and payloads over 4 MiB, writes through a timestamped temporary file, atomically renames, and registers canonical MIME/size/SHA-256 metadata. Media finalization remains open for the downstream media change.
   - [x] 2026-08-14 writer drafts now use a Rust UTF-8 temporary file, `sync_all`, and atomic rename before artifact inspection/registration; an existing target is rejected instead of being partially overwritten.
@@ -91,8 +92,10 @@
 - [x] 5.5 实现 30 天或 1GB 原始日志滚动，不删除用户工作
 
 **Quality Gate:**
-- [ ] 路径穿越、重复文件名、部分下载和 Windows 锁文件 tests 通过
-- [ ] 大文件不通过 UI/IPC base64
+- [x] 路径穿越、重复文件名、部分下载和 Windows 锁文件 tests 通过
+  - 2026-08-14 Rust artifact/attachment tests cover traversal, bounded duplicate names and atomic partial-file handling; media-runtime tests cover streaming overflow cleanup, content-addressed retries, and retrying while the existing artifact is held open (the Windows rename-lock path).
+- [x] 大文件不通过 UI/IPC base64
+  - 2026-08-14 attachment and runtime-message limits remain enforced at 25 MiB/1 MiB chunk and 8 MiB framed RPC boundaries; desktop source regression rejects `readAsDataURL`/`btoa` and requires streamed chunk commands.
 
 ## 6. Implement workflow-host RPC and process supervision
 
