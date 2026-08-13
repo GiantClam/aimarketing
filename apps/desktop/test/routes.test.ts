@@ -283,6 +283,8 @@ test("media readiness follows Provider source instead of the default local id", 
   assert.equal(isMediaProviderConfigured({ id: "local", source: "local", baseUrl: "http://127.0.0.1:11434/v1" }), false);
   assert.equal(isMediaProviderConfigured({ id: "local", source: "openai-compatible", baseUrl: "https://api.example.test/v1" }), true);
   assert.equal(isMediaProviderConfigured({ id: "openai-compatible", baseUrl: "https://api.example.test/v1" }), true);
+  assert.match(appSource, /const providerConfigured = configuredProp;/);
+  assert.doesNotMatch(appSource, /const providerConfigured = configuredProp \|\| activeMediaProviderConfigured;/);
 });
 
 test("media workflow nodes remain visible with a localized configuration-required state", () => {
@@ -295,6 +297,8 @@ test("media workflow nodes remain visible with a localized configuration-require
   assert.match(appSource, /Configuration required/);
   assert.match(appSource, /需要配置 Provider/);
   assert.match(appSource, /openWorkflowProviderSettings/);
+  assert.match(appSource, /providerConfiguredForNode=\{\(nodeType\) => isMediaProviderConfigured\(providerForCapability\(config, capabilityForWorkflowAction\(nodeType\)\)\)\}/);
+  assert.match(appSource, /requiresConfiguredProviderForWorkflowAction\(node\.type\) && !providerConfiguredForNode\(node\.type\)/);
 });
 
 test("desktop media workspace keeps cloud upload, voice-library, and task actions", () => {
