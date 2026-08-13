@@ -104,7 +104,14 @@ import type {
   WriterTurnDiagnostics,
 } from "@/lib/writer/types"
 import { cn } from "@/lib/utils"
-import { listWriterRevisionHistory, selectLatestWriterRevision } from "@/lib/writer/revision-history"
+import { selectLatestWriterRevision } from "@/lib/writer/revision-history"
+import {
+  buildWriterManualSavePayload,
+  listWriterRevisionHistory,
+  mergeWriterAssetProgress,
+  resolveWriterDraftForDisplay,
+  resolveWriterTaskFailureState,
+} from "./writer-workspace-state"
 
 type WriterMessage = {
   id: string
@@ -148,26 +155,6 @@ function getWriterAssetSortOrder(id: string) {
   const inlineMatch = /^inline-(\d+)$/iu.exec(id)
   if (inlineMatch) return 100 + Number.parseInt(inlineMatch[1], 10)
   return 1_000
-}
-
-function mergeWriterAssetProgress(
-  current: WriterAsset[],
-  incoming: WriterAsset,
-  platform: WriterPlatform,
-  mode: WriterMode,
-) {
-  const merged = [...current]
-  const existingIndex = merged.findIndex((asset) => asset.id === incoming.id)
-  if (existingIndex >= 0) {
-    merged[existingIndex] = {
-      ...merged[existingIndex],
-      ...incoming,
-    }
-  } else {
-    merged.push(incoming)
-  }
-
-  return ensureWriterAssetOrder(merged, platform, mode)
 }
 
 function formatEtaDuration(durationMs: number, locale: string) {
@@ -309,12 +296,15 @@ const isWriterMessageListPrefix = (prefix: WriterMessage[], full: WriterMessage[
   if (prefix.length > full.length) return false
   return prefix.every((message, index) => getWriterMessageSignature(message) === getWriterMessageSignature(full[index]))
 }
-const inferDraft = (messages: WriterMessage[]) =>
-  [...messages].reverse().find((message) => message.role === "assistant" && message.content.trim())?.content || ""
-const inferFinalDraft = (messages: WriterMessage[], _status: WriterConversationStatus) =>
+const inferDraft = (
+  messages: WriterMessage[],
+  activeRevision: number | null | undefined,
+  pendingContent: string,
+) => resolveWriterDraftForDisplay(messages, activeRevision, pendingContent)
+const inferFinalDraft = (messages: WriterMessage[], _status: WriterConversationStatus, activeRevision?: number | null) =>
   // A new turn can be drafting while the last validated revision remains the
   // active article. Only an empty conversation should render an empty draft.
-  inferDraft(messages)
+  inferDraft(messages, activeRevision, "")
 const THREAD_SEGMENT_LABEL_RE =
   /^(?:(?:segment|part|thread|post)\s*\d+|绗琝s*\d+\s*(?:娈祙鏉甯東閮ㄥ垎))(?:\s*[:锛?])?(?:\r?\n+|$)/i
 const stripThreadSegmentLabel = (segment: string) => segment.replace(THREAD_SEGMENT_LABEL_RE, "").trim()
@@ -1465,8 +1455,8 @@ export function WriterWorkspace({
 
   const writerConfig = WRITER_PLATFORM_CONFIG[platform]
   const baseDraft = useMemo(
-    () => draft || (conversationStatus === "drafting" ? "" : inferDraft(messages)),
-    [conversationStatus, draft, messages],
+    () => draft || inferDraft(messages, activeRevision, writerCopy.generatingDraft),
+    [activeRevision, draft, messages, writerCopy.generatingDraft],
   )
   const revisionHistory = useMemo(
     () => listWriterRevisionHistory(messages),
@@ -2528,7 +2518,12 @@ export function WriterWorkspace({
     void fetch("/api/writer/messages", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversation_id: conversationId, content: draft, expectedRevision: activeRevision, status: imagesRequested ? "ready" : "text_ready", imagesRequested }),
+      body: JSON.stringify(buildWriterManualSavePayload({
+        conversationId,
+        content: draft,
+        expectedRevision: activeRevision,
+        imagesRequested,
+      })),
     })
       .then(async (response) => {
         const payload = await response.json().catch(() => ({}))
@@ -2814,9 +2809,10 @@ export function WriterWorkspace({
     } catch (error) {
       const message = error instanceof Error ? error.message : writerCopy.imageGenerationFailed
       if (target.isLatest) {
-        setConversationStatus("failed")
-        setAssetsError(message)
-        setAssets(markWriterAssetsFailed(pendingAssets, message))
+        const failure = resolveWriterTaskFailureState(pendingAssets, message)
+        setConversationStatus(failure.conversationStatus)
+        setAssetsError(failure.assetsError)
+        setAssets(failure.assets)
       } else {
         setVersionAssetState((current) => ({
           ...current,

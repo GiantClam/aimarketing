@@ -68,7 +68,7 @@
   - Evidence (2026-08-14): Writer message history now carries persisted revision/active-draft metadata; `revision-history.ts` selects the active validated revision and the workspace exposes read-only older revision preview buttons without changing active state. `pnpm test:writer:revisions` passes 2/2 and root TypeScript reports no new Writer errors.
 - [x] 7.4 Send `expectedRevision` for inline manual saves and show a non-destructive conflict state when the server returns 409.
 - [x] 7.5 Ensure subsequent assistant turns use the latest saved manual revision rather than cached or prior generated text.
-- [ ] 7.6 Add UI regressions for pending revision visibility, revision history, manual-edit continuation, task failure, and independent image progress.
+- [x] 7.6 Add UI regressions for pending revision visibility, revision history, manual-edit continuation, task failure, and independent image progress. — 2026-08-14 `components/writer/writer-workspace-state.test.ts` covers the five state contracts; `pnpm test:writer:ui` passes 6/6. The active draft selector now ignores optimistic generation placeholders, manual saves use the expected-revision payload helper, failures preserve per-asset error state, and progress merging retains ready siblings.
 - [ ] 7.7 Run Writer UI tests, browser validation, ESLint, and TypeScript validation until they pass.
   - [x] 2026-08-14 Desktop active Writer workspace now consumes the shared `desktopWriterCopy[locale]` contract; locale/source regressions pass, Desktop TypeScript validation passes, and `pnpm desktop:build` completes. Browser validation and the full Writer UI/ESLint suite remain open.
 
