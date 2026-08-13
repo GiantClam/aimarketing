@@ -95,7 +95,7 @@
 - [ ] 5.5 添加写作、PPT、索引状态、引用和冲突 E2E
 
 **Quality Gate:**
-- [ ] 内置写入端口的并发冲突测试通过
+- [x] 内置写入端口的并发冲突测试通过 — 2026-08-14 `apps/desktop/test/obsidian.test.ts` races two writes against the same base hash; the target-scoped write lock allows one commit and returns `obsidian_write_conflict` for the stale writer.
 - [x] Full Access 风险文案与实时工具事件均可见
   - [x] 2026-08-13 route regression covers the warning copy; existing host-session fixtures cover streamed tool events and emergency stop evidence.
 - [ ] 全部新增测试、SaaS build 和 desktop build 通过

@@ -58,6 +58,21 @@ test("Obsidian writes are scoped and protected by a base hash", async () => {
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("concurrent Obsidian writes using one base hash produce one conflict", async () => {
+  const root = await mkdtemp(join(tmpdir(), "aimarketing-vault-write-race-"));
+  try {
+    const initial = await writeObsidianNote({ vaultPath: root, content: "# Initial" });
+    const writes = await Promise.allSettled([
+      writeObsidianNote({ vaultPath: root, targetPath: initial.path, content: "# First", baseHash: initial.hash }),
+      writeObsidianNote({ vaultPath: root, targetPath: initial.path, content: "# Second", baseHash: initial.hash }),
+    ]);
+    assert.equal(writes.filter((result) => result.status === "fulfilled").length, 1);
+    assert.equal(writes.filter((result) => result.status === "rejected" && /obsidian_write_conflict/u.test(String(result.reason))).length, 1);
+    const content = await readFile(join(root, initial.path), "utf8");
+    assert.ok(content === "# First" || content === "# Second");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("Obsidian watcher can start and stop without requiring Obsidian", async () => {
   const root = await mkdtemp(join(tmpdir(), "aimarketing-vault-watch-"));
   try {

@@ -90,20 +90,40 @@ export function resolveActiveIndexPath(indexPath: string): string {
 export interface ObsidianWriteRequest { readonly vaultPath: string; readonly targetPath?: string; readonly content: string; readonly baseHash?: string; }
 export type ObsidianWriteResult = { readonly path: string; readonly hash: string; readonly created: boolean };
 
+const writeLocks = new Map<string, Promise<void>>();
+
+async function acquireWriteLock(target: string) {
+  const previous = writeLocks.get(target) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => { release = resolve; });
+  const queued = previous.then(() => current);
+  writeLocks.set(target, queued);
+  await previous;
+  return () => {
+    release();
+    if (writeLocks.get(target) === queued) writeLocks.delete(target);
+  };
+}
+
 /** Writes only inside Vault/AI Marketing by default and refuses stale overwrites. */
 export async function writeObsidianNote(request: ObsidianWriteRequest): Promise<ObsidianWriteResult> {
   const root = resolve(request.vaultPath);
   const requested = request.targetPath?.trim() || "AI Marketing/generated-note.md";
   const target = resolve(root, requested);
   if (target !== root && !target.startsWith(`${root}${sep}`)) throw new Error("obsidian_path_escape");
-  const existing = await readFileIfPresent(target);
-  const existingHash = existing === undefined ? undefined : createHash("sha256").update(existing).digest("hex");
-  if (request.baseHash !== undefined && request.baseHash !== existingHash) throw new Error("obsidian_write_conflict");
-  await mkdir(resolve(target, ".."), { recursive: true });
-  const temporary = `${target}.${process.pid}.tmp`;
-  await writeFile(temporary, request.content, "utf8");
-  await rename(temporary, target);
-  return { path: relative(root, target).replaceAll("\\", "/"), hash: createHash("sha256").update(request.content).digest("hex"), created: existing === undefined };
+  const release = await acquireWriteLock(target);
+  try {
+    const existing = await readFileIfPresent(target);
+    const existingHash = existing === undefined ? undefined : createHash("sha256").update(existing).digest("hex");
+    if (request.baseHash !== undefined && request.baseHash !== existingHash) throw new Error("obsidian_write_conflict");
+    await mkdir(resolve(target, ".."), { recursive: true });
+    const temporary = `${target}.${process.pid}.tmp`;
+    await writeFile(temporary, request.content, "utf8");
+    await rename(temporary, target);
+    return { path: relative(root, target).replaceAll("\\", "/"), hash: createHash("sha256").update(request.content).digest("hex"), created: existing === undefined };
+  } finally {
+    release();
+  }
 }
 
 export async function reconcileObsidianVault(manifest: VaultManifest): Promise<{ readonly changed: readonly string[]; readonly removed: readonly string[] }> {
