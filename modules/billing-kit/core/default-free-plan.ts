@@ -346,7 +346,7 @@ export async function ensureDemoBillingCreditFloor(user: AuthUserPayload): Promi
     const nextBalance = balance + topUpAmount
     const topUpIdempotencyKey = `demo-floor:${user.enterpriseId || `user-${user.id}`}:${minimumAvailableCredits}`
 
-    await client.query(
+    const topUpResult = await client.query(
       `
         INSERT INTO "AI_MARKETING_credit_ledger" (
           credit_account_id,
@@ -360,6 +360,8 @@ export async function ensureDemoBillingCreditFloor(user: AuthUserPayload): Promi
           idempotency_key,
           metadata
         ) VALUES ($1, $2, $3, 'grant', $4, $5, $6, $7, $8, $9::jsonb)
+        ON CONFLICT (credit_account_id, idempotency_key) DO NOTHING
+        RETURNING id
       `,
       [
         accountRow.id,
@@ -377,6 +379,12 @@ export async function ensureDemoBillingCreditFloor(user: AuthUserPayload): Promi
         }),
       ],
     )
+
+    if (topUpResult.rows.length === 0) {
+      await client.query("COMMIT")
+      transactionClosed = true
+      return state
+    }
 
     await client.query(
       `

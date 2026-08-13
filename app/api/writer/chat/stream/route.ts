@@ -198,7 +198,11 @@ export async function POST(req: NextRequest) {
     })
     const revisionState = conversationId ? await getWriterRevisionState(auth.user.id, conversationId) : null
     const latestDraft = [...history].reverse().find((entry) => entry.answer.trim())
-    const activeDraftContent = revisionState?.activeDraft || latestDraft?.answer || ""
+    // Clarification messages are not revisions. Do not turn the latest
+    // clarification into a synthetic active revision for the next turn.
+    const activeDraftContent = revisionState
+      ? revisionState.activeDraft || ""
+      : latestDraft?.answer || ""
     const writerContext = buildWriterRuntimeContext({
       sessionKey: undefined,
       conversationId: pending.conversationId,

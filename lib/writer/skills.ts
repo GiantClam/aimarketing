@@ -2669,6 +2669,10 @@ async function extractBriefDefaultsFromEnterpriseKnowledge(params: {
   platform: WriterPlatform
   mode: WriterMode
 }) {
+  if (shouldUseWriterE2EFixtures()) {
+    return null
+  }
+
   if (!params.enterpriseId || (params.brief.audience && params.brief.tone)) {
     return null
   }
@@ -4229,7 +4233,9 @@ export async function generateWriterDraftWithSkills(
     Boolean(options?.enterpriseId) &&
     (retrievalStrategy === "enterprise_grounded" || retrievalStrategy === "hybrid_grounded")
 
-  const enterpriseKnowledgePromise = shouldUseEnterpriseKnowledge
+  const enterpriseKnowledgePromise = shouldUseWriterE2EFixtures()
+    ? Promise.resolve(null)
+    : shouldUseEnterpriseKnowledge
     ? withTimeout(
         loadWriterEnterpriseKnowledgeContext({
           enterpriseId: options?.enterpriseId as number,

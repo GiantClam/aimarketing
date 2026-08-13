@@ -32,6 +32,10 @@ STRATEGY_LABELS = {
 VALID_RETRIEVAL_STRATEGIES = set(STRATEGY_LABELS)
 VALID_WEB_RESEARCH_STATUSES = {"ready", "disabled", "timed_out", "unavailable", "skipped"}
 WRITER_MEMORY_ENABLED = os.environ.get("WRITER_MEMORY_ENABLED", "").strip().lower() == "true"
+WRITER_E2E_ASSISTANT_TIMEOUT_MS = max(
+    5_000,
+    int(os.environ.get("WRITER_E2E_ASSISTANT_TIMEOUT_MS", "60000") or "60000"),
+)
 
 
 def expect(condition: bool, message: str):
@@ -649,7 +653,7 @@ def run_fixture_enabled(page):
     start = perf_counter()
     send_button.click()
     page.wait_for_url(re.compile(r".*/dashboard/writer/\d+(?:\\?.*)?$"), timeout=90000)
-    clarification_text = wait_for_non_empty_last_assistant(page, timeout_ms=60000)
+    clarification_text = wait_for_non_empty_last_assistant(page, timeout_ms=WRITER_E2E_ASSISTANT_TIMEOUT_MS)
     expect(
         "Audience:" in clarification_text or "主要是写给谁看的" in clarification_text,
         "writer should ask for missing brief details before drafting",

@@ -20,6 +20,7 @@ let updatedAssistantStatuses: string[] = []
 let reserveIdempotencyKeys: string[] = []
 let finalizeIdempotencyKeys: string[] = []
 let releaseIdempotencyKeys: string[] = []
+let writerHistory: Array<Record<string, unknown>> = []
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -125,7 +126,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     return {
       getWriterConversation: async () => null,
       listWriterMessages: async (_userId: number, _conversationId: string, limit: number) =>
-        limit === 1 ? { conversation: { id: "conv-1" }, data: [] } : { data: [] },
+        limit === 1 ? { conversation: { id: "conv-1" }, data: [] } : { data: writerHistory },
       updateWriterLatestAssistantMessage: async (_userId: number, _conversationId: string, _content: string, meta?: { status?: string }) => {
         if (meta?.status) updatedAssistantStatuses.push(meta.status)
         return true
@@ -167,6 +168,7 @@ test.beforeEach(() => {
   reserveIdempotencyKeys = []
   finalizeIdempotencyKeys = []
   releaseIdempotencyKeys = []
+  writerHistory = []
 })
 
 test.after(() => {
@@ -242,6 +244,30 @@ test("writer chat stream persists a revision against the active draft revision",
   assert.equal(persistedExpectedRevision, 4)
   assert.equal(finalizeCalls, 1)
   assert.equal(releaseCalls, 0)
+})
+
+test("writer chat stream does not synthesize an active revision from a clarification message", async () => {
+  writerHistory = [
+    {
+      id: "clarification-1",
+      query: "Write a WeChat article about AI workflow systems.",
+      answer: "Who is the target audience and what outcome should the article drive?",
+      content: "Who is the target audience and what outcome should the article drive?",
+      role: "assistant",
+      inputs: { contents: "Write a WeChat article about AI workflow systems." },
+    },
+  ]
+
+  const response = await POST({
+    json: async () => ({
+      query: "The audience is B2B SaaS founders and the goal is to drive demo requests.",
+      conversation_id: "conv-1",
+    }),
+  })
+
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+  await new Response(response.body).text()
+  assert.equal((lastWriterRunInput?.writerContext as { activeDraft?: unknown })?.activeDraft, null)
 })
 
 test("writer chat stream releases reserved credits and marks the assistant failed when generation fails", async () => {

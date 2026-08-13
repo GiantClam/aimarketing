@@ -82,7 +82,12 @@ export async function POST(req: NextRequest) {
     })
     const revisionState = conversationId ? await getWriterRevisionState(auth.user.id, conversationId) : null
     const latestDraft = [...history].reverse().find((entry) => entry.answer.trim())
-    const activeDraftContent = revisionState?.activeDraft || latestDraft?.answer || ""
+    // A clarification turn is persisted as an assistant message but is not a
+    // revision. Only reuse history as an active draft when the revision store
+    // is unavailable; otherwise an activeRevision of zero must remain zero.
+    const activeDraftContent = revisionState
+      ? revisionState.activeDraft || ""
+      : latestDraft?.answer || ""
     const writerContext = buildWriterRuntimeContext({
       sessionKey: undefined,
       conversationId: persisted.conversationId,

@@ -168,6 +168,7 @@ def main():
                 "RAILWAY_OPENCODE_RUNTIME_URL": "http://127.0.0.1:9",
                 "RAILWAY_OPENCODE_RUNTIME_TOKEN": "e2e-fixture-runtime-token",
                 "WRITER_E2E_FIXTURES": "true",
+                "WRITER_E2E_ASSISTANT_TIMEOUT_MS": "15000",
                 "WRITER_ENABLE_WEB_RESEARCH": "false",
                 "WRITER_REQUIRE_WEB_RESEARCH": "false",
                 "WRITER_USE_SYSTEM_PROXY": "false",

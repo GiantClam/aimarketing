@@ -9,6 +9,8 @@ const nodeModule = require("node:module") as {
 const originalLoad = nodeModule._load
 
 let capturedTaskPayload: Record<string, unknown> | null = null
+let writerHistory: Array<Record<string, unknown>> = []
+let capturedRevisionState: Record<string, unknown> | null = null
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -44,11 +46,11 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   }
   if (request === "@/lib/writer/repository") {
     return {
-      listWriterMessages: async () => ({ data: [] }),
+      listWriterMessages: async () => ({ data: writerHistory }),
     }
   }
   if (request === "@/lib/writer/revisions") {
-    return { getWriterRevisionState: async () => null }
+    return { getWriterRevisionState: async () => capturedRevisionState }
   }
   if (request === "@/lib/assistant-async") {
     return {
@@ -75,6 +77,8 @@ test.before(async () => {
 
 test.beforeEach(() => {
   capturedTaskPayload = null
+  writerHistory = []
+  capturedRevisionState = null
 })
 
 test.after(() => {
@@ -119,4 +123,34 @@ test("writer chat payload carries raw input without application-classified opera
   ]) {
     assert.equal(Object.hasOwn(capturedTaskPayload || {}, forbidden), false, forbidden)
   }
+})
+
+test("writer chat does not synthesize an active revision from a clarification message", async () => {
+  writerHistory = [
+    {
+      id: "clarification-1",
+      query: "Write a WeChat article about AI workflow systems.",
+      answer: "Who is the target audience and what outcome should the article drive?",
+      content: "Who is the target audience and what outcome should the article drive?",
+      role: "assistant",
+      inputs: { contents: "Write a WeChat article about AI workflow systems." },
+    },
+  ]
+  capturedRevisionState = {
+    activeRevision: 0,
+    activeDraft: null,
+  }
+
+  const response = await POST({
+    json: async () => ({
+      query: "The audience is B2B SaaS founders and the goal is to drive demo requests.",
+      conversation_id: "540",
+      platform: "wechat",
+      mode: "article",
+    }),
+  })
+
+  assert.equal(response.status, 200)
+  const writerContext = capturedTaskPayload?.writerContext as { activeDraft?: unknown } | undefined
+  assert.equal(writerContext?.activeDraft, null)
 })
