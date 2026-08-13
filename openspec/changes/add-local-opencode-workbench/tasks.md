@@ -73,6 +73,7 @@
 - [x] 4.2b Desktop chat uses the shared cloud-compatible AI/user message cards, timestamps, live event panel, active route highlighting and quick prompt chips.
 - [x] 4.1a 2026-08-13 `DesktopConversationWorkspace` composes shared `WorkbenchChatMessage`/`WorkbenchWriterMessage`, prompt composer, route conversation history and artifact/event surfaces; route regressions verify the cloud-compatible composition.
 - [x] 4.2c 2026-08-13 `Desktop WorkbenchClient` now owns artifact listing/removal, run listing/inspection, usage summary reads, and Vault citation opening; the resource-library and task-center UI consume those typed adapters.
+  - [x] 4.2d 2026-08-13 all desktop workspaces consume the active capability Provider profile's configured model list; model/reasoning changes persist to that profile while legacy single-provider configs remain compatible.
   - [x] 2026-08-13 Obsidian index/rebuild and search now also use typed `WorkbenchClient.knowledge.index/search` adapters, including host-start, response correlation, timeout and normalized citation mapping.
 - [ ] 4.5 实时展示文本/工具步骤和 emergency stop
 - [x] 4.5a 2026-08-13 `workbench-client.test.ts` drives the real Desktop WorkbenchClient adapter with malformed frames, text deltas, tool events, usage, workflow/media cancellation and terminal completion; the adapter emits normalized events and ignores malformed payloads.

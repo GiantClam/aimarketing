@@ -97,9 +97,13 @@ test("desktop image capabilities select direct OpenAI-compatible or Bailian adap
 
 test("desktop video capabilities select shared MiniMax, Bailian and RunningHub clients", () => {
   const host = readFileSync(resolve(process.cwd(), "runtime/host.ts"), "utf8");
+  const app = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
   assert.match(host, /createBailianVideoAdapter\(providerOptions\)/);
   assert.match(host, /createMiniMaxVideoAdapter\(providerOptions\)/);
   assert.match(host, /createRunningHubAdapter\(/);
+  assert.match(host, /readProviderMap\(command\.payload\?\.providers\)/);
+  assert.match(host, /providerProfiles\[provider\]/);
+  assert.match(app, /providers: config\.providers/);
   assert.match(host, /executorId === "video_generate"/);
   assert.match(host, /executorId === "digital_human"/);
 });

@@ -18,6 +18,63 @@ NSIS 产物位于 `apps/desktop/src-tauri/target/release/bundle/nsis/`；本机�
 
 当前已接通：本地配置原子恢复、单实例锁、Rust SQLite 基础 schema 与 typed repository、OpenCode Host framed RPC（普通对话/写作/工作流文本统一走 OpenCode 且复用稳定 session）、本地文件 artifact、Obsidian Markdown manifest/关键词检索/reconciliation/冲突保护写入/扫描重建、共享 workflow/writer/skill/media contracts、工作流能力选择、OpenAI-compatible/Bailian/MiniMax/RunningHub 直连 submit/poll 与媒体下载、Windows Job Object 进程监管；桌面 UI 复用了线上 dashboard 的路由命名与导航顺序（`/dashboard`、`/dashboard/ai`、`/dashboard/writer`、`/dashboard/image-assistant`、`/dashboard/workflows`、`/dashboard/tasks`、`/dashboard/assets`、`/dashboard/knowledge-base`、`/dashboard/video`、`/dashboard/settings` 等），通过 `@aimarketing/workbench-ui` 共享线上主题 token、字体栈、首页入口文案、消息框架和工作区 archetype。构建时固定拉取官方 `hugohe3/ppt-master` commit 并复制完整 Skill（缺失时优先本地 spike 缓存，否则自动 git 获取），桌面只移除已确认排除的登录、企业、计费、Lead Hunter、公开营销页面与发布为 Agent，其余入口使用同一文案和路由语义；本地运行时、配置和数据适配由 Tauri/Rust/Node 完成。
 
+## 多 Provider 配置
+
+桌面运行时兼容旧版单 `provider` 配置，并支持按能力选择独立 Provider profile。普通模式配置位于 `%LOCALAPPDATA%\\AIMarketing\\config.json`，绿色便携模式位于程序目录 `data\\config.json`。`provider` 是兼容回退项；`providers` 的键是 profile ID，`defaults` 将 `text`、`image`、`video`、`audio` 分别绑定到 profile：
+
+```json
+{
+  "schemaVersion": 1,
+  "workspacePath": "D:\\AI Marketing Workspace",
+  "provider": {
+    "id": "text-main",
+    "source": "openai-compatible",
+    "model": "gpt-5.4",
+    "baseUrl": "https://text.example/v1",
+    "apiKey": "text-secret"
+  },
+  "providers": {
+    "text-main": {
+      "id": "text-main",
+      "model": "gpt-5.4",
+      "baseUrl": "https://text.example/v1",
+      "apiKey": "text-secret"
+    },
+    "image-main": {
+      "id": "image-main",
+      "model": "gpt-image-2",
+      "baseUrl": "https://image.example/v1",
+      "apiKey": "image-secret"
+    },
+    "video-runninghub": {
+      "id": "video-runninghub",
+      "source": "runninghub",
+      "model": "seedance",
+      "baseUrl": "https://www.runninghub.cn",
+      "apiKey": "runninghub-secret",
+      "endpoint": "/openapi/v2/rhart-video/sparkvideo-2.0-fast/text-to-video",
+      "queryEndpoint": "/openapi/v2/query"
+    },
+    "audio-minimax": {
+      "id": "audio-minimax",
+      "source": "minimax",
+      "model": "MiniMax-Hailuo",
+      "baseUrl": "https://api.minimaxi.com/v1",
+      "apiKey": "minimax-secret"
+    }
+  },
+  "defaults": {
+    "text": "text-main",
+    "image": "image-main",
+    "video": "video-runninghub",
+    "audio": "audio-minimax"
+  },
+  "runtime": { "source": "system" }
+}
+```
+
+未配置或找不到默认 profile 时，会安全回退到旧版 `provider`。工作流节点如果显式携带 `provider`，Host 会从同一组 profiles 解析该节点的 Base URL、API Key、Endpoint 和模型。
+
 LanceDB 使用动态加载：主绿色包不携带约 283 MiB 的平台原生 `.node`。索引默认使用随应用提供的离线 `local-hash-384-v1` 特征哈希向量（无需网络），若用户显式配置 loopback Ollama `nomic-embed-text` 则使用真实本地模型；两者都只写入每 Vault 独立 LanceDB，SQLite 永不保存 chunk、向量或 Vault 原文。
 
 ## 工作流可移植边界

@@ -15,7 +15,7 @@ import { createRpcReader, writeRpcResponse } from "./rpc";
 import { createDesktopWorkflowPorts } from "./workflow-ports";
 
 type HostCommand = { readonly version: 1; readonly requestId: string; readonly type: "chat.run" | "workflow.run" | "run.cancel" | "run.emergency_stop" | "run.retry" | "media.resume" | "health" | "session.create" | "session.prompt" | "knowledge.index" | "knowledge.search"; readonly runId?: string; readonly sessionId?: string; readonly payload?: Record<string, unknown> };
-type ProviderConfig = { readonly id?: string; readonly source?: string; readonly model?: string; readonly baseUrl?: string; readonly apiKey?: string; readonly reasoningEffort?: string };
+type ProviderConfig = { readonly id?: string; readonly source?: string; readonly model?: string; readonly baseUrl?: string; readonly apiKey?: string; readonly reasoningEffort?: string; readonly endpoint?: string; readonly queryEndpoint?: string };
 const active = new Map<string, ReturnType<typeof spawn>>();
 const workflowControllers = new Map<string, AbortController>();
 const vaultWatchers = new Map<string, ObsidianVaultWatcher>();
@@ -98,7 +98,19 @@ function readProvider(value: unknown): ProviderConfig | undefined {
     ...(typeof record.baseUrl === "string" ? { baseUrl: record.baseUrl } : {}),
     ...(typeof record.apiKey === "string" ? { apiKey: record.apiKey } : {}),
     ...(typeof record.reasoningEffort === "string" ? { reasoningEffort: record.reasoningEffort } : {}),
+    ...(typeof record.endpoint === "string" ? { endpoint: record.endpoint } : {}),
+    ...(typeof record.queryEndpoint === "string" ? { queryEndpoint: record.queryEndpoint } : {}),
   };
+}
+
+function readProviderMap(value: unknown): Record<string, ProviderConfig> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const profiles: Record<string, ProviderConfig> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    const provider = readProvider(raw);
+    if (provider) profiles[key] = provider;
+  }
+  return profiles;
 }
 
 function readWorkflowRecovery(value: unknown) {
@@ -300,15 +312,17 @@ async function createFileArtifact(workspacePath: string, runId: string, nodeKey:
 async function runMediaCapability(command: HostCommand, runId: string, nodeKey: string, executorId: string, config: Record<string, unknown>, inputs: Record<string, unknown>, workspacePath: string, signal?: AbortSignal, resumeProviderTaskId?: string) {
   const configuredMedia = command.payload?.media && typeof command.payload.media === "object" ? command.payload.media as Record<string, unknown> : undefined;
   const textProvider = command.payload?.provider && typeof command.payload.provider === "object" ? command.payload.provider as Record<string, unknown> : undefined;
+  const providerProfiles = readProviderMap(command.payload?.providers);
   const provider = typeof config.provider === "string" ? config.provider : typeof configuredMedia?.id === "string" ? configuredMedia.id : typeof textProvider?.id === "string" ? textProvider.id : "";
-  const baseUrl = typeof config.baseUrl === "string" ? config.baseUrl : typeof configuredMedia?.baseUrl === "string" ? configuredMedia.baseUrl : typeof textProvider?.baseUrl === "string" ? textProvider.baseUrl : "";
+  const profile = providerProfiles[provider] ?? readProvider(configuredMedia) ?? readProvider(textProvider);
+  const baseUrl = typeof config.baseUrl === "string" ? config.baseUrl : profile?.baseUrl ?? "";
   if (!provider || !baseUrl) {
     const error = new Error(`provider_configuration_required:${executorId}`); (error as Error & { code?: string }).code = "provider_configuration_required"; throw error;
   }
   const defaultEndpoints: Record<string, string> = { image_generate: "/images/generations", video_generate: "/videos/generations", digital_human: "/videos/generations", music_generate: "/audio/generations", voice_synthesis: "/audio/speech", voice_clone: "/voice_clone", audio_generate: "/audio/generations" };
-  const endpoint = typeof config.endpoint === "string" ? config.endpoint : defaultEndpoints[executorId] ?? "";
+  const endpoint = typeof config.endpoint === "string" ? config.endpoint : profile?.endpoint ?? defaultEndpoints[executorId] ?? "";
   if (!endpoint) throw new Error(`provider_endpoint_required:${executorId}`);
-  const apiKey = typeof config.apiKey === "string" ? config.apiKey : typeof configuredMedia?.apiKey === "string" ? configuredMedia.apiKey : typeof textProvider?.apiKey === "string" ? textProvider.apiKey : typeof command.payload?.apiKey === "string" ? command.payload.apiKey : undefined;
+  const apiKey = typeof config.apiKey === "string" ? config.apiKey : profile?.apiKey ?? (typeof command.payload?.apiKey === "string" ? command.payload.apiKey : undefined);
   const providerOptions = { provider: provider as MediaProviderId, baseUrl, apiKey: apiKey ?? "", fetchImpl: fetch, workspacePath };
   const providerLower = provider.toLowerCase();
   const adapter: MediaProviderAdapter = providerLower.includes("bailian") && executorId === "image_generate"
@@ -320,13 +334,13 @@ async function runMediaCapability(command: HostCommand, runId: string, nodeKey: 
       : providerLower.includes("minimax") && ["music_generate", "voice_synthesis", "voice_clone", "audio_generate"].includes(executorId)
       ? createMiniMaxAudioAdapter(providerOptions)
       : providerLower.includes("runninghub")
-        ? createRunningHubAdapter({ ...providerOptions, submitPath: endpoint, queryPath: typeof config.queryEndpoint === "string" ? config.queryEndpoint : "/openapi/v2/query" })
+     ? createRunningHubAdapter({ ...providerOptions, submitPath: endpoint, queryPath: typeof config.queryEndpoint === "string" ? config.queryEndpoint : profile?.queryEndpoint ?? "/openapi/v2/query" })
       : executorId === "image_generate" && (providerLower.includes("openai") || providerLower.includes("pptoken") || endpoint === "/images/generations")
         ? createOpenAICompatibleImageAdapter(providerOptions)
-      : createHttpMediaAdapter({ provider: provider as MediaProviderId, baseUrl, apiKey, submitPath: endpoint, queryPath: typeof config.queryEndpoint === "string" ? (taskId) => `${config.queryEndpoint}/${encodeURIComponent(taskId)}` : undefined });
+       : createHttpMediaAdapter({ provider: provider as MediaProviderId, baseUrl, apiKey, submitPath: endpoint, queryPath: typeof config.queryEndpoint === "string" ? (taskId) => `${config.queryEndpoint}/${encodeURIComponent(taskId)}` : profile?.queryEndpoint ? (taskId) => `${profile.queryEndpoint}/${encodeURIComponent(taskId)}` : undefined });
   if (resumeProviderTaskId && !adapter.query) throw new Error(`provider_resume_query_unsupported:${provider}`);
   const idempotencyKey = `${runId}:${nodeKey}:1`;
-  const modelId = typeof config.model === "string" ? config.model : typeof configuredMedia?.model === "string" ? configuredMedia.model : typeof textProvider?.model === "string" ? textProvider.model : "default";
+  const modelId = typeof config.model === "string" ? config.model : profile?.model ?? "default";
   emit(command, { event: "tool_event", tool: `media:${executorId}`, phase: "started", message: JSON.stringify({ provider, model: modelId, executorId, nodeKey, idempotencyKey, status: "queued" }), runId });
   const cancellation = { signal, throwIfCancelled() { if (signal?.aborted) throw new Error("media_cancelled"); } };
   let task: Awaited<ReturnType<typeof runMediaJob>>;

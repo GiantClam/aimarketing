@@ -44,9 +44,9 @@ test("desktop workflow and media entry points expose the configured model select
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
   const selector = /<ModelControls locale=\{locale\} model=\{model\} models=\{models\} reasoningEffort=\{reasoningEffort\} skillId=\{skillId\} showSkill=\{false\}/g;
   assert.ok((appSource.match(selector) ?? []).length >= 3);
-  assert.match(appSource, /<DesktopWorkflowWorkspace[\s\S]*?model=\{config\.provider\.model\} models=\{config\.provider\.models\}[\s\S]*?onModelChange=\{updateModel\}/);
-  assert.match(appSource, /<DesktopMediaWorkspace[\s\S]*?model=\{config\.provider\.model\} models=\{config\.provider\.models\}[\s\S]*?onModelChange=\{updateModel\}/);
-  assert.match(appSource, /currentWorkflowDefinition\(\)[\s\S]*?model: config\.provider\.model/);
+  assert.match(appSource, /<DesktopWorkflowWorkspace[\s\S]*?model=\{activeModel\} models=\{activeModels\}[\s\S]*?onModelChange=\{updateModel\}/);
+  assert.match(appSource, /<DesktopMediaWorkspace[\s\S]*?model=\{activeModel\} models=\{activeModels\}[\s\S]*?onModelChange=\{updateModel\}/);
+  assert.match(appSource, /currentWorkflowDefinition\(\)[\s\S]*?model: activeProvider\.model/);
 });
 
 test("desktop usage records the model reported by the active Provider event", () => {
@@ -278,7 +278,7 @@ test("media readiness follows Provider source instead of the default local id", 
   const source = readFileSync(resolve(process.cwd(), "src/provider-config.ts"), "utf8");
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
   assert.match(source, /source !== "local"/);
-  assert.match(appSource, /isMediaProviderConfigured\(config\.provider\)/);
+  assert.match(appSource, /isMediaProviderConfigured\(activeProvider\)/);
   assert.equal(isMediaProviderConfigured({ id: "local", source: "local", baseUrl: "http://127.0.0.1:11434/v1" }), false);
   assert.equal(isMediaProviderConfigured({ id: "local", source: "openai-compatible", baseUrl: "https://api.example.test/v1" }), true);
   assert.equal(isMediaProviderConfigured({ id: "openai-compatible", baseUrl: "https://api.example.test/v1" }), true);

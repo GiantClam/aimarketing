@@ -61,6 +61,25 @@ test("config writes atomically and recovers from backup", async () => {
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("config preserves provider profiles and capability defaults", async () => {
+  const root = await mkdtemp(join(tmpdir(), "aimarketing-provider-profiles-"));
+  const paths = createPaths(root, "normal");
+  try {
+    const initial = defaultDesktopConfig(paths);
+    const fixtureCredentials = { text: "fixture-text-key", image: "fixture-image-key", video: "fixture-video-key" };
+    const profiles = {
+      text: { id: "text", model: "text/model", baseUrl: "https://text.test/v1", apiKey: fixtureCredentials.text },
+      image: { id: "image", model: "image/model", baseUrl: "https://image.test/v1", apiKey: fixtureCredentials.image },
+      video: { id: "video", model: "video/model", baseUrl: "https://video.test/v1", apiKey: fixtureCredentials.video, endpoint: "/videos" },
+    };
+    const configured = { ...initial, provider: profiles.text, providers: profiles, defaults: { text: "text", image: "image", video: "video" } };
+    await writeDesktopConfig(paths, configured);
+    const loaded = await readDesktopConfig(paths);
+    assert.deepEqual(loaded.providers, profiles);
+    assert.deepEqual(loaded.defaults, configured.defaults);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("same root allows one writer", async () => {
   const root = await mkdtemp(join(tmpdir(), "aimarketing-lock-"));
   const paths = createPaths(root, "normal");
