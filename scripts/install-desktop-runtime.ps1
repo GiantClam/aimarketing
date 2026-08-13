@@ -353,6 +353,28 @@ function Install-VerifiedAsset([object]$asset) {
   throw "Unable to install $($asset.id): $lastError"
 }
 
+function Activate-StagedRuntime() {
+  $backupRoot = "$installRootResolved.last-known-good"
+  $movedExisting = $false
+  $activated = $false
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $installRootResolved) | Out-Null
+  try {
+    if (Test-Path -LiteralPath $installRootResolved) {
+      if (Test-Path -LiteralPath $backupRoot) { Remove-Item -LiteralPath $backupRoot -Recurse -Force }
+      Move-Item -LiteralPath $installRootResolved -Destination $backupRoot
+      $movedExisting = $true
+    }
+    Move-Item -LiteralPath $stageRoot -Destination $installRootResolved
+    $activated = $true
+  } catch {
+    if ($activated -and (Test-Path -LiteralPath $installRootResolved)) { Remove-Item -LiteralPath $installRootResolved -Recurse -Force -ErrorAction SilentlyContinue }
+    if ($movedExisting -and (Test-Path -LiteralPath $backupRoot) -and -not (Test-Path -LiteralPath $installRootResolved)) {
+      Move-Item -LiteralPath $backupRoot -Destination $installRootResolved -Force -ErrorAction SilentlyContinue
+    }
+    throw
+  }
+}
+
 try {
   Assert-SufficientDiskSpace
   Seed-BundledRuntime
@@ -365,13 +387,7 @@ try {
   Install-OpenCodePackage -Offline:([bool]$OfflineZip)
   Install-PythonPptxDependencies -Offline:([bool]$OfflineZip)
   foreach ($asset in $manifest.assets) { Assert-Asset $asset $stageRoot }
-  $backupRoot = "$installRootResolved.last-known-good"
-  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $installRootResolved) | Out-Null
-  if (Test-Path -LiteralPath $installRootResolved) {
-    if (Test-Path -LiteralPath $backupRoot) { Remove-Item -LiteralPath $backupRoot -Recurse -Force }
-    Move-Item -LiteralPath $installRootResolved -Destination $backupRoot
-  }
-  Move-Item -LiteralPath $stageRoot -Destination $installRootResolved
+  Activate-StagedRuntime
   Write-Output (ConvertTo-Json @{ status = "ok"; installed = $manifest.assets.id; source = if ($OfflineZip) { "offline" } else { "mirrors" } } -Compress)
 } catch {
   if (Test-Path -LiteralPath $stageRoot) { Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue }

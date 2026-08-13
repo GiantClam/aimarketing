@@ -120,6 +120,15 @@ test("installer keeps source fallback, resume, proxy and disk gates fail-closed"
   assert.match(source, /runtime_offline_manifest_mismatch/u);
 });
 
+test("runtime activation restores last-known-good when staged activation fails", async () => {
+  const source = await readFile(scriptPath, "utf8");
+  assert.match(source, /function Activate-StagedRuntime\(\)/u);
+  assert.match(source, /\$movedExisting = \$false/u);
+  assert.match(source, /\$activated = \$false/u);
+  assert.match(source, /Move-Item -LiteralPath \$backupRoot -Destination \$installRootResolved/u);
+  assert.match(source, /Activate-StagedRuntime\s*$/mu);
+});
+
 test("installer validates the signed-manifest shape before touching the install root", async () => {
   const source = await readFile(scriptPath, "utf8");
   assert.match(source, /Assert-RuntimeManifestSchema/u);
