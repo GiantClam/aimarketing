@@ -1,11 +1,13 @@
 use rusqlite::{params, Connection, OpenFlags, Result};
 use serde::Serialize;
+use serde_json::Value;
 use sha2::Digest;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const BACKUP_INTERVAL: Duration = Duration::from_secs(5 * 60);
+const REDACTED: &str = "[REDACTED]";
 
 const SCHEMA: &str = r#"
 PRAGMA journal_mode = WAL;
@@ -176,6 +178,42 @@ fn open(path: &Path) -> Result<Connection> {
     Ok(connection)
 }
 
+fn redact_json_payload(raw: &str) -> Result<String> {
+    let mut value: Value = serde_json::from_str(raw).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    redact_json_value(&mut value);
+    serde_json::to_string(&value).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
+}
+
+fn redact_json_value(value: &mut Value) {
+    match value {
+        Value::Array(items) => items.iter_mut().for_each(redact_json_value),
+        Value::Object(fields) => {
+            for (key, nested) in fields.iter_mut() {
+                let normalized = key.chars().filter(|character| character.is_ascii_alphanumeric()).collect::<String>().to_ascii_lowercase();
+                if normalized == "apikey"
+                    || normalized == "key"
+                    || normalized.ends_with("key")
+                    || normalized == "token"
+                    || normalized.ends_with("token")
+                    || normalized == "secret"
+                    || normalized.ends_with("secret")
+                    || normalized == "password"
+                    || normalized.ends_with("password")
+                    || normalized == "authorization"
+                    || normalized.ends_with("authorization")
+                    || normalized == "credential"
+                    || normalized.ends_with("credential")
+                {
+                    *nested = Value::String(REDACTED.to_string());
+                } else {
+                    redact_json_value(nested);
+                }
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct ConversationRow { pub id: String, pub title: String, pub opencode_session_id: Option<String>, pub updated_at: String }
 
@@ -249,6 +287,7 @@ pub fn create_run(path: &Path, id: &str, conversation_id: Option<&str>, model: O
 pub fn append_run_event(path: &Path, run_id: &str, sequence: i64, event_type: &str, payload_json: &str) -> Result<()> {
     initialize(path)?;
     let connection = open(path)?;
+    let payload_json = redact_json_payload(payload_json)?;
     connection.execute("INSERT INTO run_events(run_id, sequence, event_type, payload_json) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(run_id, sequence) DO NOTHING", params![run_id, sequence, event_type, payload_json])?;
     Ok(())
 }
@@ -286,6 +325,7 @@ pub fn record_usage(path: &Path, run_id: &str, provider: Option<&str>, model: &s
 pub fn record_run_node(path: &Path, run_id: &str, node_key: &str, status: &str, output_json: Option<&str>) -> Result<()> {
     initialize(path)?;
     let connection = open(path)?;
+    let output_json = output_json.map(redact_json_payload).transpose()?;
     connection.execute("INSERT INTO run_nodes(run_id, node_key, status, output_json) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(run_id, node_key) DO UPDATE SET status=excluded.status, output_json=excluded.output_json, updated_at=CURRENT_TIMESTAMP", params![run_id, node_key, status, output_json])?;
     Ok(())
 }
@@ -294,6 +334,7 @@ pub fn record_run_checkpoint(path: &Path, run_id: &str, checkpoint_key: &str, se
     if output_json.len() > 64 * 1024 { return Err(rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "run_checkpoint_too_large")))); }
     initialize(path)?;
     let connection = open(path)?;
+    let output_json = redact_json_payload(output_json)?;
     connection.execute("INSERT INTO run_checkpoints(run_id, checkpoint_key, sequence, output_json) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(run_id, checkpoint_key) DO UPDATE SET sequence=excluded.sequence, output_json=excluded.output_json, updated_at=CURRENT_TIMESTAMP", params![run_id, checkpoint_key, sequence, output_json])?;
     Ok(())
 }
@@ -301,6 +342,7 @@ pub fn record_run_checkpoint(path: &Path, run_id: &str, checkpoint_key: &str, se
 pub fn record_run_attempt(path: &Path, idempotency_key: &str, run_id: &str, node_key: &str, provider: Option<&str>, provider_task_id: Option<&str>, status: &str, payload_json: Option<&str>) -> Result<()> {
     initialize(path)?;
     let connection = open(path)?;
+    let payload_json = payload_json.map(redact_json_payload).transpose()?;
     connection.execute("INSERT INTO run_attempts(idempotency_key, run_id, node_key, provider, provider_task_id, status, payload_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(idempotency_key) DO UPDATE SET provider_task_id=COALESCE(excluded.provider_task_id, run_attempts.provider_task_id), status=excluded.status, payload_json=excluded.payload_json, updated_at=CURRENT_TIMESTAMP", params![idempotency_key, run_id, node_key, provider, provider_task_id, status, payload_json])?;
     Ok(())
 }
@@ -382,6 +424,7 @@ pub fn list_recoverable_attempts(path: &Path) -> Result<Vec<RunAttemptRow>> {
 pub fn save_workflow(path: &Path, id: &str, name: &str, project_id: Option<&str>, definition_json: &str) -> Result<WorkflowRow> {
     initialize(path)?;
     let connection = open(path)?;
+    let definition_json = redact_json_payload(definition_json)?;
     let hash = format!("{:x}", sha2::Sha256::digest(definition_json.as_bytes()));
     connection.execute("INSERT INTO workflows(id, project_id, name, definition_json) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(id) DO UPDATE SET project_id=excluded.project_id, name=excluded.name, definition_json=excluded.definition_json, updated_at=CURRENT_TIMESTAMP", params![id, project_id, name, definition_json])?;
     let revision: i64 = connection.query_row("SELECT COALESCE(MAX(revision), 0) + 1 FROM workflow_revisions WHERE workflow_id=?1", [id], |row| row.get(0))?;
@@ -532,6 +575,33 @@ mod tests {
         assert_eq!(summary.provider_cost, None);
         assert_eq!(summary.estimated_cost, None);
         assert_eq!(summary.input_tokens + summary.output_tokens, 8);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn structured_json_storage_redacts_credentials_without_losing_usage_fields() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-storage-redaction-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let path = root.join("app.db");
+        let fixture_value = "fixture-value-must-not-reach-sqlite";
+        let payload = format!(r#"{{"provider":{{"apiKey":"{fixture_value}","access_token":"{fixture_value}"}},"usage":{{"input_tokens":7,"output_tokens":11}},"nested":[{{"privateKey":"{fixture_value}"}}]}}"#);
+        create_run(&path, "run-redaction", None, Some("provider/model")).unwrap();
+        append_run_event(&path, "run-redaction", 1, "provider_result", &payload).unwrap();
+        record_run_node(&path, "run-redaction", "writer", "succeeded", Some(&payload)).unwrap();
+        record_run_checkpoint(&path, "run-redaction", "writer", 1, &payload).unwrap();
+        record_run_attempt(&path, "run-redaction:attempt", "run-redaction", "writer", Some("provider"), None, "failed", Some(&payload)).unwrap();
+        save_workflow(&path, "workflow-redaction", "Safe workflow", None, &format!(r#"{{"version":1,"provider":{{"apiKey":"{fixture_value}"}},"nodes":[]}}"#)).unwrap();
+
+        let connection = open(&path).unwrap();
+        for (table, column) in [("run_events", "payload_json"), ("run_nodes", "output_json"), ("run_checkpoints", "output_json"), ("run_attempts", "payload_json"), ("workflows", "definition_json")] {
+            let sql = format!("SELECT COALESCE({column}, '') FROM {table}");
+            let values = connection.prepare(&sql).unwrap().query_map([], |row| row.get::<_, String>(0)).unwrap().collect::<Result<Vec<_>, _>>().unwrap();
+            assert!(values.iter().all(|value| !value.contains(fixture_value)), "credential leaked into {table}.{column}");
+            assert!(values.iter().any(|value| value.contains(REDACTED)), "redaction marker missing in {table}.{column}");
+        }
+        let event: String = connection.query_row("SELECT payload_json FROM run_events WHERE run_id='run-redaction'", [], |row| row.get(0)).unwrap();
+        assert!(event.contains(r#""input_tokens":7"#));
+        assert!(event.contains(r#""output_tokens":11"#));
         let _ = std::fs::remove_dir_all(root);
     }
 

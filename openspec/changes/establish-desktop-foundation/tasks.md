@@ -27,13 +27,14 @@
 - [x] 2.3 实现 normal/portable 单实例写锁
 - [x] 2.4 实现 UTF-8 `config.json` schema、tmp/flush/rename、备份和损坏恢复
 - [x] 2.5 实现 API Key 明文风险提示和递归日志/诊断 redactor
+  - [x] 2026-08-13 Rust storage now recursively redacts credential-shaped keys in persisted event, node, checkpoint, attempt, and workflow JSON; the regression proves nested API keys/tokens are replaced while input/output token counters remain intact.
 
 **Quality Gate:**
 - [ ] 两种模式路径和锁 tests 通过
 - [ ] 部分配置写入可恢复
 - [ ] 密钥不进入测试日志、错误、SQLite 或诊断 fixture
 
-**Progress Evidence:** `apps/desktop/test/runtime.test.ts` 覆盖 normal/portable、原子配置恢复、单实例锁；`apps/desktop/runtime/config.ts` 提供递归 redactor。长路径、只读路径和 SQLite 不落密钥仍由后续 hardening/host integration 验收。
+**Progress Evidence:** `apps/desktop/test/runtime.test.ts` 覆盖 normal/portable、原子配置恢复、单实例锁；`apps/desktop/runtime/config.ts` 提供递归 redactor；Rust `storage::tests::structured_json_storage_redacts_credentials_without_losing_usage_fields` 验证结构化持久化边界。长路径、只读路径和用户消息正文中的任意凭据文本仍由后续 hardening/host integration 验收。
 
 ## 3. Build the mandatory runtime bootstrap
 

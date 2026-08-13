@@ -77,6 +77,7 @@
 
 **Quality Gate:**
 - [ ] `app.db` 不含 chunk、vector 或 Vault 原文
+  - [x] 2026-08-13 SQLite schema and storage tests keep Vault chunks/vectors outside `app.db`; the storage credential-boundary regression also verifies structured run/workflow metadata is redacted before persistence.
 - [ ] 选定本地 embedding 能在中文/空格路径的每 Vault LanceDB 写入、关闭、重开并返回稳定排序结果
 - [ ] 两个 Vault 的索引相互隔离，watcher 漏事件后可由 manifest reconciliation 修复
 - [ ] 索引删除/损坏/模型变化均可重建
