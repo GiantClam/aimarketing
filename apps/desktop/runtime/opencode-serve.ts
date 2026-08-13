@@ -34,7 +34,7 @@ export class OpenCodeServeClient {
   private baseUrl = "";
   private stopping = false;
   private streamAbort: AbortController | undefined;
-  private runtimeEnvironment: NodeJS.ProcessEnv = { NODE_ENV: process.env.NODE_ENV ?? "production" };
+  private runtimeEnvironment: Record<string, string | undefined> = { NODE_ENV: process.env.NODE_ENV ?? "production" };
   private runtimeWorkspace = "";
   private readonly active = new Map<string, ActiveRun>();
 
@@ -51,24 +51,25 @@ export class OpenCodeServeClient {
     } finally { clearTimeout(timer); }
   }
 
-  async ensureStarted(workspacePath: string, environment: NodeJS.ProcessEnv) {
+  async ensureStarted(workspacePath: string, environment: Record<string, string | undefined>) {
     if (this.child && this.child.exitCode === null) return;
     await mkdir(this.runtimeDirectory, { recursive: true });
     this.port = await this.findFreePort();
     this.username = `aimarketing-${randomBytes(8).toString("hex")}`;
     this.password = randomBytes(32).toString("base64url");
     this.baseUrl = `http://127.0.0.1:${this.port}`;
-    this.runtimeEnvironment = { ...environment };
+    this.runtimeEnvironment = { ...environment, NODE_ENV: environment.NODE_ENV ?? process.env.NODE_ENV ?? "production" };
     this.runtimeWorkspace = workspacePath;
     this.stopping = false;
-    this.child = spawn(this.executable, [...this.executableArgs, "serve", "--pure", "--hostname", "127.0.0.1", "--port", String(this.port), "--print-logs", "--log-level", "INFO"], {
+    const child = spawn(this.executable, [...this.executableArgs, "serve", "--pure", "--hostname", "127.0.0.1", "--port", String(this.port), "--print-logs", "--log-level", "INFO"], {
       cwd: workspacePath,
-      env: { ...environment, OPENCODE_SERVER_USERNAME: this.username, OPENCODE_SERVER_PASSWORD: this.password, OPENCODE_DISABLE_AUTOUPDATE: "true", OPENCODE_DISABLE_MODELS_FETCH: "true" },
+      env: { ...environment, NODE_ENV: environment.NODE_ENV ?? process.env.NODE_ENV ?? "production", OPENCODE_SERVER_USERNAME: this.username, OPENCODE_SERVER_PASSWORD: this.password, OPENCODE_DISABLE_AUTOUPDATE: "true", OPENCODE_DISABLE_MODELS_FETCH: "true" } as NodeJS.ProcessEnv,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
-    });
-    this.child.stderr?.on("data", (chunk: Buffer) => process.stderr.write(`[opencode-serve] ${chunk.toString("utf8").slice(-2048)}`));
-    this.child.once("close", () => { this.streamAbort?.abort(); this.streamAbort = undefined; if (!this.stopping) for (const active of this.active.values()) this.reportServeExit(active); });
+    }) as ChildProcess;
+    this.child = child;
+    child.stderr?.on("data", (chunk: Buffer) => process.stderr.write(`[opencode-serve] ${chunk.toString("utf8").slice(-2048)}`));
+    child.once("close", () => { this.streamAbort?.abort(); this.streamAbort = undefined; if (!this.stopping) for (const active of this.active.values()) this.reportServeExit(active); });
     const deadline = Date.now() + 60_000;
     while (Date.now() < deadline) {
       try { const response = await this.request("/global/health", {}, 2_000); if (response.ok) { this.startEventStream(workspacePath); return; } } catch { /* retry until the bounded deadline */ }
@@ -77,7 +78,7 @@ export class OpenCodeServeClient {
     throw new Error("opencode_serve_health_timeout");
   }
 
-  async createOrResumeSession(workspacePath: string, requestedId: string | undefined, provider: Provider, environment: NodeJS.ProcessEnv) {
+  async createOrResumeSession(workspacePath: string, requestedId: string | undefined, provider: Provider, environment: Record<string, string | undefined>) {
     await this.ensureStarted(workspacePath, environment);
     if (requestedId) {
       const existing = await this.request(openCodeServeSessionPath(requestedId, workspacePath, "message")).catch(() => undefined);

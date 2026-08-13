@@ -47,6 +47,7 @@ const NODE_VISUALS: Record<WorkflowNodeType, WorkflowNodeVisual> = {
   digital_human: { icon: UserRound, accentClassName: "border-orange-300/80 bg-orange-100 text-orange-800", glowClassName: "from-orange-200/80 via-orange-100/20 to-transparent" },
   music_generate: { icon: Music, accentClassName: "border-cyan-300/80 bg-cyan-100 text-cyan-800", glowClassName: "from-cyan-200/80 via-cyan-100/20 to-transparent" },
   voice_synthesis: { icon: Mic, accentClassName: "border-teal-300/80 bg-teal-100 text-teal-800", glowClassName: "from-teal-200/80 via-teal-100/20 to-transparent" },
+  voice_clone: { icon: Mic, accentClassName: "border-teal-400/80 bg-teal-100 text-teal-900", glowClassName: "from-teal-300/80 via-teal-100/20 to-transparent" },
   audio_generate: { icon: AudioLines, accentClassName: "border-cyan-300/80 bg-cyan-100 text-cyan-800", glowClassName: "from-cyan-200/80 via-cyan-100/20 to-transparent" },
   ppt_generate: { icon: PanelsTopLeft, accentClassName: "border-violet-300/80 bg-violet-100 text-violet-800", glowClassName: "from-violet-200/80 via-violet-100/20 to-transparent" },
   knowledge_retrieve: { icon: Link2, accentClassName: "border-sky-300/80 bg-sky-100 text-sky-800", glowClassName: "from-sky-200/80 via-sky-100/20 to-transparent" },

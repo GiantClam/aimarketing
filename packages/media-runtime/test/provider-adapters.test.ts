@@ -97,7 +97,7 @@ test("MiniMax voice-synthesis capability creates and polls an async speech task"
 test("MiniMax voice clone uploads an in-workspace reference without base64 IPC", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "aimarketing-voice-clone-"));
   try {
-    await writeFile(join(workspace, "reference.wav"), Buffer.from("RIFF-fixture"));
+    await writeFile(join(workspace, "reference.wav"), "RIFF-fixture");
     const urls: string[] = [];
     const adapter = createMiniMaxAudioAdapter({ provider: "minimax" as MediaProviderId, baseUrl: "https://api.minimax.io/v1", apiKey: "secret", workspacePath: workspace, fetchImpl: async (input, init) => {
       urls.push(String(input));

@@ -3,8 +3,11 @@ import type {
   WorkbenchArtifact,
   WorkbenchClient,
   WorkbenchConversation,
+  WorkbenchKnowledgeIndex,
+  WorkbenchKnowledgeResult,
   WorkbenchMessage,
   WorkbenchRun,
+  WorkbenchRunDetail,
   WorkbenchRunEvent,
   WorkbenchRunRequest,
   WorkbenchUsage,
@@ -123,6 +126,7 @@ export function createWebWorkbenchClient(options: WebWorkbenchClientOptions): Wo
   const pendingRuns = new Map<string, PendingRun>()
   const controllers = new Map<string, AbortController>()
   const usages = new Map<string, { conversationId: string; usage: WorkbenchUsage }>()
+  const artifacts = new Map<string, WorkbenchArtifact>()
   const openFile = (relativePath: string) => {
     const target = (options.fileUrl ?? ((path) => path))(relativePath)
     if (typeof window !== "undefined") window.open(target, "_blank", "noopener,noreferrer")
@@ -132,6 +136,10 @@ export function createWebWorkbenchClient(options: WebWorkbenchClientOptions): Wo
   return {
     navigation: options.navigation,
     files: { open: async (relativePath) => openFile(relativePath), reveal: async (relativePath) => openFile(relativePath) },
+    artifacts: {
+      async list() { return [...artifacts.values()] },
+      async remove(artifactId) { artifacts.delete(artifactId) },
+    },
     conversations: {
       async list() {
         const payload = await jsonOrError(await fetchImpl(`${apiBase}/conversations?limit=50`, { credentials: "same-origin" }))
@@ -171,13 +179,35 @@ export function createWebWorkbenchClient(options: WebWorkbenchClientOptions): Wo
         return webWorkflow(payload?.data ?? payload)
       },
     },
+    knowledge: {
+      async index(_options): Promise<WorkbenchKnowledgeIndex> {
+        throw new Error("web_knowledge_local_vault_only")
+      },
+      async search(_options): Promise<readonly WorkbenchKnowledgeResult[]> {
+        throw new Error("web_knowledge_local_vault_only")
+      },
+      async open(relativePath) {
+        openFile(relativePath)
+      },
+    },
     runs: {
       async start(request) {
         const run: WorkbenchRun = { id: makeId("web-run"), conversationId: request.conversationId, status: "queued", startedAt: new Date().toISOString() }
         pendingRuns.set(run.id, { request, run })
         return run
       },
+      async list() {
+        return [...pendingRuns.values()].map(({ run }) => run)
+      },
+      async inspect(runId): Promise<WorkbenchRunDetail> {
+        const pending = pendingRuns.get(runId)
+        if (!pending) throw new Error("web_workbench_run_not_found")
+        return { run: pending.run, nodes: [], events: [], usage: [...usages.values()].filter((entry) => entry.usage.runId === runId).map((entry) => ({ ...entry.usage, createdAt: new Date().toISOString() })) }
+      },
       async cancel(runId) {
+        controllers.get(runId)?.abort()
+      },
+      async emergencyStop(runId) {
         controllers.get(runId)?.abort()
       },
       subscribe(runId, onEvent) {
@@ -185,7 +215,7 @@ export function createWebWorkbenchClient(options: WebWorkbenchClientOptions): Wo
         if (!pending) return () => undefined
         const controller = new AbortController()
         controllers.set(runId, controller)
-        void streamRun({ apiBase, fetchImpl, pending, controller, onEvent, usages })
+        void streamRun({ apiBase, fetchImpl, pending, controller, onEvent, usages, artifacts })
           .finally(() => { controllers.delete(runId); pendingRuns.delete(runId) })
         return () => controller.abort()
       },
@@ -207,6 +237,7 @@ async function streamRun(input: {
   controller: AbortController
   onEvent: (event: WorkbenchRunEvent) => void
   usages: Map<string, { conversationId: string; usage: WorkbenchUsage }>
+  artifacts: Map<string, WorkbenchArtifact>
 }) {
   const { pending, controller, onEvent } = input
   try {
@@ -235,10 +266,10 @@ async function streamRun(input: {
       buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
       const parsed = consumeSseEvents(buffer)
       buffer = parsed.rest
-      for (const event of parsed.events) terminal ||= dispatchStreamEvent(event, pending, onEvent, input.usages)
+      for (const event of parsed.events) terminal ||= dispatchStreamEvent(event, pending, onEvent, input.usages, input.artifacts)
       if (done) break
     }
-    for (const event of consumeSseEvents(buffer).events) terminal ||= dispatchStreamEvent(event, pending, onEvent, input.usages)
+    for (const event of consumeSseEvents(buffer).events) terminal ||= dispatchStreamEvent(event, pending, onEvent, input.usages, input.artifacts)
     if (!terminal) onEvent({ type: "status", status: "interrupted" })
   } catch (_error) {
     if (controller.signal.aborted) onEvent({ type: "status", status: "cancelled" })
@@ -246,13 +277,13 @@ async function streamRun(input: {
   }
 }
 
-function dispatchStreamEvent(event: AiEntryStreamEvent, pending: PendingRun, onEvent: (event: WorkbenchRunEvent) => void, usages: Map<string, { conversationId: string; usage: WorkbenchUsage }>) {
+function dispatchStreamEvent(event: AiEntryStreamEvent, pending: PendingRun, onEvent: (event: WorkbenchRunEvent) => void, usages: Map<string, { conversationId: string; usage: WorkbenchUsage }>, artifacts: Map<string, WorkbenchArtifact>) {
   if (event.event === "message" && typeof event.answer === "string") onEvent({ type: "text", delta: event.answer })
   else if (event.event === "tool_call") onEvent({ type: "tool", tool: String(event.data?.toolName ?? "tool"), phase: "started" })
   else if (event.event === "tool_result") onEvent({ type: "tool", tool: String(event.data?.toolName ?? "tool"), phase: event.data?.result && (event.data.result as Record<string, unknown>).ok === false ? "failed" : "completed" })
   else if (event.event === "artifact_created") {
     const artifact = eventArtifact(event.artifact)
-    if (artifact) onEvent({ type: "artifact", artifact })
+    if (artifact) { artifacts.set(artifact.id, artifact); onEvent({ type: "artifact", artifact }) }
   } else if (event.event === "usage") {
     const usage: WorkbenchUsage = { runId: pending.run.id, model: typeof event.provider_model === "string" ? event.provider_model : pending.request.model ?? "unknown", inputTokens: typeof event.data?.inputTokens === "number" ? event.data.inputTokens : undefined, outputTokens: typeof event.data?.outputTokens === "number" ? event.data.outputTokens : undefined }
     usages.set(pending.run.id, { conversationId: pending.run.conversationId, usage })

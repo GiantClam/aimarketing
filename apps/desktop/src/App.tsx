@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { formatWorkbenchModelLabel, WORKBENCH_HOME_COPY, WORKBENCH_HOME_GROUPS, WORKBENCH_MEDIA_FEATURES, WORKBENCH_MESSAGE_FRAME, WORKBENCH_ROUTE_MANIFEST, WORKBENCH_THEME, WORKBENCH_WRITER_CONTENT_TYPES, WORKBENCH_WRITER_LANGUAGES, WORKBENCH_WRITER_MODES, WORKBENCH_WRITER_PLATFORMS, WORKBENCH_WRITER_QUICK_PROMPTS, WorkbenchChatMessage, WorkbenchRouteIcon, WorkbenchShell, WorkbenchWriterMessage, type WorkbenchMediaFeatureId } from "@aimarketing/workbench-ui";
 import { validateWorkflowDefinition, workflowNodeRegistry, type WorkflowDefinitionEnvelope, type WorkflowDefinitionNodeV2 } from "@aimarketing/workflow-core";
-import type { WorkbenchArtifact, WorkbenchRun, WorkbenchRunDetail, WorkbenchWorkflow } from "@aimarketing/workbench-client";
+import type { WorkbenchArtifact, WorkbenchKnowledgeResult, WorkbenchRun, WorkbenchRunDetail, WorkbenchWorkflow } from "@aimarketing/workbench-client";
 import { tauriBridge } from "./tauri";
 import { createDesktopWorkbenchClient } from "./workbench-client";
 import { capabilityEnglish, desktopCopy, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaPlaceholderEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale, workflowActionEnglish, writerContentTypeEnglish, writerLanguageEnglish, writerModeEnglish, writerPlatformEnglish, type DesktopLocalePreference } from "./i18n";
@@ -29,7 +29,7 @@ type ArtifactRow = { id: string; relative_path: string; mime_type: string; byte_
 type RunRow = { id: string; conversation_id?: string | null; status: string; model?: string | null; started_at: string; finished_at?: string | null };
 type RunDetail = { run: RunRow; nodes: Array<{ node_key: string; status: string; output_json?: string | null; updated_at: string }>; events: Array<{ sequence: number; event_type: string; payload_json: string; created_at: string }>; usage: Array<{ provider?: string | null; model: string; input_tokens?: number | null; output_tokens?: number | null; provider_cost?: number | null; estimated_cost?: number | null; created_at: string }> };
 type WorkflowRetryState = { completed: Record<string, Record<string, unknown>>; recoveryDefinitionHash: string };
-type KnowledgeResult = { chunkId: string; documentPath: string; heading?: string; excerpt: string; score: number; lineStart?: number; lineEnd?: number };
+type KnowledgeResult = WorkbenchKnowledgeResult;
 type LocalMessageRow = { role: string; content: string; created_at?: string };
 type DesktopConversationMessage = { id: string; role: "user" | "assistant"; content: string; created_at?: string };
 type LocalAttachment = { id: string; name: string; size: number; mediaType: string; relativePath?: string };
@@ -1268,7 +1268,7 @@ export function App() {
           try {
             await tauriBridge.invoke("host_start");
             if (activeConfig.obsidianVaultPath && activeConfig.obsidianIndexPath) {
-              await tauriBridge.invoke("host_send", { message: { version: 1, requestId: `vault-startup-${Date.now()}`, type: "knowledge.index", payload: { vaultPath: activeConfig.obsidianVaultPath, indexPath: activeConfig.obsidianIndexPath, embedding: embeddingPayload(activeConfig) } } });
+              void workbenchClient.knowledge.index({ vaultPath: activeConfig.obsidianVaultPath, indexPath: activeConfig.obsidianIndexPath, embedding: embeddingPayload(activeConfig) }).catch(() => undefined);
             }
             const attempts = await tauriBridge.invoke<Array<{ idempotency_key: string; run_id: string; node_key: string; provider?: string | null; provider_task_id?: string | null; payload_json?: string | null }>>("list_recoverable_attempts");
             for (const attempt of attempts) {
@@ -1477,11 +1477,7 @@ export function App() {
   async function rebuildVaultIndex() {
     if (!config.obsidianVaultPath || !config.obsidianIndexPath) { setRunStatus(locale === "zh" ? "请先填写 Obsidian Vault 和索引目录" : "Set the Obsidian Vault and index directory first"); return; }
     try {
-      await tauriBridge.invoke("host_start");
-      const requestId = `vault-index-${Date.now()}`;
-      const response = await sendHostMessage({ version: 1, requestId, type: "knowledge.index", payload: { vaultPath: config.obsidianVaultPath, indexPath: config.obsidianIndexPath, embedding: embeddingPayload(config) } });
-      if (response.ok !== true) throw new Error(String((response.error as { message?: string } | undefined)?.message ?? "vault_index_failed"));
-      const data = response.data as { documents?: number; chunks?: number; semantic?: boolean; embeddingModel?: string } | undefined;
+      const data = await workbenchClient.knowledge.index({ vaultPath: config.obsidianVaultPath, indexPath: config.obsidianIndexPath, embedding: embeddingPayload(config) });
       setKnowledgeStatus(locale === "zh"
         ? `${data?.semantic ? "语义索引已就绪" : "词法索引已就绪，语义模型不可用"} · ${data?.documents ?? 0} 篇笔记 · ${data?.chunks ?? 0} 个片段${data?.embeddingModel ? ` · ${data.embeddingModel}` : ""}`
         : `${data?.semantic ? "Semantic index ready" : "Lexical index ready; semantic model unavailable"} · ${data?.documents ?? 0} notes · ${data?.chunks ?? 0} chunks${data?.embeddingModel ? ` · ${data.embeddingModel}` : ""}`);
@@ -1506,13 +1502,9 @@ export function App() {
     if (!config.obsidianIndexPath) { setKnowledgeStatus(locale === "zh" ? "请先在设置中配置 Obsidian Vault 索引目录" : "Configure the Obsidian Vault index directory first"); return; }
     setKnowledgeStatus(locale === "zh" ? "正在检索本地 Vault…" : "Searching the local Vault…");
     try {
-      await tauriBridge.invoke("host_start");
-      const embedding = embeddingPayload(config);
-      const response = await sendHostMessage({ version: 1, type: "knowledge.search", payload: { indexPath: config.obsidianIndexPath, query, limit: 8, embeddingMode: embedding.mode, embeddingBaseUrl: embedding.baseUrl, embeddingModel: embedding.model, embeddingApiKey: embedding.apiKey } });
-      if (response.ok !== true) throw new Error(String((response.error as { message?: string } | undefined)?.message ?? "knowledge_search_failed"));
-      const results = (response.data as { results?: unknown } | undefined)?.results;
-      setKnowledgeResults(Array.isArray(results) ? results.filter((item): item is KnowledgeResult => Boolean(item && typeof item === "object" && typeof (item as { chunkId?: unknown }).chunkId === "string" && typeof (item as { documentPath?: unknown }).documentPath === "string" && typeof (item as { excerpt?: unknown }).excerpt === "string")) : []);
-      setKnowledgeStatus(Array.isArray(results) && results.length ? (locale === "zh" ? `找到 ${results.length} 条本地引用` : `${results.length} local references found`) : (locale === "zh" ? "没有匹配的本地笔记" : "No matching local notes"));
+      const results = await workbenchClient.knowledge.search({ indexPath: config.obsidianIndexPath, query, limit: 8, embedding: embeddingPayload(config) });
+      setKnowledgeResults([...results]);
+      setKnowledgeStatus(results.length ? (locale === "zh" ? `找到 ${results.length} 条本地引用` : `${results.length} local references found`) : (locale === "zh" ? "没有匹配的本地笔记" : "No matching local notes"));
     } catch (error) { setKnowledgeResults([]); setKnowledgeStatus(error instanceof Error ? error.message : (locale === "zh" ? "本地知识检索失败" : "Local knowledge search failed")); }
   }
 
@@ -1568,15 +1560,8 @@ export function App() {
     let knowledgeContext = "";
     if (knowledgeContextEnabled && basePrompt && config.obsidianIndexPath) {
       try {
-        await tauriBridge.invoke("host_start");
-        const response = await sendHostMessage({ version: 1, type: "knowledge.search", payload: { indexPath: config.obsidianIndexPath, query: basePrompt, limit: 6, embeddingBaseUrl: "http://127.0.0.1:11434", embeddingModel: "nomic-embed-text" } });
-        if (response.ok === true) {
-          const results = (response.data as { results?: unknown } | undefined)?.results;
-          if (Array.isArray(results)) {
-            const citations = results.filter((item): item is { documentPath: string; heading?: string; excerpt: string } => Boolean(item && typeof item === "object" && typeof (item as { documentPath?: unknown }).documentPath === "string" && typeof (item as { excerpt?: unknown }).excerpt === "string"));
-            if (citations.length) knowledgeContext = `\n\n本地 Obsidian 知识库上下文（仅来自已选择的 Vault，请优先基于引用回答）：\n${citations.map((item) => `[${item.documentPath}${item.heading ? `#${item.heading}` : ""}] ${item.excerpt}`).join("\n")}`;
-          }
-        }
+        const results = await workbenchClient.knowledge.search({ indexPath: config.obsidianIndexPath, query: basePrompt, limit: 6, embedding: embeddingPayload(config) });
+        if (results.length) knowledgeContext = `\n\n本地 Obsidian 知识库上下文（仅来自已选择的 Vault，请优先基于引用回答）：\n${results.map((item) => `[${item.documentPath}${item.heading ? `#${item.heading}` : ""}] ${item.excerpt}`).join("\n")}`;
       } catch {
         setRunStatus(locale === "zh" ? "Obsidian 检索不可用，本轮继续使用普通 OpenCode 上下文" : "Obsidian search is unavailable; this turn will use ordinary OpenCode context");
       }

@@ -5,6 +5,9 @@ import type {
   WorkbenchRun,
   WorkbenchRunDetail,
   WorkbenchArtifact,
+  WorkbenchEmbeddingConfig,
+  WorkbenchKnowledgeIndex,
+  WorkbenchKnowledgeResult,
   WorkbenchRunEvent,
   WorkbenchRunRequest,
   WorkbenchUsage,
@@ -19,6 +22,8 @@ type DesktopWorkflowRow = { id: string; name: string; definition_json: string; u
 type DesktopArtifactRow = { id: string; relative_path: string; mime_type: string; byte_length: number; sha256: string; created_at: string; available?: boolean };
 type DesktopRunRow = { id: string; conversation_id?: string | null; status: WorkbenchRun["status"] | string; model?: string | null; started_at: string; finished_at?: string | null };
 type DesktopRunDetail = { run: DesktopRunRow; nodes: Array<{ node_key: string; status: string; output_json?: string | null; updated_at: string }>; events: Array<{ sequence: number; event_type: string; payload_json: string; created_at: string }>; usage: Array<{ provider?: string | null; model: string; input_tokens?: number | null; output_tokens?: number | null; provider_cost?: number | null; estimated_cost?: number | null; created_at: string }> };
+type DesktopKnowledgeIndex = { generation: number; documents: number; chunks: number; indexPath: string; semantic: boolean; embeddingModel?: string; embeddingDimension?: number; watcher?: string };
+type DesktopKnowledgeResult = { chunkId: string; documentPath: string; heading?: string; excerpt: string; score?: number; lineStart?: number; lineEnd?: number };
 
 function makeId(prefix: string) {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
@@ -61,7 +66,49 @@ function toWorkbenchRunDetail(detail: DesktopRunDetail): WorkbenchRunDetail {
   };
 }
 
+function toWorkbenchKnowledgeIndex(value: DesktopKnowledgeIndex): WorkbenchKnowledgeIndex {
+  return { generation: value.generation, documents: value.documents, chunks: value.chunks, indexPath: value.indexPath, semantic: value.semantic, embeddingModel: value.embeddingModel, embeddingDimension: value.embeddingDimension, watcher: value.watcher };
+}
+
+function toWorkbenchKnowledgeResult(value: DesktopKnowledgeResult): WorkbenchKnowledgeResult {
+  return { chunkId: value.chunkId, documentPath: value.documentPath, heading: value.heading, excerpt: value.excerpt, score: typeof value.score === "number" ? value.score : 0, lineStart: value.lineStart, lineEnd: value.lineEnd };
+}
+
 export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: WorkbenchClient["navigation"]): WorkbenchClient {
+  async function sendHostCommand(type: "knowledge.index" | "knowledge.search", payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+    await bridge.invoke("host_start");
+    const requestId = makeId("knowledge");
+    const frame = { version: 1, requestId, type, payload };
+    let dispose: (() => void) | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      let resolveResponse: (value: Record<string, unknown>) => void = () => undefined;
+      let rejectResponse: (error: unknown) => void = () => undefined;
+      const response = new Promise<Record<string, unknown>>((resolve, reject) => { resolveResponse = resolve; rejectResponse = reject; });
+      timer = setTimeout(() => { dispose?.(); rejectResponse(new Error("workflow_host_response_timeout")); }, 60_000);
+      // Await listener registration before host_send so a fast local response
+      // cannot be lost between the two IPC calls.
+      dispose = await bridge.listen<{ raw: string }>("desktop://runtime-response", (event) => {
+        try {
+          const separator = event.raw.indexOf(":");
+          const parsed = JSON.parse(event.raw.slice(separator + 1)) as { requestId?: string };
+          if (parsed.requestId !== requestId) return;
+          if (timer) clearTimeout(timer);
+          dispose?.();
+          resolveResponse(parsed as Record<string, unknown>);
+        } catch {
+          // Ignore unrelated or malformed host frames; the timeout remains authoritative.
+        }
+      });
+      await bridge.invoke("host_send", { message: frame });
+      return await response;
+    } catch (error) {
+      if (timer) clearTimeout(timer);
+      dispose?.();
+      throw error;
+    }
+  }
+
   const conversations = {
     async list(): Promise<readonly WorkbenchConversation[]> {
       const rows = await bridge.invoke<DesktopConversationRow[]>("list_conversations");
@@ -149,6 +196,18 @@ export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: Wo
       },
     },
     knowledge: {
+      async index(options: { readonly vaultPath: string; readonly indexPath: string; readonly embedding?: WorkbenchEmbeddingConfig }): Promise<WorkbenchKnowledgeIndex> {
+        const response = await sendHostCommand("knowledge.index", { vaultPath: options.vaultPath, indexPath: options.indexPath, ...(options.embedding ? { embedding: options.embedding } : {}) });
+        if (response.ok !== true) throw new Error(String((response.error as { message?: string } | undefined)?.message ?? "vault_index_failed"));
+        return toWorkbenchKnowledgeIndex(response.data as DesktopKnowledgeIndex);
+      },
+      async search(options: { readonly indexPath: string; readonly query: string; readonly limit?: number; readonly embedding?: WorkbenchEmbeddingConfig }): Promise<readonly WorkbenchKnowledgeResult[]> {
+        const embedding = options.embedding;
+        const response = await sendHostCommand("knowledge.search", { indexPath: options.indexPath, query: options.query, limit: options.limit ?? 8, ...(embedding ? { embeddingMode: embedding.mode, embeddingBaseUrl: embedding.baseUrl, embeddingModel: embedding.model, embeddingApiKey: embedding.apiKey } : {}) });
+        if (response.ok !== true) throw new Error(String((response.error as { message?: string } | undefined)?.message ?? "knowledge_search_failed"));
+        const results = (response.data as { results?: unknown } | undefined)?.results;
+        return Array.isArray(results) ? results.filter((item): item is DesktopKnowledgeResult => Boolean(item && typeof item === "object" && typeof (item as DesktopKnowledgeResult).chunkId === "string" && typeof (item as DesktopKnowledgeResult).documentPath === "string" && typeof (item as DesktopKnowledgeResult).excerpt === "string")).map(toWorkbenchKnowledgeResult) : [];
+      },
       async open(relativePath: string): Promise<void> {
         await bridge.invoke("open_vault_file", { relativePath });
       },

@@ -73,6 +73,7 @@
 - [x] 4.2b Desktop chat uses the shared cloud-compatible AI/user message cards, timestamps, live event panel, active route highlighting and quick prompt chips.
 - [x] 4.1a 2026-08-13 `DesktopConversationWorkspace` composes shared `WorkbenchChatMessage`/`WorkbenchWriterMessage`, prompt composer, route conversation history and artifact/event surfaces; route regressions verify the cloud-compatible composition.
 - [x] 4.2c 2026-08-13 `Desktop WorkbenchClient` now owns artifact listing/removal, run listing/inspection, usage summary reads, and Vault citation opening; the resource-library and task-center UI consume those typed adapters.
+  - [x] 2026-08-13 Obsidian index/rebuild and search now also use typed `WorkbenchClient.knowledge.index/search` adapters, including host-start, response correlation, timeout and normalized citation mapping.
 - [ ] 4.5 实时展示文本/工具步骤和 emergency stop
 - [x] 4.5a 2026-08-13 `workbench-client.test.ts` drives the real Desktop WorkbenchClient adapter with malformed frames, text deltas, tool events, usage, workflow/media cancellation and terminal completion; the adapter emits normalized events and ignores malformed payloads.
 - [ ] 4.6 添加 streaming、长工具输出、取消、重启、artifact 和缺配置 UI tests
@@ -80,7 +81,7 @@
 
 **Quality Gate:**
 - [ ] Workbench UI 只使用 Desktop WorkbenchClient
-  - [x] 2026-08-13 library/task/knowledge read and action surfaces use `Desktop WorkbenchClient`; low-level bootstrap, host supervision, and persistence writes remain native runtime seams.
+  - [x] 2026-08-13 library/task/knowledge read, index and action surfaces use `Desktop WorkbenchClient`; low-level bootstrap, host supervision, session/workflow execution and persistence writes remain native runtime seams.
 - [ ] 桌面导航与确认范围一致
 - [x] Full Access 和明文 API Key 风险文案可见
   - [x] 2026-08-13 `apps/desktop/test/routes.test.ts` asserts bilingual settings warnings, workflow Full Access copy, persistence boundaries, and the absence of permission-mode/command-confirmation selectors.
@@ -109,11 +110,13 @@
 - [x] 6.1 运行 fake OpenCode E2E：首聊、多轮、tool、cancel、crash、artifact、usage
   - [x] 2026-08-13 `apps/desktop/test/opencode-serve.test.ts` runs one supervised fake-serve process through first and second prompts, asserts streamed text/tool-artifact/usage evidence, aborts a long turn through the cancel endpoint, observes serve crash as retryable, and recreates the session without replaying the prior turn.
 - [x] 6.2 用一个真实配置 Provider 运行普通对话 smoke。✓ 2026-08-13 — `apps/desktop/real-providers.test.local.json` 驱动的 `test:real-providers` 已确认 LLM `/chat/completions` HTTP 200（choices/usage）；同次 120 秒 smoke 的图片请求也 HTTP 200；视频按 v1 验证范围明确未执行。
+  - [x] 2026-08-13 rerun: LLM remains HTTP 200 with the expected schema; the configured image endpoint returned upstream HTTP 502 after bounded retries, so this is recorded as an external Provider blocker rather than a local pass. Video remains excluded.
 - [x] 6.3 捕获证据证明所有普通 desktop chat 选择 OpenCode
   - [x] 2026-08-13 architecture-boundary and route tests require `session.create`/`session.prompt` and reject direct chat-completions or `ai-sdk-native` paths.
 - [x] 6.4 扫描 bundle 和网络日志，确认无排除的 SaaS 模块/端点
   - [x] 2026-08-13 `desktop:verify-bundle` scans Vite assets and the bundled workflow host for excluded SaaS routes/capability markers and cloud-only integrations; the scanner intentionally permits the approved Full Access warning copy.
 - [ ] 6.5 运行共享 tests、desktop TS/Rust tests/build、root lint、Next build 和 SaaS regressions
+  - [x] 2026-08-13 desktop typecheck, 90 desktop tests, 27 Rust tests, Tauri check, desktop build, bundle/boundary/provenance scans, root lint, root `tsc --noEmit`, SaaS WebWorkbenchClient tests, media-runtime tests and Next production build all passed; clean VM, full browser E2E and current image Provider recovery remain open.
 
 **Completion Quality Gate:**
 - [ ] 三个 capability specs 全部满足

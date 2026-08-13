@@ -106,11 +106,41 @@ export interface ArtifactActionsAdapter {
   readonly remove: (artifactId: string) => Promise<void>;
 }
 
+export interface WorkbenchEmbeddingConfig {
+  readonly mode: "local" | "remote";
+  readonly baseUrl?: string;
+  readonly model?: string;
+  readonly apiKey?: string;
+}
+
+export interface WorkbenchKnowledgeResult {
+  readonly chunkId: string;
+  readonly documentPath: string;
+  readonly heading?: string;
+  readonly excerpt: string;
+  readonly score: number;
+  readonly lineStart?: number;
+  readonly lineEnd?: number;
+}
+
+export interface WorkbenchKnowledgeIndex {
+  readonly generation: number;
+  readonly documents: number;
+  readonly chunks: number;
+  readonly indexPath: string;
+  readonly semantic: boolean;
+  readonly embeddingModel?: string;
+  readonly embeddingDimension?: number;
+  readonly watcher?: string;
+}
+
 export interface WorkbenchClient {
   readonly navigation: NavigationAdapter;
   readonly files: FileActionsAdapter;
   readonly artifacts: ArtifactActionsAdapter;
   readonly knowledge: {
+    readonly index: (options: { readonly vaultPath: string; readonly indexPath: string; readonly embedding?: WorkbenchEmbeddingConfig }) => Promise<WorkbenchKnowledgeIndex>;
+    readonly search: (options: { readonly indexPath: string; readonly query: string; readonly limit?: number; readonly embedding?: WorkbenchEmbeddingConfig }) => Promise<readonly WorkbenchKnowledgeResult[]>;
     readonly open: (relativePath: string) => Promise<void>;
   };
   readonly conversations: {

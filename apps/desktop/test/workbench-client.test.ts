@@ -86,3 +86,33 @@ test("desktop WorkbenchClient streams text, tool, usage, cancellation and termin
   dispose();
   assert.equal(listener, undefined);
 });
+
+test("desktop WorkbenchClient routes Obsidian index and search through host RPC", async () => {
+  let listener: ((payload: { raw: string }) => void) | undefined;
+  const calls: string[] = [];
+  const bridge = {
+    async invoke<T>(command: string, args?: Record<string, unknown>) {
+      calls.push(command);
+      if (command === "host_send") {
+        const message = args?.message as { requestId: string; type: string };
+        const data = message.type === "knowledge.index"
+          ? { generation: 2, documents: 3, chunks: 8, indexPath: "vault/.index", semantic: true, embeddingModel: "local-hash-384-v1", embeddingDimension: 384, watcher: "active" }
+          : { indexPath: "vault/.index", query: "增长", results: [{ chunkId: "chunk-1", documentPath: "AI Marketing/增长.md", heading: "指标", excerpt: "转化率", score: 0.9, lineStart: 4, lineEnd: 5 }] };
+        const body = JSON.stringify({ version: 1, requestId: message.requestId, ok: true, data });
+        queueMicrotask(() => listener?.({ raw: `${Buffer.byteLength(body, "utf8")}:${body}` }));
+      }
+      return undefined as T;
+    },
+    async listen<T>(_event: string, callback: (payload: T) => void) {
+      listener = callback as unknown as (payload: { raw: string }) => void;
+      return () => { listener = undefined; };
+    },
+  };
+  const client = createDesktopWorkbenchClient(bridge, { go: () => undefined, replace: () => undefined, current: () => "/dashboard/knowledge-base" });
+  const index = await client.knowledge.index({ vaultPath: "vault", indexPath: "vault/.index", embedding: { mode: "local", model: "local-hash-384-v1" } });
+  assert.equal(index.documents, 3);
+  const results = await client.knowledge.search({ indexPath: "vault/.index", query: "增长", limit: 8, embedding: { mode: "local", model: "local-hash-384-v1" } });
+  assert.equal(results[0]?.documentPath, "AI Marketing/增长.md");
+  assert.deepEqual(calls, ["host_start", "host_send", "host_start", "host_send"]);
+  assert.equal(listener, undefined);
+});
