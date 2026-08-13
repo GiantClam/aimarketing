@@ -5,13 +5,14 @@ import { cp, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { buildOpenCodeCommand, createOpenCodeEventParser, type OpenCodeRuntimeEvent } from "@aimarketing/runtime-contracts/opencode";
 import { createBailianImageAdapter, createBailianVideoAdapter, createHttpMediaAdapter, createMiniMaxAudioAdapter, createMiniMaxVideoAdapter, createOpenAICompatibleImageAdapter, createRunningHubAdapter, downloadMediaOutputs, runMediaJob, type MediaProviderId, type MediaProviderAdapter } from "@aimarketing/media-runtime";
-import { executeWorkflow, migrateWorkflowDefinitionToCurrent, type WorkflowDefinitionEnvelope } from "@aimarketing/workflow-core";
+import { executeWorkflow, migrateWorkflowDefinitionToCurrent, type WorkflowArtifactPort, type WorkflowCapabilityPort, type WorkflowDefinitionEnvelope } from "@aimarketing/workflow-core";
 import { searchVaultIndex } from "./rag";
 import { activateIndexGeneration, createIndexGenerationPath, indexObsidianVault, ObsidianVaultWatcher, writeObsidianNote } from "./obsidian";
 import { detectPresentationArtifacts } from "./presentation-artifacts";
 import { buildLanceIndex } from "./lancedb";
 import { OpenCodeServeClient } from "./opencode-serve";
 import { createRpcReader, writeRpcResponse } from "./rpc";
+import { createDesktopWorkflowPorts } from "./workflow-ports";
 
 type HostCommand = { readonly version: 1; readonly requestId: string; readonly type: "chat.run" | "workflow.run" | "run.cancel" | "run.retry" | "media.resume" | "health" | "session.create" | "session.prompt" | "knowledge.index" | "knowledge.search"; readonly runId?: string; readonly sessionId?: string; readonly payload?: Record<string, unknown> };
 type ProviderConfig = { readonly id?: string; readonly source?: string; readonly model?: string; readonly baseUrl?: string; readonly apiKey?: string; readonly reasoningEffort?: string };
@@ -200,8 +201,8 @@ async function runWorkflow(command: HostCommand) {
   const workflowStartedAt = Date.now();
   const controller = new AbortController(); workflowControllers.set(runId, controller);
   let result: Awaited<ReturnType<typeof executeWorkflow>>;
-  try { result = await executeWorkflow(normalizedDefinition, { runId, signal: controller.signal, recovering: readWorkflowRecovery(command.payload?.recovering), ports: {
-    capability: { execute: async ({ executorId, nodeKey, config, inputs }, signal) => {
+  let artifactPort: WorkflowArtifactPort;
+  const capability: WorkflowCapabilityPort = { execute: async ({ executorId, nodeKey, config, inputs }, signal) => {
       if (executorId === "text_input") return { text: typeof config.text === "string" ? config.text : "" };
       if (executorId === "upload") {
         const uploadedFiles = Array.isArray(config.uploadedFiles) ? config.uploadedFiles : [];
@@ -216,7 +217,13 @@ async function runWorkflow(command: HostCommand) {
         const values = Array.isArray(source) ? source : source === undefined ? [] : [source];
         return inputPort === "asset" ? { assets: values, asset: values } : { images: values, image: values };
       }
-      if (executorId === "file_create") return createFileArtifact(workspacePath, runId, nodeKey, config, inputs);
+      if (executorId === "file_create") {
+        const output = await createFileArtifact(workspacePath, runId, nodeKey, config, inputs);
+        const extension = output.artifact.relativePath.toLowerCase().split(".").pop() ?? "bin";
+        const mimeType = extension === "md" ? "text/markdown" : extension === "txt" ? "text/plain" : "application/octet-stream";
+        const registration = await artifactPort.register({ relativePath: output.artifact.relativePath, mimeType, byteLength: output.artifact.bytes, sha256: output.artifact.sha256 });
+        return { ...output, artifact: { ...output.artifact, artifactId: registration.artifactId, registered: true } };
+      }
       if (executorId === "knowledge_retrieve") {
         const indexPath = typeof config.indexPath === "string" ? config.indexPath : typeof command.payload?.indexPath === "string" ? command.payload.indexPath : "";
         if (!indexPath) throw new Error("knowledge_index_required");
@@ -246,12 +253,10 @@ async function runWorkflow(command: HostCommand) {
         return runMediaCapability(command, runId, nodeKey, executorId, config, inputs, workspacePath, signal, providerTaskId);
       }
       throw new Error(`workflow_recovery_unsupported:${executorId}`);
-    } },
-    events: { append: async (event) => {
-      const phase = event.type === "node_started" ? "started" : event.type === "node_failed" ? "failed" : "completed";
-      emit(command, { event: "tool_event", tool: `workflow:${event.type}`, phase, message: JSON.stringify(event.payload).slice(0, 64 * 1024), runId });
-    } },
-  } }); } catch (error) {
+    } };
+  const ports = createDesktopWorkflowPorts({ runId, emit: (event) => emit(command, event), capability });
+  artifactPort = ports.artifacts;
+  try { result = await executeWorkflow(normalizedDefinition, { runId, signal: controller.signal, recovering: readWorkflowRecovery(command.payload?.recovering), ports }); } catch (error) {
     workflowControllers.delete(runId);
     emit(command, { event: "runtime_error", code: "workflow_invalid", message: error instanceof Error ? error.message : String(error), retryable: false, runId });
     return;
@@ -259,7 +264,7 @@ async function runWorkflow(command: HostCommand) {
   workflowControllers.delete(runId);
   for (const [nodeKey, output] of Object.entries(result.outputs)) {
     const artifacts = Array.isArray(output.artifacts) ? output.artifacts : output.artifact ? [output.artifact] : [];
-    for (const artifact of artifacts) emit(command, { event: "tool_event", tool: `artifact:${nodeKey}`, phase: "completed", message: JSON.stringify(artifact).slice(0, 900), runId });
+    for (const artifact of artifacts) emit(command, { event: "tool_event", tool: `artifact:${nodeKey}`, phase: "completed", message: JSON.stringify(artifact).slice(0, 64 * 1024), runId });
   }
   if (result.status === "succeeded") emit(command, { event: "done", runId });
   else emit(command, { event: "runtime_error", code: "workflow_failed", message: result.error ?? result.status, retryable: result.status !== "cancelled", runId });

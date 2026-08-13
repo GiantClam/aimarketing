@@ -48,7 +48,8 @@
 
 ## 3. Desktop workflow composition
 
-- [ ] 3.1 实现 desktop WorkflowRunRepository、CapabilityPort、ArtifactPort 和 EventSink
+- [x] 3.1 实现 desktop WorkflowRunRepository、CapabilityPort、ArtifactPort 和 EventSink
+  - [x] 2026-08-13 `apps/desktop/runtime/workflow-ports.ts` composes the shared ports into a bounded RPC event bridge; repository status, artifact registration and ordered workflow events remain persisted by the existing Tauri SQLite handlers.
 - [x] 3.1a workflow-core 已提供 capability/run/artifact/event ports 与 deterministic execution、cancel/retry/resume 基础。
 - [x] 5.4a Desktop workflow UI exports versioned JSON, imports through workflow-core migration, and assigns a new local workflow ID without copying Provider/path state.
 - [x] 5.4b Desktop workflow canvas exposes selectable Input/Capability/Output nodes and an editable capability/input configuration panel before execution.
