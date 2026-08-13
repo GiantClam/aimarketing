@@ -30,9 +30,9 @@
   - [x] 2026-08-13 Rust storage now recursively redacts credential-shaped keys in persisted event, node, checkpoint, attempt, and workflow JSON; the regression proves nested API keys/tokens are replaced while input/output token counters remain intact.
 
 **Quality Gate:**
-- [ ] 两种模式路径和锁 tests 通过
-- [ ] 部分配置写入可恢复
-- [ ] 密钥不进入测试日志、错误、SQLite 或诊断 fixture
+- [x] 两种模式路径和锁 tests 通过 — 2026-08-14 `apps/desktop/test/runtime.test.ts` covers deterministic normal/portable roots and same-root single-writer rejection/release.
+- [x] 部分配置写入可恢复 — 2026-08-14 the atomic config regression writes provider/runtime profiles, corrupts the active file, and restores the backup without losing the last valid workspace/provider values.
+- [x] 密钥不进入测试日志、错误、SQLite 或诊断 fixture — 2026-08-14 Rust log, storage, and diagnostic archive regressions assert credential-shaped values are redacted while usage fields remain; desktop source tests also enforce the UI persistence boundary.
 
 **Progress Evidence:** `apps/desktop/test/runtime.test.ts` 覆盖 normal/portable、原子配置恢复、单实例锁；`apps/desktop/runtime/config.ts` 提供递归 redactor；Rust `storage::tests::structured_json_storage_redacts_credentials_without_losing_usage_fields` 验证结构化持久化边界。长路径、只读路径和用户消息正文中的任意凭据文本仍由后续 hardening/host integration 验收。
 
