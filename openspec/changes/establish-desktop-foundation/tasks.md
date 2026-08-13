@@ -41,6 +41,7 @@
 - [x] 3.1 实现 WebView2、Node/workflow-host、OpenCode、Python/PPT、字体、embedding、Skills 和 migrations probes
   - [x] 2026-08-14 TypeScript bootstrap now probes the concrete `host.mjs`, isolated `knowledge.mjs`, LanceDB `dist/index.js`, `msyh.ttc`, and `local-hash-384-v1.json` assets, honoring persisted private runtime paths; readiness requires all ten components.
   - [x] 2026-08-14 readiness regression now rejects a manifest that omits any mandatory component instead of treating the remaining passing probes as sufficient.
+  - [x] 2026-08-14 desktop bootstrap regression covers all ten mandatory components as isolated damaged fixtures and verifies that only the repeated all-green probe reopens readiness.
   - [x] 2026-08-14 native bootstrap separately probes WebView2 and the same required runtime component set before Tauri creates the main WebView.
 - [ ] 3.2 在创建主 WebView 前运行原生 bootstrap 状态机
   - [x] 2026-08-13 Rust regression `startup_gates_run_before_tauri_builder` locks WebView2 and green-runtime gate ordering before `tauri::Builder`, including lock release on gate failure.

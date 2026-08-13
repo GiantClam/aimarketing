@@ -26,6 +26,19 @@ export interface BootstrapManifest {
   readonly checkedAt: string;
 }
 
+export const MANDATORY_RUNTIME_COMPONENTS: readonly RuntimeComponent[] = [
+  "node",
+  "opencode",
+  "python",
+  "host",
+  "knowledge",
+  "fonts",
+  "skills",
+  "lancedb",
+  "embedding",
+  "migrations",
+];
+
 export async function probeRuntime(paths: DesktopPaths, config: DesktopConfig): Promise<BootstrapManifest> {
   const probes: RuntimeProbe[] = [];
   probes.push(await probeExecutable("node", config.runtime.nodePath ?? (config.runtime.source === "private" ? join(paths.runtime, "node", "node.exe") : "node")));
@@ -42,8 +55,7 @@ export async function probeRuntime(paths: DesktopPaths, config: DesktopConfig): 
 }
 
 export function isRuntimeReady(manifest: BootstrapManifest) {
-  const mandatory = new Set<RuntimeComponent>(["node", "opencode", "python", "host", "knowledge", "fonts", "skills", "lancedb", "embedding", "migrations"]);
-  return [...mandatory].every((component) => manifest.probes.some((probe) => probe.component === component && probe.ok));
+  return MANDATORY_RUNTIME_COMPONENTS.every((component) => manifest.probes.some((probe) => probe.component === component && probe.ok));
 }
 
 async function probePath(component: RuntimeComponent, path: string): Promise<RuntimeProbe> {
