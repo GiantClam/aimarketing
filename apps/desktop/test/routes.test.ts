@@ -253,6 +253,14 @@ test("settings deep link renders one settings surface instead of a duplicate lib
   assert.match(appSource, /selected\.path === "\/dashboard\/settings" \? null : selected\.mode === "library"/);
 });
 
+test("desktop settings can detach a Vault without deleting local files", () => {
+  const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  assert.match(appSource, /removeVault: "解除绑定"/);
+  assert.match(appSource, /removeVault: "Detach Vault"/);
+  assert.match(appSource, /disabled=\{!config\.obsidianVaultPath\}/);
+  assert.match(appSource, /obsidianVaultPath: undefined, obsidianIndexPath: undefined/);
+});
+
 test("media readiness follows Provider source instead of the default local id", () => {
   const source = readFileSync(resolve(process.cwd(), "src/provider-config.ts"), "utf8");
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");

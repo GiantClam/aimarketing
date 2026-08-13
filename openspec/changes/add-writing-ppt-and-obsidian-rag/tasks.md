@@ -34,7 +34,7 @@
 - [x] 3.4 启动/恢复 reconciliation 比较每个 Markdown 的内容 hash，并报告 changed/removed 文档。
 - [x] 3.5 Windows watcher 提供增量变更提示，并由 manifest reconciliation 负责最终一致性。
 
-- [ ] 3.1 实现用户显式选择、移除和重新定位 Vault
+- [x] 3.1 设置页支持用户显式选择、重新定位及解除当前 Vault 绑定；解除仅清除待保存的本地配置与索引路径，不删除用户 Vault 或索引文件。 ✓ 2026-08-13
 - [ ] 3.2 实现 `.obsidian`、trash、隐藏路径、用户 ignore 和 symlink loop 规则
 - [ ] 3.3 解析 Markdown、frontmatter、wikilink、标准链接、标签和附件
 - [ ] 3.4 建立每 Vault manifest/hash 清单和启动/唤醒 reconciliation
