@@ -102,7 +102,10 @@ test("desktop shell keeps the cloud visual primitives and workflow state path", 
   assert.match(appSource, /WORKBENCH_THEME/);
   assert.match(appSource, /WorkbenchChatMessage/);
   assert.match(appSource, /showSkill=\{false\}/);
-  assert.match(readFileSync(resolve(process.cwd(), "../../components/ai-entry/ai-entry-workspace.tsx"), "utf8"), /data-cloud-surface="message"/);
+  const cloudAiEntrySource = readFileSync(resolve(process.cwd(), "../../components/ai-entry/ai-entry-workspace.tsx"), "utf8");
+  const sharedMessageSource = readFileSync(resolve(process.cwd(), "../../packages/workbench-ui/src/components.tsx"), "utf8");
+  assert.match(cloudAiEntrySource, /WorkbenchCloudMessageShell/);
+  assert.match(sharedMessageSource, /data-cloud-surface="message"/);
   assert.doesNotMatch(appSource, /WorkbenchMessageFrame/);
   assert.match(appSource, /onRun=\{\(definition\) => void runAgent\(undefined, undefined, undefined, definition\)\}/);
   assert.match(appSource, /onDefinitionChange/);
