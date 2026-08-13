@@ -102,7 +102,7 @@
 
 - [x] 6.1 运行 fake OpenCode E2E：首聊、多轮、tool、cancel、crash、artifact、usage
   - [x] 2026-08-13 `apps/desktop/test/opencode-serve.test.ts` runs one supervised fake-serve process through first and second prompts, asserts streamed text/tool-artifact/usage evidence, aborts a long turn through the cancel endpoint, observes serve crash as retryable, and recreates the session without replaying the prior turn.
-- [x] 6.2 用一个真实配置 Provider 运行普通对话 smoke。✓ 2026-08-13 — `apps/desktop/real-providers.test.local.json` 驱动的 `test:real-providers` 已确认 LLM `/chat/completions` HTTP 200（choices/usage）；图片请求在当前上游超时，未伪造成功结果；视频按 v1 验证范围明确未执行。
+- [x] 6.2 用一个真实配置 Provider 运行普通对话 smoke。✓ 2026-08-13 — `apps/desktop/real-providers.test.local.json` 驱动的 `test:real-providers` 已确认 LLM `/chat/completions` HTTP 200（choices/usage）；同次 120 秒 smoke 的图片请求也 HTTP 200；视频按 v1 验证范围明确未执行。
 - [x] 6.3 捕获证据证明所有普通 desktop chat 选择 OpenCode
   - [x] 2026-08-13 architecture-boundary and route tests require `session.create`/`session.prompt` and reject direct chat-completions or `ai-sdk-native` paths.
 - [x] 6.4 扫描 bundle 和网络日志，确认无排除的 SaaS 模块/端点

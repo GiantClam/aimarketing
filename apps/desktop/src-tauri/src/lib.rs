@@ -58,30 +58,42 @@ fn runtime_probe(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let data = data_dir(&app)?;
     let database = data.join("app.db");
     let migrations = storage::initialize(&database).is_ok() && storage::migrations_ready(&database).unwrap_or(false);
+    let configured_node = configured_runtime_executable(&data, "nodePath");
     let private_node = data.join("runtime").join("node").join("node.exe");
     let configured_opencode = configured_runtime_executable(&data, "opencodePath");
     let private_opencode = data.join("runtime").join("opencode").join("opencode.exe");
-    let node_path = (if private_node.exists() && executable_works(&private_node, &["--version"]) { Some(private_node) } else { system_executable("node").filter(|path| executable_works(path, &["--version"])) }).and_then(canonical_path);
+    let node_path = configured_node.filter(|path| executable_works(path, &["--version"])).or_else(|| if private_node.exists() && executable_works(&private_node, &["--version"]) { Some(private_node) } else { system_executable("node").filter(|path| executable_works(path, &["--version"])) }).and_then(canonical_path);
     let opencode_path = configured_opencode.filter(|path| executable_works(path, &["--version"])).or_else(|| if private_opencode.exists() && executable_works(&private_opencode, &["--version"]) { Some(private_opencode) } else { system_executable("opencode").filter(|path| executable_works(path, &["--version"])) }).and_then(canonical_path);
     let node = node_path.is_some();
     let opencode = opencode_path.is_some();
+    let configured_python = configured_runtime_executable(&data, "pythonPath");
     let private_python = data.join("runtime").join("python").join("python.exe");
     let resource_python = resource.join("dist-runtime").join("runtime").join("python").join("python.exe");
-    let python_path = [private_python, resource_python].into_iter().find(|path| python_capable(path)).or_else(system_python).and_then(canonical_path);
+    let python_path = configured_python.filter(|path| python_capable(path)).or_else(|| [private_python, resource_python].into_iter().find(|path| python_capable(path))).or_else(system_python).and_then(canonical_path);
     let python = python_path.is_some();
     let development = std::env::current_dir().unwrap_or_default().join("apps").join("desktop").join("dist-runtime");
-    let host_path = [resource.join("dist-runtime").join("host.mjs"), resource.join("_up_").join("dist-runtime").join("host.mjs"), development.join("host.mjs")].into_iter().find(|path| path.is_file()).and_then(canonical_path);
+    let configured_host = configured_runtime_path(&data, "hostPath");
+    let host_path = configured_host.filter(|path| path.is_file()).or_else(|| [resource.join("dist-runtime").join("host.mjs"), resource.join("_up_").join("dist-runtime").join("host.mjs"), development.join("host.mjs")].into_iter().find(|path| path.is_file())).and_then(canonical_path);
     let host = host_path.is_some();
     let skill_roots = [resource.join("dist-runtime").join("skills"), resource.join("_up_").join("dist-runtime").join("skills"), development.join("skills")];
-    let skill_path = skill_roots.iter().find(|path| path.join("ppt-master").join("SKILL.md").exists() && path.join("ppt-master.manifest.json").exists()).cloned().and_then(canonical_path);
+    let configured_skills = configured_runtime_path(&data, "skillsPath");
+    let skill_path = configured_skills.filter(|path| path.join("ppt-master").join("SKILL.md").exists() && path.join("ppt-master.manifest.json").exists()).or_else(|| skill_roots.iter().find(|path| path.join("ppt-master").join("SKILL.md").exists() && path.join("ppt-master.manifest.json").exists()).cloned()).and_then(canonical_path);
     let skills = skill_path.is_some();
-    let fonts = [resource.join("dist-runtime").join("runtime").join("fonts").join("msyh.ttc"), resource.join("_up_").join("dist-runtime").join("runtime").join("fonts").join("msyh.ttc"), development.join("runtime").join("fonts").join("msyh.ttc")].iter().any(|path| path.is_file());
-    let fonts_path = [resource.join("dist-runtime").join("runtime").join("fonts"), resource.join("_up_").join("dist-runtime").join("runtime").join("fonts"), development.join("runtime").join("fonts")].into_iter().find(|path| path.join("msyh.ttc").is_file()).and_then(canonical_path);
+    let configured_fonts = configured_runtime_path(&data, "fontsPath");
+    let fonts_path = configured_fonts.filter(|path| path.join("msyh.ttc").is_file()).or_else(|| [resource.join("dist-runtime").join("runtime").join("fonts"), resource.join("_up_").join("dist-runtime").join("runtime").join("fonts"), development.join("runtime").join("fonts")].into_iter().find(|path| path.join("msyh.ttc").is_file())).and_then(canonical_path);
+    let fonts = fonts_path.is_some();
+    let configured_lancedb = configured_runtime_path(&data, "lancedbPath");
     let lancedb_candidates = [data.join("runtime").join("lancedb"), resource.join("dist-runtime").join("runtime").join("lancedb")];
-    let lancedb_path = lancedb_candidates.into_iter().find(|path| path.join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").exists()).and_then(canonical_path);
+    let lancedb_path = configured_lancedb.filter(|path| path.join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").exists()).or_else(|| lancedb_candidates.into_iter().find(|path| path.join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").exists())).and_then(canonical_path);
     let lancedb = lancedb_path.is_some();
-    let embedding_path = [resource.join("dist-runtime").join("runtime").join("embedding").join("local-hash-384-v1.json"), resource.join("_up_").join("dist-runtime").join("runtime").join("embedding").join("local-hash-384-v1.json"), data.join("runtime").join("embedding").join("local-hash-384-v1.json")].into_iter().find(|path| path.is_file()).and_then(canonical_path);
+    let configured_embedding = configured_runtime_path(&data, "embeddingPath");
+    let embedding_path = configured_embedding.filter(|path| path.is_file()).or_else(|| [resource.join("dist-runtime").join("runtime").join("embedding").join("local-hash-384-v1.json"), resource.join("_up_").join("dist-runtime").join("runtime").join("embedding").join("local-hash-384-v1.json"), data.join("runtime").join("embedding").join("local-hash-384-v1.json")].into_iter().find(|path| path.is_file())).and_then(canonical_path);
     let embedding = embedding_path.is_some();
+    persist_runtime_paths(&data, &[
+        ("nodePath", node_path.as_ref()), ("opencodePath", opencode_path.as_ref()), ("pythonPath", python_path.as_ref()),
+        ("hostPath", host_path.as_ref()), ("skillsPath", skill_path.as_ref()), ("fontsPath", fonts_path.as_ref()),
+        ("lancedbPath", lancedb_path.as_ref()), ("embeddingPath", embedding_path.as_ref()),
+    ])?;
     Ok(serde_json::json!({ "ready": node && opencode && python && skills && fonts && migrations && host && lancedb && embedding, "node": node, "opencode": opencode, "python": python, "skills": skills, "fonts": fonts, "migrations": migrations, "host": host, "lancedb": lancedb, "embedding": embedding, "semanticRag": lancedb, "paths": { "node": node_path, "opencode": opencode_path, "python": python_path, "host": host_path, "skills": skill_path, "fonts": fonts_path, "lancedb": lancedb_path, "embedding": embedding_path } }))
 }
 
@@ -93,9 +105,31 @@ fn canonical_path(path: PathBuf) -> Option<PathBuf> {
     std::fs::canonicalize(path).ok()
 }
 
-fn configured_runtime_executable(data: &std::path::Path, key: &str) -> Option<PathBuf> {
+fn configured_runtime_path(data: &std::path::Path, key: &str) -> Option<PathBuf> {
     let value = config::read(&data.join("config.json"), data).ok()?;
-    value.get("runtime")?.get(key)?.as_str().map(PathBuf::from).filter(|path| path.is_file()).and_then(|path| std::fs::canonicalize(path).ok())
+    let path = value.get("runtime")?.get(key)?.as_str().map(PathBuf::from)?;
+    std::fs::canonicalize(path).ok()
+}
+
+fn configured_runtime_executable(data: &std::path::Path, key: &str) -> Option<PathBuf> {
+    configured_runtime_path(data, key).filter(|path| path.is_file())
+}
+
+fn persist_runtime_paths(data: &std::path::Path, updates: &[(&str, Option<&PathBuf>)]) -> Result<(), String> {
+    let path = data.join("config.json");
+    let mut value = config::read(&path, data)?;
+    let runtime = value.get_mut("runtime").and_then(serde_json::Value::as_object_mut).ok_or_else(|| "runtime_required".to_string())?;
+    let mut changed = false;
+    for (key, candidate) in updates {
+        let Some(candidate) = candidate else { continue; };
+        let canonical = candidate.to_string_lossy().into_owned();
+        if runtime.get(*key).and_then(serde_json::Value::as_str) != Some(canonical.as_str()) {
+            runtime.insert((*key).to_string(), serde_json::Value::String(canonical));
+            changed = true;
+        }
+    }
+    if changed { config::write(&path, &value)?; }
+    Ok(())
 }
 
 fn python_capable(path: &std::path::Path) -> bool {
@@ -594,12 +628,33 @@ fn lock_path() -> Result<std::path::PathBuf, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::safe_media_component;
+    use super::{config, configured_runtime_executable, persist_runtime_paths, safe_media_component};
+    use std::fs;
 
     #[test]
     fn media_temp_components_are_workspace_safe_and_bounded() {
         assert_eq!(safe_media_component("run:with\\separators", "run"), "run_with_separators");
         assert_eq!(safe_media_component("../", "node"), "node");
         assert!(safe_media_component(&"x".repeat(200), "node").len() <= 96);
+    }
+
+    #[test]
+    fn runtime_probe_persists_canonical_paths_and_reuses_them() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-runtime-paths-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let config_path = root.join("config.json");
+        config::write(&config_path, &config::default_config(&root)).unwrap();
+        let node = root.join("runtime-node.exe");
+        fs::write(&node, b"fixture").unwrap();
+        let canonical = fs::canonicalize(&node).unwrap();
+
+        persist_runtime_paths(&root, &[("nodePath", Some(&canonical))]).unwrap();
+
+        let saved = config::read(&config_path, &root).unwrap();
+        let canonical_text = canonical.to_string_lossy().into_owned();
+        assert_eq!(saved["runtime"]["nodePath"].as_str(), Some(canonical_text.as_str()));
+        assert_eq!(configured_runtime_executable(&root, "nodePath"), Some(canonical));
+        let _ = fs::remove_dir_all(root);
     }
 }

@@ -128,5 +128,5 @@
 - [ ] 所有阶段与质量门禁通过
 - [ ] 三个 capability specs 全部满足
 - [ ] 每类真实 Provider smoke 结果已记录
-  - 2026-08-13：使用 `apps/desktop/real-providers.test.local.json` 顺序 smoke（LLM → image，未执行视频生成）；LLM 当前 HTTP 200，响应键为 `id/object/created/model/choices/usage`。图片请求在 3 秒和 10 秒单次超时下均未返回，诊断为 `AbortSignal.timeout`，未伪造成功结果；需在图片上游可用后重跑。
+  - 2026-08-13：使用 `apps/desktop/real-providers.test.local.json` 顺序 smoke（LLM → image，未执行视频生成）；在默认 120 秒单次超时下两项均 HTTP 200，LLM 响应键为 `id/object/created/model/choices/usage`，图片响应键为 `created/model/data/usage/quality/size/output_format`。30 秒快速探测曾超时，但未被记录为成功。
 - [ ] Ready for `openspec-archive add-desktop-media-and-workflows`
