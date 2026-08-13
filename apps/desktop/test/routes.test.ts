@@ -136,16 +136,16 @@ test("shared shell local-language controls are localized in both directions", ()
 
 test("desktop home uses the same cloud page shell nesting", () => {
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
-  assert.match(appSource, /className=\"home-shell\"><div className=\"home-page-shell\"><header className=\"home-topbar\"/);
-  assert.match(appSource, /<main className=\"home-main\">/);
+  assert.match(appSource, /className="home-shell"><div className="home-page-shell"><header className="home-topbar"/);
+  assert.match(appSource, /<main className="home-main">/);
   assert.match(appSource, /<HomeEntryGroups onNavigate=\{workbenchClient\.navigation\.go\} locale=\{locale\} \/>/);
   assert.match(appSource, /chat-landing-kicker/);
-  assert.match(appSource, /className=\"dashboard-title\"/);
-  assert.match(appSource, /className=\"send-button\" disabled=\{!prompt\.trim\(\) && !attachments\.length\}/);
+  assert.match(appSource, /className="dashboard-title"/);
+  assert.match(appSource, /className="send-button" disabled=\{!prompt\.trim\(\) && !attachments\.length\}/);
   assert.match(appSource, /placeholder=\{copy\.homePlaceholder\}/);
   assert.match(appSource, /showSkill=\{false\}/);
-  assert.match(readFileSync(resolve(process.cwd(), "src/i18n.ts"), "utf8"), /homePlaceholder: \"输入你的问题\.\.\.\"/);
-  assert.match(readFileSync(resolve(process.cwd(), "src/i18n.ts"), "utf8"), /homePlaceholder: \"Ask anything\.\.\.\"/);
+  assert.match(readFileSync(resolve(process.cwd(), "src/i18n.ts"), "utf8"), /homePlaceholder: "输入你的问题\.\.\."/);
+  assert.match(readFileSync(resolve(process.cwd(), "src/i18n.ts"), "utf8"), /homePlaceholder: "Ask anything\.\.\."/);
   assert.match(readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8"), /\.home-chat-workspace \.send-button \{ height: 40px/);
 });
 
@@ -193,7 +193,7 @@ test("desktop writer and media surfaces retain the online control contract", () 
   assert.match(appSource, /本地 Obsidian 知识库上下文/);
   assert.match(appSource, /chat-quick-start-grid/);
   assert.match(appSource, /composer-prompt-chips/);
-  assert.match(appSource, /data-cloud-surface=\"prompt-suggestions\"/);
+  assert.match(appSource, /data-cloud-surface="prompt-suggestions"/);
   assert.match(appSource, /添加 Obsidian 知识库/);
   assert.match(appSource, /const userPrompt =/);
   assert.match(appSource, /const runtimePrompt =/);
@@ -213,7 +213,7 @@ test("desktop writer and media surfaces retain the online control contract", () 
   const sharedMessageSource = readFileSync(resolve(process.cwd(), "../../packages/workbench-ui/src/components.tsx"), "utf8");
   assert.match(sharedMessageSource, /ReactMarkdown/);
   assert.match(sharedMessageSource, /remarkGfm/);
-  assert.match(sharedMessageSource, /data-cloud-surface=\"message\"/);
+  assert.match(sharedMessageSource, /data-cloud-surface="message"/);
   assert.equal(WORKBENCH_CHAT_QUICK_PROMPTS.length, 3);
   assert.equal(WORKBENCH_WRITER_QUICK_PROMPTS.length, 3);
 });
@@ -272,7 +272,7 @@ test("desktop settings keep Vault embeddings local unless the user explicitly se
 test("media readiness follows Provider source instead of the default local id", () => {
   const source = readFileSync(resolve(process.cwd(), "src/provider-config.ts"), "utf8");
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
-  assert.match(source, /source !== \"local\"/);
+  assert.match(source, /source !== "local"/);
   assert.match(appSource, /isMediaProviderConfigured\(config\.provider\)/);
   assert.equal(isMediaProviderConfigured({ id: "local", source: "local", baseUrl: "http://127.0.0.1:11434/v1" }), false);
   assert.equal(isMediaProviderConfigured({ id: "local", source: "openai-compatible", baseUrl: "https://api.example.test/v1" }), true);
