@@ -66,3 +66,9 @@ test("desktop image capabilities select direct OpenAI-compatible or Bailian adap
   assert.match(host, /createOpenAICompatibleImageAdapter\(providerOptions\)/);
   assert.match(host, /executorId === "image_generate"/);
 });
+
+test("desktop host keeps voice cloning on the MiniMax media path", () => {
+  const host = readFileSync(resolve(process.cwd(), "runtime/host.ts"), "utf8");
+  assert.match(host, /voice_clone/);
+  assert.match(host, /featureId: "voice-clone"/);
+});

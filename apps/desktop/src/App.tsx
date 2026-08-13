@@ -11,7 +11,7 @@ import { sanitizeWorkflowDefinitionForStorage } from "./workflow-storage";
 
 type WorkspaceMode = "chat" | "writer" | "workflow" | "library";
 type SkillId = "auto" | "content-writing" | "marketing-analysis" | "ppt-master" | "obsidian-rag";
-type WorkflowAction = "upload" | "text_input" | "file_create" | "writer" | "llm_generate" | "agent_execute" | "ppt_generate" | "image_generate" | "video_generate" | "digital_human" | "music_generate" | "voice_synthesis" | "audio_generate" | "knowledge_retrieve" | "knowledge_write" | "product_store" | "foreach" | "collect" | "output";
+type WorkflowAction = "upload" | "text_input" | "file_create" | "writer" | "llm_generate" | "agent_execute" | "ppt_generate" | "image_generate" | "video_generate" | "digital_human" | "music_generate" | "voice_synthesis" | "voice_clone" | "audio_generate" | "knowledge_retrieve" | "knowledge_write" | "product_store" | "foreach" | "collect" | "output";
 type MediaFeatureId = WorkbenchMediaFeatureId;
 type EmbeddingConfig = { mode: "local" | "remote"; baseUrl?: string; model?: string; apiKey?: string };
 type DesktopConfig = { schemaVersion: 1; locale?: DesktopLocalePreference; workspacePath: string; obsidianVaultPath?: string; obsidianIndexPath?: string; embedding?: EmbeddingConfig; provider: { id: string; source?: string; model: string; models?: string[]; baseUrl?: string; apiKey?: string; reasoningEffort?: string; skillId?: SkillId; endpoint?: string; queryEndpoint?: string }; runtime: { source: "system" | "private"; nodePath?: string; opencodePath?: string; pythonPath?: string; hostPath?: string; skillsPath?: string; fontsPath?: string; lancedbPath?: string; embeddingPath?: string }; offlineRuntimeZipPath?: string };
@@ -160,6 +160,7 @@ const workflowActions: Array<{ id: WorkflowAction; label: string; output: "text"
   { id: "digital_human", label: "数字人", output: "video" },
   { id: "music_generate", label: "音乐生成", output: "audio" },
   { id: "voice_synthesis", label: "语音合成", output: "audio" },
+  { id: "voice_clone", label: "声音克隆", output: "audio" },
   { id: "audio_generate", label: "通用音频", output: "audio" },
   { id: "knowledge_retrieve", label: "Obsidian 知识检索", output: "text" },
   { id: "knowledge_write", label: "写入 Obsidian", output: "text" },
@@ -759,8 +760,8 @@ function DesktopMediaWorkspaceBody({
 }) {
   const isVideo = route.path.includes("video");
   const isImage = route.path.includes("image-assistant");
-  const actionToFeature: Partial<Record<WorkflowAction, MediaFeatureId>> = { video_generate: "text-to-video", digital_human: "digital-human", music_generate: "ai-music", voice_synthesis: "voice-synthesis", audio_generate: "audio-generate" };
-  const featureToAction: Partial<Record<MediaFeatureId, WorkflowAction>> = { "text-to-video": "video_generate", "image-to-video": "video_generate", "reference-to-video": "video_generate", "video-edit": "video_generate", "video-enhance": "video_generate", "digital-human": "digital_human", "ai-music": "music_generate", "audio-generate": "audio_generate", "voice-clone": "voice_synthesis", "voice-synthesis": "voice_synthesis" };
+  const actionToFeature: Partial<Record<WorkflowAction, MediaFeatureId>> = { video_generate: "text-to-video", digital_human: "digital-human", music_generate: "ai-music", voice_clone: "voice-clone", voice_synthesis: "voice-synthesis", audio_generate: "audio-generate" };
+  const featureToAction: Partial<Record<MediaFeatureId, WorkflowAction>> = { "text-to-video": "video_generate", "image-to-video": "video_generate", "reference-to-video": "video_generate", "video-edit": "video_generate", "video-enhance": "video_generate", "digital-human": "digital_human", "ai-music": "music_generate", "audio-generate": "audio_generate", "voice-clone": "voice_clone", "voice-synthesis": "voice_synthesis" };
   const [activeFeatureId, setActiveFeatureId] = useState<MediaFeatureId>(actionToFeature[workflowAction] ?? "text-to-video");
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [imageSettings, setImageSettings] = useState({ quality: "standard", size: "1024x1024", count: "1", referenceImages: "" });
@@ -842,7 +843,7 @@ function DesktopMediaWorkspace(props: DesktopMediaWorkspaceProps) {
     : { eyebrow: "Media Workspace", title: props.route.label, description: isVideo ? props.route.description : "按子能力打开独立 Tab：填写结构化信息，并查看本地任务状态、产物预览和文件。", launchers: "能力入口", workspace: "多 Tab 工作区", openFirst: "先从上方选择一个音频或视频子能力。", audio: "音频处理", video: "视频处理" };
   const localizedFeatures = mediaFeatureCatalog.map((feature) => ({ ...feature, title: locale === "en" ? mediaEnglish[feature.id] ?? feature.title : feature.title, summary: locale === "en" ? mediaSummaryEnglish[feature.id] ?? feature.summary : feature.summary }));
   const groups = [{ id: "audio", title: copy.audio, description: locale === "en" ? "Handle music generation, voice cloning, and speech synthesis in one audio workspace." : "支持音乐生成、声音克隆与语音合成，统一在一个音频工作区完成。", features: localizedFeatures.filter((feature) => feature.group === "audio") }, { id: "video", title: copy.video, description: locale === "en" ? "Handle video, digital human, editing, and enhancement in one video workspace." : "支持视频、数字人、视频编辑和高清化，统一在一个视频工作区完成。", features: localizedFeatures.filter((feature) => feature.group === "video") }];
-  const actionByFeature: Partial<Record<MediaFeatureId, WorkflowAction>> = { "ai-music": "music_generate", "audio-generate": "audio_generate", "voice-clone": "voice_synthesis", "voice-synthesis": "voice_synthesis", "text-to-video": "video_generate", "image-to-video": "video_generate", "reference-to-video": "video_generate", "video-edit": "video_generate", "digital-human": "digital_human", "video-enhance": "video_generate" };
+  const actionByFeature: Partial<Record<MediaFeatureId, WorkflowAction>> = { "ai-music": "music_generate", "audio-generate": "audio_generate", "voice-clone": "voice_clone", "voice-synthesis": "voice_synthesis", "text-to-video": "video_generate", "image-to-video": "video_generate", "reference-to-video": "video_generate", "video-edit": "video_generate", "digital-human": "digital_human", "video-enhance": "video_generate" };
   const [activeFeatureId, setActiveFeatureId] = useState<MediaFeatureId | null>(isVideo ? ((Object.entries(actionByFeature).find(([, action]) => action === workflowAction)?.[0] as MediaFeatureId | undefined) ?? "text-to-video") : null);
   const [openFeatureIds, setOpenFeatureIds] = useState<MediaFeatureId[]>(isVideo ? [((Object.entries(actionByFeature).find(([, action]) => action === workflowAction)?.[0] as MediaFeatureId | undefined) ?? "text-to-video")] : []);
   useEffect(() => { setActiveFeatureId(isVideo ? ((Object.entries(actionByFeature).find(([, action]) => action === workflowAction)?.[0] as MediaFeatureId | undefined) ?? "text-to-video") : null); }, [isVideo]);
@@ -1539,7 +1540,7 @@ export function App() {
         ...(actionId === "knowledge_write" && config.obsidianVaultPath ? { vaultPath: config.obsidianVaultPath } : {}),
       };
       const workflowDefinition = sanitizeWorkflowDefinitionForStorage(isWorkflowDefinition(workflowOverride) ? workflowOverride : selected.path === "/dashboard/workflows" ? currentWorkflowDefinition() : buildWorkflowDefinition(userPrompt, actionId, config.provider, capabilityConfig));
-      const mediaNodeTypes = new Set<WorkflowAction>(["image_generate", "video_generate", "digital_human", "music_generate", "voice_synthesis", "audio_generate"]);
+      const mediaNodeTypes = new Set<WorkflowAction>(["image_generate", "video_generate", "digital_human", "music_generate", "voice_synthesis", "voice_clone", "audio_generate"]);
       const mediaNodes = workflowDefinition.nodes.filter((node) => mediaNodeTypes.has(node.type as WorkflowAction));
       await Promise.all(mediaNodes.map((node) => {
         const nodeProvider = typeof node.config.provider === "string" && node.config.provider.trim() ? node.config.provider.trim() : config.provider.id;

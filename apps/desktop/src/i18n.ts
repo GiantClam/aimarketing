@@ -77,7 +77,7 @@ export function quickPromptsForDesktopRoute(path: string, locale: DesktopLocale)
 }
 
 export const workflowActionEnglish: Record<string, string> = {
-  upload: "Upload asset", text_input: "Text input", file_create: "Local file", writer: "Content writing", llm_generate: "Model generation", agent_execute: "Agent execution", ppt_generate: "PPT (ppt-master)", image_generate: "Image generation", video_generate: "Video generation", digital_human: "Digital human", music_generate: "Music generation", voice_synthesis: "Voice synthesis", audio_generate: "General audio", knowledge_retrieve: "Obsidian retrieval", knowledge_write: "Write to Obsidian", product_store: "Asset store", foreach: "Process each", collect: "Collect results", output: "Workflow output",
+  upload: "Upload asset", text_input: "Text input", file_create: "Local file", writer: "Content writing", llm_generate: "Model generation", agent_execute: "Agent execution", ppt_generate: "PPT (ppt-master)", image_generate: "Image generation", video_generate: "Video generation", digital_human: "Digital human", music_generate: "Music generation", voice_synthesis: "Voice synthesis", voice_clone: "Voice cloning", audio_generate: "General audio", knowledge_retrieve: "Obsidian retrieval", knowledge_write: "Write to Obsidian", product_store: "Asset store", foreach: "Process each", collect: "Collect results", output: "Workflow output",
 };
 
 export const mediaEnglish: Record<string, string> = {
@@ -113,6 +113,7 @@ export const capabilityEnglish: Record<string, { title: string; description: str
   digital_human: { title: "Digital human", description: "Generate local video results with the digital-human media capability." },
   music_generate: { title: "AI music", description: "Generate music and manage audio files in the local artifact library." },
   voice_synthesis: { title: "Voice synthesis", description: "Convert text to speech and write the output directly to the project." },
+  voice_clone: { title: "Voice cloning", description: "Create a reusable MiniMax voice from a provider-uploaded reference file and optional preview text." },
   audio_generate: { title: "General audio", description: "Generate general audio content with a configured Provider." },
   knowledge_retrieve: { title: "Obsidian knowledge", description: "Search local Vault indexes and open the cited source note." },
   knowledge_write: { title: "Write to Obsidian", description: "Write Agent output to the configured Vault while preserving the local index." },

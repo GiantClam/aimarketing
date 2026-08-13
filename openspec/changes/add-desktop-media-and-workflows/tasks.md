@@ -51,9 +51,12 @@
 - [x] 3.4a workflow-host `workflow.run` now executes pure text/file/collect/output nodes and routes writer/LLM/agent/PPT node prompts through local OpenCode; provider-backed media adapters remain downstream.
 - [x] 3.4 将所有文本类节点路由到 OpenCode，将媒体节点路由到 host-neutral media-runtime；未配置 Provider 返回结构化 configuration-required 错误。
 - [x] 3.5a SQLite schema now includes idempotent `run_nodes` and `run_attempts` records for node/provider recovery.
-- [ ] 3.2 注册 upload/text/file/writer/LLM/agent/image/video/digital-human/music/voice/audio/PPT/knowledge/product-store/foreach/collect/output
-- [ ] 3.3 明确排除 Lead Hunter、publish-as-agent、marketplace 和 enterprise preset
-- [ ] 3.4 将所有文本类节点路由到 OpenCode，将媒体节点路由到 media-runtime
+- [x] 3.2 注册 upload/text/file/writer/LLM/agent/image/video/digital-human/music/voice/audio/PPT/knowledge/product-store/foreach/collect/output
+  - [x] 2026-08-13 workflow-core registry now includes the approved `voice_clone` node alongside every listed v1 input, text, media, knowledge, control and output node; schema tests validate the complete set.
+- [x] 3.3 明确排除 Lead Hunter、publish-as-agent、marketplace 和 enterprise preset
+  - [x] 2026-08-13 registry boundary test asserts all four excluded capability identifiers are absent.
+- [x] 3.4 将所有文本类节点路由到 OpenCode，将媒体节点路由到 media-runtime
+  - [x] 2026-08-13 host routing includes the independent `voice_clone` media executor and all text/Skill nodes remain on the OpenCode branch; desktop media routing tests cover the direct provider path.
 - [ ] 3.5 保存 run、run_nodes、run_attempts、关键 run_events 和 checkpoints
 
 **Quality Gate:**

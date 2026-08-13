@@ -35,6 +35,7 @@ const mediaWorkflowActions = new Set([
   "digital_human",
   "music_generate",
   "voice_synthesis",
+  "voice_clone",
   "audio_generate",
 ]);
 

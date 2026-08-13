@@ -229,7 +229,7 @@ async function runWorkflow(command: HostCommand) {
         if (!vaultPath) throw new Error("knowledge_vault_required");
         return writeObsidianNote({ vaultPath, targetPath: typeof config.targetPath === "string" ? config.targetPath : undefined, content: typeof inputs.text === "string" ? inputs.text : JSON.stringify(inputs, null, 2), baseHash: typeof config.baseHash === "string" ? config.baseHash : undefined });
       }
-      if (["image_generate", "video_generate", "digital_human", "music_generate", "voice_synthesis", "audio_generate"].includes(executorId)) return runMediaCapability(command, runId, nodeKey, executorId, config, inputs, workspacePath, signal);
+      if (["image_generate", "video_generate", "digital_human", "music_generate", "voice_synthesis", "voice_clone", "audio_generate"].includes(executorId)) return runMediaCapability(command, runId, nodeKey, executorId, config, inputs, workspacePath, signal);
       const prompt = [typeof config.prompt === "string" ? config.prompt : "", typeof config.script === "string" ? config.script : "", typeof config.text === "string" ? config.text : "", typeof inputs.text === "string" ? inputs.text : ""].filter(Boolean).join("\n\n");
       const nodeCommand: HostCommand = { ...command, runId: `${runId}:${nodeKey}`, payload: { ...(command.payload ?? {}), prompt: executorId === "ppt_generate" ? `${prompt}\n\nUse the local ppt-master skill and write the editable PPTX into the project workspace.` : prompt } };
       const workflowProvider = readProvider(command.payload?.provider);
@@ -242,7 +242,7 @@ async function runWorkflow(command: HostCommand) {
       const artifacts = executorId === "ppt_generate" ? await detectPresentationArtifacts(workspacePath, workflowStartedAt) : [];
       return { text, ...(artifacts.length ? { artifacts } : {}) };
     }, resume: async ({ executorId, nodeKey, config, inputs, providerTaskId }, signal) => {
-      if (["image_generate", "video_generate", "digital_human", "music_generate", "voice_synthesis", "audio_generate"].includes(executorId)) {
+      if (["image_generate", "video_generate", "digital_human", "music_generate", "voice_synthesis", "voice_clone", "audio_generate"].includes(executorId)) {
         return runMediaCapability(command, runId, nodeKey, executorId, config, inputs, workspacePath, signal, providerTaskId);
       }
       throw new Error(`workflow_recovery_unsupported:${executorId}`);
@@ -287,7 +287,7 @@ async function runMediaCapability(command: HostCommand, runId: string, nodeKey: 
   if (!provider || !baseUrl) {
     const error = new Error(`provider_configuration_required:${executorId}`); (error as Error & { code?: string }).code = "provider_configuration_required"; throw error;
   }
-  const defaultEndpoints: Record<string, string> = { image_generate: "/images/generations", video_generate: "/videos/generations", digital_human: "/videos/generations", music_generate: "/audio/generations", voice_synthesis: "/audio/speech", audio_generate: "/audio/generations" };
+  const defaultEndpoints: Record<string, string> = { image_generate: "/images/generations", video_generate: "/videos/generations", digital_human: "/videos/generations", music_generate: "/audio/generations", voice_synthesis: "/audio/speech", voice_clone: "/voice_clone", audio_generate: "/audio/generations" };
   const endpoint = typeof config.endpoint === "string" ? config.endpoint : defaultEndpoints[executorId] ?? "";
   if (!endpoint) throw new Error(`provider_endpoint_required:${executorId}`);
   const apiKey = typeof config.apiKey === "string" ? config.apiKey : typeof configuredMedia?.apiKey === "string" ? configuredMedia.apiKey : typeof textProvider?.apiKey === "string" ? textProvider.apiKey : typeof command.payload?.apiKey === "string" ? command.payload.apiKey : undefined;
@@ -299,7 +299,7 @@ async function runMediaCapability(command: HostCommand, runId: string, nodeKey: 
       ? createBailianVideoAdapter(providerOptions)
       : providerLower.includes("minimax") && executorId === "video_generate"
       ? createMiniMaxVideoAdapter(providerOptions)
-      : providerLower.includes("minimax") && ["music_generate", "voice_synthesis", "audio_generate"].includes(executorId)
+      : providerLower.includes("minimax") && ["music_generate", "voice_synthesis", "voice_clone", "audio_generate"].includes(executorId)
       ? createMiniMaxAudioAdapter(providerOptions)
       : providerLower.includes("runninghub")
         ? createRunningHubAdapter({ ...providerOptions, submitPath: endpoint, queryPath: typeof config.queryEndpoint === "string" ? config.queryEndpoint : "/openapi/v2/query" })
@@ -313,7 +313,7 @@ async function runMediaCapability(command: HostCommand, runId: string, nodeKey: 
   const cancellation = { signal, throwIfCancelled() { if (signal?.aborted) throw new Error("media_cancelled"); } };
   let task: Awaited<ReturnType<typeof runMediaJob>>;
   try {
-    task = await runMediaJob(adapter, { provider: provider as MediaProviderId, modelId, input: { ...config, ...inputs }, idempotencyKey }, cancellation, {
+    task = await runMediaJob(adapter, { provider: provider as MediaProviderId, modelId, input: { ...config, ...inputs, ...(executorId === "voice_clone" ? { featureId: "voice-clone" } : {}) }, idempotencyKey }, cancellation, {
       pollIntervalMs: 1000,
       timeoutMs: 30 * 60 * 1000,
       ...(resumeProviderTaskId ? { initialTask: { providerTaskId: resumeProviderTaskId, status: "queued", outputs: [] } } : {}),
