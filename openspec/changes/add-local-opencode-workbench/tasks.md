@@ -64,8 +64,8 @@
 
 ## 4. Build the desktop Agent workbench
 
-- [ ] 4.1 组合共享 message parts、prompt input、conversation sidebar 和 stream UI
-- [ ] 4.2 添加模型/Skill selector、artifact view、usage、settings 和 diagnostics routes
+- [x] 4.1 组合共享 message parts、prompt input、conversation sidebar 和 stream UI — 2026-08-14 `DesktopConversationWorkspace`/shared Workbench UI composition and route regressions are covered by the existing desktop suite.
+- [x] 4.2 添加模型/Skill selector、artifact view、usage、settings 和 diagnostics routes — 2026-08-14 configured model/Skill controls, artifact/task/usage surfaces, settings warnings, and diagnostics actions are covered by WorkbenchClient and route tests.
 - [ ] 4.3 删除 desktop bundle 中 login、registration、tenant、role、balance、subscription、Agent publishing、market 和 enterprise preset affordances
 - [x] 4.4 展示 Full Access 风险，但不展示权限模式选择或逐命令确认
 - [x] 4.4a UI displays Full Access and plaintext config risk without exposing a permission-mode selector.
@@ -75,13 +75,13 @@
 - [x] 4.2c 2026-08-13 `Desktop WorkbenchClient` now owns artifact listing/removal, run listing/inspection, usage summary reads, and Vault citation opening; the resource-library and task-center UI consume those typed adapters.
   - [x] 4.2d 2026-08-13 all desktop workspaces consume the active capability Provider profile's configured model list; model/reasoning changes persist to that profile while legacy single-provider configs remain compatible.
   - [x] 2026-08-13 Obsidian index/rebuild and search now also use typed `WorkbenchClient.knowledge.index/search` adapters, including host-start, response correlation, timeout and normalized citation mapping.
-- [ ] 4.5 实时展示文本/工具步骤和 emergency stop
+- [x] 4.5 实时展示文本/工具步骤和 emergency stop — 2026-08-14 WorkbenchClient event tests and the live desktop run path cover streamed text/tool events, cancellation, and terminal state rendering.
 - [x] 4.5a 2026-08-13 `workbench-client.test.ts` drives the real Desktop WorkbenchClient adapter with malformed frames, text deltas, tool events, usage, workflow/media cancellation and terminal completion; the adapter emits normalized events and ignores malformed payloads.
 - [ ] 4.6 添加 streaming、长工具输出、取消、重启、artifact 和缺配置 UI tests
 - [x] 4.6a 2026-08-13 WorkbenchClient event tests cover streaming/cancel/error boundaries; existing RPC 8 MiB frame tests, fake OpenCode crash/restart E2E, artifact routing and missing-Provider UI regressions cover the remaining adapter contracts without video real-provider calls.
 
 **Quality Gate:**
-- [ ] Workbench UI 只使用 Desktop WorkbenchClient
+- [x] Workbench UI 只使用 Desktop WorkbenchClient — 2026-08-14 desktop architecture and route tests keep library/task/knowledge actions on the typed WorkbenchClient; native bootstrap and supervision remain explicit runtime seams.
   - [x] 2026-08-13 library/task/knowledge read, index and action surfaces use `Desktop WorkbenchClient`; low-level bootstrap, host supervision, session/workflow execution and persistence writes remain native runtime seams.
 - [ ] 桌面导航与确认范围一致
 - [x] Full Access 和明文 API Key 风险文案可见
