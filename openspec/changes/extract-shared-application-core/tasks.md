@@ -71,6 +71,7 @@
 - [x] 5.4a Desktop Workbench navigation and chat/writer artifact actions now use the injected `WorkbenchClient`, preserving artifact MIME metadata through the Tauri adapter.
 - [x] 5.4b SaaS AI Entry route replacement now accepts an injected `NavigationAdapter`; the Next router is retained only as its host-composition fallback.
   - [x] 5.4c SaaS AI Entry message rows now use the shared `WorkbenchCloudMessageShell`; rich stream parts/PPT/artifact actions remain host slots, and embedded link actions route exclusively through the injected navigation adapter. ✓ 2026-08-13
+  - [x] 5.4d AI Entry accepts an injected `WorkbenchClient` for portable conversation-message reads and navigation; the existing SaaS API path remains the default to preserve rich task/PPT state until those typed client ports are extracted. ✓ 2026-08-13
 - [x] 5.5 Implement the Web adapter with the current `/api/*` contracts and Next navigation. ✓ 2026-08-13 — SaaS composition now adapts the existing `/api/ai` conversation/message/chat SSE contracts behind `WorkbenchClient`, with injected navigation and browser-request cancellation.
 - [x] 5.6 Verify shared UI packages contain no `next/*` imports or hard-coded `/api/` calls. ✓ 2026-08-13 — shared-boundary validation now rejects hard-coded host `/api/*` calls in `workbench-client`/`workbench-ui` while allowing legitimate third-party Provider endpoints.
 - [x] 5.6a `workflow-core` definition migration/hash contract is browser-safe; desktop Vite production build no longer pulls Node-only `crypto`.

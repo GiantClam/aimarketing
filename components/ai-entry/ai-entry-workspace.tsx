@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import type { NavigationAdapter } from "@aimarketing/workbench-client"
+import type { NavigationAdapter, WorkbenchClient } from "@aimarketing/workbench-client"
 import { WorkbenchCloudMessageShell } from "@aimarketing/workbench-ui"
 import {
   ArrowRight,
@@ -1386,6 +1386,7 @@ export function AiEntryWorkspace({
   embeddedLinkActions = [],
   embeddedContextChips = [],
   embeddedGuideMessage = null,
+  client,
   navigation,
   onConversationIdChange,
 }: {
@@ -1398,6 +1399,7 @@ export function AiEntryWorkspace({
   embeddedLinkActions?: AiEntryWorkspaceLinkAction[]
   embeddedContextChips?: string[]
   embeddedGuideMessage?: AiEntryWorkspaceGuideMessage | null
+  client?: Pick<WorkbenchClient, "conversations" | "navigation">
   navigation?: NavigationAdapter
   onConversationIdChange?: (conversationId: string | null) => void
 }) {
@@ -1406,12 +1408,12 @@ export function AiEntryWorkspace({
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const workspaceNavigation = useMemo<NavigationAdapter>(
-    () => navigation ?? {
+    () => navigation ?? client?.navigation ?? {
       go: (href) => router.push(href),
       replace: (href) => router.replace(href),
       current: () => pathname,
     },
-    [navigation, pathname, router],
+    [client, navigation, pathname, router],
   )
   const isZh = locale === "zh"
   const displayLocale = isZh ? "zh" : "en"
@@ -1658,6 +1660,27 @@ export function AiEntryWorkspace({
   }, [conversationState?.artifacts, isConversationLoading, messages, taskRuns])
   const fetchConversationMessages = useCallback(
     async (targetConversationId: string) => {
+      if (client) {
+        const portableMessages = await client.conversations.messages(targetConversationId)
+        return {
+          response: { ok: true, status: 200 },
+          payload: null,
+          messages: portableMessages
+            .filter((message) => message.role === "user" || message.role === "assistant")
+            .map((message): ChatMessage => {
+              const role: ChatMessage["role"] = message.role === "assistant" ? "assistant" : "user"
+              return {
+                id: message.id,
+                role,
+                content: message.content,
+                createdAt: Date.parse(message.createdAt) || Date.now(),
+              }
+            }),
+          taskRuns: [],
+          pendingTask: null,
+          conversationState: null,
+        }
+      }
       const params = new URLSearchParams({ conversation_id: targetConversationId, limit: "200" })
       if (effectiveEntryMode) params.set("entryMode", effectiveEntryMode)
       if (routeAgentId) params.set("agent", routeAgentId)
@@ -1677,7 +1700,7 @@ export function AiEntryWorkspace({
         conversationState: payload?.conversation_state ?? null,
       }
     },
-    [effectiveEntryMode, routeAgentId],
+    [client, effectiveEntryMode, routeAgentId],
   )
   const resetWorkspaceForNewConversation = useCallback(() => {
     activeRequestAbortControllerRef.current?.abort()
