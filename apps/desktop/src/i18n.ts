@@ -91,6 +91,33 @@ export const mediaSubmitEnglish: Record<string, string> = { "ai-music": "Generat
 export const mediaFieldEnglish: Record<string, string> = {
   "风格 / 情绪 / 场景": "Style / mood / scene", "歌词来源": "Lyrics source", "歌词": "Lyrics", "AI 写词提示": "AI lyric prompt", "音频提示词": "Audio prompt", "时长（秒）": "Duration (seconds)", "格式": "Format", "新音色 ID": "New voice ID", "试听文本": "Preview text", "示例音频文本": "Sample audio text", "降噪": "Noise reduction", "文本内容": "Text content", "音色": "Voice", "模型": "Model", "语言增强": "Language boost", "语速": "Speed", "音量": "Volume", "音高": "Pitch", "视频提示词": "Video prompt", "首帧图片": "First-frame image", "动作提示": "Motion prompt", "参考图片": "Reference images", "场景提示": "Scene prompt", "源视频": "Source video", "编辑指令": "Edit instruction", "音频": "Audio", "人物图片": "Avatar image", "口播文案": "Spoken copy", "增强目标": "Enhancement target", "处理时长上限（秒）": "Maximum duration (seconds)", Seed: "Seed",
 };
+/** Placeholders are part of the shared media feature catalog, so translate
+ * them at the desktop boundary instead of leaking Chinese copy into English
+ * WebView sessions. */
+export const mediaPlaceholderEnglish: Record<string, string> = {
+  "例如：独立电子流行，适合 AI 产品发布片头。": "For example: indie electronic pop for an AI product launch intro.",
+  "手动填写歌词，或在结果区回显 AI 生成歌词。": "Enter lyrics manually, or show AI-generated lyrics in the result.",
+  "例如：写一首关于新品牌发布夜的中文流行歌。": "For example: write a Chinese pop song about a new brand launch night.",
+  "例如：生成一段适合科技产品发布会转场的短音效。": "For example: create a short transition sound for a technology product launch.",
+  "留空则自动生成，例如 voice_brand_host": "Leave blank to generate one automatically, e.g. voice_brand_host.",
+  "例如：欢迎来到 AI Marketing 新品发布会。": "For example: welcome to the AI Marketing product launch.",
+  "上传示例音频时可填写。": "Optional when uploading a sample recording.",
+  "从可用音色库选择": "Choose from the available voice library.",
+  "输入需要合成的完整文本": "Enter the full text to synthesize.",
+  "描述镜头、人物动作、风格和时长": "Describe the shots, subject motion, style, and duration.",
+  "粘贴本地素材相对路径或 URL": "Paste a relative local asset path or URL.",
+  "描述图片中的主体如何运动": "Describe how the subject in the image should move.",
+  "粘贴本地素材路径，多个路径用逗号分隔": "Paste local asset paths, separated by commas.",
+  "描述参考主体在镜头中的动作": "Describe how the reference subject should move in the shot.",
+  "例如：把背景替换为夜景城市": "For example: replace the background with a city at night.",
+  "粘贴本地视频路径或 URL": "Paste a local video path or URL.",
+  "选择本地视频产物或粘贴路径": "Choose a local video artifact or paste its path.",
+  "选择本地音频产物或粘贴路径": "Choose a local audio artifact or paste its path.",
+  "选择本地人物图片或粘贴路径": "Choose a local avatar image or paste its path.",
+  "未上传音频时，这段文案会走 TTS 合成。": "Without uploaded audio, this script will be synthesized with TTS.",
+  "例如：模特正在做产品展示": "For example: a model is demonstrating the product.",
+  "例如：提升细节、修复压缩模糊": "For example: enhance detail and repair compression blur.",
+};
 export const mediaOptionEnglish: Record<string, string> = { "手动填写": "Enter manually", "AI 自动生成": "Generate with AI", "关闭": "Off", "开启": "On", "自动": "Auto", "中文": "Chinese", "英文": "English", 标准: "Standard", 高清: "HD", "横版 · 1536×1024": "Landscape · 1536×1024", "竖版 · 1024×1536": "Portrait · 1024×1536" };
 
 export const writerPlatformEnglish: Record<string, string> = {

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { desktopCopy, detectDesktopLocale, quickPromptsForDesktopRoute, resolveDesktopLocale } from "../src/i18n";
+import { WORKBENCH_MEDIA_FEATURES } from "@aimarketing/workbench-ui";
+import { desktopCopy, detectDesktopLocale, mediaPlaceholderEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale } from "../src/i18n";
 
 test("desktop locale follows Windows/WebView language by default", () => {
   assert.equal(detectDesktopLocale("zh-CN"), "zh");
@@ -12,6 +13,16 @@ test("desktop locale follows Windows/WebView language by default", () => {
 test("desktop locale preference overrides system language", () => {
   assert.equal(resolveDesktopLocale("zh", "en-US"), "zh");
   assert.equal(resolveDesktopLocale("en", "zh-CN"), "en");
+});
+
+test("English desktop media fields do not leak untranslated Chinese placeholders", () => {
+  const placeholders = WORKBENCH_MEDIA_FEATURES.flatMap((feature) => feature.fields.map((field) => field.placeholder).filter((value): value is string => Boolean(value && /[\u4e00-\u9fff]/u.test(value))));
+  assert.ok(placeholders.length > 0);
+  for (const placeholder of placeholders) {
+    const translated = mediaPlaceholderEnglish[placeholder];
+    assert.ok(translated, `missing English placeholder translation: ${placeholder}`);
+    assert.doesNotMatch(translated, /[\u4e00-\u9fff]/u);
+  }
 });
 
 test("retained Agent routes use the same quick prompts as the cloud catalog", () => {

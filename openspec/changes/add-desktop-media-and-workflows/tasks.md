@@ -95,8 +95,10 @@
 - [x] 4.5a Media download/verification failures retain the provider task ID as recoverable `download_failed` attempts; startup recovery resumes poll/download while terminal provider failures remain excluded.
 
 **Quality Gate:**
-- [ ] 关闭应用后恢复长媒体工作流
-- [ ] failed/interrupted 节点可安全重试
+- [x] 关闭应用后恢复长媒体工作流
+  - [x] 2026-08-13 desktop host integration test starts a persisted `media.resume`, terminates the host, restarts it with the same provider task ID, verifies polling reaches a local artifact, and asserts the provider submit endpoint was never called.
+- [x] failed/interrupted 节点可安全重试
+  - [x] 2026-08-13 host crash/interrupted recovery is supervised by Tauri, workflow retry reuses the persisted definition hash/checkpoints, and the media restart fixture verifies a retryable provider task does not resubmit.
 - [x] 外部请求与 usage 记录具有幂等证据
   - [x] 2026-08-13 media idempotency keys and persisted usage/attempt updates are asserted by desktop, media-runtime and Rust storage tests.
 

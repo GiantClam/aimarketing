@@ -4,7 +4,7 @@ import { parseAndMigrateWorkflowDefinition, migrateWorkflowDefinitionToCurrent, 
 import type { WorkbenchWorkflow } from "@aimarketing/workbench-client";
 import { tauriBridge } from "./tauri";
 import { createDesktopWorkbenchClient } from "./workbench-client";
-import { capabilityEnglish, desktopCopy, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale, workflowActionEnglish, writerContentTypeEnglish, writerLanguageEnglish, writerModeEnglish, writerPlatformEnglish, type DesktopLocalePreference } from "./i18n";
+import { capabilityEnglish, desktopCopy, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaPlaceholderEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale, workflowActionEnglish, writerContentTypeEnglish, writerLanguageEnglish, writerModeEnglish, writerPlatformEnglish, type DesktopLocalePreference } from "./i18n";
 import { configuredModelOptions, isMediaProviderConfigured, preferredConfiguredModel, requiresConfiguredProviderForWorkflowAction } from "./provider-config";
 import { createSessionRecoverySnapshot } from "./session-recovery";
 import { sanitizeWorkflowDefinitionForStorage } from "./workflow-storage";
@@ -801,7 +801,7 @@ function DesktopMediaWorkspaceBody({
     ...(locale === "en" ? {
       summary: mediaSummaryEnglish[feature.id] ?? feature.summary,
       submitLabel: mediaSubmitEnglish[feature.id] ?? feature.submitLabel,
-      fields: feature.fields.map((field) => ({ ...field, label: mediaFieldEnglish[field.label] ?? field.label, placeholder: field.placeholder ? mediaFieldEnglish[field.placeholder] ?? field.placeholder : field.placeholder, options: field.options?.map((option) => ({ ...option, label: mediaOptionEnglish[option.label] ?? option.label })) })),
+      fields: feature.fields.map((field) => ({ ...field, label: mediaFieldEnglish[field.label] ?? field.label, placeholder: field.placeholder ? mediaPlaceholderEnglish[field.placeholder] ?? field.placeholder : field.placeholder, options: field.options?.map((option) => ({ ...option, label: mediaOptionEnglish[option.label] ?? option.label })) })),
     } : {}),
   }));
   const activeFeature = localizedFeatureCatalog.find((feature) => feature.id === activeFeatureId) ?? localizedFeatureCatalog[0];
