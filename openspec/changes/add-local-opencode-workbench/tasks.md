@@ -18,10 +18,14 @@
 
 ## 2. Implement the supervised local OpenCode runtime
 
-- [ ] 2.1 在 loopback 随机端口启动 `opencode serve` 并生成随机 Basic Auth
-- [ ] 2.2 禁用外部 CORS/mDNS，使用 AIMarketing 私有 config/Skill/cache/session 目录
-- [ ] 2.3 一个 conversation 映射一个稳定 session，并验证跨 conversation/data root 隔离
-- [ ] 2.4 归一化 text、reasoning、tool、usage、warning、error、artifact 和 completion events
+- [x] 2.1 在 loopback 随机端口启动 `opencode serve` 并生成随机 Basic Auth
+  - [x] 2026-08-13 `OpenCodeServeClient` allocates a free `127.0.0.1` port and per-runtime random Basic Auth; fake serve regression covers health, auth and retained/lost session paths.
+- [x] 2.2 禁用外部 CORS/mDNS，使用 AIMarketing 私有 config/Skill/cache/session 目录
+  - [x] 2026-08-13 production spawn explicitly passes `--pure --hostname 127.0.0.1`; source regression rejects `--mdns`/`--cors`; host sets isolated `OPENCODE_CONFIG_DIR` and runtime workspace directories.
+- [x] 2.3 一个 conversation 映射一个稳定 session，并验证跨 conversation/data root 隔离
+  - [x] 2026-08-13 session IDs are persisted per conversation, recovery creates a replacement only for a lost session, and host-session/workbench tests cover workspace-scoped mapping.
+- [x] 2.4 归一化 text、reasoning、tool、usage、warning、error、artifact 和 completion events
+  - [x] 2026-08-13 shared `runtime-contracts/opencode` normalization plus fake serve fixtures cover streamed text/tool/usage, terminal errors, service exit and completion evidence; malformed event handling is covered by host-session tests.
 - [x] 2.5 实现 abort、紧急停止、crash detection、supervised restart 和 interrupted status。✓ 2026-08-13 — `run.cancel` 通过 serve abort；服务端 close 使 active turn 统一产生 retryable `opencode_serve_exited`，避免 HTTP socket 竞态误报为 prompt failure；下一次 session 创建自动重启 serve，workflow-host 崩溃仍由 Tauri supervisor/UI 标记 interrupted 并支持显式 retry。
 - [x] 2.6 验证进程树随 Tauri 退出且不自动请求管理员权限
   - [x] 2026-08-13 supervised OpenCode shutdown uses a Windows `taskkill /T /F` tree fallback with hidden, non-elevated process creation; host SIGTERM/SIGINT handlers stop the server before exit.
@@ -31,7 +35,8 @@
   - [x] 2026-08-13 fake serve covers retained/lost sessions, text/tool/usage, abort, terminal error and crash recovery.
 - [x] Loopback/auth/进程生命周期 tests 通过
   - [x] 2026-08-13 loopback Basic Auth, supervised restart and process-tree shutdown tests pass.
-- [ ] OpenCode/用户全局配置未被修改
+- [x] OpenCode/用户全局配置未被修改
+  - [x] 2026-08-13 host writes only workspace-private `.opencode` config and sets `OPENCODE_CONFIG_DIR`; no global OpenCode config path or auto-update mutation is used.
 
 ## 3. Route ordinary chat and Agent turns through OpenCode
 
@@ -50,9 +55,12 @@
   - [x] 2026-08-13 host-session, OpenCode Serve and RPC tests cover multi-turn session recovery, abort/cancel, lost sessions, crash, malformed/oversized frames and unavailable runtime paths.
 
 **Quality Gate:**
-- [ ] 每个普通聊天 run 有 OpenCode runtime evidence
-- [ ] 不存在 desktop 直连文本模型 SDK fallback
-- [ ] 恢复不会重复已完成工具副作用
+- [x] 每个普通聊天 run 有 OpenCode runtime evidence
+  - [x] 2026-08-13 route, host-session and architecture tests require `session.create`/`session.prompt`, framed runtime events and persisted run evidence.
+- [x] 不存在 desktop 直连文本模型 SDK fallback
+  - [x] 2026-08-13 architecture boundary scan rejects `ai-sdk-native`, direct chat-completions and SaaS/Next runtime markers.
+- [x] 恢复不会重复已完成工具副作用
+  - [x] 2026-08-13 recovery snapshot is bounded to prior text turns and explicitly excludes replaying old tool actions; session-loss regression verifies persisted history remains unchanged.
 
 ## 4. Build the desktop Agent workbench
 

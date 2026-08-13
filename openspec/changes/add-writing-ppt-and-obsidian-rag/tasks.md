@@ -3,24 +3,36 @@
 - [x] 1.2a 抽取 `writer-core` revision guard、title-only body preservation 和 optimistic message reconciliation 首个共享切片。
 - [x] 1.4a 将 `content/skills/` catalog/digest 生成器接入共享 Skill 包并验证 37 个 canonical skills。
 
-- [ ] 1.1 为 Writer config、types、result、revision guard、session runtime、assets 和 message reconciliation 补共享契约测试
-- [ ] 1.2 将纯 Writer 逻辑抽入 `packages/writer-core`，原 `lib/writer` 路径保留兼容 re-export
-- [ ] 1.3 将 DB、R2、企业知识和云 runtime 留在 SaaS adapter
-- [ ] 1.4 将 `content/skills/` 固定为 Web/Desktop Skill 单一源并生成 catalog/digest
-- [ ] 1.5 桌面端只发布确认保留的内容写作 Skills
+- [x] 1.1 为 Writer config、types、result、revision guard、session runtime、assets 和 message reconciliation 补共享契约测试
+  - [x] 2026-08-13 `packages/writer-core/test/revision.test.ts` covers title-only preservation, incomplete results, invariants, bounded session context and optimistic reconciliation.
+- [x] 1.2 将纯 Writer 逻辑抽入 `packages/writer-core`，原 `lib/writer` 路径保留兼容 re-export
+  - [x] 2026-08-13 pure guards/session/reconciliation live in `packages/writer-core`; SaaS `lib/writer` modules retain compatibility wrappers.
+- [x] 1.3 将 DB、R2、企业知识和云 runtime 留在 SaaS adapter
+  - [x] 2026-08-13 writer-core architecture scan rejects Next, DB/auth/billing/R2/Railway/Cloudflare/fetch/process-env dependencies.
+- [x] 1.4 将 `content/skills/` 固定为 Web/Desktop Skill 单一源并生成 catalog/digest
+  - [x] 2026-08-13 shared catalog generation and desktop bundling consume `content/skills/`; catalog validation covers the canonical skill set.
+- [x] 1.5 桌面端只发布确认保留的内容写作 Skills
+  - [x] 2026-08-13 desktop runtime contains the generated canonical catalog plus the pinned `ppt-master` manifest; no SaaS Skill registry is consulted at runtime.
 
 **Quality Gate:**
-- [ ] `writer-core` 无 Next、DB、R2、企业或 Railway/Cloudflare 导入
-- [ ] 现有 Writer 纯逻辑回归通过
-- [ ] Desktop 写作 contract 证明所有 turn 经过 OpenCode
+- [x] `writer-core` 无 Next、DB、R2、企业或 Railway/Cloudflare 导入
+  - [x] 2026-08-13 architecture test passes.
+- [x] 现有 Writer 纯逻辑回归通过
+  - [x] 2026-08-13 writer-core test suite passes 6/6.
+- [x] Desktop 写作 contract 证明所有 turn 经过 OpenCode
+  - [x] 2026-08-13 desktop route regression requires writer/PPT routes to use the OpenCode session path.
 
 ## 2. Local ppt-master runtime
 
-- [ ] 2.1 将实际 `ppt-master` Skill、references 和脚本纳入 desktop runtime manifest
+- [x] 2.1 将实际 `ppt-master` Skill、references 和脚本纳入 desktop runtime manifest
+  - [x] 2026-08-13 bundler pins upstream commit `4e6ecbcb0dc079efebd3c79b775c0f02581509fe`, copies the complete Skill tree and writes `ppt-master.manifest.json` with digest.
 - [x] 2.2 为 Python、必要 imports、字体目录和 `ppt-master` 输出建立 capability probe（运行时现在会校验依赖导入、字体门禁，并生成带中英文字段的 16:9 可编辑 PPTX 后再选择 Python 路径）
-- [ ] 2.3 实现本地 PPT service，仅通过 OpenCode session 调用 Skill
-- [ ] 2.4 发现并登记项目目录中的 PPTX、SVG、preview 和诊断产物
-- [ ] 2.5 删除 desktop composition 对 `infra/railway/ppt-master-worker` 的任何依赖
+- [x] 2.3 实现本地 PPT service，仅通过 OpenCode session 调用 Skill
+  - [x] 2026-08-13 desktop PPT route uses the same `session.create`/`session.prompt` OpenCode path as ordinary chat; no second text runtime is registered.
+- [x] 2.4 发现并登记项目目录中的 PPTX、SVG、preview 和诊断产物
+  - [x] 2026-08-13 `detectPresentationArtifacts` returns constrained relative paths, kind and SHA-256 for PPTX/SVG/preview outputs; regression covers local discovery.
+- [x] 2.5 删除 desktop composition 对 `infra/railway/ppt-master-worker` 的任何依赖
+  - [x] 2026-08-13 desktop architecture scan and runtime source contain no Railway worker import or network route.
 
 **Quality Gate:**
 - [ ] 中文、图片、16:9、可编辑文本 PPT smoke 通过
@@ -37,8 +49,10 @@
 - [x] 3.1 设置页支持用户显式选择、重新定位及解除当前 Vault 绑定；解除仅清除待保存的本地配置与索引路径，不删除用户 Vault 或索引文件。 ✓ 2026-08-13
 - [x] 3.2 实现 `.obsidian`、trash、隐藏路径、用户 ignore 和 symlink loop 规则。✓ 2026-08-13 — 扫描和 watcher 统一排除 `.obsidian`、`.trash`、隐藏路径、symbolic link，以及 Vault `.gitignore` / `.aimarketingignore` 规则；回归测试覆盖两类用户 ignore。
 - [x] 3.3 解析 Markdown、frontmatter、wikilink、标准链接、标签和附件。✓ 2026-08-13 — UTF-8 Markdown 按 heading 分块，保留相对路径、行范围、frontmatter/inline tags、Wiki/Markdown links 及本地附件引用；中英文与附件 fixture 覆盖解析结果。
-- [ ] 3.4 建立每 Vault manifest/hash 清单和启动/唤醒 reconciliation
-- [ ] 3.5 实现 watcher 增量事件与 rename/delete 恢复
+- [x] 3.4 建立每 Vault manifest/hash 清单和启动/唤醒 reconciliation
+  - [x] 2026-08-13 per-Vault manifest/generation/hash and startup reconciliation are implemented and covered by Obsidian tests.
+- [x] 3.5 实现 watcher 增量事件与 rename/delete 恢复
+  - [x] 2026-08-13 Windows watcher emits incremental hints while reconciliation handles changed/removed/renamed files; regression covers ignore rules and reconciliation.
 
 **Quality Gate:**
 - [ ] Obsidian 未启动时全部功能可用
@@ -57,7 +71,8 @@
 - [x] 4.2 实现本地 embedding 默认路径和每 Vault LanceDB 目录。✓ 2026-08-13 — 默认 loopback local embedding（不可用时 deterministic local hash fallback）写入每 Vault 独立 `indexPath/lancedb`；双 Vault 中文路径回归证明状态与检索结果不会交叉污染。
 - [x] 4.3 写入 `index-state.json` 并在不兼容时建立新 generation 后原子切换。✓ 2026-08-13 — manifest 与 embedding state 先写入私有 generation，`current-generation.json` 仅在 LanceDB 建成后原子指向新 generation；模型/维度变化回归证明旧向量保留但不会与新 generation 混用。
 - [x] 4.4 实现 lexical + vector hybrid retrieval 和 top-k 限制。✓ 2026-08-13 — `index-state.json` 仅标记 `semantic_ready` 后才查询 LanceDB，随后按 40% lexical / 60% vector 合并并限制为 1–20 条；状态转换回归覆盖 semantic hybrid 与 lexical-only fallback。
-- [ ] 4.5 返回 Vault 相对路径、标题、段落、行范围和可点击引用
+- [x] 4.5 返回 Vault 相对路径、标题、段落、行范围和可点击引用
+  - [x] 2026-08-13 knowledge search DTOs retain relative path, heading and line range; desktop knowledge UI renders clickable Vault-root-constrained citations.
 - [x] 4.6 实现可选远程 embedding，并在 UI 明示远程发送范围。✓ 2026-08-13 — 默认 local-only embedding；用户在设置中显式切换 Remote 后才通过 HTTPS OpenAI-compatible `/embeddings` 发送待索引片段，独立 API key 仅透传给 Host，不写入 SQLite/日志/诊断包；回归覆盖远程 opt-in、鉴权与模型记录。
 
 **Quality Gate:**

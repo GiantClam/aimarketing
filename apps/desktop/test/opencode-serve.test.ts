@@ -14,6 +14,9 @@ test("desktop OpenCode uses the shared synchronous serve-session contract", () =
   assert.match(source, /30 \* 60 \* 1000/);
   assert.match(source, /taskkill/);
   assert.match(source, /windowsHide: true/);
+  assert.match(source, /"serve", "--pure", "--hostname", "127\.0\.0\.1"/u);
+  assert.doesNotMatch(source, /"--mdns"/u);
+  assert.doesNotMatch(source, /"--cors"/u);
   assert.doesNotMatch(source, /prompt_async/);
 });
 

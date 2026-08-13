@@ -61,7 +61,7 @@ export class OpenCodeServeClient {
     this.runtimeEnvironment = { ...environment };
     this.runtimeWorkspace = workspacePath;
     this.stopping = false;
-    this.child = spawn(this.executable, [...this.executableArgs, "serve", "--hostname", "127.0.0.1", "--port", String(this.port), "--print-logs", "--log-level", "INFO"], {
+    this.child = spawn(this.executable, [...this.executableArgs, "serve", "--pure", "--hostname", "127.0.0.1", "--port", String(this.port), "--print-logs", "--log-level", "INFO"], {
       cwd: workspacePath,
       env: { ...environment, OPENCODE_SERVER_USERNAME: this.username, OPENCODE_SERVER_PASSWORD: this.password, OPENCODE_DISABLE_AUTOUPDATE: "true", OPENCODE_DISABLE_MODELS_FETCH: "true" },
       stdio: ["ignore", "pipe", "pipe"],
