@@ -34,8 +34,22 @@ test("installer seeds bundled runtime and skills before downloading missing comp
   assert.match(source, /localPath|bundledRuntime/);
   assert.match(source, /alreadyExtracted/u);
   assert.match(source, /runtime archive missing/u);
-  assert.match(source, /Invoke-WebRequest[^\n]+TimeoutSec 90/u);
+  assert.match(source, /Invoke-ResumableDownload\s+\$url\s+\$tmp\s+90/u);
+  assert.match(source, /HttpWebRequest/u);
   assert.match(source, /pip install[^\n]+--timeout 30/u);
+});
+
+test("installer keeps source fallback, resume, proxy and disk gates fail-closed", async () => {
+  const source = await readFile(scriptPath, "utf8");
+  assert.match(source, /\$mirrors = @\("aliyun", "tencent", "tsinghua", "official"\)/u);
+  assert.match(source, /AddRange\(\[int64\]\$existingBytes\)/u);
+  assert.match(source, /\$partial = "\$destination\.part"/u);
+  assert.match(source, /\[Net\.WebProxy\]::new\(\$Proxy\)/u);
+  assert.match(source, /\[IO\.DriveInfo\]::new\(\$root\)\.AvailableFreeSpace/u);
+  assert.match(source, /runtime_install_disk_space_insufficient/u);
+  assert.match(source, /runtime_install_temp_disk_space_insufficient/u);
+  assert.match(source, /Assert-SufficientDiskSpace\s*$/mu);
+  assert.match(source, /--proxy/u);
 });
 
 test("installer validates the signed-manifest shape before touching the install root", async () => {

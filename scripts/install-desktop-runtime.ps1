@@ -2,6 +2,8 @@ param(
   [Parameter(Mandatory = $true)][string]$ManifestPath,
   [Parameter(Mandatory = $true)][string]$InstallRoot,
   [string]$OfflineZip,
+  [string]$Proxy,
+  [UInt64]$MinimumFreeBytes = 1073741824,
   [switch]$ValidateOnly
 )
 
@@ -43,6 +45,73 @@ if ($ValidateOnly) {
   Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
   Write-Output (ConvertTo-Json @{ status = "valid"; manifestId = $manifest.manifestId; platform = $manifest.platform; architecture = $manifest.architecture } -Compress)
   return
+}
+
+function Get-AvailableBytes([string]$path) {
+  $fullPath = [IO.Path]::GetFullPath($path)
+  $root = [IO.Path]::GetPathRoot($fullPath)
+  if ([string]::IsNullOrWhiteSpace($root)) { throw "runtime_install_disk_root_missing" }
+  try {
+    return [UInt64]([IO.DriveInfo]::new($root).AvailableFreeSpace)
+  } catch {
+    throw "runtime_install_disk_probe_failed:$root"
+  }
+}
+
+function Assert-SufficientDiskSpace() {
+  $assetBytes = [UInt64]0
+  foreach ($asset in @($manifest.assets)) {
+    if ($null -ne $asset.bytes -and [int64]$asset.bytes -gt 0) {
+      $assetBytes += [UInt64]$asset.bytes
+    }
+  }
+  $requiredBytes = $assetBytes + [UInt64]$MinimumFreeBytes
+  $availableBytes = Get-AvailableBytes $installRootResolved
+  if ($availableBytes -lt $requiredBytes) {
+    throw "runtime_install_disk_space_insufficient:available=$availableBytes;required=$requiredBytes"
+  }
+  $temporaryAvailableBytes = Get-AvailableBytes ([IO.Path]::GetTempPath())
+  if ($temporaryAvailableBytes -lt $requiredBytes) {
+    throw "runtime_install_temp_disk_space_insufficient:available=$temporaryAvailableBytes;required=$requiredBytes"
+  }
+}
+
+function Invoke-ResumableDownload([string]$uri, [string]$destination, [int]$timeoutSeconds = 90) {
+  $partial = "$destination.part"
+  $existingBytes = if (Test-Path -LiteralPath $partial -PathType Leaf) { [UInt64](Get-Item -LiteralPath $partial).Length } else { [UInt64]0 }
+  $request = [Net.HttpWebRequest]::Create($uri)
+  $request.Timeout = $timeoutSeconds * 1000
+  $request.ReadWriteTimeout = $timeoutSeconds * 1000
+  if (-not [string]::IsNullOrWhiteSpace($Proxy)) {
+    $request.Proxy = [Net.WebProxy]::new($Proxy)
+  }
+  if ($existingBytes -gt 0) { $request.AddRange([int64]$existingBytes) }
+  $response = $null
+  $input = $null
+  $output = $null
+  try {
+    $response = [Net.HttpWebResponse]$request.GetResponse()
+    $append = $existingBytes -gt 0 -and $response.StatusCode -eq [Net.HttpStatusCode]::PartialContent
+    if (-not $append -and $existingBytes -gt 0) {
+      Remove-Item -LiteralPath $partial -Force -ErrorAction SilentlyContinue
+    }
+    $mode = if ($append) { [IO.FileMode]::Append } else { [IO.FileMode]::Create }
+    $input = $response.GetResponseStream()
+    $output = [IO.File]::Open($partial, $mode, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    $buffer = New-Object byte[] (1024 * 1024)
+    while (($read = $input.Read($buffer, 0, $buffer.Length)) -gt 0) {
+      $output.Write($buffer, 0, $read)
+    }
+    $output.Flush($true)
+    $output.Dispose(); $output = $null
+    $input.Dispose(); $input = $null
+    $response.Dispose(); $response = $null
+    Move-Item -LiteralPath $partial -Destination $destination -Force
+  } finally {
+    if ($output) { $output.Dispose() }
+    if ($input) { $input.Dispose() }
+    if ($response) { $response.Dispose() }
+  }
 }
 
 function Seed-BundledRuntime() {
@@ -115,10 +184,11 @@ function Install-OpenCodePackage([switch]$Offline) {
     "https://mirrors.tuna.tsinghua.edu.cn/npm/",
     "https://registry.npmjs.org"
   )
+  $proxyArgs = if ([string]::IsNullOrWhiteSpace($Proxy)) { @() } else { @("--proxy", $Proxy) }
   $installed = $false
   foreach ($registry in $registries) {
     try {
-      & $npm install --prefix $prefix --no-save --no-fund --no-audit --fetch-timeout 30000 --fetch-retries 1 --registry $registry opencode-ai@latest 2>&1 | Out-Null
+      & $npm install --prefix $prefix --no-save --no-fund --no-audit --fetch-timeout 30000 --fetch-retries 1 --registry $registry @proxyArgs opencode-ai@latest 2>&1 | Out-Null
       if ($LASTEXITCODE -eq 0) { $installed = $true; break }
     } catch { }
   }
@@ -143,6 +213,7 @@ function Enable-EmbeddedPythonSitePackages() {
 function Install-PythonPptxDependencies([switch]$Offline) {
   $python = Join-Path $stageRoot "runtime/python/python.exe"
   if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw "embedded Python executable missing" }
+  $proxyArgs = if ([string]::IsNullOrWhiteSpace($Proxy)) { @() } else { @("--proxy", $Proxy) }
   Enable-EmbeddedPythonSitePackages
   # Offline packages may already contain a complete embedded Python runtime.
   # Probe before touching pip so a portable ZIP never reaches the network path.
@@ -183,7 +254,7 @@ finally:
   if ($Offline) { throw "offline_python_pptx_missing" }
   $pipScript = Join-Path $stageRoot "runtime/python/get-pip.py"
   if (-not (Test-Path -LiteralPath $pipScript -PathType Leaf)) { throw "get-pip.py missing" }
-  & $python $pipScript --disable-pip-version-check --no-warn-script-location 2>&1 | Out-Null
+  & $python $pipScript --disable-pip-version-check --no-warn-script-location @proxyArgs 2>&1 | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "embedded Python pip bootstrap failed" }
   $indexes = @(
     "https://mirrors.aliyun.com/pypi/simple",
@@ -195,7 +266,7 @@ finally:
   $installed = $false
   foreach ($index in $indexes) {
     try {
-      & $python -m pip install --disable-pip-version-check --no-input --no-warn-script-location --timeout 30 --retries 1 --index-url $index -r $requirements 2>&1 | Out-Null
+      & $python -m pip install --disable-pip-version-check --no-input --no-warn-script-location --timeout 30 --retries 1 --index-url $index @proxyArgs -r $requirements 2>&1 | Out-Null
       if ($LASTEXITCODE -eq 0) { $installed = $true; break }
     } catch { }
   }
@@ -214,23 +285,30 @@ function Install-VerifiedAsset([object]$asset) {
   if ($asset.id -eq "node-embed-amd64" -and (Test-Path -LiteralPath (Join-Path $stageRoot "runtime/node/node.exe") -PathType Leaf)) { return }
   $targetDir = Split-Path -Parent $target
   New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+  $tmp = "$target.download"
   $lastError = $null
   foreach ($mirror in $mirrors) {
     $url = $asset.urls.$mirror
     if ([string]::IsNullOrWhiteSpace($url)) { continue }
     try {
-      $tmp = "$target.download.$([guid]::NewGuid().ToString('N'))"
-      Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing -TimeoutSec 90
+      Invoke-ResumableDownload $url $tmp 90
       $hash = (Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash.ToLowerInvariant()
       if ($hash -ne $asset.sha256.ToLowerInvariant()) { throw "sha256 mismatch for $($asset.id) from $mirror" }
       Move-Item -LiteralPath $tmp -Destination $target -Force
       return
-    } catch { $lastError = $_; if ($tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue } }
+    } catch {
+      $lastError = $_
+      if ($_.Exception.Message -like "sha256 mismatch*") {
+        Remove-Item -LiteralPath "$tmp.part" -Force -ErrorAction SilentlyContinue
+      }
+      Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+    }
   }
   throw "Unable to install $($asset.id): $lastError"
 }
 
 try {
+  Assert-SufficientDiskSpace
   Seed-BundledRuntime
   if ($OfflineZip) {
     Expand-Archive -LiteralPath ([IO.Path]::GetFullPath($OfflineZip)) -DestinationPath $stageRoot -Force
