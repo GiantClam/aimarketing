@@ -13,6 +13,10 @@ let finalizeCalls = 0
 let releaseCalls = 0
 let emitLateProgressAfterResolve = false
 let lastWriterRunInput: Record<string, unknown> | null = null
+let writerRunnerShouldThrow = false
+let activeRevision = 0
+let persistedExpectedRevision: number | null = null
+let updatedAssistantStatuses: string[] = []
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -81,6 +85,9 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       loadWriterSkillRunner: () => ({
         runBlocking: async (input?: { onProgress?: (event: { type: string; label: string; status: string }) => Promise<void> | void }) => {
           lastWriterRunInput = (input || null) as Record<string, unknown> | null
+          if (writerRunnerShouldThrow) {
+            throw new Error("writer_provider_failed")
+          }
           if (emitLateProgressAfterResolve) {
             setTimeout(() => {
               void input?.onProgress?.({
@@ -113,14 +120,21 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       getWriterConversation: async () => null,
       listWriterMessages: async (_userId: number, _conversationId: string, limit: number) =>
         limit === 1 ? { conversation: { id: "conv-1" }, data: [] } : { data: [] },
-      updateWriterLatestAssistantMessage: async () => {},
+      updateWriterLatestAssistantMessage: async (_userId: number, _conversationId: string, _content: string, meta?: { status?: string }) => {
+        if (meta?.status) updatedAssistantStatuses.push(meta.status)
+        return true
+      },
+      updateWriterAssistantMessageById: async () => true,
       appendWriterAssistantMessage: async () => true,
     }
   }
   if (request === "@/lib/writer/revisions") {
     return {
-      getWriterRevisionState: async () => ({ activeRevision: 0, activeDraftMessageId: null, activeDraft: null }),
-      persistWriterRevision: async () => ({ revision: 1, messageId: 1 }),
+      getWriterRevisionState: async () => ({ activeRevision, activeDraftMessageId: activeRevision > 0 ? 22 : null, activeDraft: activeRevision > 0 ? "# Existing draft\n\nBody" : null }),
+      persistWriterRevision: async (input: { expectedRevision: number }) => {
+        persistedExpectedRevision = input.expectedRevision
+        return { revision: input.expectedRevision + 1, messageId: 1 }
+      },
     }
   }
 
@@ -140,6 +154,10 @@ test.beforeEach(() => {
   releaseCalls = 0
   emitLateProgressAfterResolve = false
   lastWriterRunInput = null
+  writerRunnerShouldThrow = false
+  activeRevision = 0
+  persistedExpectedRevision = null
+  updatedAssistantStatuses = []
 })
 
 test.after(() => {
@@ -175,6 +193,39 @@ test("writer chat stream route finalizes credits on success", async () => {
   assert.equal(typeof (lastWriterRunInput?.writerContext as { sessionKey?: unknown })?.sessionKey, "string")
   assert.equal(finalizeCalls, 1)
   assert.equal(releaseCalls, 0)
+})
+
+test("writer chat stream persists a revision against the active draft revision", async () => {
+  activeRevision = 4
+
+  const response = await POST({
+    json: async () => ({
+      query: "revise the existing article",
+      conversation_id: "conv-1",
+    }),
+  })
+
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+  await new Response(response.body).text()
+  assert.equal(lastWriterRunInput?.conversationStatus, "drafting")
+  assert.equal(persistedExpectedRevision, 4)
+  assert.equal(finalizeCalls, 1)
+  assert.equal(releaseCalls, 0)
+})
+
+test("writer chat stream releases reserved credits and marks the assistant failed when generation fails", async () => {
+  writerRunnerShouldThrow = true
+
+  const response = await POST({
+    json: async () => ({ query: "write a launch post" }),
+  })
+
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+  const text = await new Response(response.body).text()
+  assert.match(text, /"event":"error"/)
+  assert.equal(finalizeCalls, 0)
+  assert.equal(releaseCalls, 1)
+  assert.deepEqual(updatedAssistantStatuses, ["failed"])
 })
 
 test("writer chat stream route ignores late progress events after the stream closes", async () => {
