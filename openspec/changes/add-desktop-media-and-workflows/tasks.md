@@ -39,6 +39,7 @@
   - [x] 2.1a `config.json` now persists a normalized configured model list and selected Skill; stale selected models fall back to the first configured model.
   - [x] 2.1b Workflow definitions recursively remove Provider credentials before save, export, import, or host dispatch; credentials remain only in the current in-memory Provider payload.
   - [x] 2.1c 2026-08-13 desktop settings and host dispatch support multiple same-type Provider profiles with capability defaults for text/image/video/audio; each profile normalizes its model list and falls back to the first configured model.
+  - [x] 2.1d 2026-08-14 media feature-level model fields now derive their options from the active capability Provider profile, deduplicate configured models, fall back to the first configured model when stale, and stay synchronized with the top-level selector; `apps/desktop/test/media-model-options.test.ts` and the full Desktop suite pass.
   - [x] 2026-08-14 mixed workflow dispatch keeps the sanitized portable definition separate from the in-memory host definition; media nodes are rebound to the configured image/video/audio profile and its preferred model before execution, with regression coverage proving stale bindings and API keys are not carried forward.
   - [x] 2026-08-14 direct media routes and workflow canvas readiness now resolve Provider configuration per capability/node; an unrelated configured image/audio/video profile cannot unlock another media node, with route regression coverage for same-type multi-provider isolation.
 - [x] 2.2 提交前持久化 idempotency key，提交后立即保存 provider task ID（桌面在发送 `workflow.run` 前为每个媒体节点写入 queued attempt；收到 provider task ID 事件后幂等更新同一记录）
@@ -132,10 +133,10 @@
 
 ## Completion Checklist
 
-- [ ] 所有阶段与质量门禁通过
-- [ ] 三个 capability specs 全部满足
+- [x] 所有阶段与质量门禁通过 — 2026-08-14 Desktop 111/111, desktop build, bundle-boundary scan, root TypeScript and lint pass; real-provider scope remains LLM/image/audio and intentionally excludes video/Seedance.
+- [x] 三个 capability specs 全部满足 — local media/workflow/portability contract tests cover direct Provider routing, recovery/idempotency, local artifacts, cancellation/retry, and credential-free JSON import/export.
 - [x] 每类真实 Provider smoke 结果已记录
   - 2026-08-13：使用 `apps/desktop/real-providers.test.local.json` 顺序 smoke（LLM → image → audio，未执行 video/seedance）；LLM HTTP 200 且 schema 通过，音频 profile `audio-minimax/speech-2.8-turbo` 提交 HTTP 200 并在第 8 次查询返回 `Success`，图片请求连续 3 次 HTTP 502（上游 `upstream_error`，非本地适配器失败）。脱敏输出明确记录 `scope.executed=[llm,image,audio]` 与 `scope.excluded=[video,seedance]`，API key 不进入结果。
   - 2026-08-14 rerun: LLM HTTP 200/schema 通过；图片直连 `/v1/images/generations` 连续 3 次 HTTP 502，备用工具代理返回 HTTP 401 `Invalid token`；音频提交 HTTP 200 但 24 次轮询仍未达最终状态。结果继续归类为上游 Provider 可用性阻塞，未把它误报为桌面适配器成功；video/seedance 仍未执行。
   - 2026-08-14 current rerun: using `apps/desktop/real-providers.test.local.json`, LLM HTTP 200/schema passed, OpenAI-compatible image HTTP 200/schema passed after one bounded retry, and MiniMax audio HTTP 200/schema passed after bounded polling; video/seedance remained explicitly excluded.
-- [ ] Ready for `openspec-archive add-desktop-media-and-workflows`
+- [ ] Ready for `openspec-archive add-desktop-media-and-workflows` — archive after the Windows hardening change carries the final clean-VM/signature release evidence.

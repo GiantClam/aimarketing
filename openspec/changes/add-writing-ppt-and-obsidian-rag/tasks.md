@@ -105,7 +105,7 @@
 
 ## Completion Checklist
 
-- [ ] 所有阶段与质量门禁通过
-- [ ] `desktop-local-writing`、`desktop-ppt-master`、`desktop-obsidian-rag` specs 全部满足
-- [ ] 文档、运行时清单和诊断说明同步
+- [x] 所有阶段与质量门禁通过 — 2026-08-14 Desktop writing/PPT/Obsidian E2E, TypeScript, lint, SaaS build and desktop build pass.
+- [x] `desktop-local-writing`、`desktop-ppt-master`、`desktop-obsidian-rag` specs 全部满足 — local OpenCode routing, editable PPTX artifacts and Vault-local indexing/citations are covered by the desktop contract and E2E suites.
+- [x] 文档、运行时清单和诊断说明同步 — canonical Skills, runtime manifest, local runtime contract and release evidence are synchronized; production/VM gates remain owned by hardening.
 - [ ] Ready for `openspec-archive add-writing-ppt-and-obsidian-rag`
