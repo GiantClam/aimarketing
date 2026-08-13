@@ -20,6 +20,8 @@ export interface WorkbenchConversation {
   readonly title: string;
   readonly updatedAt: string;
   readonly messageCount: number;
+  /** Persisted local OpenCode session used to continue a conversation after restart. */
+  readonly opencodeSessionId?: string;
 }
 
 export interface WorkbenchRun {

@@ -1279,7 +1279,7 @@ export function App() {
           setLocalePreference(activeConfig.locale ?? "auto");
           if (runtimeChanged) await tauriBridge.invoke("write_config", { value: activeConfig });
         }
-        setConversations(recent.map((conversation) => ({ id: conversation.id, title: conversation.title, updated_at: conversation.updatedAt })));
+        setConversations(recent.map((conversation) => ({ id: conversation.id, title: conversation.title, updated_at: conversation.updatedAt, opencode_session_id: conversation.opencodeSessionId ?? null })));
          setTaskCount(runRows.length);
          setTokenCount(inputTokens + outputTokens);
          setProviderCost(providerCosts.length ? providerCosts.reduce((total, value) => total + value, 0) : undefined);

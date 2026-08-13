@@ -16,7 +16,7 @@ import type {
 } from "@aimarketing/workbench-client";
 import type { TauriBridge } from "./tauri";
 
-type DesktopConversationRow = { id: string; title: string; updated_at: string; message_count?: number };
+type DesktopConversationRow = { id: string; title: string; updated_at: string; message_count?: number; opencode_session_id?: string | null };
 type DesktopMessageRow = { id: string; conversation_id: string; role: WorkbenchMessage["role"]; content: string; created_at: string };
 type DesktopWorkflowRow = { id: string; name: string; definition_json: string; updated_at: string };
 type DesktopArtifactRow = { id: string; relative_path: string; mime_type: string; byte_length: number; sha256: string; created_at: string; available?: boolean };
@@ -112,12 +112,12 @@ export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: Wo
   const conversations = {
     async list(): Promise<readonly WorkbenchConversation[]> {
       const rows = await bridge.invoke<DesktopConversationRow[]>("list_conversations");
-      return rows.map((row) => ({ id: row.id, title: row.title, updatedAt: row.updated_at, messageCount: row.message_count ?? 0 }));
+      return rows.map((row) => ({ id: row.id, title: row.title, updatedAt: row.updated_at, messageCount: row.message_count ?? 0, opencodeSessionId: row.opencode_session_id ?? undefined }));
     },
     async create(title = "新对话"): Promise<WorkbenchConversation> {
       const id = makeId("conversation");
       const row = await bridge.invoke<DesktopConversationRow>("create_conversation", { input: { id, title, project_id: null } });
-      return { id: row.id, title: row.title, updatedAt: row.updated_at, messageCount: row.message_count ?? 0 };
+      return { id: row.id, title: row.title, updatedAt: row.updated_at, messageCount: row.message_count ?? 0, opencodeSessionId: row.opencode_session_id ?? undefined };
     },
     async messages(conversationId: string): Promise<readonly WorkbenchMessage[]> {
       const rows = await bridge.invoke<DesktopMessageRow[]>("list_messages", { conversationId });

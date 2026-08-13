@@ -359,6 +359,8 @@ test("desktop conversation history and retry flow consume the injected Workbench
   assert.match(appSource, /const workbenchClient = useMemo\(\(\) => createDesktopWorkbenchClient/);
   assert.match(appSource, /workbenchClient\.conversations\.list\(\)/);
   assert.match(appSource, /workbenchClient\.conversations\.messages\(conversationId\)/);
+  assert.match(appSource, /opencode_session_id: conversation\.opencodeSessionId \?\? null/);
+  assert.match(appSource, /const existingSessionId = conversations\.find\(\(item\) => item\.id === conversationId\)\?\.opencode_session_id/);
   assert.match(appSource, /workbenchClient\.conversations\.messages\(run\.conversation_id\)/);
   assert.match(appSource, /workbenchClient\.workflows\.list\(\)/);
   assert.match(appSource, /workbenchClient\.workflows\.save\(/);
