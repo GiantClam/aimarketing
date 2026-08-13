@@ -1,6 +1,6 @@
 param(
-  [string]$NormalZip = ".artifacts/desktop-release-normal/AI-Marketing-Windows-x64-normal.zip",
-  [string]$PortableZip = ".artifacts/desktop-release-portable/AI-Marketing-Windows-x64-portable.zip",
+  [string]$NormalZip = ".artifacts/desktop-release/AI-Marketing-Windows-x64-normal.zip",
+  [string]$PortableZip = ".artifacts/desktop-release/AI-Marketing-Windows-x64-portable.zip",
   [string]$RuntimeZip = ".artifacts/desktop-runtime-release-retry/AIMarketing-Runtime-x64.zip",
   [string]$BudgetConfig = "scripts/desktop-size-budget.json"
 )

@@ -17,4 +17,5 @@ test("desktop release audit is fail-closed for required release evidence", async
   assert.match(script, /runtime-manifest-crypto\.mjs/u);
   assert.match(script, /signatureVerified/u);
   assert.match(script, /status = if \(\$authenticode\.status -eq "pass"/u);
+  assert.match(script, /desktop-release\/AI-Marketing-Windows-x64-normal\.zip/u);
 });

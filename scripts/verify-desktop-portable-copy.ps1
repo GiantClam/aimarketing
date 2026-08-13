@@ -1,5 +1,5 @@
 param(
-  [string]$PortableZip = ".artifacts/desktop-release-portable/AI-Marketing-Windows-x64-portable.zip",
+  [string]$PortableZip = ".artifacts/desktop-release/AI-Marketing-Windows-x64-portable.zip",
   [string]$WorkRoot
 )
 

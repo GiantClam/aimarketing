@@ -12,4 +12,5 @@ test("portable copy verifier checks adjacent data and copied runtime fingerprint
   assert.match(script, /Security\.Cryptography\.SHA256\]::Create\(\)/u);
   assert.match(script, /desktop_portable_copy_runtime_changed/u);
   assert.match(script, /localAppDataCreated/u);
+  assert.match(script, /desktop-release\/AI-Marketing-Windows-x64-portable\.zip/u);
 });

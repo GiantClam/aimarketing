@@ -23,6 +23,7 @@ function Verify-Package {
   $packageName = "AI-Marketing-Windows-x64-$Mode"
   $zipCandidates = @(
     (Join-Path $packageRoot "$packageName.zip"),
+    (Join-Path (Join-Path $packageRoot "desktop-release") "$packageName.zip"),
     (Join-Path (Join-Path $packageRoot "desktop-release-$Mode") "$packageName.zip")
   )
   $zipPath = $zipCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
