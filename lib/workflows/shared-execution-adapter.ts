@@ -140,6 +140,14 @@ export async function runSaasWorkflowWithSharedCore(input: SharedSaasWorkflowExe
     error.name = "AbortError"
     throw error
   }
+  if (result.status === "failed") {
+    for (const node of definition.nodes) {
+      if (nodeStates[node.nodeKey]) continue
+      const state = newState(node.nodeKey, "cancelled", {}, "workflow_upstream_failed")
+      nodeStates[node.nodeKey] = state
+      await input.onNodeStateChange?.(state)
+    }
+  }
   const finalNodeKeys = definition.nodes
     .filter((node) => !definition.edges.some((edge) => edge.sourceNodeKey === node.nodeKey))
     .map((node) => node.nodeKey)

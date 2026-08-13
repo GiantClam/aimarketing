@@ -51,3 +51,24 @@ test("SaaS adapter reports host capability failures through the existing node-st
   assert.equal(result.nodeStates.writer?.errorMessage, "provider_unavailable")
   assert.deepEqual(updates, ["input:running", "input:succeeded", "writer:running", "writer:failed"])
 })
+
+test("SaaS adapter persists unstarted descendants as cancelled after a shared-core failure", async () => {
+  const result = await runSaasWorkflowWithSharedCore({
+    enterpriseId: 1,
+    ownerUserId: 2,
+    nodes: [
+      { nodeKey: "input", type: "text_input", title: "Input", positionX: 0, positionY: 0, config: { text: "Brief" } },
+      { nodeKey: "writer", type: "writer", title: "Writer", positionX: 1, positionY: 0, config: {} },
+      { nodeKey: "file", type: "file_create", title: "File", positionX: 2, positionY: 0, config: {} },
+    ],
+    edges: [
+      { sourceNodeKey: "input", targetNodeKey: "writer", inputName: "text" },
+      { sourceNodeKey: "writer", targetNodeKey: "file", inputName: "text" },
+    ],
+    executorContext: { capabilityInvoker: async () => { throw new Error("provider_unavailable") } },
+  })
+
+  assert.equal(result.status, "failed")
+  assert.equal(result.nodeStates.file?.status, "cancelled")
+  assert.equal(result.nodeStates.file?.errorMessage, "workflow_upstream_failed")
+})
