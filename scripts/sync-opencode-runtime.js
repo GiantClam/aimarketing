@@ -70,6 +70,7 @@ function listSkillIds() {
 }
 
 function listFiles(root, prefix = "") {
+  if (!fs.existsSync(root)) return []
   return fs.readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
     const relative = path.join(prefix, entry.name)
     const absolute = path.join(root, entry.name)
@@ -80,16 +81,28 @@ function listFiles(root, prefix = "") {
 function assertRuntimeInSync() {
   const mismatches = []
   const compareTree = (source, target, label) => {
-    for (const relative of listFiles(source)) {
+    const sourceFiles = new Set(listFiles(source).map((relative) => relative.replaceAll("\\", "/")))
+    const targetFiles = new Set(listFiles(target).map((relative) => relative.replaceAll("\\", "/")))
+    for (const relative of [...sourceFiles].sort()) {
       const sourceFile = path.join(source, relative)
       const targetFile = path.join(target, relative)
       if (!fs.existsSync(targetFile) || Buffer.compare(fs.readFileSync(sourceFile), fs.readFileSync(targetFile)) !== 0) {
         mismatches.push(`${label}/${relative}`)
       }
     }
+    for (const relative of [...targetFiles].sort()) {
+      if (!sourceFiles.has(relative)) mismatches.push(`${label}/${relative} (unexpected)`)
+    }
   }
-  for (const skillId of listSkillIds()) {
+  const sourceSkillIds = new Set(listSkillIds())
+  const targetSkillIds = fs.existsSync(skillRoot)
+    ? new Set(fs.readdirSync(skillRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name))
+    : new Set()
+  for (const skillId of [...sourceSkillIds].sort()) {
     compareTree(path.join(sourceRoot, skillId), path.join(skillRoot, skillId), `skills/${skillId}`)
+  }
+  for (const skillId of [...targetSkillIds].sort()) {
+    if (!sourceSkillIds.has(skillId)) mismatches.push(`skills/${skillId} (unexpected)`)
   }
   compareTree(toolSourceRoot, toolRoot, "tools")
   for (const file of ["writer-catalog.json"]) {
