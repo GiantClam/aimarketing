@@ -4,6 +4,7 @@ import { migrateWorkflowDefinitionToCurrent, validateWorkflowDefinition, workflo
 import { tauriBridge } from "./tauri";
 import { capabilityEnglish, desktopCopy, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale, workflowActionEnglish, writerContentTypeEnglish, writerLanguageEnglish, writerModeEnglish, writerPlatformEnglish, type DesktopLocalePreference } from "./i18n";
 import { configuredModelOptions, isMediaProviderConfigured, preferredConfiguredModel } from "./provider-config";
+import { sanitizeWorkflowDefinitionForStorage } from "./workflow-storage";
 
 type WorkspaceMode = "chat" | "writer" | "workflow" | "library";
 type SkillId = "auto" | "content-writing" | "marketing-analysis" | "ppt-master" | "obsidian-rag";
@@ -1399,7 +1400,7 @@ export function App() {
   }
 
   async function saveCurrentWorkflow() {
-    const definition = currentWorkflowDefinition();
+    const definition = sanitizeWorkflowDefinitionForStorage(currentWorkflowDefinition());
     const action = workflowActions.find((item) => item.id === definition.nodes.find((node) => node.nodeKey !== "input" && node.nodeKey !== "output")?.type) ?? workflowActions[0];
     const workflowId = globalThis.crypto?.randomUUID?.() ?? `workflow-${Date.now()}`;
     try {
@@ -1411,14 +1412,14 @@ export function App() {
 
   function currentWorkflowDefinition() {
     const base = workflowDefinition ?? buildWorkflowDefinition(prompt, workflowAction, config.provider);
-    return { ...base, nodes: base.nodes.map((node) => {
+    return sanitizeWorkflowDefinitionForStorage({ ...base, nodes: base.nodes.map((node) => {
       const title = node.nodeKey === "input" ? (locale === "en" ? "Input task" : "输入任务") : node.nodeKey === "output" ? (locale === "en" ? "Local artifact" : "本地产物") : (locale === "en" ? workflowActionEnglish[node.type] ?? node.title : node.title);
       return node.nodeKey === "input" ? { ...node, title, config: { ...node.config, text: prompt } } : node.nodeKey !== "output" ? { ...node, title, config: { ...node.config, prompt, script: prompt, text: prompt, provider: config.provider.id, model: config.provider.model, baseUrl: config.provider.baseUrl, endpoint: config.provider.endpoint, queryEndpoint: config.provider.queryEndpoint } } : { ...node, title };
-    }) };
+    }) });
   }
 
   function exportCurrentWorkflow() {
-    const definition = currentWorkflowDefinition();
+    const definition = sanitizeWorkflowDefinitionForStorage(currentWorkflowDefinition());
     const blob = new Blob([JSON.stringify({ format: "aimarketing-workflow", exportedAt: new Date().toISOString(), definition }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = `ai-marketing-workflow-${Date.now()}.json`; anchor.click(); URL.revokeObjectURL(url);
@@ -1428,7 +1429,7 @@ export function App() {
   async function importWorkflow(file: File) {
     try {
       const parsed = JSON.parse(await file.text()) as { definition?: unknown };
-      const migrated = migrateWorkflowDefinitionToCurrent((parsed.definition ?? parsed) as WorkflowDefinitionEnvelope);
+      const migrated = sanitizeWorkflowDefinitionForStorage(migrateWorkflowDefinitionToCurrent((parsed.definition ?? parsed) as WorkflowDefinitionEnvelope));
       const capability = migrated.nodes.find((node) => node.nodeKey === "capability");
       const importedAction = workflowActions.find((item) => item.id === capability?.type);
       const importedConfig = capability?.config && typeof capability.config === "object" ? capability.config as Record<string, unknown> : {};
@@ -1503,7 +1504,7 @@ export function App() {
         ...(actionId === "knowledge_retrieve" && config.obsidianIndexPath ? { indexPath: config.obsidianIndexPath, query: userPrompt, embeddingBaseUrl: "http://127.0.0.1:11434", embeddingModel: "nomic-embed-text" } : {}),
         ...(actionId === "knowledge_write" && config.obsidianVaultPath ? { vaultPath: config.obsidianVaultPath } : {}),
       };
-      const workflowDefinition = isWorkflowDefinition(workflowOverride) ? workflowOverride : selected.path === "/dashboard/workflows" ? currentWorkflowDefinition() : buildWorkflowDefinition(userPrompt, actionId, config.provider, capabilityConfig);
+      const workflowDefinition = sanitizeWorkflowDefinitionForStorage(isWorkflowDefinition(workflowOverride) ? workflowOverride : selected.path === "/dashboard/workflows" ? currentWorkflowDefinition() : buildWorkflowDefinition(userPrompt, actionId, config.provider, capabilityConfig));
       const usesOpenCodeConversation = mode === "chat" || mode === "writer" || selected.path === "/dashboard";
       if (usesOpenCodeConversation) {
         const skillInstruction = effectiveSkillId === "auto" ? "" : `\n\n请使用本地 ${effectiveSkillId} Skill 完成本轮任务，并保持所有产物写入当前项目目录。`;
