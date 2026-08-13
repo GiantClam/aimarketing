@@ -8,19 +8,25 @@ export function encodeRpcMessage(value: unknown) {
   return `${bytes}:${body}\n`;
 }
 
+export function decodeRpcFrame(frame: string): RuntimeCommand {
+  const separator = frame.indexOf(":");
+  if (separator <= 0) throw new Error("invalid_rpc_frame");
+  const prefix = frame.slice(0, separator);
+  if (!/^\d+$/.test(prefix)) throw new Error("invalid_rpc_frame");
+  const size = Number(prefix);
+  if (!Number.isSafeInteger(size) || size < 2) throw new Error("invalid_rpc_frame");
+  if (size > MAX_RUNTIME_MESSAGE_BYTES) throw new Error("runtime_message_too_large");
+  const payload = frame.slice(separator + 1);
+  if (Buffer.byteLength(payload, "utf8") !== size) throw new Error("incomplete_rpc_frame");
+  return JSON.parse(payload) as RuntimeCommand;
+}
+
 export function createRpcReader(input: NodeJS.ReadableStream, onMessage: (command: RuntimeCommand) => void, onError: (error: Error) => void) {
-  let buffer = "";
   const reader = createInterface({ input });
   reader.on("line", (line) => {
-    if (!line && !buffer) return;
-    buffer += line;
+    if (!line) return;
     try {
-      const separator = buffer.indexOf(":");
-      if (separator <= 0) throw new Error("invalid_rpc_frame");
-      const size = Number.parseInt(buffer.slice(0, separator), 10);
-      const payload = buffer.slice(separator + 1);
-      if (!Number.isSafeInteger(size) || size < 2 || Buffer.byteLength(payload, "utf8") !== size) throw new Error("incomplete_rpc_frame");
-      onMessage(JSON.parse(payload) as RuntimeCommand); buffer = "";
+      onMessage(decodeRpcFrame(line));
     } catch (error) { onError(error instanceof Error ? error : new Error(String(error))); }
   });
   return reader;

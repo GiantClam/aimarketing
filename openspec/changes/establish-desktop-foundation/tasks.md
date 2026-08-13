@@ -83,6 +83,7 @@
 ## 6. Implement workflow-host RPC and process supervision
 
 - [ ] 6.1 为 framing、correlation、反向请求、events、取消、最大消息和坏消息写 tests
+  - [x] 6.1a Node workflow-host framing tests 覆盖 UTF-8 byte length、严格数字前缀、8 MiB 上限、坏 frame 后继续处理下一条合法请求；Rust host 额外覆盖 stdout 长度/UTF-8/JSON/v1 response schema 和超长行丢弃。
 - [x] 6.1a workflow-host bundle 通过 esbuild 固定为 Node ESM，并由 Tauri host_start/host_send/host_stop 命令管理 stdin/stdout/stderr。
 - [x] 6.1b 事件通过 Tauri `desktop://runtime-response` / `desktop://runtime-log` 转发，发布资源清单包含 host bundle。
 - [ ] 6.2 创建私有 Node workflow-host，装载共享 packages 和 desktop ports
