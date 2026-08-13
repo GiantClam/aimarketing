@@ -82,9 +82,10 @@
 - [ ] 5.1 实现项目目录和 canonical temp output 分配
 - [ ] 5.2 实现路径归属、MIME、大小、hash 验证和原子 rename
   - [x] 2026-08-14 attachment ingestion now bounds sanitized filenames to 180 characters and adds a process-local sequence to prevent duplicate uploads from clobbering an in-progress `.part` file; Rust regression covers long Unicode names and same-stamp duplicate uploads.
-  - [x] 2026-08-14 workflow text artifacts now use `runtime.artifact.write`; Rust validates the configured workspace, rejects parent/absolute paths and payloads over 4 MiB, writes through a timestamped temporary file, atomically renames, and registers canonical MIME/size/SHA-256 metadata. Explorer/default-program actions and media finalization remain open.
+  - [x] 2026-08-14 workflow text artifacts now use `runtime.artifact.write`; Rust validates the configured workspace, rejects parent/absolute paths and payloads over 4 MiB, writes through a timestamped temporary file, atomically renames, and registers canonical MIME/size/SHA-256 metadata. Media finalization remains open for the downstream media change.
   - [x] 2026-08-14 writer drafts now use a Rust UTF-8 temporary file, `sync_all`, and atomic rename before artifact inspection/registration; an existing target is rejected instead of being partially overwritten.
-- [ ] 5.3 实现 Explorer、应用内和默认程序打开动作
+- [x] 5.3 实现 Explorer、应用内和默认程序打开动作
+  - [x] 2026-08-14 WorkbenchClient routes artifact reveal/open through typed Tauri file actions; Windows Explorer uses `/select,`, while default-program open now uses native `ShellExecuteW` instead of `cmd.exe /C start`, preserving spaces and shell metacharacters in validated artifact paths. Desktop route regressions and Rust artifact path/MIME tests pass.
 - [x] 5.4 关键事件写 SQLite，完整 NDJSON/stdout/stderr 写 per-run JSONL
 - [x] 5.5 实现 30 天或 1GB 原始日志滚动，不删除用户工作
 

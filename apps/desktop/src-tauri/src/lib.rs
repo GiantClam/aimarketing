@@ -1,7 +1,7 @@
 use serde::Serialize;
 use serde::Deserialize;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::Manager;
@@ -456,6 +456,27 @@ fn copy_directory(source: &std::path::Path, destination: &std::path::Path) -> Re
     Ok(())
 }
 
+/// Open an artifact through the Windows shell without passing the path through
+/// `cmd.exe`; this preserves spaces and shell metacharacters in user filenames.
+#[cfg(windows)]
+fn open_with_default_program(target: &Path) -> Result<(), String> {
+    use std::iter;
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    let operation: Vec<u16> = std::ffi::OsStr::new("open").encode_wide().chain(iter::once(0)).collect();
+    let file: Vec<u16> = target.as_os_str().encode_wide().chain(iter::once(0)).collect();
+    let result = unsafe { ShellExecuteW(std::ptr::null_mut(), operation.as_ptr(), file.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL) };
+    if (result as isize) <= 32 { return Err(format!("default_program_open_failed:{}", result as isize)); }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn open_with_default_program(target: &Path) -> Result<(), String> {
+    Command::new("xdg-open").arg(target).spawn().map(|_| ()).map_err(|error| format!("default_program_spawn_failed: {error}"))
+}
+
 #[tauri::command]
 fn open_workspace(app: tauri::AppHandle) -> Result<(), String> {
     let root = project_root(&app)?;
@@ -506,7 +527,7 @@ fn open_artifact_default(app: tauri::AppHandle, relative_path: String, mime_type
     let root = project_root(&app)?;
     let metadata = artifacts::inspect(&root, &relative_path, &mime_type)?;
     let target = root.join(metadata.relative_path.replace('/', "\\"));
-    Command::new("cmd.exe").args(["/C", "start", "", &target.to_string_lossy()]).spawn().map(|_| ()).map_err(|error| format!("default_program_spawn_failed: {error}"))
+    open_with_default_program(&target)
 }
 
 #[tauri::command]

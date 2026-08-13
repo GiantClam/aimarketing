@@ -401,7 +401,9 @@ test("desktop media and asset artifact reveals consume the WorkbenchClient file 
   assert.match(appSource, /onArtifactReveal\(item\.relative_path, item\.mime_type\)/);
   assert.doesNotMatch(appSource, /tauriBridge\.invoke\("open_artifact"/);
   assert.match(tauriSource, /fn open_artifact\([\s\S]*?Command::new\("explorer\.exe"\)\.args\(\["\/select,"/);
-  assert.match(tauriSource, /fn open_artifact_default\([\s\S]*?Command::new\("cmd\.exe"\)\.args\(\["\/C", "start"/);
+  assert.match(tauriSource, /fn open_artifact_default\([\s\S]*?open_with_default_program\(&target\)/);
+  assert.match(tauriSource, /fn open_with_default_program\(target: &Path\)/);
+  assert.doesNotMatch(tauriSource, /open_artifact_default[\s\S]*?Command::new\("cmd\.exe"\)/);
 });
 
 test("OpenCode serve errors terminate the shared synchronous turn barrier", () => {
