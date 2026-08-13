@@ -19,10 +19,10 @@ pub fn append(root: &Path, run_id: &str, line: &str) {
 fn redact(line: &str) -> String {
     let mut output = line.to_string();
     for key in ["apiKey", "api_key", "token", "authorization", "password"] {
-        let pattern = format!(r#"("{key}"\s*:\s*")[^"]*"#);
+        let pattern = format!(r#"(?i)("{key}"\s*:\s*")[^"]*"#);
         if let Ok(regex) = regex::Regex::new(&pattern) { output = regex.replace_all(&output, "$1[REDACTED]").to_string(); }
     }
-    if let Ok(regex) = regex::Regex::new(r"(?i)(authorization\s*:\s*bearer\s+)[^\s,]+") { output = regex.replace_all(&output, "$1[REDACTED]").to_string(); }
+    if let Ok(regex) = regex::Regex::new(r"(?i)(authorization\s*:\s*(?:bearer|basic)\s+)[^\s,]+") { output = regex.replace_all(&output, "$1[REDACTED]").to_string(); }
     if let Ok(regex) = regex::Regex::new(r"(?i)(api[_-]?key\s*[=:]\s*)[^\s,;&]+") { output = regex.replace_all(&output, "$1[REDACTED]").to_string(); }
     output
 }
@@ -52,6 +52,8 @@ mod tests {
         let content = fs::read_to_string(path).unwrap(); assert!(!content.contains("secret")); assert!(content.contains("[REDACTED]"));
         append(&root, "run-2", "Authorization: Bearer another-secret api_key=third-secret");
         let content = fs::read_to_string(root.join("logs").join("runs").join("run-2.jsonl")).unwrap(); assert!(!content.contains("another-secret")); assert!(!content.contains("third-secret"));
+        append(&root, "run-3", r#"{"Authorization":"Basic fourth-secret","API_KEY":"fifth-secret"}"#);
+        let content = fs::read_to_string(root.join("logs").join("runs").join("run-3.jsonl")).unwrap(); assert!(!content.contains("fourth-secret")); assert!(!content.contains("fifth-secret"));
         let _ = fs::remove_dir_all(root);
     }
 
