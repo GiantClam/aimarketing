@@ -92,7 +92,8 @@
 - [x] 5.1-5.3 Host 内置 Obsidian 写入端口默认写入 `AI Marketing/`，支持 target/baseHash 并在冲突时拒绝覆盖；UI/E2E 展示仍待完成。
 - [x] 5.4 UI 明示 Full Access 文件工具可绕过内置写入端口
   - [x] 2026-08-13 desktop route regression asserts the bilingual Full Access warning, plaintext API-key boundary, and no permission-mode selector.
-- [ ] 5.5 添加写作、PPT、索引状态、引用和冲突 E2E
+- [x] 5.5 添加写作、PPT、索引状态、引用和冲突 E2E
+  - [x] 2026-08-14 `apps/desktop/test/writing-ppt-obsidian-e2e.test.ts` runs one local fake-OpenCode flow that streams a writer/PPT artifact event, writes and indexes a Chinese Vault note, verifies lexical index state and citation metadata, discovers PPTX/SVG artifacts with hashes, and proves one optimistic-write conflict.
 
 **Quality Gate:**
 - [x] 内置写入端口的并发冲突测试通过 — 2026-08-14 `apps/desktop/test/obsidian.test.ts` races two writes against the same base hash; the target-scoped write lock allows one commit and returns `obsidian_write_conflict` for the stale writer.
