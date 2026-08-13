@@ -13,6 +13,27 @@ test("workflow execution propagates ports and emits ordered events", async () =>
   assert.equal(result.status, "succeeded"); assert.equal(calls[1], 'writer:{"text":"hello"}'); assert.deepEqual(events, [1, 2, 3, 4, 5, 6]);
 });
 
+test("workflow success events carry bounded checkpoint outputs", async () => {
+  const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
+  const result = await executeWorkflow(definition, { runId: "checkpoint-run", ports: {
+    capability: { execute: async ({ executorId }) => executorId === "text_input" ? { text: "hello" } : { text: "done" } },
+    events: { append: async (event) => { events.push({ type: event.type, payload: event.payload }); } },
+  } });
+  assert.equal(result.status, "succeeded");
+  const success = events.find((event) => event.type === "node_succeeded" && event.payload.nodeKey === "writer");
+  assert.deepEqual(success?.payload, { nodeKey: "writer", checkpointKey: "writer", executorId: "writer", output: { text: "done" } });
+});
+
+test("workflow checkpoint outputs truncate oversized values before event transport", async () => {
+  const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
+  await executeWorkflow(definition, { runId: "checkpoint-limit", ports: {
+    capability: { execute: async ({ executorId }) => executorId === "text_input" ? { text: "hello" } : Object.fromEntries(Array.from({ length: 64 }, (_, index) => [`field-${index}`, "x".repeat(16_000)])) },
+    events: { append: async (event) => { events.push({ type: event.type, payload: event.payload }); } },
+  } });
+  const success = events.find((event) => event.type === "node_succeeded" && event.payload.nodeKey === "writer");
+  assert.deepEqual(success?.payload.output, { checkpointTruncated: true });
+});
+
 test("workflow cancellation returns cancelled without executing remaining nodes", async () => {
   const controller = new AbortController(); controller.abort();
   const result = await executeWorkflow(definition, { runId: "run-2", signal: controller.signal, ports: { capability: { execute: async () => ({}) } } });
@@ -84,16 +105,17 @@ test("workflow foreach executes its body with bounded concurrency and collects i
     { edgeKey: "foreach-agent", sourceNodeKey: "foreach", sourcePortId: "item.asset", targetNodeKey: "agent", targetPortId: "asset" },
     { edgeKey: "agent-collect", sourceNodeKey: "agent", sourcePortId: "text", targetNodeKey: "collect", targetPortId: "items.text" },
   ] };
-  let active = 0; let peak = 0;
+  let active = 0; let peak = 0; const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
   const result = await executeWorkflow(foreachDefinition, { runId: "foreach-run", ports: { capability: { execute: async ({ executorId, inputs }) => {
     if (executorId === "upload") return { assets: ["a", "b", "c"] };
     if (executorId === "foreach") return { assets: ["a", "b", "c"] };
     if (executorId === "agent_execute") { active += 1; peak = Math.max(peak, active); await new Promise((resolve) => setTimeout(resolve, 8)); active -= 1; return { text: `done-${String(inputs.asset)}` }; }
     return { text: inputs["items.text"] };
-  } } } });
+  } }, events: { append: async (event) => { events.push({ type: event.type, payload: event.payload }); } } } });
   assert.equal(result.status, "succeeded");
   assert.equal(peak, 2);
   assert.deepEqual(result.outputs.collect?.text, ["done-a", "done-b", "done-c"]);
+  assert.deepEqual(events.filter((event) => event.type === "node_succeeded" && event.payload.nodeKey === "agent").map((event) => event.payload.checkpointKey), ["agent:asset-1", "agent:asset-2", "agent:asset-3"]);
 });
 
 test("workflow retries a failed node through the capability port", async () => {

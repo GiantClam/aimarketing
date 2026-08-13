@@ -249,7 +249,7 @@ async function runWorkflow(command: HostCommand) {
     } },
     events: { append: async (event) => {
       const phase = event.type === "node_started" ? "started" : event.type === "node_failed" ? "failed" : "completed";
-      emit(command, { event: "tool_event", tool: `workflow:${event.type}`, phase, message: JSON.stringify(event.payload).slice(0, 900), runId });
+      emit(command, { event: "tool_event", tool: `workflow:${event.type}`, phase, message: JSON.stringify(event.payload).slice(0, 64 * 1024), runId });
     } },
   } }); } catch (error) {
     workflowControllers.delete(runId);

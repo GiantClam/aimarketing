@@ -497,6 +497,11 @@ fn record_run_node(app: tauri::AppHandle, run_id: String, node_key: String, stat
 }
 
 #[tauri::command]
+fn record_run_checkpoint(app: tauri::AppHandle, run_id: String, checkpoint_key: String, sequence: i64, output_json: String) -> Result<(), String> {
+    storage::record_run_checkpoint(&database_path(&app)?, &run_id, &checkpoint_key, sequence, &output_json).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn record_run_attempt(app: tauri::AppHandle, idempotency_key: String, run_id: String, node_key: String, provider: Option<String>, provider_task_id: Option<String>, status: String, payload_json: Option<String>) -> Result<(), String> {
     storage::record_run_attempt(&database_path(&app)?, &idempotency_key, &run_id, &node_key, provider.as_deref(), provider_task_id.as_deref(), &status, payload_json.as_deref()).map_err(|error| error.to_string())
 }
@@ -565,7 +570,7 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .manage(instance_lock)
         .manage(host::HostState::default())
-        .invoke_handler(tauri::generate_handler![health, runtime_probe, repair_runtime, runtime_paths, initialize_local_state, read_config, write_config, begin_local_attachment, append_local_attachment_chunk, finish_local_attachment, abort_local_attachment, allocate_media_temp, write_writer_draft, inspect_artifact, register_artifact, list_artifacts, remove_artifact, export_diagnostics, open_workspace, pick_directory, open_artifact, open_artifact_default, open_vault_file, create_conversation, set_conversation_session, append_message, create_run, append_run_event, finish_run, record_usage, record_run_node, record_run_attempt, list_conversations, list_messages, list_runs, list_recoverable_attempts, save_workflow, list_workflows, usage_summary, host::host_start, host::host_send, host::host_stop]);
+        .invoke_handler(tauri::generate_handler![health, runtime_probe, repair_runtime, runtime_paths, initialize_local_state, read_config, write_config, begin_local_attachment, append_local_attachment_chunk, finish_local_attachment, abort_local_attachment, allocate_media_temp, write_writer_draft, inspect_artifact, register_artifact, list_artifacts, remove_artifact, export_diagnostics, open_workspace, pick_directory, open_artifact, open_artifact_default, open_vault_file, create_conversation, set_conversation_session, append_message, create_run, append_run_event, finish_run, record_usage, record_run_node, record_run_checkpoint, record_run_attempt, list_conversations, list_messages, list_runs, list_recoverable_attempts, save_workflow, list_workflows, usage_summary, host::host_start, host::host_send, host::host_stop]);
     let app = builder.build(tauri::generate_context!()).expect("error while building AI Marketing");
     app.run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {

@@ -3,6 +3,8 @@ import type { WorkflowDefinitionEnvelope } from "./definition";
 import type { WorkflowCapabilityPort, WorkflowClock, WorkflowRunEventSink, WorkflowRunRepository } from "./ports";
 import { workflowNodeRegistry } from "./node-definitions/registry";
 
+const CHECKPOINT_OUTPUT_MAX_BYTES = 48 * 1024;
+
 export interface WorkflowExecutionOptions {
   readonly runId: string;
   readonly ports: { readonly capability: WorkflowCapabilityPort; readonly repository?: WorkflowRunRepository; readonly events?: WorkflowRunEventSink; readonly clock?: WorkflowClock };
@@ -64,7 +66,7 @@ export async function executeWorkflow(definition: WorkflowDefinitionEnvelope, op
         outputs[step.nodeKey] = output;
         pending.delete(step.nodeKey);
         for (const nodeKey of consumedNodeKeys) pending.delete(nodeKey);
-        await appendEvent(options, sequence, "node_succeeded", { nodeKey: step.nodeKey, executorId });
+        await appendEvent(options, sequence, "node_succeeded", { nodeKey: step.nodeKey, checkpointKey: step.nodeKey, executorId, output: checkpointOutput(output) });
       }
       const failure = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === "rejected");
       if (failure) throw failure.reason;
@@ -133,7 +135,7 @@ async function executeForeach(
         await appendEvent(options, sequence, "node_started", { nodeKey: node.nodeKey, executorId, iterationKey, iterationIndex: index });
         try {
           localOutputs[node.nodeKey] = await executeWithRetry(executorId, node.nodeKey, node.config, nodeInputs, options, { key: iterationKey, index, item });
-          await appendEvent(options, sequence, "node_succeeded", { nodeKey: node.nodeKey, executorId, iterationKey, iterationIndex: index });
+          await appendEvent(options, sequence, "node_succeeded", { nodeKey: node.nodeKey, checkpointKey: `${node.nodeKey}:${iterationKey}`, executorId, iterationKey, iterationIndex: index, output: checkpointOutput(localOutputs[node.nodeKey]) });
         } catch (error) {
           await appendEvent(options, sequence, "node_failed", { nodeKey: node.nodeKey, executorId, iterationKey, iterationIndex: index, message: error instanceof Error ? error.message : String(error) });
           throw error;
@@ -156,7 +158,7 @@ async function executeForeach(
   const collectExecutor = workflowNodeRegistry.require(collectNode.type).executorId;
   await appendEvent(options, sequence, "node_started", { nodeKey: collectNode.nodeKey, executorId: collectExecutor });
   const output = await executeWithRetry(collectExecutor, collectNode.nodeKey, collectNode.config, collectInputsByPort, options);
-  await appendEvent(options, sequence, "node_succeeded", { nodeKey: collectNode.nodeKey, executorId: collectExecutor });
+  await appendEvent(options, sequence, "node_succeeded", { nodeKey: collectNode.nodeKey, checkpointKey: collectNode.nodeKey, executorId: collectExecutor, output: checkpointOutput(output) });
   completed[collectNode.nodeKey] = output;
   return { output, consumedNodeKeys: [collectNode.nodeKey, ...step.bodyNodeKeys] };
 }
@@ -188,6 +190,26 @@ function collectInputs(definition: WorkflowDefinitionEnvelope, nodeKey: string, 
 async function appendEvent(options: WorkflowExecutionOptions, sequence: { value: number }, type: string, payload: Record<string, unknown>) {
   sequence.value += 1;
   await options.ports.events?.append({ runId: options.runId, sequence: sequence.value, type, payload });
+}
+
+function checkpointOutput(value: unknown): unknown {
+  const bounded = boundCheckpointValue(value, 0);
+  try {
+    const serialized = JSON.stringify(bounded);
+    return serialized.length <= CHECKPOINT_OUTPUT_MAX_BYTES ? bounded : { checkpointTruncated: true };
+  } catch {
+    return { checkpointTruncated: true };
+  }
+}
+
+function boundCheckpointValue(value: unknown, depth: number): unknown {
+  if (depth > 5 || value === null || typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value === "string") return value.slice(0, 16_000);
+  if (Array.isArray(value)) return value.slice(0, 32).map((item) => boundCheckpointValue(item, depth + 1));
+  if (typeof value === "object") {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, 64).map(([key, item]) => [key.slice(0, 160), boundCheckpointValue(item, depth + 1)]));
+  }
+  return undefined;
 }
 
 function throwIfCancelled(signal?: AbortSignal) { if (signal?.aborted) { const error = new Error("workflow_cancelled"); error.name = "AbortError"; throw error; } }

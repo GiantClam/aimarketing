@@ -65,6 +65,8 @@ test("desktop host emits terminal media attempt events for recovery idempotency"
   assert.match(host, /task\.usage/);
   assert.match(host, /tempDirectory/);
   assert.match(app, /allocate_media_temp/);
+  assert.match(host, /slice\(0, 64 \* 1024\)/);
+  assert.match(app, /record_run_checkpoint/);
 });
 
 test("desktop image capabilities select direct OpenAI-compatible or Bailian adapters", () => {

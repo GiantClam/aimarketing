@@ -1335,7 +1335,11 @@ export function App() {
             try {
               const payload = JSON.parse((event as { message?: string }).message ?? "{}");
               const nodeStatus = tool.endsWith("node_started") ? "running" : tool.endsWith("node_failed") ? "failed" : "succeeded";
-              void tauriBridge.invoke("record_run_node", { runId: event.runId, nodeKey: payload.nodeKey, status: nodeStatus, outputJson: null });
+              const nodeKey = typeof payload.nodeKey === "string" ? payload.nodeKey : "";
+              const checkpointKey = typeof payload.checkpointKey === "string" ? payload.checkpointKey : nodeKey;
+              const outputJson = nodeStatus === "succeeded" && payload.output && typeof payload.output === "object" ? JSON.stringify(payload.output) : null;
+              if (nodeKey) void tauriBridge.invoke("record_run_node", { runId: event.runId, nodeKey, status: nodeStatus, outputJson });
+              if (nodeStatus === "succeeded" && checkpointKey && outputJson) void tauriBridge.invoke("record_run_checkpoint", { runId: event.runId, checkpointKey, sequence, outputJson });
             } catch { /* event remains in run_events */ }
           }
           if (tool.startsWith("media:")) {

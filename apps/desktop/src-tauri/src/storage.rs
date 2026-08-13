@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS workflows (id TEXT PRIMARY KEY, project_id TEXT REFER
 CREATE TABLE IF NOT EXISTS workflow_revisions (id TEXT PRIMARY KEY, workflow_id TEXT NOT NULL REFERENCES workflows(id), revision INTEGER NOT NULL, definition_json TEXT NOT NULL, definition_hash TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(workflow_id, revision));
 CREATE TABLE IF NOT EXISTS run_nodes (run_id TEXT NOT NULL REFERENCES runs(id), node_key TEXT NOT NULL, status TEXT NOT NULL, output_json TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(run_id, node_key));
 CREATE TABLE IF NOT EXISTS run_attempts (idempotency_key TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id), node_key TEXT NOT NULL, provider TEXT, provider_task_id TEXT, status TEXT NOT NULL, payload_json TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS run_checkpoints (run_id TEXT NOT NULL REFERENCES runs(id), checkpoint_key TEXT NOT NULL, sequence INTEGER NOT NULL, output_json TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(run_id, checkpoint_key));
 CREATE TABLE IF NOT EXISTS vault_mappings (id TEXT PRIMARY KEY, vault_path TEXT NOT NULL UNIQUE, index_path TEXT NOT NULL, embedding_model TEXT NOT NULL, embedding_dimension INTEGER NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 "#;
 
@@ -56,6 +57,8 @@ fn initialize_schema(path: &Path) -> Result<()> {
     let _ = connection.execute("ALTER TABLE usage_records ADD COLUMN provider TEXT", []);
     let _ = connection.execute("ALTER TABLE usage_records ADD COLUMN provider_cost REAL", []);
     connection.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (3)", [])?;
+    connection.execute("CREATE TABLE IF NOT EXISTS run_checkpoints (run_id TEXT NOT NULL REFERENCES runs(id), checkpoint_key TEXT NOT NULL, sequence INTEGER NOT NULL, output_json TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(run_id, checkpoint_key))", [])?;
+    connection.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (4)", [])?;
     Ok(())
 }
 
@@ -265,6 +268,14 @@ pub fn record_run_node(path: &Path, run_id: &str, node_key: &str, status: &str, 
     Ok(())
 }
 
+pub fn record_run_checkpoint(path: &Path, run_id: &str, checkpoint_key: &str, sequence: i64, output_json: &str) -> Result<()> {
+    if output_json.len() > 64 * 1024 { return Err(rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "run_checkpoint_too_large")))); }
+    initialize(path)?;
+    let connection = open(path)?;
+    connection.execute("INSERT INTO run_checkpoints(run_id, checkpoint_key, sequence, output_json) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(run_id, checkpoint_key) DO UPDATE SET sequence=excluded.sequence, output_json=excluded.output_json, updated_at=CURRENT_TIMESTAMP", params![run_id, checkpoint_key, sequence, output_json])?;
+    Ok(())
+}
+
 pub fn record_run_attempt(path: &Path, idempotency_key: &str, run_id: &str, node_key: &str, provider: Option<&str>, provider_task_id: Option<&str>, status: &str, payload_json: Option<&str>) -> Result<()> {
     initialize(path)?;
     let connection = open(path)?;
@@ -382,6 +393,8 @@ mod tests {
         create_run(&path, "run-1", Some("conversation-1"), Some("local-model")).unwrap();
         append_run_event(&path, "run-1", 1, "text_delta", r#"{"text":"你好"}"#).unwrap();
         record_run_node(&path, "run-1", "writer", "succeeded", Some(r#"{"text":"完成"}"#)).unwrap();
+        record_run_checkpoint(&path, "run-1", "writer", 2, r#"{"text":"完成"}"#).unwrap();
+        record_run_checkpoint(&path, "run-1", "writer", 3, r#"{"text":"最终"}"#).unwrap();
         record_run_attempt(&path, "run-1:media:1", "run-1", "media", Some("openai"), Some("provider-task-1"), "submitted", Some(r#"{"provider":"openai"}"#)).unwrap();
         assert_eq!(list_recoverable_attempts(&path).unwrap().len(), 1);
         finish_run(&path, "run-1", "succeeded").unwrap();
@@ -391,6 +404,8 @@ mod tests {
         assert_eq!(list_runs(&path).unwrap().len(), 1);
         let connection = open(&path).unwrap();
         assert_eq!(connection.query_row("SELECT status FROM run_nodes WHERE run_id='run-1' AND node_key='writer'", [], |row| row.get::<_, String>(0)).unwrap(), "succeeded");
+        assert_eq!(connection.query_row("SELECT sequence FROM run_checkpoints WHERE run_id='run-1' AND checkpoint_key='writer'", [], |row| row.get::<_, i64>(0)).unwrap(), 3);
+        assert_eq!(connection.query_row("SELECT output_json FROM run_checkpoints WHERE run_id='run-1' AND checkpoint_key='writer'", [], |row| row.get::<_, String>(0)).unwrap(), r#"{"text":"最终"}"#);
         assert_eq!(connection.query_row("SELECT provider_task_id FROM run_attempts WHERE idempotency_key='run-1:media:1'", [], |row| row.get::<_, String>(0)).unwrap(), "provider-task-1");
         assert!(integrity(&path).unwrap());
         let identity: String = open(&path).unwrap().query_row("SELECT device_id FROM identity WHERE id=1", [], |row| row.get(0)).unwrap();

@@ -61,7 +61,8 @@
   - [x] 2026-08-13 registry boundary test asserts all four excluded capability identifiers are absent.
 - [x] 3.4 将所有文本类节点路由到 OpenCode，将媒体节点路由到 media-runtime
   - [x] 2026-08-13 host routing includes the independent `voice_clone` media executor and all text/Skill nodes remain on the OpenCode branch; desktop media routing tests cover the direct provider path.
-- [ ] 3.5 保存 run、run_nodes、run_attempts、关键 run_events 和 checkpoints
+- [x] 3.5 保存 run、run_nodes、run_attempts、关键 run_events 和 checkpoints
+  - [x] 2026-08-13 workflow-core emits bounded node success outputs as stable checkpoint payloads; Tauri persists idempotent `run_checkpoints` rows keyed by run/checkpoint, including foreach iteration keys.
 
 **Quality Gate:**
 - [ ] 完整 DAG、并行、foreach/collect contract tests 通过
