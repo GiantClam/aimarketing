@@ -10,6 +10,7 @@ export const FORBIDDEN_IMPORT_PATTERNS = Object.freeze([
   /["'](?:@\/)?(?:lib\/)?(?:db|billing|enterprise|r2|railway|cloudflare)(?:\/|["'])/i,
   /["'](?:@\/)?next\/(?:navigation|link)(?:["'])/,
 ]);
+export const FORBIDDEN_HOST_API_PATH_PATTERN = /["'`]\/api(?:\/|["'`])/;
 
 function sourceFiles(rootDir) {
   if (!existsSync(rootDir)) return [];
@@ -25,10 +26,15 @@ function sourceFiles(rootDir) {
   return files;
 }
 
-export function scanSourceText(source, filePath = "<source>") {
+export function scanSourceText(source, filePath = "<source>", options = {}) {
+  const checkHostApiPaths = options.checkHostApiPaths ?? true;
   const violations = [];
   const lines = source.split(/\r?\n/);
   lines.forEach((line, index) => {
+    if (checkHostApiPaths && FORBIDDEN_HOST_API_PATH_PATTERN.test(line)) {
+      violations.push({ filePath, line: index + 1, text: line.trim() });
+      return;
+    }
     if (!/\b(?:import|export|require)\b/.test(line)) return;
     for (const pattern of FORBIDDEN_IMPORT_PATTERNS) {
       if (pattern.test(line)) {
@@ -42,7 +48,9 @@ export function scanSourceText(source, filePath = "<source>") {
 
 export function scanSharedPackages(rootDir = SHARED_ROOT) {
   return sourceFiles(rootDir).flatMap((filePath) =>
-    scanSourceText(readFileSync(filePath, "utf8"), relative(process.cwd(), filePath)),
+    scanSourceText(readFileSync(filePath, "utf8"), relative(process.cwd(), filePath), {
+      checkHostApiPaths: /[\\/]workbench-(?:client|ui)[\\/]/.test(filePath),
+    }),
   );
 }
 

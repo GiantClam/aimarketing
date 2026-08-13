@@ -60,7 +60,7 @@
 - [x] 5.3 Define `WorkbenchClient`, streaming subscription, file action, and `NavigationAdapter` interfaces.
 - [ ] 5.4 Convert shared AI Entry message rendering and workflow UI slices to injected clients and navigation.
 - [ ] 5.5 Implement the Web adapter with the current `/api/*` contracts and Next navigation.
-- [ ] 5.6 Verify shared UI packages contain no `next/*` imports or hard-coded `/api/` calls.
+- [x] 5.6 Verify shared UI packages contain no `next/*` imports or hard-coded `/api/` calls. ✓ 2026-08-13 — shared-boundary validation now rejects hard-coded host `/api/*` calls in `workbench-client`/`workbench-ui` while allowing legitimate third-party Provider endpoints.
 - [x] 5.6a `workflow-core` definition migration/hash contract is browser-safe; desktop Vite production build no longer pulls Node-only `crypto`.
 
 ## 6. Prove SaaS Parity and Complete Cutover

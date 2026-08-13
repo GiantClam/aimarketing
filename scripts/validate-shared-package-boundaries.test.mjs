@@ -16,6 +16,12 @@ test("rejects SaaS infrastructure imports", () => {
   assert.equal(violations.length, 1);
 });
 
+test("rejects hard-coded host API paths in shared packages", () => {
+  const violations = scanSourceText('export const request = () => fetch("/api/ai/conversations");', "fixture.ts");
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0]?.line, 1);
+});
+
 test("allows host-neutral ports and standard libraries", () => {
   const violations = scanSourceText(
     'import type { ArtifactPort } from "./ports";\nimport { randomUUID } from "node:crypto";',
