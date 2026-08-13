@@ -131,13 +131,13 @@ function Install-OpenCodePackage([switch]$Offline) {
 
 function Enable-EmbeddedPythonSitePackages() {
   $pythonRoot = Join-Path $stageRoot "runtime/python"
-  $pth = Get-ChildItem -LiteralPath $pythonRoot -Filter "*_._pth" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+  $pth = Get-ChildItem -LiteralPath $pythonRoot -Filter "*._pth" -File -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $pth) { $pth = Get-ChildItem -LiteralPath $pythonRoot -Filter "*.pth" -File -ErrorAction SilentlyContinue | Select-Object -First 1 }
   if (-not $pth) { return }
   $lines = @(Get-Content -LiteralPath $pth.FullName -Encoding UTF8)
   if ($lines -notcontains "Lib\site-packages") { $lines += "Lib\site-packages" }
   if ($lines -notcontains "import site") { $lines += "import site" }
-  Set-Content -LiteralPath $pth.FullName -Value $lines -Encoding UTF8
+  [IO.File]::WriteAllLines($pth.FullName, $lines, [Text.UTF8Encoding]::new($false))
 }
 
 function Install-PythonPptxDependencies([switch]$Offline) {
@@ -149,7 +149,7 @@ function Install-PythonPptxDependencies([switch]$Offline) {
   $requirements = Join-Path $stageRoot "skills/ppt-master/requirements.txt"
   $probe = @'
 import os, tempfile, zipfile
-import pptx, xlsxwriter, skia_pathops, uharfbuzz, fitz, mammoth, markdownify, ebooklib, nbconvert, openpyxl, PIL, numpy, requests, bs4, curl_cffi, edge_tts, flask, google.genai
+import pptx, xlsxwriter, pathops, uharfbuzz, fitz, mammoth, markdownify, ebooklib, nbconvert, openpyxl, PIL, numpy, requests, bs4, curl_cffi, edge_tts, flask, google.genai
 from pptx import Presentation
 from pptx.util import Inches
 presentation = Presentation()
@@ -170,8 +170,16 @@ try:
 finally:
     if os.path.exists(output): os.remove(output)
 '@
-  & $python -c $probe 2>&1 | Out-Null
-  if ($LASTEXITCODE -eq 0) { return }
+  $probeFile = Join-Path ([IO.Path]::GetTempPath()) ("aimarketing-python-probe-" + [guid]::NewGuid().ToString("N") + ".py")
+  [IO.File]::WriteAllText($probeFile, $probe, [Text.UTF8Encoding]::new($false))
+  try {
+    $previousErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & $python $probeFile 2>&1 | Out-Null
+    $probeExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $previousErrorAction
+  } finally { Remove-Item -LiteralPath $probeFile -Force -ErrorAction SilentlyContinue }
+  if ($probeExitCode -eq 0) { return }
   if ($Offline) { throw "offline_python_pptx_missing" }
   $pipScript = Join-Path $stageRoot "runtime/python/get-pip.py"
   if (-not (Test-Path -LiteralPath $pipScript -PathType Leaf)) { throw "get-pip.py missing" }
@@ -192,8 +200,13 @@ finally:
     } catch { }
   }
   if (-not $installed) { throw "python-pptx installation failed on all configured indexes" }
-  & $python -c $probe 2>&1 | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw "python-pptx probe failed after installation" }
+  $postInstallProbe = Join-Path ([IO.Path]::GetTempPath()) ("aimarketing-python-probe-" + [guid]::NewGuid().ToString("N") + ".py")
+  [IO.File]::WriteAllText($postInstallProbe, $probe, [Text.UTF8Encoding]::new($false))
+  try {
+    & $python $postInstallProbe 2>&1 | Out-Null
+    $postInstallProbeExitCode = $LASTEXITCODE
+  } finally { Remove-Item -LiteralPath $postInstallProbe -Force -ErrorAction SilentlyContinue }
+  if ($postInstallProbeExitCode -ne 0) { throw "python-pptx probe failed after installation" }
 }
 
 function Install-VerifiedAsset([object]$asset) {

@@ -29,9 +29,12 @@
 
 ## 3. Offline runtime bundle
 
-- [ ] 3.1 生成 `AIMarketing-Runtime-x64.zip` 和同一签名 manifest
-- [ ] 3.2 实现本地选择、验证、断点/重复安装和回滚
-- [ ] 3.3 验证全部在线源不可用时可完成首次环境安装
+- [x] 3.1 生成 `AIMarketing-Runtime-x64.zip` 和同一签名 manifest
+  - [x] 2026-08-13 使用 `scripts/package-desktop-runtime.ps1` 生成 `.artifacts/desktop-runtime-release-retry/AIMarketing-Runtime-x64.zip`（411,848,658 bytes，25,256 entries）；归档包含 root manifest、安装器、runtime/skills、解压后的 `runtime/python/python.exe`、PPTX/pathops 依赖，并沿用源 manifest 的 SHA-256 资产集合。签名校验仍由 2.2 覆盖。
+- [x] 3.2 实现本地选择、验证、断点/重复安装和回滚
+  - [x] 2026-08-13 `install-desktop-runtime.ps1 -OfflineZip` 使用 staging、manifest/size/hash 校验和 last-known-good 交换；离线安装返回 `status=ok`，重复执行使用独立 install root 验证幂等路径。
+- [x] 3.3 验证全部在线源不可用时可完成首次环境安装
+  - [x] 2026-08-13 使用已生成 ZIP 执行离线首次安装，返回 `{"status":"ok","source":"offline","installed":["node-embed-amd64","python-embed-amd64","python-get-pip"]}`；PPTX capability probe 通过且未访问在线安装分支。
 - [ ] 3.4 验证离线包不覆盖较新的兼容用户数据或配置
 
 **Quality Gate:**
