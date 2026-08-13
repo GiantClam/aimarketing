@@ -690,6 +690,18 @@ mod tests {
     }
 
     #[test]
+    fn startup_gates_run_before_tauri_builder() {
+        let source = include_str!("lib.rs");
+        let webview_gate = source.find("bootstrap::ensure_webview2()").expect("webview gate missing");
+        let runtime_gate = source.find("bootstrap::ensure_runtime_before_window()").expect("runtime gate missing");
+        let builder = source.find("let builder = tauri::Builder::default()").expect("tauri builder missing");
+        assert!(webview_gate < builder, "WebView2 must be ready before Tauri creates the window");
+        assert!(runtime_gate < builder, "green runtime must be ready before Tauri creates the window");
+        assert!(source[webview_gate..builder].contains("instance_lock.release()"));
+        assert!(source[runtime_gate..builder].contains("instance_lock.release()"));
+    }
+
+    #[test]
     fn diagnostic_redaction_recurses_without_touching_non_secret_config() {
         let mut value = serde_json::json!({
             "provider": { "apiKey": "provider-secret", "model": "gpt-5.4" },
