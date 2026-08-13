@@ -15,8 +15,9 @@
   - [x] 2026-08-13 `packages/media-runtime` exposes direct MiniMax, Bailian and RunningHub async video adapters; `apps/desktop/test/media-runtime.test.ts` verifies host routing for `video_generate`/`digital_human` without issuing a video-generation request. Existing provider fixtures cover submit/poll normalization; real video smoke remains excluded by acceptance scope.
 - [x] 1.5 抽取 RunningHub digital human 和 MiniMax music/TTS/clone/audio clients
   - [x] 2026-08-13 shared adapters cover RunningHub task capabilities plus MiniMax music, async voice synthesis, voice cloning and general audio; fixture coverage verifies synchronous base64, async file retrieval, clone preview output, workspace-local multipart reference upload and strict path/source-file validation. Desktop voice-clone UI metadata is carried as `featureId=voice-clone` into the local host without base64 IPC.
-- [ ] 1.6 为 SaaS/Desktop adapters 运行同一组 provider contract tests
+- [x] 1.6 为 SaaS/Desktop adapters 运行同一组 provider contract tests
   - [x] 1.6a 2026-08-13 `lib/ai-runtime/provider-parity.test.ts` runs the same normalized output/idempotency assertions against SaaS and Desktop OpenAI-compatible and Bailian image adapters; video generation remains outside the real-provider smoke scope.
+  - [x] 2026-08-14 `pnpm test:media:provider-parity` exposes and passes the shared parity suite (2/2): OpenAI-compatible and Bailian image adapters match terminal output, output count, and idempotency/request identity semantics.
 
 **Quality Gate:**
 - [x] `media-runtime` 无 Next、DB、billing、enterprise、R2 或环境全局读取
