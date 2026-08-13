@@ -11,12 +11,20 @@ use std::os::windows::process::CommandExt;
 const WEBVIEW2_BOOTSTRAPPER_URL: &str = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-fn webview_repair_progress_messages() -> [&'static str; 3] {
-    [
-        "正在检查 WebView2 运行时…",
-        "正在下载 WebView2 修复程序…",
-        "正在安装 WebView2 并重新探测…",
-    ]
+fn webview_repair_progress_messages_for(chinese: bool) -> [&'static str; 3] {
+    if chinese {
+        [
+            "正在检查 WebView2 运行时…",
+            "正在下载 WebView2 修复程序…",
+            "正在安装 WebView2 并重新探测…",
+        ]
+    } else {
+        [
+            "Checking the WebView2 runtime…",
+            "Downloading the WebView2 repair package…",
+            "Installing WebView2 and probing again…",
+        ]
+    }
 }
 
 struct StartupProgress {
@@ -25,7 +33,7 @@ struct StartupProgress {
 }
 
 impl StartupProgress {
-    fn new(message: &str) -> Self {
+    fn new(message: &str, chinese: bool) -> Self {
         #[cfg(windows)]
         {
             use std::ptr::{null, null_mut};
@@ -35,7 +43,7 @@ impl StartupProgress {
             };
 
             let class = wide("STATIC");
-            let title = wide("AI Marketing 环境修复");
+            let title = wide(if chinese { "AI Marketing 环境修复" } else { "AI Marketing environment repair" });
             let hwnd = unsafe {
                 CreateWindowExW(
                     WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
@@ -61,6 +69,7 @@ impl StartupProgress {
         }
         #[cfg(not(windows))]
         {
+            let _ = chinese;
             eprintln!("NATIVE_STATUS: {message}");
             Self {}
         }
@@ -100,8 +109,9 @@ fn wide(value: &str) -> Vec<u16> {
 
 pub fn ensure_webview2() -> Result<(), String> {
     if webview2_installed() { return Ok(()); }
-    let progress_messages = webview_repair_progress_messages();
-    let progress = StartupProgress::new(progress_messages[0]);
+    let chinese = startup_is_chinese();
+    let progress_messages = webview_repair_progress_messages_for(chinese);
+    let progress = StartupProgress::new(progress_messages[0], chinese);
     let bootstrapper = bundled_bootstrapper().unwrap_or_else(|| std::env::temp_dir().join("AI-Marketing-WebView2Bootstrapper.exe"));
     if !bootstrapper.is_file() {
         progress.update(progress_messages[1]);
@@ -111,6 +121,31 @@ pub fn ensure_webview2() -> Result<(), String> {
     install_bootstrapper(&bootstrapper)?;
     if webview2_installed() { return Ok(()); }
     Err("webview2_install_incomplete".to_string())
+}
+
+fn startup_is_chinese() -> bool {
+    #[cfg(windows)]
+    {
+        let mut buffer = [0_u16; 85];
+        let length = unsafe {
+            windows_sys::Win32::Globalization::GetUserDefaultLocaleName(
+                buffer.as_mut_ptr(),
+                buffer.len() as i32,
+            )
+        };
+        if length > 1 {
+            return String::from_utf16_lossy(&buffer[..(length - 1) as usize])
+                .to_ascii_lowercase()
+                .starts_with("zh");
+        }
+        false
+    }
+    #[cfg(not(windows))]
+    {
+        std::env::var("LANG")
+            .map(|value| value.to_ascii_lowercase().starts_with("zh"))
+            .unwrap_or(false)
+    }
 }
 
 /// Run the runtime gate before Tauri creates the WebView. The React bootstrap
@@ -356,11 +391,19 @@ mod tests {
     #[test]
     fn webview_repair_progress_has_visible_ordered_stages() {
         assert_eq!(
-            webview_repair_progress_messages(),
+            webview_repair_progress_messages_for(true),
             [
                 "正在检查 WebView2 运行时…",
                 "正在下载 WebView2 修复程序…",
                 "正在安装 WebView2 并重新探测…",
+            ]
+        );
+        assert_eq!(
+            webview_repair_progress_messages_for(false),
+            [
+                "Checking the WebView2 runtime…",
+                "Downloading the WebView2 repair package…",
+                "Installing WebView2 and probing again…",
             ]
         );
     }
