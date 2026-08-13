@@ -18,4 +18,5 @@ test("desktop size budget verifier reports all release components and fails over
   assert.match(script, /desktop_size_budget_exceeded/u);
   assert.match(script, /runtimeZipBytes/u);
   assert.match(script, /extractedProgramBytes/u);
+  assert.match(script, /desktop-runtime-release-retry\/AIMarketing-Runtime-x64\.zip/u);
 });

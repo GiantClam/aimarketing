@@ -26,7 +26,8 @@
   - [x] 2026-08-13 `runtime-manifest-crypto.mjs` signs canonical manifest content with an operator-supplied offline Ed25519 private-key path; staging signs only when `AIMARKETING_RUNTIME_SIGNING_KEY` is explicitly provided, while the installer embeds the trusted public key and verifies required signatures before download, extraction, or install-root replacement. Crypto, CLI, and Windows PowerShell tamper tests pass; unsigned development manifests remain explicitly non-required.
 - [x] 2.5 实现 last-known-good 回退和“可用不主动升级”策略
   - [x] 2026-08-13 installer stages and verifies a candidate before swapping the install root, preserves `<root>.last-known-good`, and only runs from explicit bootstrap/repair flows rather than auto-updating a healthy runtime.
-- [ ] 2.6 对每个 runtime 组件完成再分发许可审计
+- [x] 2.6 对每个 runtime 组件完成再分发许可审计
+  - [x] 2026-08-13 `desktop:release-audit` scans the normal, portable and standalone runtime ZIPs; all 28 bundled npm package roots in each archive have SPDX/license metadata or a colocated license/notice file, with zero missing evidence.
 
 **Quality Gate:**
 - [x] 损坏签名、hash、size 或组件身份均 fail closed
@@ -92,6 +93,7 @@
 - [x] 5.4 执行主 ZIP、解压后、runtime 补齐后的组件级 size budget
   - [x] 2026-08-13 `scripts/verify-desktop-size-budget.ps1` reports compressed main normal/portable ZIPs, uncompressed extracted program contents, runtime ZIP size, and application/Node/OpenCode/Python/fonts/embedding/Skills ownership; configured budget overflow fails closed. Current normal/portable/runtime archives pass with 268,943,017 / 269,006,577 / 411,848,658 compressed bytes and 689,076,629 / 689,076,636 / 991,112,444 uncompressed bytes.
 - [ ] 5.5 执行 Authenticode、manifest 签名、依赖漏洞和许可证审计
+  - [x] 2026-08-13 `desktop:release-audit` records current evidence without suppressing failures: license audit passes (28/28 packages per archive), Authenticode is incomplete for the unsigned development EXE/DLL, manifests are `development_unsigned`, and the approved npm registry audit reports 3 critical, 32 high, 29 moderate and 3 low vulnerabilities. `-RequireAuthenticode`, `-RequireSignedManifest` and `-RequireDependencyAudit` fail closed for release CI.
 - [ ] 5.6 执行 desktop 全量 E2E 与 SaaS lint/build/regression
 - [x] 5.7 发布人工 ZIP 升级说明和已知限制，不启用应用内自动更新
   - [x] 普通/便携 ZIP README 均说明关闭应用后手动替换；便携模式先备份 `data/`；不自动下载或替换自身，并明确外部 Vault、系统 WebView2 和明文 API Key 边界。
