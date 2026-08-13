@@ -3,6 +3,7 @@ use serde::Deserialize;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::Manager;
 use std::fs;
 #[cfg(windows)]
@@ -237,11 +238,18 @@ fn project_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 
 const MAX_ATTACHMENT_BYTES: usize = 25 * 1024 * 1024;
 const MAX_ATTACHMENT_CHUNK_BYTES: usize = 1024 * 1024;
+const MAX_ATTACHMENT_NAME_CHARS: usize = 180;
+static ATTACHMENT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 fn safe_attachment_name(file_name: &str) -> String {
     let original = std::path::Path::new(&file_name).file_name().and_then(|value| value.to_str()).unwrap_or("attachment.bin");
     let safe_name: String = original.chars().map(|character| if character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_' | ' ' | '(' | ')') { character } else { '_' }).collect();
-    if safe_name.trim().is_empty() { "attachment.bin".to_string() } else { safe_name.trim().to_string() }
+    if safe_name.trim().is_empty() { "attachment.bin".to_string() } else { safe_name.trim().chars().take(MAX_ATTACHMENT_NAME_CHARS).collect() }
+}
+
+fn attachment_relative_path(file_name: &str, stamp: u128) -> String {
+    let sequence = ATTACHMENT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    format!("attachments/{}-{}-{}", stamp, sequence, safe_attachment_name(file_name))
 }
 
 fn attachment_target(app: &tauri::AppHandle, relative_path: &str) -> Result<(PathBuf, PathBuf), String> {
@@ -259,7 +267,7 @@ fn attachment_partial_target(target: &PathBuf) -> PathBuf { target.with_file_nam
 fn begin_local_attachment(app: tauri::AppHandle, file_name: String, byte_length: usize) -> Result<serde_json::Value, String> {
     if byte_length > MAX_ATTACHMENT_BYTES { return Err("attachment_too_large".to_string()); }
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|duration| duration.as_nanos()).unwrap_or(0);
-    let relative_path = format!("attachments/{}-{}", stamp, safe_attachment_name(&file_name));
+    let relative_path = attachment_relative_path(&file_name, stamp);
     let root = project_root(&app)?;
     let target = root.join(relative_path.replace('/', "\\"));
     if let Some(parent) = target.parent() { fs::create_dir_all(parent).map_err(|error| error.to_string())?; }
@@ -699,7 +707,7 @@ fn lock_path() -> Result<std::path::PathBuf, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{archive_diagnostics, config, configured_runtime_executable, persist_runtime_paths, powershell_quote, redact_diagnostic_value, resolve_windows_command_shim, safe_media_component, write_file_atomically};
+    use super::{archive_diagnostics, attachment_relative_path, config, configured_runtime_executable, persist_runtime_paths, powershell_quote, redact_diagnostic_value, resolve_windows_command_shim, safe_attachment_name, safe_media_component, write_file_atomically, MAX_ATTACHMENT_NAME_CHARS};
     use std::fs;
 
     #[test]
@@ -707,6 +715,17 @@ mod tests {
         assert_eq!(safe_media_component("run:with\\separators", "run"), "run_with_separators");
         assert_eq!(safe_media_component("../", "node"), "node");
         assert!(safe_media_component(&"x".repeat(200), "node").len() <= 96);
+    }
+
+    #[test]
+    fn attachment_names_are_bounded_and_duplicate_uploads_are_unique() {
+        let long_name = format!("{}.png", "名".repeat(400));
+        let first = attachment_relative_path(&long_name, 42);
+        let second = attachment_relative_path(&long_name, 42);
+        assert_ne!(first, second);
+        assert!(first.starts_with("attachments/42-"));
+        assert!(safe_attachment_name(&long_name).chars().count() <= MAX_ATTACHMENT_NAME_CHARS);
+        assert!(!first.contains(".."));
     }
 
     #[test]
