@@ -240,6 +240,24 @@ fn abort_local_attachment(app: tauri::AppHandle, relative_path: String) -> Resul
     Ok(())
 }
 
+fn safe_media_component(value: &str, fallback: &str) -> String {
+    let sanitized: String = value.chars().map(|character| if character.is_ascii_alphanumeric() || matches!(character, '-' | '_') { character } else { '_' }).collect();
+    let trimmed = sanitized.trim_matches('_');
+    if trimmed.is_empty() { fallback.to_string() } else { trimmed.chars().take(96).collect() }
+}
+
+#[tauri::command]
+fn allocate_media_temp(app: tauri::AppHandle, run_id: String, node_key: String) -> Result<serde_json::Value, String> {
+    if run_id.trim().is_empty() || node_key.trim().is_empty() { return Err("media_temp_identity_required".to_string()); }
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|duration| duration.as_nanos()).unwrap_or(0);
+    let relative_path = format!("artifacts/.tmp/{}/{}/{}", safe_media_component(&run_id, "run"), safe_media_component(&node_key, "node"), stamp);
+    let root = project_root(&app)?;
+    let target = root.join(relative_path.replace('/', "\\"));
+    if !target.starts_with(&root) { return Err("media_temp_path_escape".to_string()); }
+    fs::create_dir_all(&target).map_err(|error| format!("media_temp_create_failed: {error}"))?;
+    Ok(serde_json::json!({ "relativePath": relative_path }))
+}
+
 #[tauri::command]
 fn write_writer_draft(app: tauri::AppHandle, content: String) -> Result<artifacts::ArtifactMetadata, String> {
     if content.trim().is_empty() { return Err("writer_draft_empty".to_string()); }
@@ -547,7 +565,7 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .manage(instance_lock)
         .manage(host::HostState::default())
-        .invoke_handler(tauri::generate_handler![health, runtime_probe, repair_runtime, runtime_paths, initialize_local_state, read_config, write_config, begin_local_attachment, append_local_attachment_chunk, finish_local_attachment, abort_local_attachment, write_writer_draft, inspect_artifact, register_artifact, list_artifacts, remove_artifact, export_diagnostics, open_workspace, pick_directory, open_artifact, open_artifact_default, open_vault_file, create_conversation, set_conversation_session, append_message, create_run, append_run_event, finish_run, record_usage, record_run_node, record_run_attempt, list_conversations, list_messages, list_runs, list_recoverable_attempts, save_workflow, list_workflows, usage_summary, host::host_start, host::host_send, host::host_stop]);
+        .invoke_handler(tauri::generate_handler![health, runtime_probe, repair_runtime, runtime_paths, initialize_local_state, read_config, write_config, begin_local_attachment, append_local_attachment_chunk, finish_local_attachment, abort_local_attachment, allocate_media_temp, write_writer_draft, inspect_artifact, register_artifact, list_artifacts, remove_artifact, export_diagnostics, open_workspace, pick_directory, open_artifact, open_artifact_default, open_vault_file, create_conversation, set_conversation_session, append_message, create_run, append_run_event, finish_run, record_usage, record_run_node, record_run_attempt, list_conversations, list_messages, list_runs, list_recoverable_attempts, save_workflow, list_workflows, usage_summary, host::host_start, host::host_send, host::host_stop]);
     let app = builder.build(tauri::generate_context!()).expect("error while building AI Marketing");
     app.run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
@@ -562,4 +580,16 @@ fn lock_path() -> Result<std::path::PathBuf, String> {
     let executable_dir = executable.parent().unwrap_or(executable.as_path());
     let local_app_data = std::env::var_os("LOCALAPPDATA").map(|value| std::path::PathBuf::from(value).join("AIMarketing"));
     Ok(storage::data_root(executable_dir, local_app_data).join("instance.lock"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::safe_media_component;
+
+    #[test]
+    fn media_temp_components_are_workspace_safe_and_bounded() {
+        assert_eq!(safe_media_component("run:with\\separators", "run"), "run_with_separators");
+        assert_eq!(safe_media_component("../", "node"), "node");
+        assert!(safe_media_component(&"x".repeat(200), "node").len() <= 96);
+    }
 }

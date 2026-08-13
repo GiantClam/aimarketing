@@ -33,13 +33,16 @@
   - [x] 2.1b Workflow definitions recursively remove Provider credentials before save, export, import, or host dispatch; credentials remain only in the current in-memory Provider payload.
 - [x] 2.2 提交前持久化 idempotency key，提交后立即保存 provider task ID（桌面在发送 `workflow.run` 前为每个媒体节点写入 queued attempt；收到 provider task ID 事件后幂等更新同一记录）
 - [x] 2.3 实现可恢复 poll 和 provider 支持时的 cancel（`runMediaJob` 使用持久化 task ID 续 poll，并通过未 aborted 的控制端口发送 provider cancel）
-- [ ] 2.4 从 Rust 请求 canonical temp path，流式下载并原子移动到项目目录
-- [ ] 2.5 验证 MIME、大小、hash 和路径归属后登记 artifact
+- [x] 2.4 从 Rust 请求 canonical temp path，流式下载并原子移动到项目目录
+  - [x] 2026-08-13 Tauri allocates a workspace-relative `artifacts/.tmp` directory per media node; host downloads provider streams there and atomically renames hashed outputs into the final artifact directory without carrying bytes through RPC.
+- [x] 2.5 验证 MIME、大小、hash 和路径归属后登记 artifact
+  - [x] 2026-08-13 Rust artifact inspection enforces workspace ownership, extension/MIME policy, byte-size/hash calculation and idempotent registration after terminal host events; temp directories are removed after finalize or failure.
 - [x] 2.6 记录 token/请求/媒体任务和预估成本，不执行扣费
   - [x] 2026-08-13 media-runtime now normalizes provider usage (tokens, duration, request count, provider/estimated cost) into terminal media events; desktop persists one idempotent usage row per media node and does not record the pre-download submitted event as complete.
 
 **Quality Gate:**
-- [ ] 强制杀死并重启后只继续 poll、不重复 submit
+- [x] 强制杀死并重启后只继续 poll、不重复 submit
+  - [x] 2026-08-13 recovery allocates a fresh Rust-owned temp directory and resumes by provider task ID; the host never re-submits an existing task.
 - [ ] 大文件不以 base64 经过 UI/IPC
 - [ ] API Key 不进入命令行、SQLite、日志或诊断包
 

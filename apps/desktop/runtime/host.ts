@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { buildOpenCodeCommand, createOpenCodeEventParser, type OpenCodeRuntimeEvent } from "@aimarketing/runtime-contracts/opencode";
 import { createBailianImageAdapter, createBailianVideoAdapter, createHttpMediaAdapter, createMiniMaxAudioAdapter, createMiniMaxVideoAdapter, createOpenAICompatibleImageAdapter, createRunningHubAdapter, downloadMediaOutputs, runMediaJob, type MediaProviderId, type MediaProviderAdapter } from "@aimarketing/media-runtime";
 import { executeWorkflow, migrateWorkflowDefinitionToCurrent, type WorkflowDefinitionEnvelope } from "@aimarketing/workflow-core";
@@ -330,9 +330,16 @@ async function runMediaCapability(command: HostCommand, runId: string, nodeKey: 
     throw new Error(`media_task_${task.status}`);
   }
   const outputDirectory = join(workspacePath, "artifacts", runId.replace(/[^a-zA-Z0-9_-]/g, "_"), nodeKey.replace(/[^a-zA-Z0-9_-]/g, "_"));
+  const tempDirectories = command.payload?.mediaTempDirectories && typeof command.payload.mediaTempDirectories === "object" ? command.payload.mediaTempDirectories as Record<string, unknown> : {};
+  const tempRelativePath = typeof tempDirectories[nodeKey] === "string" ? tempDirectories[nodeKey].trim() : "";
+  if (tempRelativePath && isAbsolute(tempRelativePath)) throw new Error("media_temp_path_escape");
+  if (tempRelativePath && (!tempRelativePath.startsWith("artifacts/.tmp/") || tempRelativePath.split(/[\\/]/u).includes(".."))) throw new Error("media_temp_path_escape");
+  const workspaceRoot = resolve(workspacePath);
+  const tempDirectory = tempRelativePath ? resolve(workspaceRoot, tempRelativePath) : undefined;
+  if (tempDirectory && (tempDirectory === workspaceRoot || !tempDirectory.startsWith(`${workspaceRoot}${sep}`))) throw new Error("media_temp_path_escape");
   let artifacts: Awaited<ReturnType<typeof downloadMediaOutputs>>;
   try {
-    artifacts = await downloadMediaOutputs(task, outputDirectory, { filenamePrefix: executorId });
+    artifacts = await downloadMediaOutputs(task, outputDirectory, { filenamePrefix: executorId, ...(tempDirectory ? { tempDirectory } : {}) });
     if (!artifacts.length && task.outputs.length) throw new Error("media_outputs_not_downloadable");
   } catch (error) {
     emit(command, { event: "tool_event", tool: `media:${executorId}`, phase: "failed", message: JSON.stringify({ provider, model: modelId, executorId, nodeKey, providerTaskId: task.providerTaskId, idempotencyKey, status: "failed", error: error instanceof Error ? error.message.slice(0, 180) : String(error).slice(0, 180) }), runId });

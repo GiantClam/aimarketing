@@ -1239,6 +1239,7 @@ export function App() {
               let payload: Record<string, unknown> = {};
               try { payload = JSON.parse(attempt.payload_json ?? "{}"); } catch { payload = {}; }
               const resumeExecutorId = typeof payload.executorId === "string" ? payload.executorId : attempt.node_key;
+              const allocatedTemp = await tauriBridge.invoke<{ relativePath: string }>("allocate_media_temp", { runId: attempt.run_id, nodeKey: attempt.node_key });
               await tauriBridge.invoke("host_send", { message: {
                 version: 1,
                 requestId: `resume-${attempt.idempotency_key}`,
@@ -1249,6 +1250,7 @@ export function App() {
                   nodeKey: attempt.node_key,
                   executorId: resumeExecutorId,
                   providerTaskId: attempt.provider_task_id,
+                  mediaTempDirectories: { [attempt.node_key]: allocatedTemp.relativePath },
                   workspacePath: activeConfig.workspacePath,
                   config: {
                     provider: attempt.provider ?? activeConfig.provider.id,
@@ -1560,6 +1562,10 @@ export function App() {
       const workflowDefinition = sanitizeWorkflowDefinitionForStorage(isWorkflowDefinition(workflowOverride) ? workflowOverride : selected.path === "/dashboard/workflows" ? currentWorkflowDefinition() : buildWorkflowDefinition(userPrompt, actionId, config.provider, capabilityConfig));
       const mediaNodeTypes = new Set<WorkflowAction>(["image_generate", "video_generate", "digital_human", "music_generate", "voice_synthesis", "voice_clone", "audio_generate"]);
       const mediaNodes = workflowDefinition.nodes.filter((node) => mediaNodeTypes.has(node.type as WorkflowAction));
+      const mediaTempDirectories = Object.fromEntries(await Promise.all(mediaNodes.map(async (node) => {
+        const allocated = await tauriBridge.invoke<{ relativePath: string }>("allocate_media_temp", { runId, nodeKey: node.nodeKey });
+        return [node.nodeKey, allocated.relativePath] as const;
+      })));
       await Promise.all(mediaNodes.map((node) => {
         const nodeProvider = typeof node.config.provider === "string" && node.config.provider.trim() ? node.config.provider.trim() : config.provider.id;
         const nodeModel = typeof node.config.model === "string" && node.config.model.trim() ? node.config.model.trim() : config.provider.model;
@@ -1585,7 +1591,7 @@ export function App() {
         const workflowName = locale === "en" ? `${actionName} workflow` : `${actionName}工作流`;
         const saved = toSavedWorkflow(await workbenchClient.workflows.save({ id: workflowId, title: workflowName, definition: workflowDefinition }));
         setSavedWorkflows((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
-        await sendHostMessage({ version: 1, requestId: runId, runId, type: "workflow.run", payload: { workspacePath: config.workspacePath, provider: config.provider, media: config.provider, vaultPath: config.obsidianVaultPath, indexPath: config.obsidianIndexPath, executable: config.runtime.opencodePath, definition: workflowDefinition } });
+        await sendHostMessage({ version: 1, requestId: runId, runId, type: "workflow.run", payload: { workspacePath: config.workspacePath, provider: config.provider, media: config.provider, vaultPath: config.obsidianVaultPath, indexPath: config.obsidianIndexPath, executable: config.runtime.opencodePath, mediaTempDirectories, definition: workflowDefinition } });
       }
       setPrompt(""); setRunStatus(locale === "zh" ? "已发送，等待本地 Agent 事件…" : "Sent; waiting for local Agent events…");
     } catch (error) {

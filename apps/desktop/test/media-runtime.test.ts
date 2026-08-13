@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -41,10 +41,12 @@ test("media runtime downloads outputs atomically and rejects missing providers",
   assert.throws(() => requireMediaProvider(undefined, provider, "image"), (error: unknown) => error instanceof ProviderConfigurationRequiredError && error.code === "provider_configuration_required");
   const root = await mkdtemp(join(tmpdir(), "aimarketing-media-runtime-"));
   try {
-    const artifacts = await downloadMediaOutputs({ providerTaskId: "task-2", status: "succeeded", outputs: [{ b64_json: Buffer.from("fixture-png").toString("base64") }] }, root, { filenamePrefix: "image", maxBytes: 1024 });
+    const tempDirectory = join(root, "rust-allocated-temp");
+    const artifacts = await downloadMediaOutputs({ providerTaskId: "task-2", status: "succeeded", outputs: [{ b64_json: Buffer.from("fixture-png").toString("base64") }] }, root, { filenamePrefix: "image", maxBytes: 1024, tempDirectory });
     assert.equal(artifacts.length, 1);
     assert.equal(await readFile(join(root, artifacts[0].relativePath), "utf8"), "fixture-png");
     assert.match(artifacts[0].sha256, /^[a-f0-9]{64}$/);
+    assert.equal(existsSync(tempDirectory), false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -61,6 +63,8 @@ test("desktop host emits terminal media attempt events for recovery idempotency"
   assert.match(app, /status: "queued", payloadJson/);
   assert.match(app, /status === "succeeded"[\s\S]*record_usage/);
   assert.match(host, /task\.usage/);
+  assert.match(host, /tempDirectory/);
+  assert.match(app, /allocate_media_temp/);
 });
 
 test("desktop image capabilities select direct OpenAI-compatible or Bailian adapters", () => {

@@ -430,70 +430,76 @@ export function createRunningHubAdapter(options: DirectProviderOptions & { reado
 export interface DownloadedMediaArtifact { readonly relativePath: string; readonly bytes: number; readonly sha256: string; readonly contentType?: string; }
 
 /** Downloads provider URLs before a task is considered durable. */
-export async function downloadMediaOutputs(task: MediaTask, directory: string, options: { readonly fetchImpl?: typeof fetch; readonly filenamePrefix?: string; readonly maxBytes?: number; readonly allowedContentTypes?: readonly string[] } = {}): Promise<readonly DownloadedMediaArtifact[]> {
+export async function downloadMediaOutputs(task: MediaTask, directory: string, options: { readonly fetchImpl?: typeof fetch; readonly filenamePrefix?: string; readonly maxBytes?: number; readonly allowedContentTypes?: readonly string[]; readonly tempDirectory?: string } = {}): Promise<readonly DownloadedMediaArtifact[]> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const fs = await import("node:fs/promises");
   const path = await import("node:path");
   const crypto = await import("node:crypto");
+  const tempDirectory = options.tempDirectory ?? directory;
   await fs.mkdir(directory, { recursive: true });
+  if (tempDirectory !== directory) await fs.mkdir(tempDirectory, { recursive: true });
   const artifacts: DownloadedMediaArtifact[] = [];
-  for (const [index, output] of task.outputs.entries()) {
-    const url = typeof output.url === "string" ? output.url : typeof output.uri === "string" ? output.uri : undefined;
-    const encoded = typeof output.b64_json === "string" ? output.b64_json : typeof output.base64 === "string" ? output.base64 : undefined;
-    if (!url && !encoded) continue;
-    const response = url ? await fetchImpl(url) : undefined;
-    if (response && (!response.ok || !response.body)) throw new Error(`media_download_http_${response.status}`);
-    const contentType = response?.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-    if (contentType && options.allowedContentTypes?.length && !options.allowedContentTypes.some((allowed) => contentType === allowed.toLowerCase() || contentType.startsWith(`${allowed.toLowerCase()}/`))) throw new Error(`media_download_mime_rejected:${contentType}`);
-    const maxBytes = Math.max(1, options.maxBytes ?? 512 * 1024 * 1024);
-    const advertisedBytes = Number(response?.headers.get("content-length") ?? 0);
-    if (advertisedBytes > maxBytes) throw new Error("media_download_too_large");
-    const extension = url ? path.extname(new URL(url).pathname) || ".bin" : ".bin";
-    const temporary = path.join(directory, `${options.filenamePrefix ?? "media"}-${index + 1}-${Date.now()}-${process.pid}.tmp`);
-    let name = "";
-    let handle: Awaited<ReturnType<typeof fs.open>> | undefined;
-    let digest = "";
-    let byteLength = 0;
-    try {
-      const hash = crypto.createHash("sha256");
-      handle = await fs.open(temporary, "w");
-      if (encoded) {
-        const bytes = new Uint8Array(Buffer.from(encoded, "base64"));
-        if (bytes.byteLength > maxBytes) throw new Error("media_download_too_large");
-        await handle.write(bytes as unknown as Uint8Array<ArrayBuffer>);
-        hash.update(bytes as unknown as Uint8Array<ArrayBuffer>);
-        byteLength = bytes.byteLength;
-      } else {
-        const reader = response!.body!.getReader();
-        try {
-          while (true) {
-            const next = await reader.read();
-            if (next.done) break;
-            const chunk = next.value;
-            byteLength += chunk.byteLength;
-            if (byteLength > maxBytes) throw new Error("media_download_too_large");
-            await handle.write(chunk);
-            hash.update(chunk);
+  try {
+    for (const [index, output] of task.outputs.entries()) {
+      const url = typeof output.url === "string" ? output.url : typeof output.uri === "string" ? output.uri : undefined;
+      const encoded = typeof output.b64_json === "string" ? output.b64_json : typeof output.base64 === "string" ? output.base64 : undefined;
+      if (!url && !encoded) continue;
+      const response = url ? await fetchImpl(url) : undefined;
+      if (response && (!response.ok || !response.body)) throw new Error(`media_download_http_${response.status}`);
+      const contentType = response?.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+      if (contentType && options.allowedContentTypes?.length && !options.allowedContentTypes.some((allowed) => contentType === allowed.toLowerCase() || contentType.startsWith(`${allowed.toLowerCase()}/`))) throw new Error(`media_download_mime_rejected:${contentType}`);
+      const maxBytes = Math.max(1, options.maxBytes ?? 512 * 1024 * 1024);
+      const advertisedBytes = Number(response?.headers.get("content-length") ?? 0);
+      if (advertisedBytes > maxBytes) throw new Error("media_download_too_large");
+      const extension = url ? path.extname(new URL(url).pathname) || ".bin" : ".bin";
+      const temporary = path.join(tempDirectory, `${options.filenamePrefix ?? "media"}-${index + 1}-${Date.now()}-${process.pid}.tmp`);
+      let name = "";
+      let handle: Awaited<ReturnType<typeof fs.open>> | undefined;
+      let digest = "";
+      let byteLength = 0;
+      try {
+        const hash = crypto.createHash("sha256");
+        handle = await fs.open(temporary, "w");
+        if (encoded) {
+          const bytes = new Uint8Array(Buffer.from(encoded, "base64"));
+          if (bytes.byteLength > maxBytes) throw new Error("media_download_too_large");
+          await handle.write(bytes as unknown as Uint8Array<ArrayBuffer>);
+          hash.update(bytes as unknown as Uint8Array<ArrayBuffer>);
+          byteLength = bytes.byteLength;
+        } else {
+          const reader = response!.body!.getReader();
+          try {
+            while (true) {
+              const next = await reader.read();
+              if (next.done) break;
+              const chunk = next.value;
+              byteLength += chunk.byteLength;
+              if (byteLength > maxBytes) throw new Error("media_download_too_large");
+              await handle.write(chunk);
+              hash.update(chunk);
+            }
+          } finally {
+            reader.releaseLock();
           }
-        } finally {
-          reader.releaseLock();
         }
+        await handle.sync();
+        await handle.close();
+        handle = undefined;
+        digest = hash.digest("hex");
+        name = `${options.filenamePrefix ?? "media"}-${index + 1}-${digest.slice(0, 12)}${extension}`;
+        const target = path.join(directory, name);
+        await fs.rename(temporary, target);
+      } catch (error) {
+        if (handle) await handle.close().catch(() => undefined);
+        await fs.rm(temporary, { force: true }).catch(() => undefined);
+        throw error;
       }
-      await handle.sync();
-      await handle.close();
-      handle = undefined;
-      digest = hash.digest("hex");
-      name = `${options.filenamePrefix ?? "media"}-${index + 1}-${digest.slice(0, 12)}${extension}`;
-      const target = path.join(directory, name);
-      await fs.rename(temporary, target);
-    } catch (error) {
-      if (handle) await handle.close().catch(() => undefined);
-      await fs.rm(temporary, { force: true }).catch(() => undefined);
-      throw error;
+      artifacts.push({ relativePath: name, bytes: byteLength, sha256: digest, ...(contentType ? { contentType } : {}) });
     }
-    artifacts.push({ relativePath: name, bytes: byteLength, sha256: digest, ...(contentType ? { contentType } : {}) });
+    return artifacts;
+  } finally {
+    if (tempDirectory !== directory) await fs.rm(tempDirectory, { recursive: true, force: true }).catch(() => undefined);
   }
-  return artifacts;
 }
 
 export async function runMediaJob(adapter: MediaProviderAdapter, request: MediaRequest, cancellation: CancellationPort, options: MediaPollingOptions = {}): Promise<MediaTask> {
