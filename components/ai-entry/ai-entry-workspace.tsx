@@ -1,9 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import type { NavigationAdapter } from "@aimarketing/workbench-client"
+import { WorkbenchCloudMessageShell } from "@aimarketing/workbench-ui"
 import {
   ArrowRight,
   Check,
@@ -23,12 +23,7 @@ import {
   X,
 } from "lucide-react"
 
-import {
-  Message,
-  MessageAction,
-  MessageAvatar,
-  MessageContent,
-} from "@/components/ai-entry/prompt-kit/message"
+import { MessageContent } from "@/components/ai-entry/prompt-kit/message"
 import { MessagePartViewList } from "@/components/ai-entry/message-parts/message-part-view"
 import { PptPreviewReportCard } from "@/components/ai-entry/ppt-preview-report-card"
 import {
@@ -4319,15 +4314,25 @@ export function AiEntryWorkspace({
                   parsedArtifact && !hasParts && !parsedPptPreview && !fallbackPptPreview,
                 )
                 return isAssistant ? (
-                  <Message key={message.id} className="items-start wb-cloud-message wb-cloud-message-assistant" data-cloud-surface="message">
-                    <div className="ai-avatar mt-1 shrink-0">AI</div>
-                    <article className="message-card assistant-message">
-                      <div className="message-header assistant-message-header">
-                        <div className="min-w-0 flex-1">
-                          <div className="dashboard-kicker text-foreground">AI RESPONSE</div>
-                          <div className="message-time">{formatMessageTime(message.createdAt, displayLocale, browserTimeZone)}</div>
-                        </div>
+                  <WorkbenchCloudMessageShell
+                    key={message.id}
+                    role="assistant"
+                    label="AI RESPONSE"
+                    timestamp={formatMessageTime(message.createdAt, displayLocale, browserTimeZone)}
+                    footer={(bodyContent.trim() || artifactPart || parsedArtifact) ? (
+                      <div className="message-actions message-feedback">
+                        <button type="button" className="message-feedback-btn" title={copied ? copy.copiedReply : copy.copyReply} onClick={() => void handleCopyMessage(message.id, message.content)}>
+                          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          <span className="sr-only"><TextMorph text={copied ? copy.copied : copy.copy} /></span>
+                        </button>
+                        {(() => {
+                          const workHref = artifactPart?.workHref ?? parsedArtifact?.workHref ?? null
+                          const downloadHref = artifactPart?.downloadUrl ?? parsedArtifact?.downloadHref ?? null
+                          return <>{workHref ? <a className="message-feedback-btn" href={workHref} aria-label={isZh ? "打开作品库" : "Open in Works"}><LibraryBig className="h-4 w-4" /></a> : null}{downloadHref ? <a className="message-feedback-btn" href={downloadHref} download aria-label={isZh ? "导出" : "Export"}><Download className="h-4 w-4" /></a> : null}</>
+                        })()}
                       </div>
+                    ) : null}
+                  >
                       {isPendingAssistant ? (
                         <div className="flex items-center gap-2 text-sm text-foreground">
                           <TypingIndicator />
@@ -4415,50 +4420,11 @@ export function AiEntryWorkspace({
                           />
                         </section>
                       ) : null}
-                      {(bodyContent.trim() || artifactPart || parsedArtifact) ? (
-                        <div className="message-actions message-feedback">
-                          <MessageAction tooltip={copied ? copy.copiedReply : copy.copyReply}>
-                            <button type="button" className="message-feedback-btn" onClick={() => void handleCopyMessage(message.id, message.content)}>
-                              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                              <span className="sr-only">
-                                <TextMorph text={copied ? copy.copied : copy.copy} />
-                              </span>
-                            </button>
-                          </MessageAction>
-                          {(() => {
-                            const workHref = artifactPart?.workHref ?? parsedArtifact?.workHref ?? null
-                            const downloadHref = artifactPart?.downloadUrl ?? parsedArtifact?.downloadHref ?? null
-                            return (
-                              <>
-                                {workHref ? (
-                                  <a className="message-feedback-btn" href={workHref} aria-label={isZh ? "打开作品库" : "Open in Works"}>
-                                    <LibraryBig className="h-4 w-4" />
-                                  </a>
-                                ) : null}
-                                {downloadHref ? (
-                                  <a className="message-feedback-btn" href={downloadHref} download aria-label={isZh ? "导出" : "Export"}>
-                                    <Download className="h-4 w-4" />
-                                  </a>
-                                ) : null}
-                              </>
-                            )
-                          })()}
-                        </div>
-                      ) : null}
-                    </article>
-                  </Message>
+                  </WorkbenchCloudMessageShell>
                 ) : (
-                  <Message key={message.id} className="justify-end wb-cloud-message wb-cloud-message-user" data-cloud-surface="message">
-                    <div className="message-card-user">
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <div className="dashboard-kicker text-primary">{isZh ? "你的指令" : "Your Command"}</div>
-                        <div className="text-xs text-white/55">{formatMessageTime(message.createdAt, displayLocale, browserTimeZone)}</div>
-                      </div>
-                      <MessageContent bare role="user" className="p-0 text-sm leading-7 text-white">{message.content}</MessageContent>
-                      {renderMessageAttachments(message.attachments)}
-                    </div>
-                    <MessageAvatar alt="User" fallback="U" />
-                  </Message>
+                  <WorkbenchCloudMessageShell key={message.id} role="user" label={isZh ? "你的指令" : "Your Command"} timestamp={formatMessageTime(message.createdAt, displayLocale, browserTimeZone)} attachments={renderMessageAttachments(message.attachments)}>
+                    <MessageContent bare role="user" className="p-0 text-sm leading-7 text-white">{message.content}</MessageContent>
+                  </WorkbenchCloudMessageShell>
                 )
               })}
 
@@ -4489,12 +4455,10 @@ export function AiEntryWorkspace({
                     variant="outline"
                     size="sm"
                     className="h-8 rounded-[6px] px-3 text-xs"
-                    asChild
+                    onClick={() => workspaceNavigation.go(action.href)}
                   >
-                    <Link href={action.href}>
-                      {action.label}
-                      <ArrowRight className="ml-1.5 h-3 w-3" />
-                    </Link>
+                    {action.label}
+                    <ArrowRight className="ml-1.5 h-3 w-3" />
                   </Button>
                 ))}
                 {composerContextChips.map((chip) => (

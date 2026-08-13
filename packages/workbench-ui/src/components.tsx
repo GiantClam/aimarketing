@@ -47,6 +47,60 @@ export function WorkbenchTaskEvents({ events, limit = 4, className = "" }: { eve
   );
 }
 
+/**
+ * Host-neutral cloud message frame. Hosts keep ownership of rich message
+ * parts and artifact actions, while the shared package owns the common
+ * dashboard geometry used by SaaS and desktop.
+ */
+export function WorkbenchCloudMessageShell({
+  role,
+  label,
+  timestamp,
+  children,
+  attachments,
+  footer,
+  className = "",
+}: {
+  role: "assistant" | "user";
+  label: string;
+  timestamp: ReactNode;
+  children: ReactNode;
+  attachments?: ReactNode;
+  footer?: ReactNode;
+  className?: string;
+}) {
+  if (role === "user") {
+    return (
+      <div className={`wb-cloud-message wb-cloud-message-user ${className}`.trim()} data-cloud-surface="message">
+        <div className="message-card-user">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="dashboard-kicker text-primary">{label}</div>
+            <div className="text-xs text-white/55">{timestamp}</div>
+          </div>
+          {children}
+          {attachments}
+        </div>
+        <div className="ai-avatar wb-chat-user-avatar" aria-label={label}>U</div>
+      </div>
+    );
+  }
+  return (
+    <div className={`wb-cloud-message wb-cloud-message-assistant ${className}`.trim()} data-cloud-surface="message">
+      <div className="ai-avatar mt-1 shrink-0">AI</div>
+      <article className="message-card assistant-message">
+        <div className="message-header assistant-message-header">
+          <div className="min-w-0 flex-1">
+            <div className="dashboard-kicker text-foreground">{label}</div>
+            <div className="message-time">{timestamp}</div>
+          </div>
+        </div>
+        {children}
+        {footer}
+      </article>
+    </div>
+  );
+}
+
 /** Shared Markdown body so desktop and cloud render the same authored content. */
 function WorkbenchMessageMarkdown({ content, className = "" }: { content: string; className?: string }) {
   return <div className={className}><ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown></div>;

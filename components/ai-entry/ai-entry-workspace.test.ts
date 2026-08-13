@@ -12,4 +12,14 @@ test("AI Entry routes through an injected NavigationAdapter with a Next fallback
   assert.match(source, /replace: \(href\) => router\.replace\(href\)/)
   assert.match(source, /workspaceNavigation\.replace\(/)
   assert.equal(source.match(/\brouter\.replace\(/g)?.length, 1)
+  assert.match(source, /onClick=\{\(\) => workspaceNavigation\.go\(action\.href\)\}/)
+  assert.doesNotMatch(source, /from "next\/link"/)
+})
+
+test("AI Entry delegates common cloud message geometry to the shared workbench UI", () => {
+  const source = readFileSync(resolve(process.cwd(), "components/ai-entry/ai-entry-workspace.tsx"), "utf8")
+
+  assert.match(source, /import \{ WorkbenchCloudMessageShell \} from "@aimarketing\/workbench-ui"/)
+  assert.equal(source.match(/<WorkbenchCloudMessageShell/g)?.length, 2)
+  assert.doesNotMatch(source, /<Message key=\{message\.id\}/)
 })
