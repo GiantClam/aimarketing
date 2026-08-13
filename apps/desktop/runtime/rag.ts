@@ -1,11 +1,12 @@
 import { HybridKnowledgeRetriever, type KnowledgeCitation, type KnowledgeChunk } from "@aimarketing/knowledge-runtime";
-import { readManifest, searchLanceIndex, type LocalEmbeddingOptions } from "./lancedb";
+import { readIndexState, readManifest, searchLanceIndex, type LocalEmbeddingOptions } from "./lancedb";
 
 export async function searchVaultIndex(indexPath: string, query: string, limit = 8, embedding: LocalEmbeddingOptions = {}): Promise<KnowledgeCitation[]> {
   const boundedLimit = Math.max(1, Math.min(20, limit));
   const manifest = await readManifest(indexPath);
   const lexical = await new HybridKnowledgeRetriever().retrieve(manifest.chunks as KnowledgeChunk[], query, boundedLimit * 2);
   try {
+    if ((await readIndexState(indexPath)).status !== "semantic_ready") return lexical.slice(0, boundedLimit);
     const semantic = await searchLanceIndex(indexPath, query, boundedLimit, embedding);
     if (semantic.length > 0) return mergeHybridCitations(lexical, semantic, boundedLimit);
   } catch {

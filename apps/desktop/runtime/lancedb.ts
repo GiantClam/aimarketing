@@ -161,6 +161,10 @@ export async function readManifest(indexPath: string): Promise<VaultManifest> {
   return JSON.parse(await readFile(join(resolveActiveIndexPath(indexPath), "manifest.json"), "utf8")) as VaultManifest;
 }
 
+export async function readIndexState(indexPath: string): Promise<VaultIndexState> {
+  return JSON.parse(await readFile(join(resolveActiveIndexPath(indexPath), "index-state.json"), "utf8")) as VaultIndexState;
+}
+
 export function chunkToSemanticRow(chunk: VaultChunk) {
   return { id: chunk.id, documentPath: chunk.documentPath, heading: chunk.heading, text: chunk.text, ...(chunk.lineStart === undefined ? {} : { lineStart: chunk.lineStart, lineEnd: chunk.lineEnd }), vector: embedLocal(`${chunk.heading ?? ""}\n${chunk.text}`) };
 }

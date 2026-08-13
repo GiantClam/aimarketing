@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mergeHybridCitations, searchVaultIndex } from "../runtime/rag";
+import { buildLanceIndex } from "../runtime/lancedb";
+import type { VaultManifest } from "../runtime/obsidian";
 
 test("desktop RAG searches a Vault manifest without SQLite or remote calls", async () => {
   const root = await mkdtemp(join(tmpdir(), "aimarketing-rag-")); const index = join(root, "index");
@@ -26,4 +28,21 @@ test("desktop RAG merges exact lexical hits with LanceDB nearest neighbours", ()
   );
   assert.deepEqual(results.map((item) => item.chunkId), ["semantic", "exact"]);
   assert.ok(results.every((item) => item.score > 0));
+});
+
+test("desktop RAG uses hybrid retrieval only after the active index is semantic-ready", async () => {
+  const root = await mkdtemp(join(tmpdir(), "aimarketing-rag-state-")); const index = join(root, "index");
+  try {
+    await mkdir(index);
+    const manifest: VaultManifest = { schemaVersion: 1, vaultPath: join(root, "Vault"), generation: 1, documents: [{ documentPath: "note.md", hash: "hash" }], chunks: [{ id: "exact", documentPath: "note.md", text: "exact lexical match", hash: "exact" }, { id: "semantic", documentPath: "other.md", text: "vector-only result", hash: "semantic" }], updatedAt: new Date().toISOString() };
+    await writeFile(join(index, "manifest.json"), JSON.stringify(manifest), "utf8");
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      const inputs = JSON.parse(String(init?.body)).input as unknown[];
+      return new Response(JSON.stringify({ data: inputs.length === 1 ? [{ embedding: [1, 0] }] : [{ embedding: [0, 1] }, { embedding: [1, 0] }] }), { status: 200, headers: { "content-type": "application/json" } });
+    };
+    const state = await buildLanceIndex(index, manifest, { mode: "remote", baseUrl: "https://embeddings.example.test/v1", model: "embedding-test", apiKey: "test-secret", fetchImpl });
+    assert.deepEqual((await searchVaultIndex(index, "exact", 1, { mode: "remote", baseUrl: "https://embeddings.example.test/v1", model: "embedding-test", apiKey: "test-secret", fetchImpl })).map((item) => item.chunkId), ["semantic"]);
+    await writeFile(join(index, "index-state.json"), JSON.stringify({ ...state, status: "lexical_ready" }), "utf8");
+    assert.deepEqual((await searchVaultIndex(index, "exact", 1, { mode: "remote", baseUrl: "https://embeddings.example.test/v1", model: "embedding-test", apiKey: "test-secret", fetchImpl })).map((item) => item.chunkId), ["exact"]);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

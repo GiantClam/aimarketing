@@ -56,7 +56,7 @@
 - [x] 4.1 在语义索引未就绪时提供标题/tag/link/关键词扫描检索。✓ 2026-08-13 — shared lexical retriever 统一检索路径、heading、tags、links 与正文，仍返回原始笔记 excerpt；Desktop fallback 回归覆盖元数据命中且不依赖 SQLite/远程调用。
 - [x] 4.2 实现本地 embedding 默认路径和每 Vault LanceDB 目录。✓ 2026-08-13 — 默认 loopback local embedding（不可用时 deterministic local hash fallback）写入每 Vault 独立 `indexPath/lancedb`；双 Vault 中文路径回归证明状态与检索结果不会交叉污染。
 - [x] 4.3 写入 `index-state.json` 并在不兼容时建立新 generation 后原子切换。✓ 2026-08-13 — manifest 与 embedding state 先写入私有 generation，`current-generation.json` 仅在 LanceDB 建成后原子指向新 generation；模型/维度变化回归证明旧向量保留但不会与新 generation 混用。
-- [ ] 4.4 实现 lexical + vector hybrid retrieval 和 top-k 限制
+- [x] 4.4 实现 lexical + vector hybrid retrieval 和 top-k 限制。✓ 2026-08-13 — `index-state.json` 仅标记 `semantic_ready` 后才查询 LanceDB，随后按 40% lexical / 60% vector 合并并限制为 1–20 条；状态转换回归覆盖 semantic hybrid 与 lexical-only fallback。
 - [ ] 4.5 返回 Vault 相对路径、标题、段落、行范围和可点击引用
 - [x] 4.6 实现可选远程 embedding，并在 UI 明示远程发送范围。✓ 2026-08-13 — 默认 local-only embedding；用户在设置中显式切换 Remote 后才通过 HTTPS OpenAI-compatible `/embeddings` 发送待索引片段，独立 API key 仅透传给 Host，不写入 SQLite/日志/诊断包；回归覆盖远程 opt-in、鉴权与模型记录。
 
