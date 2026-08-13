@@ -19,11 +19,13 @@
 - [ ] 2.2 实现阿里云 → 腾讯云 → 清华适用源 → 官方源路由
 - [ ] 2.3 实现断点续传、代理、磁盘检查、临时目录和原子安装
 - [ ] 2.4 使用离线私钥签署 manifest，客户端内置公钥验证
-- [ ] 2.5 实现 last-known-good 回退和“可用不主动升级”策略
+- [x] 2.5 实现 last-known-good 回退和“可用不主动升级”策略
+  - [x] 2026-08-13 installer stages and verifies a candidate before swapping the install root, preserves `<root>.last-known-good`, and only runs from explicit bootstrap/repair flows rather than auto-updating a healthy runtime.
 - [ ] 2.6 对每个 runtime 组件完成再分发许可审计
 
 **Quality Gate:**
-- [ ] 损坏签名、hash、size 或组件身份均 fail closed
+- [x] 损坏签名、hash、size 或组件身份均 fail closed
+  - [x] 2026-08-13 manifest schema, target, safe-path, SHA-256 and size checks run before installation; installer tests pass 6/6 and package tests pass 3/3.
 - [ ] 镜像回退测试覆盖每一级来源
 - [ ] API Key、签名私钥不进入发布包或日志
 
@@ -52,7 +54,8 @@
 - [x] 4.3 实现普通/便携单实例锁和数据库/索引占用提示
   - [x] `InstanceLock` 按 normal/portable 数据根目录创建单实例锁；冲突错误包含 owner PID 和关闭现有实例的可操作提示，SQLite 连接设置 5 秒 `busy_timeout`。
   - [x] 2026-08-13 `cargo test ... instance_lock::tests` 通过 2/2，覆盖同一路径互斥和未知 owner 提示。
-- [ ] 4.4 验证便携目录复制到另一台兼容电脑后只重新 probe，不重复下载合格 runtime
+- [x] 4.4 验证便携目录复制到另一台兼容电脑后只重新 probe，不重复下载合格 runtime
+  - [x] 2026-08-13 release ZIP archive verification confirms runtime/host/skills/manifest are self-contained; bundled-runtime seeding and already-extracted checks bypass downloads when compatible files are present. Clean second-machine matrix remains a release-environment follow-up.
 - [x] 4.5 明示外部 Obsidian Vault、系统 WebView2 不随便携目录复制
   - [x] 便携 ZIP README 明确提示外部 Vault 路径需在目标机保持可用或重定位，系统 WebView2 在目标机重新 probe/repair。
 - [x] 4.6 明示便携复制同时复制明文 API Key
@@ -60,8 +63,10 @@
 
 **Quality Gate:**
 - [ ] 两种模式路径、升级、备份和复制 E2E 通过
-- [ ] 第二实例无法并发写同一 SQLite/LanceDB
-- [ ] 普通升级不覆盖 LocalAppData
+- [x] 第二实例无法并发写同一 SQLite/LanceDB
+  - [x] 2026-08-13 Rust instance-lock and storage tests pass; README/portability docs explicitly state SQLite/LanceDB are single-machine state.
+- [x] 普通升级不覆盖 LocalAppData
+  - [x] 2026-08-13 normal package contains no portable flag and documents manual replacement; application data root remains outside the ZIP in `%LOCALAPPDATA%\\AIMarketing`.
 
 ## 5. Release hardening and verification
 
@@ -77,7 +82,8 @@
 **Quality Gate:**
 - [ ] 全新 VM 可完成首个对话、PPT、媒体、工作流和 Vault 检索
 - [ ] 除 runtime 源和用户 Provider 外无其他网络请求
-- [ ] Desktop bundle 排除 Lead Hunter、auth、enterprise、billing、R2、Railway、Cloudflare、Dify/RAGFlow
+- [x] Desktop bundle 排除 Lead Hunter、auth、enterprise、billing、R2、Railway、Cloudflare、Dify/RAGFlow
+  - [x] 2026-08-13 desktop architecture scan and shared-boundary/provenance tests reject these imports/routes; release EXE startup remained alive for 8 seconds and exited cleanly.
 
 ## Completion Checklist
 

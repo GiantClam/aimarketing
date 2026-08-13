@@ -11,26 +11,36 @@ function endpoint(baseUrl, path) {
 }
 
 async function request(label, url, apiKey, body) {
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(Number(process.env.AIMARKETING_PROVIDER_TIMEOUT_MS ?? 120000)),
-    });
-    const text = await response.text();
-    let parsed;
-    try { parsed = JSON.parse(text); } catch { parsed = undefined; }
-    return { label, status: response.status, ok: response.ok, ...(parsed ? { response: parsed } : { responseText: text.slice(0, 1000) }) };
-  } catch (error) {
-    return { label, ok: false, error: error instanceof Error ? error.message : String(error) };
+  const retries = Math.max(0, Number(process.env.AIMARKETING_PROVIDER_RETRIES ?? 2));
+  const transientStatuses = new Set([408, 425, 429, 500, 502, 503, 504]);
+  let lastResult;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(Number(process.env.AIMARKETING_PROVIDER_TIMEOUT_MS ?? 120000)),
+      });
+      const text = await response.text();
+      let parsed;
+      try { parsed = JSON.parse(text); } catch { parsed = undefined; }
+      lastResult = { label, status: response.status, ok: response.ok, attempt: attempt + 1, ...(parsed ? { response: parsed } : { responseText: text.slice(0, 1000) }) };
+      if (response.ok || !transientStatuses.has(response.status) || attempt === retries) return lastResult;
+    } catch (error) {
+      lastResult = { label, ok: false, attempt: attempt + 1, error: error instanceof Error ? error.message : String(error) };
+      if (attempt === retries) return lastResult;
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(5000, 500 * 2 ** attempt)));
   }
+  return lastResult ?? { label, ok: false, error: "provider_smoke_no_result" };
 }
 
 // The configured LLM and image entries can point at the same upstream. Run
 // them serially so a capacity-limited gateway does not turn a valid smoke into
-// a client-side concurrency failure. Video generation remains intentionally
-// out of this smoke suite.
+// a client-side concurrency failure. Transient upstream errors are retried a
+// bounded number of times; video generation remains intentionally out of this
+// smoke suite.
 const results = [
   await request("llm", endpoint(config.llm.baseUrl, "chat/completions"), config.llm.apiKey, {
     model: config.llm.model,
@@ -51,6 +61,7 @@ const sanitized = results.map((result) => ({
   label: result.label,
   ...(typeof result.status === "number" ? { status: result.status } : {}),
   ok: result.ok,
+  ...(typeof result.attempt === "number" ? { attempts: result.attempt } : {}),
   ...(result.response && typeof result.response === "object" ? { responseKeys: Object.keys(result.response) } : {}),
   ...(result.error ? { error: result.error } : {}),
 }));
