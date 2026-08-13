@@ -20,7 +20,8 @@
   - [x] 2026-08-13 `install-desktop-runtime.ps1` keeps the ordered source list for each manifest asset and continues to the next source after a bounded download/hash failure; installer regression asserts the exact order and all source URLs remain manifest-controlled.
 - [x] 2.3 实现断点续传、代理、磁盘检查、临时目录和原子安装
   - [x] 2026-08-13 asset downloads use stable `.download.part` files with HTTP Range resume, optional explicit proxy forwarding for asset/npm/pip requests, preflight `DriveInfo.AvailableFreeSpace` checks, and existing staged-directory plus atomic install-root swap semantics.
-- [ ] 2.4 使用离线私钥签署 manifest，客户端内置公钥验证
+- [x] 2.4 使用离线私钥签署 manifest，客户端内置公钥验证
+  - [x] 2026-08-13 `runtime-manifest-crypto.mjs` signs canonical manifest content with an operator-supplied offline Ed25519 private-key path; staging signs only when `AIMARKETING_RUNTIME_SIGNING_KEY` is explicitly provided, while the installer embeds the trusted public key and verifies required signatures before download, extraction, or install-root replacement. Crypto, CLI, and Windows PowerShell tamper tests pass; unsigned development manifests remain explicitly non-required.
 - [x] 2.5 实现 last-known-good 回退和“可用不主动升级”策略
   - [x] 2026-08-13 installer stages and verifies a candidate before swapping the install root, preserves `<root>.last-known-good`, and only runs from explicit bootstrap/repair flows rather than auto-updating a healthy runtime.
 - [ ] 2.6 对每个 runtime 组件完成再分发许可审计
@@ -29,7 +30,8 @@
 - [x] 损坏签名、hash、size 或组件身份均 fail closed
   - [x] 2026-08-13 manifest schema, target, safe-path, SHA-256 and size checks run before installation; installer tests pass 6/6 and package tests pass 3/3.
 - [ ] 镜像回退测试覆盖每一级来源
-- [ ] API Key、签名私钥不进入发布包或日志
+- [x] API Key、签名私钥不进入发布包或日志
+  - [x] 2026-08-13 signing consumes only an external private-key path, copies only the public verifier/helper into runtime packages, and never serializes private-key bytes; existing credential redaction tests remain green.
 
 ## 3. Offline runtime bundle
 

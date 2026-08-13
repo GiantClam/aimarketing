@@ -21,6 +21,10 @@ test("offline runtime packager preserves the installer import contract", async (
   assert.match(source, /Compress-Archive/u);
   assert.match(source, /SkipDownloads/u);
   assert.match(source, /runtime_package_archive_missing/u);
+  assert.match(source, /runtime-manifest-crypto\.mjs/u);
+  assert.match(source, /RequireSignature/u);
+  assert.match(source, /runtime_package_manifest_signature_required/u);
+  assert.match(source, /signatureAlgorithm -ne "ed25519"/u);
 });
 
 test("offline runtime packager preflights embedded Python PPT dependencies", async () => {

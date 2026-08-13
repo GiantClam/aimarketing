@@ -2,7 +2,8 @@ param(
   [string]$SourceRoot = "apps/desktop/dist-runtime",
   [string]$OutputDir = ".artifacts/desktop-release",
   [switch]$SkipDownloads,
-  [switch]$SkipPythonDependencies
+  [switch]$SkipPythonDependencies,
+  [switch]$RequireSignature
 )
 
 $ErrorActionPreference = "Stop"
@@ -161,7 +162,8 @@ function Prepare-OfflinePython([string]$rootPath) {
 if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { throw "runtime_package_manifest_missing:$manifestPath" }
 $manifest = Get-Content -Raw -Encoding UTF8 $manifestPath | ConvertFrom-Json
 if ([int]$manifest.schemaVersion -ne 1 -or [string]$manifest.platform -ne "windows" -or [string]$manifest.architecture -ne "x64") { throw "runtime_package_manifest_target_invalid" }
-if ([string]$manifest.integrity.hashAlgorithm -ne "sha256") { throw "runtime_package_manifest_integrity_invalid" }
+if ([string]$manifest.integrity.hashAlgorithm -ne "sha256" -or [string]$manifest.integrity.signatureAlgorithm -ne "ed25519") { throw "runtime_package_manifest_integrity_invalid" }
+if ($RequireSignature -and ([string]::IsNullOrWhiteSpace([string]$manifest.integrity.signature) -or -not [bool]$manifest.integrity.required)) { throw "runtime_package_manifest_signature_required" }
 
 New-Item -ItemType Directory -Force -Path $stage, $output | Out-Null
 try {
@@ -169,6 +171,7 @@ try {
   Copy-Item -LiteralPath (Join-Path $source "skills") -Destination (Join-Path $stage "skills") -Recurse -Force
   Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $stage "runtime-manifest.json") -Force
   Copy-Item -LiteralPath (Join-Path $source "install-desktop-runtime.ps1") -Destination (Join-Path $stage "install-desktop-runtime.ps1") -Force
+  if (Test-Path -LiteralPath (Join-Path $source "runtime-manifest-crypto.mjs") -PathType Leaf) { Copy-Item -LiteralPath (Join-Path $source "runtime-manifest-crypto.mjs") -Destination (Join-Path $stage "runtime-manifest-crypto.mjs") -Force }
   foreach ($asset in @($manifest.assets)) {
     $target = Join-Path $stage $asset.relativePath
     if (Test-Path -LiteralPath $target -PathType Leaf) { Verify-Asset $asset $stage; continue }

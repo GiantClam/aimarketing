@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = "Stop"
 $mirrors = @("aliyun", "tencent", "tsinghua", "official")
 $manifest = Get-Content -Raw -Encoding UTF8 $ManifestPath | ConvertFrom-Json
-$installRootResolved = [IO.Path]::GetFullPath($InstallRoot)
+$installRootResolved = [IO.Path]::GetFullPath([string]$InstallRoot)
 $stageRoot = Join-Path ([IO.Path]::GetTempPath()) ("aimarketing-runtime-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
 
@@ -26,7 +26,7 @@ function Assert-RuntimeManifestSchema() {
   if ($null -eq $manifest -or [int]$manifest.schemaVersion -ne 1) { throw "runtime_manifest_schema_unsupported" }
   if ([string]$manifest.platform -ne 'windows' -or [string]$manifest.architecture -ne 'x64') { throw "runtime_manifest_target_unsupported" }
   if ($null -eq $manifest.compatibility -or [string]$manifest.compatibility.architecture -ne 'x64') { throw "runtime_manifest_compatibility_missing" }
-  if ($null -eq $manifest.integrity -or [string]$manifest.integrity.hashAlgorithm -ne 'sha256') { throw "runtime_manifest_integrity_schema_missing" }
+  if ($null -eq $manifest.integrity -or [string]$manifest.integrity.hashAlgorithm -ne 'sha256' -or [string]$manifest.integrity.signatureAlgorithm -ne 'ed25519') { throw "runtime_manifest_integrity_schema_missing" }
   $assets = @($manifest.assets)
   if ($assets.Count -eq 0) { throw "runtime_manifest_assets_missing" }
   foreach ($asset in $assets) {
@@ -40,7 +40,31 @@ function Assert-RuntimeManifestSchema() {
   }
 }
 
+function Assert-ManifestSignature() {
+  $trustedPublicKey = "-----BEGIN PUBLIC KEY-----`nMCowBQYDK2VwAyEAHgKs3hyNJCHJsLN9sle73MWSPew6fOweDLoO1E935JA=`n-----END PUBLIC KEY-----`n"
+  $required = $false
+  if ($null -ne $manifest.integrity.required) { $required = [bool]$manifest.integrity.required }
+  $signature = [string]$manifest.integrity.signature
+  if ([string]::IsNullOrWhiteSpace($signature)) {
+    if ($required) { throw "runtime_manifest_signature_missing" }
+    return
+  }
+  $node = $env:AIMARKETING_NODE_PATH
+  if ([string]::IsNullOrWhiteSpace($node)) { $node = (Get-Command node -ErrorAction SilentlyContinue).Source }
+  if ([string]::IsNullOrWhiteSpace($node) -or -not (Test-Path -LiteralPath $node -PathType Leaf)) {
+    $node = Join-Path (Split-Path -Parent ([IO.Path]::GetFullPath($ManifestPath))) "runtime/node/node.exe"
+  }
+  $scriptDirectory = $PSScriptRoot
+  $verifier = Join-Path $scriptDirectory "runtime-manifest-crypto.mjs"
+  if (-not (Test-Path -LiteralPath $node -PathType Leaf) -or -not (Test-Path -LiteralPath $verifier -PathType Leaf)) { throw "runtime_manifest_signature_verifier_missing" }
+  $publicKeyFile = Join-Path $stageRoot "runtime-manifest-public-key.pem"
+  [IO.File]::WriteAllText($publicKeyFile, $trustedPublicKey, [Text.UTF8Encoding]::new($false))
+  & $node $verifier verify $ManifestPath $publicKeyFile
+  if ($LASTEXITCODE -ne 0) { throw "runtime_manifest_signature_invalid" }
+}
+
 Assert-RuntimeManifestSchema
+Assert-ManifestSignature
 if ($ValidateOnly) {
   Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
   Write-Output (ConvertTo-Json @{ status = "valid"; manifestId = $manifest.manifestId; platform = $manifest.platform; architecture = $manifest.architecture } -Compress)

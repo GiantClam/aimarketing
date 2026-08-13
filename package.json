@@ -19,7 +19,7 @@
     "desktop:build": "pnpm --filter @aimarketing/desktop build",
     "desktop:verify-bundle": "node scripts/verify-desktop-bundle-boundaries.mjs",
     "desktop:verify-packages": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-desktop-packages.ps1",
-    "test:desktop-runtime-installer": "node --test scripts/install-desktop-runtime.test.mjs scripts/package-desktop-runtime.test.mjs scripts/runtime-download.test.mjs",
+    "test:desktop-runtime-installer": "node --test scripts/install-desktop-runtime.test.mjs scripts/package-desktop-runtime.test.mjs scripts/runtime-download.test.mjs scripts/runtime-manifest-crypto.test.mjs",
     "test:desktop-bundle-boundaries": "node --test scripts/verify-desktop-bundle-boundaries.test.mjs",
     "test:desktop-packages": "node --test scripts/verify-desktop-packages.test.mjs",
     "desktop:tauri:check": "cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml",

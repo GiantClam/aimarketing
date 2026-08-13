@@ -12,6 +12,7 @@ $lancedbDestination = Join-Path $destination "lancedb"
 node (Join-Path $root "scripts/stage-lancedb-runtime.mjs") $root $lancedbDestination | Write-Output
 $distRoot = Split-Path -Parent $destination
 Copy-Item -LiteralPath (Join-Path $root "scripts/install-desktop-runtime.ps1") -Destination (Join-Path $distRoot "install-desktop-runtime.ps1") -Force
+Copy-Item -LiteralPath (Join-Path $root "scripts/runtime-manifest-crypto.mjs") -Destination (Join-Path $distRoot "runtime-manifest-crypto.mjs") -Force
 
 function Copy-IfFile([string]$source, [string]$target) {
   if ([string]::IsNullOrWhiteSpace($source) -or -not (Test-Path -LiteralPath $source -PathType Leaf)) { return $false }
@@ -38,7 +39,7 @@ $fontStaged = Copy-IfFile (Join-Path $env:WINDIR "Fonts/msyh.ttc") (Join-Path $d
   platform = "windows"
   architecture = "x64"
   compatibility = @{ architecture = "x64"; windows = @("10-22H2", "11") }
-  integrity = @{ hashAlgorithm = "sha256"; signatureAlgorithm = "ed25519"; signature = $null }
+  integrity = @{ hashAlgorithm = "sha256"; signatureAlgorithm = "ed25519"; signature = $null; required = $false; publicKey = "-----BEGIN PUBLIC KEY-----`nMCowBQYDK2VwAyEAHgKs3hyNJCHJsLN9sle73MWSPew6fOweDLoO1E935JA=`n-----END PUBLIC KEY-----`n" }
   stagedAt = [DateTime]::UtcNow.ToString("o")
   node = @{ staged = $nodeStaged; path = if ($nodeStaged) { "runtime/node/node.exe" } else { $null } }
   opencode = @{ staged = $opencodeStaged; path = if ($opencodeStaged) { "runtime/opencode/opencode.exe" } else { $null } }
@@ -89,3 +90,13 @@ $fontStaged = Copy-IfFile (Join-Path $env:WINDIR "Fonts/msyh.ttc") (Join-Path $d
     }
   )
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $destination "runtime-manifest.json") -Encoding utf8
+
+$signingKey = $env:AIMARKETING_RUNTIME_SIGNING_KEY
+if (-not [string]::IsNullOrWhiteSpace($signingKey)) {
+  if (-not (Test-Path -LiteralPath $signingKey -PathType Leaf)) { throw "runtime_manifest_signing_key_missing" }
+  $manifest = Join-Path $destination "runtime-manifest.json"
+  $signedManifest = Join-Path $destination "runtime-manifest.signed.json"
+  & node (Join-Path $root "scripts/runtime-manifest-crypto.mjs") sign $manifest $signingKey $signedManifest
+  if ($LASTEXITCODE -ne 0) { throw "runtime_manifest_sign_failed" }
+  Move-Item -LiteralPath $signedManifest -Destination $manifest -Force
+}

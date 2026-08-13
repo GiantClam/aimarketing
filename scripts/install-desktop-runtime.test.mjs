@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import { generateKeyPairSync } from "node:crypto";
 
 const execFileAsync = promisify(execFile);
 
@@ -59,7 +60,10 @@ test("installer validates the signed-manifest shape before touching the install 
   assert.match(source, /runtime_manifest_compatibility_missing/u);
   assert.match(source, /runtime_manifest_\$\{label\}_unsafe/u);
   assert.match(source, /runtime_manifest_asset_hash_invalid/u);
+  assert.match(source, /signatureAlgorithm -ne 'ed25519'/u);
   assert.match(source, /Assert-SafeRelativePath/u);
+  assert.match(source, /trustedPublicKey/u);
+  assert.doesNotMatch(source, /\$manifest\.integrity\.publicKey/u);
 });
 
 test("staged runtime manifest declares the Windows x64 compatibility and integrity contract", async () => {
@@ -69,6 +73,8 @@ test("staged runtime manifest declares the Windows x64 compatibility and integri
   assert.match(source, /architecture\s*=\s*"x64"/u);
   assert.match(source, /hashAlgorithm\s*=\s*"sha256"/u);
   assert.match(source, /signatureAlgorithm\s*=\s*"ed25519"/u);
+  assert.match(source, /AIMARKETING_RUNTIME_SIGNING_KEY/u);
+  assert.match(source, /runtime-manifest-crypto\.mjs/u);
 });
 
 test("installer validates a manifest without creating or replacing runtime data", async (t) => {
@@ -90,6 +96,51 @@ test("installer validates a manifest without creating or replacing runtime data"
     const result = await execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath, "-ManifestPath", manifestPath, "-InstallRoot", installRoot, "-ValidateOnly"], { windowsHide: true });
     assert.match(result.stdout, /"status":"valid"/u);
     assert.equal(await readFile(manifestPath, "utf8"), `${JSON.stringify(valid)}\n`);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("installer rejects a tampered required signature before touching the install root", async (t) => {
+  if (process.platform !== "win32") { t.skip("PowerShell runtime validation is Windows-only"); return; }
+  const root = await mkdtemp(join(tmpdir(), "aimarketing-signed-manifest-"));
+  const manifestPath = join(root, "manifest.json");
+  const signedPath = join(root, "signed.json");
+  const keyPath = join(root, "private.pem");
+  const testScript = join(root, "install-desktop-runtime.ps1");
+  const testVerifier = join(root, "runtime-manifest-crypto.mjs");
+  const installRoot = join(root, "install");
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const manifest = {
+    schemaVersion: 1,
+    manifestId: "fixture-signed",
+    platform: "windows",
+    architecture: "x64",
+    compatibility: { architecture: "x64", windows: ["10-22H2", "11"] },
+    integrity: {
+      hashAlgorithm: "sha256",
+      signatureAlgorithm: "ed25519",
+      required: true,
+      signature: null,
+      publicKey: publicKey.export({ type: "spki", format: "pem" }).toString(),
+    },
+    assets: [{ id: "fixture", kind: "file", relativePath: "runtime/fixture.bin", sha256: "a".repeat(64), bytes: 1, urls: { official: "https://example.invalid/fixture.bin" } }],
+  };
+  try {
+    const installerSource = await readFile(scriptPath, "utf8");
+    const publicBase64 = publicKey.export({ type: "spki", format: "der" }).toString("base64");
+    await writeFile(testScript, installerSource.replace("MCowBQYDK2VwAyEAHgKs3hyNJCHJsLN9sle73MWSPew6fOweDLoO1E935JA=", publicBase64), "utf8");
+    await copyFile(join(dirname(fileURLToPath(import.meta.url)), "runtime-manifest-crypto.mjs"), testVerifier);
+    await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`, "utf8");
+    await writeFile(keyPath, privateKey.export({ type: "pkcs8", format: "pem" }), "utf8");
+    await execFileAsync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "runtime-manifest-crypto.mjs"), "sign", manifestPath, keyPath, signedPath], { windowsHide: true });
+    await execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", testScript, "-ManifestPath", signedPath, "-InstallRoot", installRoot, "-ValidateOnly"], { windowsHide: true });
+    const signed = JSON.parse(await readFile(signedPath, "utf8"));
+    signed.assets[0].bytes = 2;
+    await writeFile(signedPath, `${JSON.stringify(signed)}\n`, "utf8");
+    await assert.rejects(execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", testScript, "-ManifestPath", signedPath, "-InstallRoot", installRoot, "-ValidateOnly"], { windowsHide: true }));
+    assert.equal(await readFile(signedPath, "utf8").then((value) => value.includes('"bytes":2')), true);
+    await assert.rejects(readFile(join(installRoot, "runtime", "fixture.bin")));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
