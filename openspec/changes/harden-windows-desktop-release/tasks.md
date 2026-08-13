@@ -41,6 +41,7 @@
 
 - [ ] 4.1 生成普通 ZIP，数据/runtime 默认位于 `%LOCALAPPDATA%\AIMarketing`
 - [ ] 4.2 生成含 `portable.flag` 的便携 ZIP，全部应用数据位于程序旁 `data/`
+  - [x] 4.2a 打包脚本在压缩后检查 portable/runtime 必需条目，并核对可执行文件、host 和 Skill catalog 的归档字节长度。
 - [ ] 4.3 实现普通/便携单实例锁和数据库/索引占用提示
 - [ ] 4.4 验证便携目录复制到另一台兼容电脑后只重新 probe，不重复下载合格 runtime
 - [ ] 4.5 明示外部 Obsidian Vault、系统 WebView2 不随便携目录复制
@@ -72,4 +73,3 @@
 - [ ] 三个 capability specs 全部满足
 - [ ] 发布清单记录签名、hash、体积、测试矩阵和未测组合
 - [ ] Ready for `openspec-archive harden-windows-desktop-release`
-

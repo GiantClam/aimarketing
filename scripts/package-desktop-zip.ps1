@@ -14,6 +14,46 @@ $stage = Join-Path ([IO.Path]::GetTempPath()) ("aimarketing-package-" + [guid]::
 $packageRoot = Join-Path $stage $packageName
 $zip = Join-Path $output "$packageName.zip"
 
+function Assert-DesktopPackageArchive {
+  param(
+    [string]$ArchivePath,
+    [string]$PackageName,
+    [string]$ExecutablePath,
+    [string]$RuntimePath,
+    [switch]$ExpectPortable
+  )
+
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $archive = [System.IO.Compression.ZipFile]::OpenRead($ArchivePath)
+  try {
+    $requiredEntries = @(
+      "$PackageName/AI Marketing.exe",
+      "$PackageName/README.txt",
+      "$PackageName/_up_/dist-runtime/host.mjs",
+      "$PackageName/_up_/dist-runtime/skill-catalog.json",
+      "$PackageName/_up_/dist-runtime/runtime/runtime-manifest.json"
+    )
+    if ($ExpectPortable) { $requiredEntries += "$PackageName/portable.flag" }
+    foreach ($entryName in $requiredEntries) {
+      if ($null -eq $archive.GetEntry($entryName)) { throw "package archive missing required entry: $entryName" }
+    }
+
+    $expectedLengths = @{
+      "$PackageName/AI Marketing.exe" = (Get-Item -LiteralPath $ExecutablePath).Length
+      "$PackageName/_up_/dist-runtime/host.mjs" = (Get-Item -LiteralPath (Join-Path $RuntimePath "host.mjs")).Length
+      "$PackageName/_up_/dist-runtime/skill-catalog.json" = (Get-Item -LiteralPath (Join-Path $RuntimePath "skill-catalog.json")).Length
+    }
+    foreach ($entryName in $expectedLengths.Keys) {
+      $entry = $archive.GetEntry($entryName)
+      if ($entry.Length -ne $expectedLengths[$entryName]) {
+        throw "package archive has stale content: $entryName expected $($expectedLengths[$entryName]) bytes, found $($entry.Length)"
+      }
+    }
+  } finally {
+    $archive.Dispose()
+  }
+}
+
 New-Item -ItemType Directory -Force -Path $packageRoot, $output | Out-Null
 try {
   $executable = Join-Path $release "ai-marketing.exe"
@@ -41,6 +81,7 @@ The portable package includes config.json and may include a plaintext API key; p
 
 if (Test-Path -LiteralPath $zip -PathType Leaf) { Remove-Item -LiteralPath $zip -Force }
 Compress-Archive -LiteralPath $packageRoot -DestinationPath $zip -CompressionLevel Optimal
+Assert-DesktopPackageArchive -ArchivePath $zip -PackageName $packageName -ExecutablePath $executable -RuntimePath $distRuntime -ExpectPortable:$Portable
 Get-Item -LiteralPath $zip | Select-Object FullName, Length, LastWriteTime
 } finally {
   if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
