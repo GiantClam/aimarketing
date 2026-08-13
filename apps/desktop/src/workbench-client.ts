@@ -64,8 +64,8 @@ export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: Wo
   return {
     navigation,
     files: {
-      open: (relativePath) => bridge.invoke("open_artifact_default", { relativePath, mimeType: "application/octet-stream" }).then(() => undefined),
-      reveal: (relativePath) => bridge.invoke("open_artifact", { relativePath, mimeType: "application/octet-stream" }).then(() => undefined),
+      open: (relativePath, mimeType = "application/octet-stream") => bridge.invoke("open_artifact_default", { relativePath, mimeType }).then(() => undefined),
+      reveal: (relativePath, mimeType = "application/octet-stream") => bridge.invoke("open_artifact", { relativePath, mimeType }).then(() => undefined),
     },
     conversations,
     runs,

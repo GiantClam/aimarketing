@@ -135,7 +135,7 @@ test("desktop home uses the same cloud page shell nesting", () => {
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
   assert.match(appSource, /className=\"home-shell\"><div className=\"home-page-shell\"><header className=\"home-topbar\"/);
   assert.match(appSource, /<main className=\"home-main\">/);
-  assert.match(appSource, /<HomeEntryGroups onNavigate=\{navigate\} locale=\{locale\} \/>/);
+  assert.match(appSource, /<HomeEntryGroups onNavigate=\{workbenchClient\.navigation\.go\} locale=\{locale\} \/>/);
   assert.match(appSource, /chat-landing-kicker/);
   assert.match(appSource, /className=\"dashboard-title\"/);
   assert.match(appSource, /className=\"send-button\" disabled=\{!prompt\.trim\(\) && !attachments\.length\}/);

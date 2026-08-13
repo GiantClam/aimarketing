@@ -63,8 +63,8 @@ export interface WorkbenchRunRequest {
 }
 
 export interface FileActionsAdapter {
-  readonly open: (relativePath: string) => Promise<void>;
-  readonly reveal: (relativePath: string) => Promise<void>;
+  readonly open: (relativePath: string, mimeType?: string) => Promise<void>;
+  readonly reveal: (relativePath: string, mimeType?: string) => Promise<void>;
 }
 
 export interface WorkbenchClient {

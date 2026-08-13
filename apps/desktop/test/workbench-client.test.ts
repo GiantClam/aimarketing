@@ -16,8 +16,10 @@ test("desktop WorkbenchClient adapts conversations and file actions through Taur
   const client = createDesktopWorkbenchClient(bridge, { go: () => undefined, replace: () => undefined, current: () => "/dashboard/ai" });
   assert.equal((await client.conversations.list())[0]?.title, "本地会话");
   assert.equal((await client.conversations.messages("c1"))[0]?.content, "你好");
-  await client.files.open("output/report.md");
+  await client.files.open("output/report.md", "text/markdown");
   assert.equal(calls.at(-1)?.command, "open_artifact_default");
-  await client.files.reveal("output/report.md");
+  assert.equal(calls.at(-1)?.args?.mimeType, "text/markdown");
+  await client.files.reveal("output/report.md", "text/markdown");
   assert.equal(calls.at(-1)?.command, "open_artifact");
+  assert.equal(calls.at(-1)?.args?.mimeType, "text/markdown");
 });
