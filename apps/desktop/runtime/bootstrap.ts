@@ -43,7 +43,7 @@ export async function probeRuntime(paths: DesktopPaths, config: DesktopConfig): 
 
 export function isRuntimeReady(manifest: BootstrapManifest) {
   const mandatory = new Set<RuntimeComponent>(["node", "opencode", "python", "host", "knowledge", "fonts", "skills", "lancedb", "embedding", "migrations"]);
-  return manifest.probes.filter((probe) => mandatory.has(probe.component)).every((probe) => probe.ok);
+  return [...mandatory].every((component) => manifest.probes.some((probe) => probe.component === component && probe.ok));
 }
 
 async function probePath(component: RuntimeComponent, path: string): Promise<RuntimeProbe> {

@@ -14,6 +14,7 @@ test("runtime readiness requires every mandatory component", () => {
   assert.equal(isRuntimeReady({ ...base, probes: base.probes.map((probe) => probe.component === "python" ? { ...probe, ok: false } : probe) }), false);
   assert.equal(isRuntimeReady({ ...base, probes: base.probes.map((probe) => probe.component === "host" ? { ...probe, ok: false } : probe) }), false);
   assert.equal(isRuntimeReady({ ...base, probes: base.probes.map((probe) => probe.component === "lancedb" ? { ...probe, ok: false } : probe) }), false);
+  assert.equal(isRuntimeReady({ ...base, probes: base.probes.filter((probe) => probe.component !== "migrations") }), false);
 });
 
 test("runtime repair uses the same real PPTX capability shape as the native gate", () => {
