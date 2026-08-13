@@ -144,4 +144,6 @@ test("workflow-host routes persisted provider tasks through workflow-core recove
   assert.match(source, /completed: command\.payload\.completed/);
   assert.match(source, /run\.emergency_stop/);
   assert.match(source, /tool: "run:emergency_stop"/);
+  assert.match(source, /SIGTERM/);
+  assert.match(source, /SIGINT/);
 });

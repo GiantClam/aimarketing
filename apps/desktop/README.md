@@ -20,4 +20,8 @@ NSIS 产物位于 `apps/desktop/src-tauri/target/release/bundle/nsis/`；本机�
 
 LanceDB 使用动态加载：主绿色包不携带约 283 MiB 的平台原生 `.node`。索引默认使用随应用提供的离线 `local-hash-384-v1` 特征哈希向量（无需网络），若用户显式配置 loopback Ollama `nomic-embed-text` 则使用真实本地模型；两者都只写入每 Vault 独立 LanceDB，SQLite 永不保存 chunk、向量或 Vault 原文。
 
+## 工作流可移植边界
+
+工作流通过普通 `.workflow.json` 文件共享。导出内容不包含 API Key、Provider/模型绑定、数据库内部 ID、运行历史或绝对本机路径；在另一台机器导入时会迁移 schema、生成新的本地 workflow ID，并使用该机当前 Provider、项目目录、Vault 和索引路径。`app.db` 与每个 Vault 的 LanceDB 都是单机状态，不支持通过同步盘共享或并发打开；第二个实例会被单实例锁拒绝。
+
 仍需后续验收：RunningHub 各业务 endpoint 的真实账号 smoke、真实 OpenCode+官方 ppt-master 端到端产物、LanceDB 独立运行时分发、首启原生安装门禁/干净 Win10/Win11 矩阵、完整 Workbench streaming UI 与线上 parity fixtures。当前未将这些诊断缺口误标为 v1 已完成。

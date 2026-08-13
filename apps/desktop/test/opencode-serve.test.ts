@@ -12,6 +12,8 @@ test("desktop OpenCode uses the shared synchronous serve-session contract", () =
   assert.match(source, /createOpenCodeServePromptPayload/);
   assert.match(source, /openCodeServeSessionPath\(sessionId, workspacePath, "message"\)/);
   assert.match(source, /30 \* 60 \* 1000/);
+  assert.match(source, /taskkill/);
+  assert.match(source, /windowsHide: true/);
   assert.doesNotMatch(source, /prompt_async/);
 });
 

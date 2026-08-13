@@ -20,6 +20,7 @@ const active = new Map<string, ReturnType<typeof spawn>>();
 const workflowControllers = new Map<string, AbortController>();
 const vaultWatchers = new Map<string, ObsidianVaultWatcher>();
 const sessions = new Map<string, { readonly conversationId: string; readonly workspacePath: string; readonly sessionId: string; readonly provider?: ProviderConfig }>();
+let shuttingDown = false;
 function defaultOpenCodeExecutable() {
   if (process.env.AIMARKETING_OPENCODE_PATH) return process.env.AIMARKETING_OPENCODE_PATH;
   if (process.platform === "win32") {
@@ -30,8 +31,19 @@ function defaultOpenCodeExecutable() {
   return "opencode";
 }
 const serveClient = new OpenCodeServeClient(defaultOpenCodeExecutable(), join(process.env.OPENCODE_RUNTIME_DIR ?? process.cwd(), ".opencode-server"));
-process.once("exit", () => { void serveClient.stop(); });
 process.once("exit", () => { for (const watcher of vaultWatchers.values()) watcher.stop(); vaultWatchers.clear(); });
+
+async function shutdownHost() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  for (const watcher of vaultWatchers.values()) watcher.stop();
+  vaultWatchers.clear();
+  await serveClient.stop().catch(() => undefined);
+  process.exit(0);
+}
+
+process.once("SIGTERM", () => { void shutdownHost(); });
+process.once("SIGINT", () => { void shutdownHost(); });
 
 function respond(command: HostCommand, data: unknown) { writeRpcResponse(process.stdout, { version: 1, requestId: command.requestId, ok: true, data }); }
 function fail(command: HostCommand, code: string, message: string) { writeRpcResponse(process.stdout, { version: 1, requestId: command.requestId, ok: false, error: { code, message, retryable: false } }); }

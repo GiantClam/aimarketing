@@ -84,9 +84,12 @@
   - [x] 2026-08-13 host cancellation propagates AbortSignal, kills matching OpenCode children, exposes an emergency-stop command/event, and Tauri closes unfinished nodes as cancelled/interrupted.
 - [x] 4.2 实现节点/分支重试与 resume compatibility 检查
   - [x] 2026-08-13 workflow-core retries failed capability calls, reuses successful node checkpoints for Task Center retries, and rejects definition-hash changes before recovery.
-- [ ] 4.3 媒体 provider job 恢复为 poll/download，OpenCode/本地工具恢复为 interrupted
-- [ ] 4.4 防止重启后重复 artifact registration 和 usage recording
-- [ ] 4.5 实现异常退出、临时 URL 到期和部分产物测试
+- [x] 4.3 媒体 provider job 恢复为 poll/download，OpenCode/本地工具恢复为 interrupted
+  - [x] 2026-08-13 persisted provider task IDs resume through poll/download while Tauri startup recovery marks OpenCode/local nodes interrupted.
+- [x] 4.4 防止重启后重复 artifact registration 和 usage recording
+  - [x] 2026-08-13 deterministic artifact paths, idempotent registration keys and usage rows are covered by media/runtime/storage regression tests.
+- [x] 4.5 实现异常退出、临时 URL 到期和部分产物测试
+  - [x] 2026-08-13 provider-success/download-failure recovery retains the task ID; atomic downloader tests cover partial files, MIME/size rejection and cleanup.
 - [x] 4.3a `media.resume` seeds `runMediaJob` with the persisted task ID, polls/downloads without submit, and emits terminal artifact metadata.
 - [x] 4.4a media progress/status events update the idempotent attempt record; resumed artifacts use the same deterministic registration path.
 - [x] 4.5a Media download/verification failures retain the provider task ID as recoverable `download_failed` attempts; startup recovery resumes poll/download while terminal provider failures remain excluded.
@@ -94,7 +97,8 @@
 **Quality Gate:**
 - [ ] 关闭应用后恢复长媒体工作流
 - [ ] failed/interrupted 节点可安全重试
-- [ ] 外部请求与 usage 记录具有幂等证据
+- [x] 外部请求与 usage 记录具有幂等证据
+  - [x] 2026-08-13 media idempotency keys and persisted usage/attempt updates are asserted by desktop, media-runtime and Rust storage tests.
 
 ## 5. Workflow UI and portability
 
@@ -105,17 +109,19 @@
   - [x] 2026-08-13 Task Center can inspect any persisted run and displays node statuses/outputs, ordered tool/media/error events, local artifacts referenced by events, retry entry points, and per-run usage totals from SQLite.
 - [x] 5.4 实现版本化 workflow JSON export/import 和 schema migration
   - [x] 2026-08-13 export/import uses the shared versioned envelope and migration path; imports receive a new local workflow ID and sanitized provider/path bindings.
-- [ ] 5.5 在另一台机器导入后重新绑定本地路径/Provider，不复制数据库 ID
+- [x] 5.5 在另一台机器导入后重新绑定本地路径/Provider，不复制数据库 ID
+  - [x] 2026-08-13 portability sanitizer removes Provider/model bindings, credentials, database IDs and absolute paths while preserving relative references; import migrates/validates and saves a new local ID.
 
 **Quality Gate:**
 - [ ] 混合文本→图片→视频→音频→PPT 工作流 E2E 通过
 - [ ] workflow JSON 可通过普通文件共享并成功导入
-- [ ] 不支持共享或并发打开 `app.db`/LanceDB 的文档已明确
+- [x] 不支持共享或并发打开 `app.db`/LanceDB 的文档已明确
+  - [x] 2026-08-13 `apps/desktop/README.md` and the portability spec explicitly prohibit sync-drive sharing/concurrent opens and describe the single-instance lock boundary.
 
 ## Completion Checklist
 
 - [ ] 所有阶段与质量门禁通过
 - [ ] 三个 capability specs 全部满足
 - [ ] 每类真实 Provider smoke 结果已记录
-  - 2026-08-13：`apps/desktop/real-providers.test.local.json` 的顺序 smoke 已验证 LLM `chat/completions` HTTP 200（响应含 `choices`/`usage`）和图片 Provider HTTP 200（响应含 `data`/`created`）；脚本按顺序执行以排除 client-side concurrency，且按验收范围未执行视频生成。
+  - 2026-08-13：`apps/desktop/real-providers.test.local.json` 的顺序 smoke 当前图片 Provider HTTP 200（响应含 `created`/`data`/`usage`），LLM 上游返回 HTTP 502（响应含 `error`）；脚本按顺序执行以排除 client-side concurrency，且按验收范围未执行视频生成。此前已有一次 LLM HTTP 200 记录，但需在 Provider 恢复后重跑当前配置确认。
 - [ ] Ready for `openspec-archive add-desktop-media-and-workflows`

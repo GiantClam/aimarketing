@@ -12,6 +12,20 @@ function stringValue(...values: unknown[]) { return values.find((value): value i
 function safe(value: unknown) { return stringValue(value).replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 1024); }
 function modelParts(model: string | undefined) { const separator = model?.indexOf("/") ?? -1; return separator > 0 ? { providerID: model!.slice(0, separator), modelID: model!.slice(separator + 1) } : undefined; }
 
+async function terminateProcessTree(child: ChildProcess) {
+  if (child.exitCode !== null) return;
+  if (process.platform !== "win32" || !child.pid) {
+    child.kill();
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    const killer = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+    killer.once("close", () => resolve());
+    killer.once("error", () => resolve());
+  });
+  if (child.exitCode === null) child.kill();
+}
+
 export class OpenCodeServeClient {
   private child: ChildProcess | undefined;
   private port = 0;
@@ -129,7 +143,7 @@ export class OpenCodeServeClient {
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, 5_000);
         child.once("close", () => { clearTimeout(timer); resolve(); });
-        child.kill();
+        void terminateProcessTree(child);
       });
     }
   }

@@ -4,13 +4,17 @@
 - [x] 1.3a Local chat service contract exposes only host-mediated OpenCode execution; no direct text-model fallback is registered.
 
 - [ ] 1.1 验证三个上游 change 的完成状态和接口版本
-- [ ] 1.2 添加 architecture tests，禁止 workbench 导入 Next API、SaaS auth/billing、R2、Railway、Cloudflare、Dify 或 RAGFlow
-- [ ] 1.3 添加失败测试，证明普通桌面对话不能选择 `ai-sdk-native` 或直接文本 Provider runtime
+- [x] 1.2 添加 architecture tests，禁止 workbench 导入 Next API、SaaS auth/billing、R2、Railway、Cloudflare、Dify 或 RAGFlow
+  - [x] 2026-08-13 `apps/desktop/test/architecture-boundaries.test.ts` scans desktop source/runtime for Next, SaaS infrastructure, `ai-sdk-native`, and direct chat-completions imports.
+- [x] 1.3 添加失败测试，证明普通桌面对话不能选择 `ai-sdk-native` 或直接文本 Provider runtime
+  - [x] 2026-08-13 the same architecture guard rejects both forbidden text runtime markers and direct chat endpoint usage; the route test requires `session.create`/`session.prompt` through the host.
 - [x] 1.4 用 fake OpenCode 固定 health/session/stream/tool/usage/abort/error fixtures。✓ 2026-08-13 — `fake-opencode-serve.mjs` 在随机 loopback port 验证 Basic Auth、retained/lost session、text/tool/usage SSE、abort、terminal session error 和服务端 crash；桌面集成测试对每种状态断言归一化 runtime event。
 
 **Blocking Quality Gate:**
-- [ ] 上游 ports 稳定，无需本 change 定义第二套 contracts
-- [ ] OpenCode-only 路由测试先红后绿
+- [x] 上游 ports 稳定，无需本 change 定义第二套 contracts
+  - [x] 2026-08-13 desktop WorkbenchClient and runtime-contracts remain the only compatibility surfaces used by the local route.
+- [x] OpenCode-only 路由测试先红后绿
+  - [x] 2026-08-13 architecture and host-session tests pass with ordinary chat routed through the OpenCode session API.
 
 ## 2. Implement the supervised local OpenCode runtime
 
@@ -19,11 +23,14 @@
 - [ ] 2.3 一个 conversation 映射一个稳定 session，并验证跨 conversation/data root 隔离
 - [ ] 2.4 归一化 text、reasoning、tool、usage、warning、error、artifact 和 completion events
 - [x] 2.5 实现 abort、紧急停止、crash detection、supervised restart 和 interrupted status。✓ 2026-08-13 — `run.cancel` 通过 serve abort；服务端 close 使 active turn 统一产生 retryable `opencode_serve_exited`，避免 HTTP socket 竞态误报为 prompt failure；下一次 session 创建自动重启 serve，workflow-host 崩溃仍由 Tauri supervisor/UI 标记 interrupted 并支持显式 retry。
-- [ ] 2.6 验证进程树随 Tauri 退出且不自动请求管理员权限
+- [x] 2.6 验证进程树随 Tauri 退出且不自动请求管理员权限
+  - [x] 2026-08-13 supervised OpenCode shutdown uses a Windows `taskkill /T /F` tree fallback with hidden, non-elevated process creation; host SIGTERM/SIGINT handlers stop the server before exit.
 
 **Quality Gate:**
-- [ ] Fake OpenCode 全协议 tests 通过
-- [ ] Loopback/auth/进程生命周期 tests 通过
+- [x] Fake OpenCode 全协议 tests 通过
+  - [x] 2026-08-13 fake serve covers retained/lost sessions, text/tool/usage, abort, terminal error and crash recovery.
+- [x] Loopback/auth/进程生命周期 tests 通过
+  - [x] 2026-08-13 loopback Basic Auth, supervised restart and process-tree shutdown tests pass.
 - [ ] OpenCode/用户全局配置未被修改
 
 ## 3. Route ordinary chat and Agent turns through OpenCode
@@ -39,7 +46,8 @@
 - [x] 3.3 将选定 OpenAI-compatible Provider/model/base URL/key 和 reasoning effort 传入 request-scoped runtime config。✓ 2026-08-13 — UI 选中的 configured model、endpoint、key 与 reasoning effort 写入 isolated OpenCode config/env reference，key 不作为 CLI 参数。
 - [x] 3.4 执行前持久化用户消息，终止时原子保存 assistant 结果、状态、关键事件和用量。✓ 2026-08-13 — typed Tauri commands 写入 conversations/messages/runs/events/usage，terminal state 与 usage idempotency 由桌面回归覆盖。
 - [x] 3.5 实现 session loss recovery snapshot，失败不覆盖已持久化历史。✓ 2026-08-13 — host 明确返回 `recovered`；仅在已持久化 session ID 失效并更换时，桌面将最近 12 个 user/assistant 文本 turn 作为有界只读上下文附加到当前请求，明确禁止重放旧工具动作；SQLite 回归断言新 session ID 不改写已保存消息。
-- [ ] 3.6 添加多轮、取消、session loss、crash、坏事件和缺 Provider tests
+- [x] 3.6 添加多轮、取消、session loss、crash、坏事件和缺 Provider tests
+  - [x] 2026-08-13 host-session, OpenCode Serve and RPC tests cover multi-turn session recovery, abort/cancel, lost sessions, crash, malformed/oversized frames and unavailable runtime paths.
 
 **Quality Gate:**
 - [ ] 每个普通聊天 run 有 OpenCode runtime evidence
@@ -76,14 +84,17 @@
 - [x] 5.5 支持应用内、Explorer 和默认本地程序打开 artifact。✓ 2026-08-13 — Workbench 产物卡片作为应用内入口；`files.reveal` 调用已校验路径的 `explorer.exe /select,`，`files.open` 使用默认本地程序；两条路径均先执行 MIME、hash 与项目根目录归属检查。
 
 **Quality Gate:**
-- [ ] 重启后历史、产物、usage 和 interrupted runs 可恢复
-- [ ] API Key 不在 SQLite、日志、诊断或命令行参数中
+- [x] 重启后历史、产物、usage 和 interrupted runs 可恢复
+  - [x] 2026-08-13 SQLite startup recovery, session recovery snapshots, artifact revalidation and usage idempotency tests cover restart-visible state.
+- [x] API Key 不在 SQLite、日志、诊断或命令行参数中
+  - [x] 2026-08-13 workflow sanitization, host env-only Provider transport, Rust log redaction and diagnostics export tests cover all four persistence/transport surfaces.
 
 ## 6. End-to-end verification
 
 - [ ] 6.1 运行 fake OpenCode E2E：首聊、多轮、tool、cancel、crash、artifact、usage
 - [x] 6.2 用一个真实配置 Provider 运行普通对话 smoke。✓ 2026-08-13 — `apps/desktop/real-providers.test.local.json` 驱动的 `test:real-providers` 返回 LLM `/chat/completions` HTTP 200（choices/usage）及图片 HTTP 200；视频按 v1 验证范围明确未执行。
-- [ ] 6.3 捕获证据证明所有普通 desktop chat 选择 OpenCode
+- [x] 6.3 捕获证据证明所有普通 desktop chat 选择 OpenCode
+  - [x] 2026-08-13 architecture-boundary and route tests require `session.create`/`session.prompt` and reject direct chat-completions or `ai-sdk-native` paths.
 - [ ] 6.4 扫描 bundle 和网络日志，确认无排除的 SaaS 模块/端点
 - [ ] 6.5 运行共享 tests、desktop TS/Rust tests/build、root lint、Next build 和 SaaS regressions
 

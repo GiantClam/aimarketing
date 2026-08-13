@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { formatWorkbenchModelLabel, WORKBENCH_HOME_COPY, WORKBENCH_HOME_GROUPS, WORKBENCH_MEDIA_FEATURES, WORKBENCH_MESSAGE_FRAME, WORKBENCH_ROUTE_MANIFEST, WORKBENCH_THEME, WORKBENCH_WRITER_CONTENT_TYPES, WORKBENCH_WRITER_LANGUAGES, WORKBENCH_WRITER_MODES, WORKBENCH_WRITER_PLATFORMS, WORKBENCH_WRITER_QUICK_PROMPTS, WorkbenchChatMessage, WorkbenchRouteIcon, WorkbenchShell, WorkbenchWriterMessage, type WorkbenchMediaFeatureId } from "@aimarketing/workbench-ui";
-import { migrateWorkflowDefinitionToCurrent, validateWorkflowDefinition, workflowNodeRegistry, type WorkflowDefinitionEnvelope, type WorkflowDefinitionNodeV2 } from "@aimarketing/workflow-core";
+import { parseAndMigrateWorkflowDefinition, migrateWorkflowDefinitionToCurrent, validateWorkflowDefinition, workflowNodeRegistry, type WorkflowDefinitionEnvelope, type WorkflowDefinitionNodeV2 } from "@aimarketing/workflow-core";
 import type { WorkbenchWorkflow } from "@aimarketing/workbench-client";
 import { tauriBridge } from "./tauri";
 import { createDesktopWorkbenchClient } from "./workbench-client";
@@ -1524,7 +1524,7 @@ export function App() {
   async function importWorkflow(file: File) {
     try {
       const parsed = JSON.parse(await file.text()) as { definition?: unknown };
-      const migrated = sanitizeWorkflowDefinitionForStorage(migrateWorkflowDefinitionToCurrent((parsed.definition ?? parsed) as WorkflowDefinitionEnvelope));
+      const migrated = sanitizeWorkflowDefinitionForStorage(parseAndMigrateWorkflowDefinition((parsed.definition ?? parsed) as WorkflowDefinitionEnvelope));
       const capability = migrated.nodes.find((node) => node.nodeKey === "capability");
       const importedAction = workflowActions.find((item) => item.id === capability?.type);
       const importedConfig = capability?.config && typeof capability.config === "object" ? capability.config as Record<string, unknown> : {};
