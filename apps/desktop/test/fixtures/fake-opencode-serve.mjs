@@ -43,14 +43,22 @@ const server = createServer(async (request, response) => {
       setTimeout(() => process.exit(23), 25);
       return;
     }
+    if (payload.parts?.[0]?.text === "Long running") {
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
+      response.writeHead(204); response.end();
+      return;
+    }
+    const prompt = payload.parts?.[0]?.text;
+    const answer = prompt === "First turn" ? "First answer" : prompt === "Second turn" ? "Second answer" : prompt === "Create artifact" ? "Artifact created" : "Recovered answer";
+    const tool = prompt === "Create artifact" ? "artifact:result" : "write";
     setTimeout(() => {
       if (payload.parts?.[0]?.text === "Trigger error") {
         sendEvent({ payload: { type: "session.error", properties: { sessionID: "recovered-session", error: { message: "provider unavailable" } } } });
         return;
       }
       sendEvent({ payload: { type: "message.updated", properties: { sessionID: "recovered-session", info: { id: "assistant-1", role: "assistant" } } } });
-      sendEvent({ payload: { type: "message.part.updated", properties: { sessionID: "recovered-session", part: { id: "text-1", messageID: "assistant-1", type: "text", text: "Recovered answer" } } } });
-      sendEvent({ payload: { type: "message.part.updated", properties: { sessionID: "recovered-session", part: { id: "tool-1", messageID: "assistant-1", type: "tool", tool: "write", state: { status: "completed", title: "saved" } } } } });
+      sendEvent({ payload: { type: "message.part.updated", properties: { sessionID: "recovered-session", part: { id: "text-1", messageID: "assistant-1", type: "text", text: answer } } } });
+      sendEvent({ payload: { type: "message.part.updated", properties: { sessionID: "recovered-session", part: { id: "tool-1", messageID: "assistant-1", type: "tool", tool, state: { status: "completed", title: "saved" } } } } });
       sendEvent({ payload: { type: "message.part.updated", properties: { sessionID: "recovered-session", part: { id: "usage-1", messageID: "assistant-1", type: "step-finish", tokens: { input: 11, output: 7 }, cost: 0.02 } } } });
     }, 25);
     await new Promise((resolve) => setTimeout(resolve, 75));

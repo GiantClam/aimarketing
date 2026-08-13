@@ -58,3 +58,45 @@ test("OpenCode Serve recreates a lost persisted session and preserves streamed e
     await rm(runtimeDirectory, { recursive: true, force: true });
   }
 });
+
+test("fake OpenCode E2E covers first chat, multi-turn, tool/artifact, cancel, crash and usage", async () => {
+  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "aimarketing-opencode-e2e-"));
+  const fixture = resolve(process.cwd(), "test/fixtures/fake-opencode-serve.mjs");
+  const client = new OpenCodeServeClient(process.execPath, runtimeDirectory, [fixture]);
+  const abortLog = resolve(runtimeDirectory, "e2e-abort.log");
+  const provider = { model: "configured/model" };
+  try {
+    const session = await client.createOrResumeSession(runtimeDirectory, undefined, provider, { FAKE_OPENCODE_ABORT_LOG: abortLog });
+    assert.equal(session.recovered, false);
+
+    const firstEvents: Array<{ event: string; [key: string]: unknown }> = [];
+    await client.prompt(session.sessionId, runtimeDirectory, "first-run", "First turn", provider, (event) => firstEvents.push(event));
+    assert.equal(firstEvents.some((event) => event.event === "text_delta" && event.delta === "First answer"), true);
+    assert.equal(firstEvents.some((event) => event.event === "usage" && event.inputTokens === 11 && event.outputTokens === 7), true);
+    assert.equal(firstEvents.some((event) => event.event === "done"), true);
+
+    const secondEvents: Array<{ event: string; [key: string]: unknown }> = [];
+    await client.prompt(session.sessionId, runtimeDirectory, "second-run", "Second turn", provider, (event) => secondEvents.push(event));
+    assert.equal(secondEvents.some((event) => event.event === "text_delta" && event.delta === "Second answer"), true);
+
+    const artifactEvents: Array<{ event: string; [key: string]: unknown }> = [];
+    await client.prompt(session.sessionId, runtimeDirectory, "artifact-run", "Create artifact", provider, (event) => artifactEvents.push(event));
+    assert.equal(artifactEvents.some((event) => event.event === "tool_event" && event.tool === "artifact:result"), true);
+
+    const controller = new AbortController();
+    const cancelEvents: Array<{ event: string; [key: string]: unknown }> = [];
+    const cancelPromise = client.prompt(session.sessionId, runtimeDirectory, "cancel-run", "Long running", provider, (event) => cancelEvents.push(event), controller.signal);
+    setTimeout(() => controller.abort(), 100);
+    await cancelPromise;
+    assert.equal(cancelEvents.some((event) => event.event === "runtime_error" && event.code === "opencode_aborted"), true);
+    assert.equal(await readFile(abortLog, "utf8"), "aborted");
+
+    const crashEvents: Array<{ event: string; [key: string]: unknown }> = [];
+    await client.prompt(session.sessionId, runtimeDirectory, "crash-run", "Trigger crash", provider, (event) => crashEvents.push(event));
+    assert.deepEqual(crashEvents.filter((event) => event.event === "runtime_error").map((event) => event.code), ["opencode_serve_exited"]);
+    assert.equal((await client.createOrResumeSession(runtimeDirectory, undefined, provider, { FAKE_OPENCODE_ABORT_LOG: abortLog })).sessionId, "recovered-session");
+  } finally {
+    await client.stop();
+    await rm(runtimeDirectory, { recursive: true, force: true });
+  }
+});
