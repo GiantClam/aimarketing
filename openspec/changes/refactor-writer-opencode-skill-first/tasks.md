@@ -95,6 +95,7 @@
 - [x] 9.3 Run the complete Writer unit, integration, route, billing, recovery, runtime, Skill, TypeScript, and ESLint suites.
   - [x] 2026-08-14 Writer Skill/contract 9/9, asset 14/14, asset-runtime 4/4, revision 2/2, UI 6/6, session recovery 4/4, root TypeScript and ESLint all pass. Desktop 108/108, shared boundary/provenance checks, and both Writer browser scenarios pass. Browser/production smoke gates remain separately open.
 - [ ] 9.4 Run local E2E for all ten platforms across create, adaptive clarification, complete-article revision, translation, platform adaptation, and URL research.
+  - [x] 2026-08-14 deterministic local platform matrix now covers all ten platform bindings through clarification and active-draft revision, verifies one registry primary Skill per platform, and checks platform-compatible asset intents. Real provider/browser translation, adaptation, and URL-research scenarios remain open.
 - [ ] 9.5 Run local image E2E for WeChat cover, platform inline images, cumulative per-image duration, partial success, and recovery.
 - [ ] 9.6 Compare same-prompt article quality against the current production baseline and require no regression in factuality/platform compliance plus an improvement in blind editorial rating.
 - [ ] 9.7 Publish the additive migration, compatible application build, Railway OpenCode image, and generated Skill bundle as one cutover unit.
