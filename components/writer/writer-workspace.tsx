@@ -2550,6 +2550,8 @@ export function WriterWorkspace({
     const generationPlatform = target.platform
     const generationMode = target.mode
     const generationStartedAt = Date.now()
+    const assetIdempotencyKey =
+      globalThis.crypto?.randomUUID?.() || `writer-assets-${generationStartedAt}-${target.messageId}`
     let pendingAssets = buildPendingWriterAssets(target.sourceMarkdown, generationPlatform, generationMode)
     if (pendingAssets.length === 0) {
       const extracted = extractWriterAssetsFromMarkdown(target.sourceMarkdown, generationPlatform, generationMode)
@@ -2635,6 +2637,7 @@ export function WriterWorkspace({
           platform: generationPlatform,
           mode: generationMode,
           conversationId: target.isLatest ? conversationId : null,
+          idempotencyKey: assetIdempotencyKey,
           async: true,
         }),
       })
