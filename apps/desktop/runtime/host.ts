@@ -229,7 +229,7 @@ async function runWorkflow(command: HostCommand) {
       const workflowConfigDirectory = await prepareSkillWorkspace(workspacePath);
       await writeOpenCodeConfig(workflowConfigDirectory, workflowProvider, workflowProvider?.model);
       const workflowEnvironment = withPrivatePython({ ...process.env, OPENCODE_CONFIG_DIR: workflowConfigDirectory, ...(workflowProvider?.apiKey && workflowProvider.id ? { [`${providerKey(workflowProvider.id).toUpperCase()}_API_KEY`]: workflowProvider.apiKey } : {}) });
-      const workflowSessionId = await serveClient.createOrResumeSession(workspacePath, undefined, workflowProvider ?? {}, workflowEnvironment);
+      const { sessionId: workflowSessionId } = await serveClient.createOrResumeSession(workspacePath, undefined, workflowProvider ?? {}, workflowEnvironment);
       const events = await runOpenCode(nodeCommand, { workspacePath, sessionId: workflowSessionId, provider: workflowProvider }, { respond: false, signal });
       const text = (events ?? []).filter((event): event is Extract<OpenCodeRuntimeEvent, { event: "text_delta" }> => event.event === "text_delta").map((event) => event.delta).join("");
       const artifacts = executorId === "ppt_generate" ? await detectPresentationArtifacts(workspacePath, workflowStartedAt) : [];
@@ -365,9 +365,9 @@ createRpcReader(process.stdin, (raw) => {
         const configDirectory = await prepareSkillWorkspace(workspacePath);
         await writeOpenCodeConfig(configDirectory, provider, typeof command.payload?.model === "string" ? command.payload.model : provider?.model);
         const environment = withPrivatePython({ ...process.env, OPENCODE_CONFIG_DIR: configDirectory, ...(provider?.apiKey && provider.id ? { [`${providerKey(provider.id).toUpperCase()}_API_KEY`]: provider.apiKey } : {}) });
-        const sessionId = await serveClient.createOrResumeSession(workspacePath, typeof command.payload?.sessionId === "string" ? command.payload.sessionId : undefined, provider ?? {}, environment);
+        const { sessionId, recovered } = await serveClient.createOrResumeSession(workspacePath, typeof command.payload?.sessionId === "string" ? command.payload.sessionId : undefined, provider ?? {}, environment);
         sessions.set(sessionId, { conversationId, workspacePath, sessionId, provider });
-        respond(command, { conversationId, sessionId, workspacePath, transport: "opencode-serve", fullAccess: true });
+        respond(command, { conversationId, sessionId, workspacePath, transport: "opencode-serve", fullAccess: true, recovered });
       } catch (error) { fail(command, "opencode_session_unavailable", error instanceof Error ? error.message : String(error)); }
     })();
   }

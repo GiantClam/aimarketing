@@ -22,8 +22,10 @@ test("OpenCode Serve recreates a lost persisted session and preserves streamed e
   const events: Array<{ event: string; [key: string]: unknown }> = [];
   const abortLog = resolve(runtimeDirectory, "abort.log");
   try {
-    const sessionId = await client.createOrResumeSession(runtimeDirectory, "lost-session", { model: "configured/model" }, { FAKE_OPENCODE_ABORT_LOG: abortLog });
-    assert.equal(sessionId, "recovered-session");
+    assert.deepEqual(await client.createOrResumeSession(runtimeDirectory, "retained-session", { model: "configured/model" }, { FAKE_OPENCODE_ABORT_LOG: abortLog }), { sessionId: "retained-session", recovered: false });
+    const session = await client.createOrResumeSession(runtimeDirectory, "lost-session", { model: "configured/model" }, { FAKE_OPENCODE_ABORT_LOG: abortLog });
+    assert.deepEqual(session, { sessionId: "recovered-session", recovered: true });
+    const sessionId = session.sessionId;
     await client.prompt(sessionId, runtimeDirectory, "recovered-run", "Continue safely", { model: "configured/model" }, (event) => events.push(event));
     await new Promise<void>((resolveWait, reject) => {
       const deadline = Date.now() + 2_000;

@@ -31,6 +31,7 @@ const server = createServer(async (request, response) => {
     request.once("close", () => { if (events === response) events = undefined; });
     return;
   }
+  if (request.method === "GET" && url.pathname === "/session/retained-session/message") return json(response, 200, { id: "retained-session" });
   if (request.method === "GET" && url.pathname === "/session/lost-session/message") return json(response, 404, { message: "missing" });
   if (request.method === "POST" && url.pathname === "/session") return json(response, 200, { id: "recovered-session" });
   if (request.method === "POST" && url.pathname === "/session/recovered-session/message") {

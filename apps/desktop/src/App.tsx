@@ -6,6 +6,7 @@ import { tauriBridge } from "./tauri";
 import { createDesktopWorkbenchClient } from "./workbench-client";
 import { capabilityEnglish, desktopCopy, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale, workflowActionEnglish, writerContentTypeEnglish, writerLanguageEnglish, writerModeEnglish, writerPlatformEnglish, type DesktopLocalePreference } from "./i18n";
 import { configuredModelOptions, isMediaProviderConfigured, preferredConfiguredModel, requiresConfiguredProviderForWorkflowAction } from "./provider-config";
+import { createSessionRecoverySnapshot } from "./session-recovery";
 import { sanitizeWorkflowDefinitionForStorage } from "./workflow-storage";
 
 type WorkspaceMode = "chat" | "writer" | "workflow" | "library";
@@ -1501,6 +1502,7 @@ export function App() {
       await tauriBridge.invoke("host_start");
       await tauriBridge.invoke("create_conversation", { input: { id: conversationId, title: userPrompt.slice(0, 40), project_id: null } });
       setConversations((current) => [{ id: conversationId, title: current.find((item) => item.id === conversationId)?.title ?? userPrompt.slice(0, 40), updated_at: new Date().toISOString(), opencode_session_id: current.find((item) => item.id === conversationId)?.opencode_session_id ?? null }, ...current.filter((item) => item.id !== conversationId)].slice(0, 8));
+      const priorConversationHistory = await workbenchClient.conversations.messages(conversationId);
       await tauriBridge.invoke("append_message", { input: { id: `message-${runId}`, conversation_id: conversationId, role: "user", content: userPrompt, created_at: userMessageCreatedAt } });
       setAttachments([]);
       await tauriBridge.invoke("create_run", { runId, conversationId, model: config.provider.model || null });
@@ -1533,7 +1535,10 @@ export function App() {
         const sessionId = String((sessionResponse.data as { sessionId?: string } | undefined)?.sessionId ?? "");
         if (!sessionId) throw new Error("opencode_session_id_missing");
         await tauriBridge.invoke("set_conversation_session", { conversationId, sessionId });
-        await sendHostMessage({ version: 1, requestId: runId, runId, sessionId, type: "session.prompt", payload: { prompt: openCodePrompt, model: config.provider.model, provider: config.provider, skillId: effectiveSkillId, executable: config.runtime.opencodePath } });
+        const recovered = (sessionResponse.data as { recovered?: unknown } | undefined)?.recovered === true;
+        const recoverySnapshot = recovered ? createSessionRecoverySnapshot(priorConversationHistory.filter((message): message is typeof message & { role: "user" | "assistant" } => message.role === "user" || message.role === "assistant")) : "";
+        const promptWithRecovery = recoverySnapshot ? `${recoverySnapshot}\n\nCurrent request: ${openCodePrompt}` : openCodePrompt;
+        await sendHostMessage({ version: 1, requestId: runId, runId, sessionId, type: "session.prompt", payload: { prompt: promptWithRecovery, model: config.provider.model, provider: config.provider, skillId: effectiveSkillId, executable: config.runtime.opencodePath } });
       } else {
         const workflowId = `workflow-${actionId}`;
         const actionName = locale === "en" ? workflowActionEnglish[action.id] ?? action.label : action.label;

@@ -67,7 +67,7 @@ export class OpenCodeServeClient {
     await this.ensureStarted(workspacePath, environment);
     if (requestedId) {
       const existing = await this.request(openCodeServeSessionPath(requestedId, workspacePath, "message")).catch(() => undefined);
-      if (existing?.ok) return requestedId;
+      if (existing?.ok) return { sessionId: requestedId, recovered: false };
     }
     const model = modelParts(provider.model);
     const body = createOpenCodeServeSessionPayload({ title: "AI Marketing Desktop", ...(model ? { providerId: model.providerID, modelId: model.modelID } : {}) });
@@ -75,7 +75,7 @@ export class OpenCodeServeClient {
     const payload = await response.json().catch(() => null);
     const id = readOpenCodeServeSessionId(payload);
     if (!response.ok || !id) throw new Error(`opencode_session_create_failed:${safe(payload?.message) || response.statusText}`);
-    return id;
+    return { sessionId: id, recovered: Boolean(requestedId) };
   }
 
   async prompt(sessionId: string, workspacePath: string, runId: string, prompt: string, provider: Provider, sink: EventSink, signal?: AbortSignal) {

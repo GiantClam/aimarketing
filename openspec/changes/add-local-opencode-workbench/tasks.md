@@ -38,7 +38,7 @@
 - [x] 3.2 移除或拒绝 desktop 对 `ai-sdk-native`、Railway、Cloudflare 的文本路由。✓ 2026-08-13 — desktop chat 只经 host-mediated OpenCode；边界与路由 tests 不存在 direct text-provider fallback。
 - [x] 3.3 将选定 OpenAI-compatible Provider/model/base URL/key 和 reasoning effort 传入 request-scoped runtime config。✓ 2026-08-13 — UI 选中的 configured model、endpoint、key 与 reasoning effort 写入 isolated OpenCode config/env reference，key 不作为 CLI 参数。
 - [x] 3.4 执行前持久化用户消息，终止时原子保存 assistant 结果、状态、关键事件和用量。✓ 2026-08-13 — typed Tauri commands 写入 conversations/messages/runs/events/usage，terminal state 与 usage idempotency 由桌面回归覆盖。
-- [ ] 3.5 实现 session loss recovery snapshot，失败不覆盖已持久化历史
+- [x] 3.5 实现 session loss recovery snapshot，失败不覆盖已持久化历史。✓ 2026-08-13 — host 明确返回 `recovered`；仅在已持久化 session ID 失效并更换时，桌面将最近 12 个 user/assistant 文本 turn 作为有界只读上下文附加到当前请求，明确禁止重放旧工具动作；SQLite 回归断言新 session ID 不改写已保存消息。
 - [ ] 3.6 添加多轮、取消、session loss、crash、坏事件和缺 Provider tests
 
 **Quality Gate:**

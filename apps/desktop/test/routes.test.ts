@@ -327,6 +327,8 @@ test("ordinary chat, writer and PPT routes stay on the OpenCode session path", (
   assert.match(appSource, /type: "session\.create"/);
   assert.match(appSource, /type: "session\.prompt"/);
   assert.match(appSource, /usesOpenCodeConversation/);
+  assert.match(appSource, /createSessionRecoverySnapshot\(priorConversationHistory/);
+  assert.match(appSource, /recovered === true/);
   assert.doesNotMatch(appSource, /ai-sdk-native/);
 });
 
