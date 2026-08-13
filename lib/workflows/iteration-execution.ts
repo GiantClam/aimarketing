@@ -1,9 +1,8 @@
 import {
   collectWorkflowNodeInput,
-  runWorkflowDefinition,
   type WorkflowNodeRunState,
-  type WorkflowRunResult,
 } from "@/lib/workflows/execution"
+import { runSaasWorkflowWithSharedCore } from "@/lib/workflows/shared-execution-adapter"
 import {
   createWorkflowNodeInputBundle,
   mergeWorkflowNodeOutputBundles,
@@ -33,6 +32,12 @@ type WorkflowIterationRow = {
   status: "queued" | "running" | "succeeded" | "failed" | "cancelled"
   inputPayload?: Record<string, unknown> | null
   outputPayload?: Record<string, unknown> | null
+}
+
+type WorkflowRunSlice = {
+  status: "succeeded" | "failed"
+  nodeStates: Record<string, WorkflowNodeRunState>
+  finalNodeKeys: string[]
 }
 
 export type IterationWorkflowRetry = {
@@ -80,7 +85,7 @@ function cloneBundle(value: WorkflowNodeOutputBundle | null | undefined): Workfl
   return result
 }
 
-function mergeFinalOutputs(result: WorkflowRunResult): WorkflowNodeOutputBundle {
+function mergeFinalOutputs(result: WorkflowRunSlice): WorkflowNodeOutputBundle {
   return result.finalNodeKeys.reduce(
     (bundle, nodeKey) => mergeWorkflowNodeOutputBundles(bundle, result.nodeStates[nodeKey]?.output ?? {}),
     createWorkflowNodeInputBundle(),
@@ -195,7 +200,7 @@ export async function runPersistedWorkflowIterationDefinition(
   const preNodes = input.nodes.filter((node) => preNodeKeys.has(node.nodeKey))
   const preEdges = scopedEdges(input.edges, preNodeKeys)
   const preResult = preNodes.length
-    ? await runWorkflowDefinition({
+    ? await runSaasWorkflowWithSharedCore({
         enterpriseId: input.enterpriseId,
         ownerUserId: input.ownerUserId,
         nodes: preNodes,
@@ -206,7 +211,6 @@ export async function runPersistedWorkflowIterationDefinition(
       })
     : {
         status: "succeeded" as const,
-        parallelLevels: [],
         nodeStates: {},
         finalNodeKeys: [],
       }
@@ -285,7 +289,7 @@ export async function runPersistedWorkflowIterationDefinition(
     maxIterations: foreachStep.maxIterations,
     failurePolicy: foreachStep.failurePolicy,
     execute: async (item, context): Promise<IterationExecutionResult<WorkflowNodeOutputBundle>> => {
-      const bodyResult = await runWorkflowDefinition({
+      const bodyResult = await runSaasWorkflowWithSharedCore({
         enterpriseId: input.enterpriseId,
         ownerUserId: input.ownerUserId,
         nodes: bodyNodes,
@@ -377,14 +381,13 @@ export async function runPersistedWorkflowIterationDefinition(
   const postNodes = input.nodes
     .filter((node) => postNodeKeys.has(node.nodeKey))
     .map((node) => (node.type === "output" ? dynamicControlNode(node, outcomes) : node))
-  let postResult: WorkflowRunResult = {
+  let postResult: WorkflowRunSlice = {
     status: "succeeded",
-    parallelLevels: [],
     nodeStates: {},
     finalNodeKeys: [],
   }
   if (postNodes.length) {
-    postResult = await runWorkflowDefinition({
+    postResult = await runSaasWorkflowWithSharedCore({
       enterpriseId: input.enterpriseId,
       ownerUserId: input.ownerUserId,
       nodes: postNodes,
