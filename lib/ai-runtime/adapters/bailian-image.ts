@@ -91,6 +91,7 @@ async function requestImage(input: CapabilityExecutionRequest, model: ModelDefin
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json",
+      ...(input.idempotencyKey ? { "X-Request-ID": input.idempotencyKey } : {}),
     },
     body: JSON.stringify({
       model: model.providerMetadata?.nativeModel,

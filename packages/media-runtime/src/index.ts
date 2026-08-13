@@ -178,14 +178,25 @@ function asTask(provider: MediaProviderId, payload: Record<string, unknown>, fal
   const providerTaskId = text(output.task_id) || text(output.taskId) || text(payload.task_id) || text(payload.id) || fallbackId || `sync-${Date.now()}`;
   const providerStatus = output.task_status ?? output.status ?? payload.status ?? payload.state;
   const values: unknown[] = [];
-  for (const value of [output.video_url, output.audio, output.url, output.file_url, output.results, output.images, output.data, payload.data, payload.results, payload.output, payload.outputs]) {
-    if (Array.isArray(value)) values.push(...value);
-    else if (value !== undefined && value !== null) values.push(value);
-  }
+  const addValue = (value: unknown) => {
+    if (value === undefined || value === null || values.includes(value)) return;
+    if (Array.isArray(value)) values.push(value);
+    else values.push(value);
+  };
+  for (const value of [output.video_url, output.audio, output.url, output.file_url, output.results, output.images, output.data, payload.data, payload.results, payload.outputs]) addValue(value);
+  const seen = new Set<string>();
   const outputs = values.flatMap((value) => {
-    if (typeof value === "string") return [{ url: value }];
-    if (!value || typeof value !== "object") return [];
-    return [{ ...(value as Record<string, unknown>) }];
+    const candidates = Array.isArray(value) ? value : [value];
+    return candidates.flatMap((item) => {
+      if (typeof item === "string") return [{ url: item }];
+      if (!item || typeof item !== "object") return [];
+      return [{ ...(item as Record<string, unknown>) }];
+    });
+  }).filter((item) => {
+    const key = JSON.stringify(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
   const usage = normalizeUsage(output.usage ?? output.usage_info ?? payload.usage ?? payload.usage_info);
   return { providerTaskId, status: mapProviderStatus(providerStatus), ...(providerStatus ? { providerStatus: String(providerStatus) } : {}), outputs, ...(usage ? { usage } : {}) };
