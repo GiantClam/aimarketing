@@ -101,7 +101,8 @@
 
 ## 6. Implement workflow-host RPC and process supervision
 
-- [ ] 6.1 为 framing、correlation、反向请求、events、取消、最大消息和坏消息写 tests
+- [x] 6.1 为 framing、correlation、反向请求、events、取消、最大消息和坏消息写 tests
+  - Evidence (2026-08-14): Desktop RPC framing, host-session reverse-service, cancellation/event, oversized-frame and malformed-frame suites pass; the current Rust suite is 39/39 and Desktop suite is 108/108.
   - [x] 6.1a Node workflow-host framing tests 覆盖 UTF-8 byte length、严格数字前缀、8 MiB 上限、坏 frame 后继续处理下一条合法请求；Rust host 额外覆盖 stdout 长度/UTF-8/JSON/v1 response schema 和超长行丢弃。
   - [x] 2026-08-14 reverse-RPC framing now has a separate `service_request`/`service_response` schema, Rust validation coverage, and a desktop source-level delegation regression.
   - [x] 2026-08-14 workflow repository create/status, ordered event append, and artifact registration now use typed reverse-service methods; direct Node-host workflow integration tests include a mock framed service responder.
