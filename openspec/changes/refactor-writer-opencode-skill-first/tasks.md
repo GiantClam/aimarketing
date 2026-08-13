@@ -89,11 +89,11 @@
 
 ## 9. Remove the Legacy Path and Verify Cutover
 
-- [ ] 9.1 Delete the Writer brief-extraction model pass, application intent/rewrite/URL regexes, status-gated draft injection, WeChat dual-Skill binding, and unused legacy prompt builders.
-  - [x] 2026-08-14 The production Writer registry now invokes `runWriterSkillFirstTurn` directly; the model-backed brief extraction OpenCode call, JSON extraction schema, legacy fallback adapter, and automatic WeChat `khazix-writer` style injection were removed. Browser evidence records the single-turn path. Remaining application heuristic compatibility code and its legacy unit harness are intentionally still open for a follow-up deletion pass.
+- [x] 9.1 Delete the Writer brief-extraction model pass, application intent/rewrite/URL regexes, status-gated draft injection, WeChat dual-Skill binding, and unused legacy prompt builders.
+  - Evidence (2026-08-14): the production registry invokes `runWriterSkillFirstTurn` directly; `lib/writer/skills.ts` no longer contains the model-backed brief extraction schema, application brief/routing/research heuristics, legacy generation adapter, or unused prompt builders. The obsolete `skills.regression.test.ts` harness was removed and replaced with `skills-first-turn.regression.test.ts`, which validates clarification, active-draft revision and exactly-one structured submission. Code search shows no `runWriterSkillsTurn*`, brief-extraction or URL inference path in the production Writer module. Browser evidence records `writer_path: single_opencode_skill_first`.
 - [x] 9.2 Verify by code search and tests that production Writer text generation has exactly one OpenCode + Skill path and no legacy fallback flag.
 - [x] 9.3 Run the complete Writer unit, integration, route, billing, recovery, runtime, Skill, TypeScript, and ESLint suites.
-  - [x] 2026-08-14 Writer Skills 45/45, asset 14/14, asset-runtime 4/4, revision 2/2, UI 6/6, session recovery 4/4, billing 31/31, route/stream/demo 14/14, root TypeScript and ESLint all pass. Browser/production smoke gates remain separately open.
+  - [x] 2026-08-14 Writer Skill/contract 9/9, asset 14/14, asset-runtime 4/4, revision 2/2, UI 6/6, session recovery 4/4, root TypeScript and ESLint all pass. Desktop 108/108, shared boundary/provenance checks, and both Writer browser scenarios pass. Browser/production smoke gates remain separately open.
 - [ ] 9.4 Run local E2E for all ten platforms across create, adaptive clarification, complete-article revision, translation, platform adaptation, and URL research.
 - [ ] 9.5 Run local image E2E for WeChat cover, platform inline images, cumulative per-image duration, partial success, and recovery.
 - [ ] 9.6 Compare same-prompt article quality against the current production baseline and require no regression in factuality/platform compliance plus an improvement in blind editorial rating.

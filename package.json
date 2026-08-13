@@ -77,7 +77,7 @@
     "test:e2e:ai-entry:agent-selection:ui": "python scripts/ai_entry_agent_selection_ui_e2e.py",
     "test:e2e:ai-entry:consulting-model-lock:ui": "python scripts/ai_entry_consulting_model_lock_ui_e2e.py",
     "test:upstream:credentials": "node scripts/verify_upstream_credentials.js",
-    "test:writer:skills": "tsx --test lib/writer/skills.regression.test.ts lib/writer/skill-contract-fixtures.test.ts lib/writer/khazix-contract-fixtures.test.ts",
+    "test:writer:skills": "tsx --test lib/writer/skills-first-turn.regression.test.ts lib/writer/skill-contract-fixtures.test.ts lib/writer/khazix-contract-fixtures.test.ts",
     "test:writer:assets": "tsx --test lib/writer/assets.regression.test.ts",
     "test:writer:assets-runtime": "tsx --test lib/writer/assets-runtime.regression.test.ts",
     "test:writer:revisions": "tsx --test lib/writer/revision-history.test.ts",
