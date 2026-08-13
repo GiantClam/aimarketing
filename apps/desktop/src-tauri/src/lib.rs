@@ -106,7 +106,7 @@ fn runtime_probe(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let skill_path = configured_skills.filter(|path| path.join("ppt-master").join("SKILL.md").exists() && path.join("ppt-master.manifest.json").exists()).or_else(|| skill_roots.iter().find(|path| path.join("ppt-master").join("SKILL.md").exists() && path.join("ppt-master.manifest.json").exists()).cloned()).and_then(canonical_path);
     let skills = skill_path.is_some();
     let configured_fonts = configured_runtime_path(&data, "fontsPath");
-    let fonts_path = configured_fonts.filter(|path| path.join("msyh.ttc").is_file()).or_else(|| [resource.join("dist-runtime").join("runtime").join("fonts"), resource.join("_up_").join("dist-runtime").join("runtime").join("fonts"), development.join("runtime").join("fonts")].into_iter().find(|path| path.join("msyh.ttc").is_file())).and_then(canonical_path);
+    let fonts_path = configured_fonts.filter(|path| bootstrap::font_asset_works(&path.join("msyh.ttc"))).or_else(|| [resource.join("dist-runtime").join("runtime").join("fonts"), resource.join("_up_").join("dist-runtime").join("runtime").join("fonts"), development.join("runtime").join("fonts")].into_iter().find(|path| bootstrap::font_asset_works(&path.join("msyh.ttc")))).and_then(canonical_path);
     let fonts = fonts_path.is_some();
     let configured_lancedb = configured_runtime_path(&data, "lancedbPath");
     let lancedb_candidates = [data.join("runtime").join("lancedb"), resource.join("dist-runtime").join("runtime").join("lancedb")];

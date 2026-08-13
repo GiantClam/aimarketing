@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -246,8 +247,8 @@ fn runtime_ready(resource_roots: &[PathBuf], install_root: &Path) -> bool {
             let path = if root.join("skills").join("ppt-master").join("SKILL.md").is_file() { root.join("skills") } else { root.join("dist-runtime").join("skills") };
             path.join("ppt-master").join("SKILL.md").is_file() && path.join("ppt-master.manifest.json").is_file()
         });
-    let fonts = configured_runtime_path(install_root, "fontsPath").is_some_and(|path| path.join("msyh.ttc").is_file())
-        || resource_roots.iter().any(|root| root.join("fonts").join("msyh.ttc").is_file() || root.join("runtime").join("fonts").join("msyh.ttc").is_file() || root.join("dist-runtime").join("runtime").join("fonts").join("msyh.ttc").is_file());
+    let fonts = configured_runtime_path(install_root, "fontsPath").is_some_and(|path| font_asset_works(&path.join("msyh.ttc")))
+        || resource_roots.iter().any(|root| font_asset_works(&root.join("fonts").join("msyh.ttc")) || font_asset_works(&root.join("runtime").join("fonts").join("msyh.ttc")) || font_asset_works(&root.join("dist-runtime").join("runtime").join("fonts").join("msyh.ttc")));
     let lancedb = configured_runtime_path(install_root, "lancedbPath").is_some_and(|path| lancedb_ready(&path))
         || [install_root.join("runtime").join("lancedb"), install_root.join("lancedb")].into_iter().any(|path| lancedb_ready(&path))
         || resource_roots.iter().any(|root| lancedb_ready(&root.join("lancedb")) || lancedb_ready(&root.join("runtime").join("lancedb")));
@@ -274,6 +275,19 @@ fn configured_offline_runtime_zip(install_root: &Path) -> Option<PathBuf> {
 
 fn lancedb_ready(root: &Path) -> bool {
     root.join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").is_file()
+}
+
+pub(crate) fn font_asset_works(path: &Path) -> bool {
+    let Ok(metadata) = std::fs::metadata(path) else { return false; };
+    if !metadata.is_file() || metadata.len() < 12 { return false; }
+    let Ok(mut file) = std::fs::File::open(path) else { return false; };
+    let mut header = [0_u8; 12];
+    if file.read_exact(&mut header).is_err() { return false; }
+    match &header[..4] {
+        b"ttcf" => u32::from_be_bytes(header[8..12].try_into().unwrap_or_default()) > 0,
+        b"OTTO" | [0, 1, 0, 0] => u16::from_be_bytes(header[4..6].try_into().unwrap_or_default()) > 0,
+        _ => false,
+    }
 }
 
 fn executable_works(path: &Path, args: &[&str]) -> bool {
@@ -443,6 +457,23 @@ mod tests {
         crate::config::write(&root.join("config.json"), &value).unwrap();
 
         assert_eq!(configured_runtime_path(&root, "nodePath"), Some(canonical));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn font_probe_rejects_corrupt_files_and_accepts_valid_font_headers() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-font-probe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let font = root.join("msyh.ttc");
+        std::fs::write(&font, b"corrupt-font").unwrap();
+        assert!(!font_asset_works(&font));
+        let mut valid = [0x74, 0x74, 0x63, 0x66, 0, 1, 0, 0, 0, 0, 0, 1];
+        std::fs::write(&font, valid).unwrap();
+        assert!(font_asset_works(&font));
+        valid[0] = b'x';
+        std::fs::write(&font, valid).unwrap();
+        assert!(!font_asset_works(&font));
         let _ = std::fs::remove_dir_all(root);
     }
 
