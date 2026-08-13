@@ -47,6 +47,7 @@
 - [ ] 4.5 Implement a SaaS adapter that preserves existing store, task, billing, artifact, and route behavior.
   - [x] 4.5a Ordinary non-iteration SaaS DAG runs now use the shared workflow scheduler through a host adapter; existing node executors, capability invoker, task persistence, billing and artifact finalization remain SaaS-owned.
   - [x] 4.5b Foreach/collect pre-scope, isolated iteration body and post-scope DAGs now also use the shared SaaS scheduler; persisted iteration attempts, idempotency keys, credit reservation/finalization and recovery continue to be host-owned.
+  - [x] 4.5c SaaS retry jobs now resume completed node outputs through the shared scheduler and increment only selected retry attempts; legacy retry-key selection and run persistence remain host-owned.
 - [ ] 4.6 Keep original `lib/workflows/*` paths as thin re-exports or SaaS composition modules.
   - [x] 4.6a `lib/workflows/node-definitions/*` now re-export the same `workflow-core` node types, built-ins, registry and port compatibility instances; SaaS-specific node execution remains host composition.
   - [x] 4.6b `lib/workflows/schema.ts` now re-exports the shared schema types and helpers; the shared core owns generic asset-to-media connection compatibility.

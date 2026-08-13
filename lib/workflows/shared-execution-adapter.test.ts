@@ -72,3 +72,34 @@ test("SaaS adapter persists unstarted descendants as cancelled after a shared-co
   assert.equal(result.nodeStates.file?.status, "cancelled")
   assert.equal(result.nodeStates.file?.errorMessage, "workflow_upstream_failed")
 })
+
+test("SaaS adapter resumes completed outputs and increments only retried node attempts", async () => {
+  const invoked: string[] = []
+  const previousTime = new Date(0)
+  const result = await runSaasWorkflowWithSharedCore({
+    enterpriseId: 1,
+    ownerUserId: 2,
+    nodes: [
+      { nodeKey: "input", type: "text_input", title: "Input", positionX: 0, positionY: 0, config: { text: "Ignored" } },
+      { nodeKey: "writer", type: "writer", title: "Writer", positionX: 1, positionY: 0, config: {} },
+    ],
+    edges: [{ sourceNodeKey: "input", targetNodeKey: "writer", inputName: "text" }],
+    initialNodeStates: {
+      input: { nodeKey: "input", status: "succeeded", attemptCount: 1, output: { text: ["Persisted brief"] }, startedAt: previousTime, finishedAt: previousTime, creditsConsumed: 0 },
+      writer: { nodeKey: "writer", status: "failed", attemptCount: 1, output: {}, startedAt: previousTime, finishedAt: previousTime, creditsConsumed: 0, errorMessage: "provider_timeout" },
+    },
+    rerunNodeKeys: ["writer"],
+    executorContext: {
+      capabilityInvoker: async ({ node, input }) => {
+        invoked.push(`${node.nodeKey}:${input.text.join(" ")}`)
+        return { output: { text: ["Recovered"] } }
+      },
+    },
+  })
+
+  assert.equal(result.status, "succeeded")
+  assert.deepEqual(invoked, ["writer:Persisted brief"])
+  assert.equal(result.nodeStates.input?.attemptCount, 1)
+  assert.equal(result.nodeStates.writer?.attemptCount, 2)
+  assert.deepEqual(result.nodeStates.writer?.output.text, ["Recovered"])
+})

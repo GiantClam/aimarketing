@@ -23,6 +23,8 @@ type SharedSaasWorkflowExecutionInput = {
   seedInput?: Partial<WorkflowNodeInputBundle>
   executorContext?: Omit<WorkflowNodeExecutionContext, "enterpriseId" | "ownerUserId" | "node" | "input">
   signal?: AbortSignal
+  initialNodeStates?: Record<string, WorkflowNodeRunState>
+  rerunNodeKeys?: readonly string[]
   onNodeStateChange?: (state: WorkflowNodeRunState) => Promise<void> | void
 }
 
@@ -55,12 +57,12 @@ function bundleFromPortInputs(inputs: Record<string, unknown>, seed?: Partial<Wo
   return bundle
 }
 
-function newState(nodeKey: string, status: WorkflowNodeRunState["status"], output: WorkflowNodeOutputBundle = {}, errorMessage: string | null = null, result?: WorkflowNodeExecutionResult): WorkflowNodeRunState {
+function newState(nodeKey: string, status: WorkflowNodeRunState["status"], output: WorkflowNodeOutputBundle = {}, errorMessage: string | null = null, result?: WorkflowNodeExecutionResult, previous?: WorkflowNodeRunState): WorkflowNodeRunState {
   const now = new Date()
   return {
     nodeKey,
     status,
-    attemptCount: 1,
+    attemptCount: previous?.status === "running" ? previous.attemptCount : (previous?.attemptCount ?? 0) + 1,
     output: cloneOutput(output),
     startedAt: now,
     finishedAt: status === "running" ? null : now,
@@ -88,12 +90,19 @@ function legacyDefinition(nodes: WorkflowDefinition["nodes"], edges: WorkflowDef
 export async function runSaasWorkflowWithSharedCore(input: SharedSaasWorkflowExecutionInput): Promise<SharedSaasWorkflowExecutionResult> {
   const definition = legacyDefinition(input.nodes, input.edges)
   const sourceNodes = new Map(input.nodes.map((node) => [node.nodeKey, node]))
-  const nodeStates: Record<string, WorkflowNodeRunState> = {}
+  const nodeStates: Record<string, WorkflowNodeRunState> = Object.fromEntries(Object.entries(input.initialNodeStates ?? {}).map(([nodeKey, state]) => [nodeKey, { ...state, output: cloneOutput(state.output) }]))
   const results = new Map<string, WorkflowNodeExecutionResult>()
+  const rerunNodeKeys = new Set(input.rerunNodeKeys ?? [])
+  const completed = Object.fromEntries(
+    Object.entries(input.initialNodeStates ?? {})
+      .filter(([nodeKey, state]) => state.status === "succeeded" && !rerunNodeKeys.has(nodeKey))
+      .map(([nodeKey, state]) => [nodeKey, cloneOutput(state.output) as Record<string, unknown>]),
+  )
 
   const result = await executeWorkflow(definition, {
     runId: "saas-workflow-adapter",
     signal: input.signal,
+    completed,
     ports: {
       capability: {
         execute: async ({ nodeKey, inputs }) => {
@@ -115,18 +124,18 @@ export async function runSaasWorkflowWithSharedCore(input: SharedSaasWorkflowExe
           const nodeKey = typeof event.payload.nodeKey === "string" ? event.payload.nodeKey : null
           if (!nodeKey) return
           if (event.type === "node_started") {
-            const state = newState(nodeKey, "running")
+            const state = newState(nodeKey, "running", {}, null, undefined, nodeStates[nodeKey])
             nodeStates[nodeKey] = state
             await input.onNodeStateChange?.(state)
           } else if (event.type === "node_succeeded") {
             const execution = results.get(nodeKey)
             const output = execution?.output ?? {}
-            const state = newState(nodeKey, "succeeded", output, null, execution)
+            const state = newState(nodeKey, "succeeded", output, null, execution, nodeStates[nodeKey])
             nodeStates[nodeKey] = state
             await input.onNodeStateChange?.(state)
           } else if (event.type === "node_failed") {
             const message = typeof event.payload.message === "string" ? event.payload.message : "workflow_node_execution_failed"
-            const state = newState(nodeKey, "failed", {}, message)
+            const state = newState(nodeKey, "failed", {}, message, undefined, nodeStates[nodeKey])
             nodeStates[nodeKey] = state
             await input.onNodeStateChange?.(state)
           }
@@ -143,7 +152,7 @@ export async function runSaasWorkflowWithSharedCore(input: SharedSaasWorkflowExe
   if (result.status === "failed") {
     for (const node of definition.nodes) {
       if (nodeStates[node.nodeKey]) continue
-      const state = newState(node.nodeKey, "cancelled", {}, "workflow_upstream_failed")
+      const state = newState(node.nodeKey, "cancelled", {}, "workflow_upstream_failed", undefined, nodeStates[node.nodeKey])
       nodeStates[node.nodeKey] = state
       await input.onNodeStateChange?.(state)
     }

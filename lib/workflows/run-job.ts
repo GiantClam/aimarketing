@@ -2,7 +2,7 @@ import type { AuthUser } from "@/lib/auth/session"
 import { appendPlatformRunEvent, getPlatformTaskRun } from "@/lib/platform/task-run-store"
 import { updatePlatformWorkflowRun } from "@/lib/platform/workflow-runner"
 import { createWorkflowCapabilityInvoker } from "@/lib/workflows/capability-invoker"
-import { retryWorkflowNodeExecution, type WorkflowNodeRunState } from "@/lib/workflows/execution"
+import { collectWorkflowRetryNodeKeys, type WorkflowNodeRunState } from "@/lib/workflows/execution"
 import { runSaasWorkflowWithSharedCore } from "@/lib/workflows/shared-execution-adapter"
 import type { WorkflowNodeInputBundle } from "@/lib/workflows/node-executors"
 import {
@@ -321,15 +321,20 @@ export async function executeWorkflowRetryJob(context: WorkflowRetryJobContext) 
       nodes: context.workflow.nodes,
     })
 
-    const result = await retryWorkflowNodeExecution({
+    const result = await runSaasWorkflowWithSharedCore({
       enterpriseId: context.workflow.enterpriseId,
       ownerUserId: context.workflow.ownerUserId,
       nodes: context.workflow.nodes,
       edges: context.workflow.edges,
       seedInput: context.seedInput,
-      nodeStates: context.existingNodeStates,
-      nodeKey: context.nodeKey,
-      mode: context.mode,
+      initialNodeStates: context.existingNodeStates,
+      rerunNodeKeys: collectWorkflowRetryNodeKeys({
+        mode: context.mode,
+        nodeKey: context.nodeKey,
+        nodes: context.workflow.nodes,
+        edges: context.workflow.edges,
+        nodeStates: context.existingNodeStates,
+      }),
       executorContext: {
         capabilityInvoker: createJobCapabilityInvoker(context),
         workflowMetadata: context.workflow.metadata ?? null,
