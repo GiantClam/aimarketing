@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { formatWorkbenchModelLabel, WORKBENCH_HOME_COPY, WORKBENCH_HOME_GROUPS, WORKBENCH_MEDIA_FEATURES, WORKBENCH_MESSAGE_FRAME, WORKBENCH_ROUTE_MANIFEST, WORKBENCH_THEME, WORKBENCH_WRITER_CONTENT_TYPES, WORKBENCH_WRITER_LANGUAGES, WORKBENCH_WRITER_MODES, WORKBENCH_WRITER_PLATFORMS, WORKBENCH_WRITER_QUICK_PROMPTS, WorkbenchChatMessage, WorkbenchRouteIcon, WorkbenchShell, WorkbenchWriterMessage, type WorkbenchMediaFeatureId } from "@aimarketing/workbench-ui";
 import { migrateWorkflowDefinitionToCurrent, validateWorkflowDefinition, workflowNodeRegistry, type WorkflowDefinitionEnvelope, type WorkflowDefinitionNodeV2 } from "@aimarketing/workflow-core";
 import { tauriBridge } from "./tauri";
@@ -937,6 +937,7 @@ function DesktopSettingsPanel({
 
 export function App() {
   const [activePath, setActivePath] = useState(() => window.location.pathname === "/" ? "/dashboard" : `${window.location.pathname}${window.location.search}`);
+  const activePathRef = useRef(activePath);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [workflowAction, setWorkflowAction] = useState<WorkflowAction>("writer");
   const [workflowDefinition, setWorkflowDefinition] = useState<WorkflowDefinitionEnvelope | null>(null);
@@ -1004,6 +1005,7 @@ export function App() {
   const effectiveSkillId: SkillId = selected.path.includes("executive-ppt") ? "ppt-master" : (config.provider.skillId ?? skillId);
 
   useEffect(() => { configRef.current = config; }, [config]);
+  useEffect(() => { activePathRef.current = activePath; }, [activePath]);
   // Legacy/retained surfaces consume ModelControls indirectly. Refresh once
   // after a configured list changes so they all observe the same catalog.
   const [, setModelCatalogRevision] = useState(0);
@@ -1014,19 +1016,19 @@ export function App() {
   const updateModel = (model: string) => setConfig((current) => ({ ...current, provider: { ...current.provider, model } }));
   const updateReasoning = (reasoning: string) => setConfig((current) => ({ ...current, provider: { ...current.provider, reasoningEffort: reasoning } }));
 
-  function navigate(path: string) {
+  const navigate = useCallback((path: string) => {
     // Match the online compatibility route: `/dashboard/works` immediately
     // resolves to the asset library rather than creating a second page.
     const canonicalPath = path === "/dashboard/works" ? "/dashboard/assets" : path;
     window.history.pushState({}, "", canonicalPath);
     setActivePath(canonicalPath);
-  }
+  }, []);
 
-  const workbenchClient = createDesktopWorkbenchClient(tauriBridge, {
+  const workbenchClient = useMemo(() => createDesktopWorkbenchClient(tauriBridge, {
     go: navigate,
     replace: navigate,
-    current: () => activePath,
-  });
+    current: () => activePathRef.current,
+  }), [navigate]);
 
   function toggleLocale() {
     setLocalePreference(locale === "zh" ? "en" : "zh");
@@ -1114,21 +1116,21 @@ export function App() {
       return;
     }
     const conversationId = decodeURIComponent(match[1]);
-    void tauriBridge.invoke<LocalMessageRow[]>("list_messages", { conversationId }).then((history) => {
-      setConversationMessages(history.filter((message): message is LocalMessageRow & { role: "user" | "assistant" } => message.role === "user" || message.role === "assistant").map((message, index) => ({ id: `${conversationId}:${index}`, role: message.role, content: message.content, created_at: message.created_at })));
+    void workbenchClient.conversations.messages(conversationId).then((history) => {
+      setConversationMessages(history.filter((message): message is typeof message & { role: "user" | "assistant" } => message.role === "user" || message.role === "assistant").map((message) => ({ id: message.id, role: message.role, content: message.content, created_at: message.createdAt })));
       const latestUser = [...history].reverse().find((message) => message.role === "user");
       const latestAssistant = [...history].reverse().find((message) => message.role === "assistant");
       setActiveConversationId(conversationId);
       activeConversationRef.current = conversationId;
       setActivePrompt(latestUser?.content ?? "");
-      setActivePromptAt(latestUser?.created_at);
+      setActivePromptAt(latestUser?.createdAt);
       setAssistantText(latestAssistant?.content ?? "");
-      setAssistantAt(latestAssistant?.created_at);
+      setAssistantAt(latestAssistant?.createdAt);
       setPrompt("");
       setToolEvents([]);
       setRunStatus("");
     }).catch(() => setRunStatus(locale === "zh" ? "会话历史加载失败" : "Unable to load conversation history"));
-  }, [activePath]);
+  }, [activePath, locale, workbenchClient]);
 
   useEffect(() => {
     const onPopState = () => setActivePath(`${window.location.pathname}${window.location.search}`);
@@ -1154,7 +1156,7 @@ export function App() {
     void (async () => {
       try {
         const health = await tauriBridge.invoke<{ status: string }>("health");
-        const [state, stored, runtime, recent, summary, artifacts, workflows, runRows] = await Promise.all([tauriBridge.invoke<{ integrity: boolean; interruptedRuns?: number }>("initialize_local_state"), tauriBridge.invoke<DesktopConfig>("read_config"), tauriBridge.invoke<{ ready: boolean; paths?: { opencode?: string; python?: string } }>("runtime_probe"), tauriBridge.invoke<Array<{ id: string; title: string; updated_at: string; opencode_session_id?: string | null }>>("list_conversations"), tauriBridge.invoke<{ runs: number; input_tokens: number; output_tokens: number; estimated_cost?: number; artifacts: number }>("usage_summary"), tauriBridge.invoke<unknown[]>("list_artifacts"), tauriBridge.invoke<SavedWorkflow[]>("list_workflows"), tauriBridge.invoke<RunRow[]>("list_runs")]);
+        const [state, stored, runtime, recent, summary, artifacts, workflows, runRows] = await Promise.all([tauriBridge.invoke<{ integrity: boolean; interruptedRuns?: number }>("initialize_local_state"), tauriBridge.invoke<DesktopConfig>("read_config"), tauriBridge.invoke<{ ready: boolean; paths?: { opencode?: string; python?: string } }>("runtime_probe"), workbenchClient.conversations.list(), tauriBridge.invoke<{ runs: number; input_tokens: number; output_tokens: number; estimated_cost?: number; artifacts: number }>("usage_summary"), tauriBridge.invoke<unknown[]>("list_artifacts"), tauriBridge.invoke<SavedWorkflow[]>("list_workflows"), tauriBridge.invoke<RunRow[]>("list_runs")]);
         let activeConfig = stored;
         if (stored) {
           const selectedRuntime = { ...stored.runtime, ...(runtime.paths?.opencode ? { opencodePath: runtime.paths.opencode } : {}), ...(runtime.paths?.python ? { pythonPath: runtime.paths.python } : {}) };
@@ -1166,7 +1168,7 @@ export function App() {
           setLocalePreference(activeConfig.locale ?? "auto");
           if (runtimeChanged) await tauriBridge.invoke("write_config", { value: activeConfig });
         }
-        setConversations(recent);
+        setConversations(recent.map((conversation) => ({ id: conversation.id, title: conversation.title, updated_at: conversation.updatedAt })));
         setTaskCount(summary.runs);
         setTokenCount(summary.input_tokens + summary.output_tokens);
         setEstimatedCost(summary.estimated_cost ?? 0);
@@ -1178,12 +1180,12 @@ export function App() {
         if (latestConversation) {
           setActiveConversationId(latestConversation.id);
           activeConversationRef.current = latestConversation.id;
-          const history = await tauriBridge.invoke<LocalMessageRow[]>("list_messages", { conversationId: latestConversation.id });
-          setConversationMessages(history.filter((message): message is LocalMessageRow & { role: "user" | "assistant" } => message.role === "user" || message.role === "assistant").map((message, index) => ({ id: `${latestConversation.id}:${index}`, role: message.role, content: message.content, created_at: message.created_at })));
+          const history = await workbenchClient.conversations.messages(latestConversation.id);
+          setConversationMessages(history.filter((message): message is typeof message & { role: "user" | "assistant" } => message.role === "user" || message.role === "assistant").map((message) => ({ id: message.id, role: message.role, content: message.content, created_at: message.createdAt })));
           const latestUser = [...history].reverse().find((message) => message.role === "user");
           const latestAssistant = [...history].reverse().find((message) => message.role === "assistant");
-          if (latestUser) { setActivePrompt(latestUser.content); setActivePromptAt(latestUser.created_at); }
-          if (latestAssistant) { setAssistantText(latestAssistant.content); setAssistantAt(latestAssistant.created_at); }
+          if (latestUser) { setActivePrompt(latestUser.content); setActivePromptAt(latestUser.createdAt); }
+          if (latestAssistant) { setAssistantText(latestAssistant.content); setAssistantAt(latestAssistant.createdAt); }
         }
         if (!state.integrity) { setRuntimeStatus("本地数据库需要修复"); return; }
         if (!runtime.ready) {
@@ -1315,7 +1317,7 @@ export function App() {
       } catch { /* malformed diagnostics stay in the host log */ }
     }).then((unlisten) => { dispose = unlisten; }).catch(() => undefined);
     return () => { dispose?.(); disposeRuntimeLog?.(); };
-  }, []);
+  }, [workbenchClient]);
 
   async function saveSettings() {
     try { const nextConfig = { ...config, locale: localePreference }; setConfig(nextConfig); await tauriBridge.invoke("write_config", { value: nextConfig }); setSettingsOpen(false); setRunStatus(locale === "zh" ? "模型配置已保存到本机 config.json" : "Model settings saved to local config.json"); }
@@ -1349,7 +1351,7 @@ export function App() {
   async function prepareRunRetry(run: RunRow) {
     if (!run.conversation_id) { setRunStatus(locale === "zh" ? "该任务没有关联会话，无法准备重试" : "This task has no conversation and cannot be retried"); return; }
     try {
-      const history = await tauriBridge.invoke<Array<{ role: string; content: string }>>("list_messages", { conversationId: run.conversation_id });
+      const history = await workbenchClient.conversations.messages(run.conversation_id);
       const latestUser = [...history].reverse().find((message) => message.role === "user");
       if (!latestUser) { setRunStatus(locale === "zh" ? "未找到原始用户指令，无法准备重试" : "The original user instruction was not found"); return; }
       setActiveConversationId(run.conversation_id);

@@ -310,6 +310,14 @@ test("ordinary chat, writer and PPT routes stay on the OpenCode session path", (
   assert.doesNotMatch(appSource, /ai-sdk-native/);
 });
 
+test("desktop conversation history and retry flow consume the injected WorkbenchClient", () => {
+  const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  assert.match(appSource, /const workbenchClient = useMemo\(\(\) => createDesktopWorkbenchClient/);
+  assert.match(appSource, /workbenchClient\.conversations\.list\(\)/);
+  assert.match(appSource, /workbenchClient\.conversations\.messages\(conversationId\)/);
+  assert.match(appSource, /workbenchClient\.conversations\.messages\(run\.conversation_id\)/);
+});
+
 test("OpenCode serve errors terminate the shared synchronous turn barrier", () => {
   const serveSource = readFileSync(resolve(process.cwd(), "runtime/opencode-serve.ts"), "utf8");
   assert.match(serveSource, /active\.failed =/);
