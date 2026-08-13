@@ -326,8 +326,7 @@ fn write_writer_draft(app: tauri::AppHandle, content: String) -> Result<artifact
     let root = project_root(&app)?;
     let target = root.join(relative_path.replace('/', "\\"));
     if !target.starts_with(&root) { return Err("writer_draft_path_escape".to_string()); }
-    if let Some(parent) = target.parent() { fs::create_dir_all(parent).map_err(|error| error.to_string())?; }
-    fs::write(&target, content.as_bytes()).map_err(|error| error.to_string())?;
+    write_file_atomically(&target, content.as_bytes())?;
     let metadata = artifacts::inspect(&root, &relative_path, "text/markdown")?;
     storage::register_artifact(&database_path(&app)?, &format!("writer-draft-{}", stamp), None, &metadata).map_err(|error| error.to_string())?;
     Ok(metadata)
@@ -407,6 +406,22 @@ fn redact_diagnostic_value(value: &mut serde_json::Value) {
 
 fn chrono_like_timestamp() -> String {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|duration| duration.as_secs().to_string()).unwrap_or_else(|_| "unknown".to_string())
+}
+
+fn write_file_atomically(target: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+    if target.exists() { return Err("atomic_target_exists".to_string()); }
+    let parent = target.parent().ok_or_else(|| "atomic_target_parent_missing".to_string())?;
+    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|duration| duration.as_nanos()).unwrap_or(0);
+    let temporary = target.with_extension(format!("{}.{}.tmp", target.extension().and_then(|value| value.to_str()).unwrap_or("artifact"), stamp));
+    let result = (|| {
+        let mut file = fs::File::create(&temporary).map_err(|error| error.to_string())?;
+        file.write_all(bytes).map_err(|error| error.to_string())?;
+        file.sync_all().map_err(|error| error.to_string())?;
+        fs::rename(&temporary, target).map_err(|error| error.to_string())
+    })();
+    if result.is_err() { let _ = fs::remove_file(&temporary); }
+    result
 }
 
 fn powershell_quote(value: &str) -> String { value.replace('\'', "''") }
@@ -684,7 +699,7 @@ fn lock_path() -> Result<std::path::PathBuf, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{archive_diagnostics, config, configured_runtime_executable, persist_runtime_paths, powershell_quote, redact_diagnostic_value, resolve_windows_command_shim, safe_media_component};
+    use super::{archive_diagnostics, config, configured_runtime_executable, persist_runtime_paths, powershell_quote, redact_diagnostic_value, resolve_windows_command_shim, safe_media_component, write_file_atomically};
     use std::fs;
 
     #[test]
@@ -757,6 +772,19 @@ mod tests {
         assert_eq!(value["nested"]["label"], "中文");
         assert_eq!(value["items"][0]["password"], "[REDACTED]");
         assert_eq!(value["items"][0]["value"], 7);
+    }
+
+    #[test]
+    fn writer_artifacts_use_atomic_utf8_file_activation() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-atomic-writer-{}", std::process::id()));
+        let target = root.join("articles").join("draft.md");
+        let _ = fs::remove_dir_all(&root);
+        write_file_atomically(&target, "中文 draft".as_bytes()).unwrap();
+        assert_eq!(fs::read_to_string(&target).unwrap(), "中文 draft");
+        assert_eq!(write_file_atomically(&target, b"second"), Err("atomic_target_exists".to_string()));
+        let files = fs::read_dir(root.join("articles")).unwrap().map(|entry| entry.unwrap().file_name()).collect::<Vec<_>>();
+        assert_eq!(files, vec![std::ffi::OsString::from("draft.md")]);
+        let _ = fs::remove_dir_all(root);
     }
 
     #[cfg(windows)]

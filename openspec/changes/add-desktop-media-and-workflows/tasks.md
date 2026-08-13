@@ -130,4 +130,5 @@
 - [ ] 三个 capability specs 全部满足
 - [x] 每类真实 Provider smoke 结果已记录
   - 2026-08-13：使用 `apps/desktop/real-providers.test.local.json` 顺序 smoke（LLM → image → audio，未执行 video/seedance）；LLM HTTP 200 且 schema 通过，音频 profile `audio-minimax/speech-2.8-turbo` 提交 HTTP 200 并在第 8 次查询返回 `Success`，图片请求连续 3 次 HTTP 502（上游 `upstream_error`，非本地适配器失败）。脱敏输出明确记录 `scope.executed=[llm,image,audio]` 与 `scope.excluded=[video,seedance]`，API key 不进入结果。
+  - 2026-08-14 rerun: LLM HTTP 200/schema 通过；图片直连 `/v1/images/generations` 连续 3 次 HTTP 502，备用工具代理返回 HTTP 401 `Invalid token`；音频提交 HTTP 200 但 24 次轮询仍未达最终状态。结果继续归类为上游 Provider 可用性阻塞，未把它误报为桌面适配器成功；video/seedance 仍未执行。
 - [ ] Ready for `openspec-archive add-desktop-media-and-workflows`
