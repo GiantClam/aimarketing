@@ -7,7 +7,7 @@
 - [x] 1.6b Harden media runner cancellation so provider cancel requests are sent with a non-aborted control port; add size/MIME rejection coverage for local downloads.
 
 - [ ] 1.1 迁移现有 success、429、invalid response、polling 和 timeout fixtures
-- [ ] 1.2 定义统一 `submit/poll/cancel/download/usage` async media job contract
+- [x] 1.2 定义统一 `submit/poll/cancel/download/usage` async media job contract。✓ 2026-08-13 — `media-runtime` 提供 host-neutral request/task/provider/cancellation ports、generic submit/poll/cancel runner、atomic downloader 与 idempotency/recovery contract tests。
 - [ ] 1.3 抽取 OpenAI-compatible/Bailian image clients
 - [ ] 1.4 抽取 MiniMax/Bailian/RunningHub video clients
 - [ ] 1.5 抽取 RunningHub digital human 和 MiniMax music/TTS/clone/audio clients
@@ -26,7 +26,7 @@
 - [x] 2.5b Desktop media workspace exposes cloud-aligned audio/video feature groups, per-feature fields, local artifact pickers, task status and artifact opening.
 - [x] 2.2c Tauri startup lists persisted `run_attempts` with provider task IDs and host resume requests carry current config without persisting API keys.
 
-- [ ] 2.1 实现从明文 `config.json` 解析并脱敏传递 Provider 配置
+- [x] 2.1 实现从明文 `config.json` 解析并脱敏传递 Provider 配置。✓ 2026-08-13 — 配置仅在当前内存 Provider payload 中传给 host；workflow save/export/import/dispatch 会递归剔除凭据，真实 LLM/图片 smoke 均通过且未输出密钥。
   - [x] 2.1a `config.json` now persists a normalized configured model list and selected Skill; stale selected models fall back to the first configured model.
   - [x] 2.1b Workflow definitions recursively remove Provider credentials before save, export, import, or host dispatch; credentials remain only in the current in-memory Provider payload.
 - [ ] 2.2 提交前持久化 idempotency key，提交后立即保存 provider task ID
