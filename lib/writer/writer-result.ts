@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { validateWriterResultInvariants } from "@aimarketing/writer-core"
 
 export const WRITER_RESULT_SCHEMA_VERSION = 1 as const
 
@@ -34,18 +35,5 @@ export type WriterSubmitResult = z.infer<typeof writerSubmitResultSchema>
 export function validateWriterSubmitResult(value: unknown) {
   const parsed = writerSubmitResultSchema.safeParse(value)
   if (!parsed.success) throw new Error(`writer_result_invalid:${parsed.error.issues[0]?.path.join(".") || "unknown"}`)
-  // Some providers emit a clarification message together with a complete
-  // draft. A draft is the stronger, actionable signal; canonicalize that
-  // ambiguous shape instead of failing the entire Writer turn.
-  const normalized = parsed.data.outcome === "needs_clarification" && parsed.data.draft
-    ? { ...parsed.data, outcome: "draft_ready" as const }
-    : parsed.data
-  if (normalized.outcome === "draft_ready" && !normalized.draft) throw new Error("writer_result_draft_missing")
-  if (normalized.research.completed && !normalized.research.requested) throw new Error("writer_result_research_state_invalid")
-  const ids = new Set<string>()
-  for (const intent of normalized.assetIntents) {
-    if (ids.has(intent.id)) throw new Error(`writer_result_duplicate_asset:${intent.id}`)
-    ids.add(intent.id)
-  }
-  return normalized
+  return validateWriterResultInvariants(parsed.data)
 }

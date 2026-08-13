@@ -53,7 +53,7 @@
 
 - [x] 5.1a 建立 host-neutral Writer revision guard、title-only body preservation 和 optimistic message reconciliation 首个共享切片。
 - [x] 5.1b 共享 Writer revision tests 与既有 SaaS revision regression tests 均通过。
-- [ ] 5.1 Extract Writer types, result validation, revision guard, message reconciliation, and session context without DB/R2 dependencies.
+- [x] 5.1 Extract Writer types, result validation, revision guard, message reconciliation, and session context without DB/R2 dependencies. ✓ 2026-08-13 — `writer-core` now owns result invariants, revision/message reconciliation and bounded portable context; SaaS retains only Zod transport validation, storage identity and context hashing.
 - [x] 5.2a 将 `content/skills/` 作为唯一 canonical source，并新增可复现的 skill catalog 类型、校验器和生成脚本。
 - [x] 5.2b 为 catalog 条目生成 SHA-256 digest，并通过包级测试验证排序、重复 ID 与非法条目拒绝。
 - [ ] 5.2 Make `content/skills/` the canonical Skill source and generate host-specific bundles plus verifiable catalog digests.

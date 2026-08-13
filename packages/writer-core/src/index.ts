@@ -6,6 +6,22 @@ export type WriterRevision = {
 
 export type WriterActiveDraft = { readonly revision: number; readonly title: string; readonly content: string };
 export type WriterDraftResult = { readonly outcome: "needs_clarification" | "draft_ready"; readonly draft: { title: string; content: string; baseRevision: number | null } | null };
+export type WriterSessionDraft = WriterActiveDraft & { readonly sourceUrls: readonly string[] };
+export type WriterSessionTurn = { readonly role: "user" | "assistant"; readonly content: string };
+export type WriterSessionContext = {
+  readonly schemaVersion: 1;
+  readonly conversationId: string;
+  readonly platform: string;
+  readonly currentTurn: string;
+  readonly activeDraft: WriterSessionDraft | null;
+  readonly recentTurns: readonly WriterSessionTurn[];
+  readonly taskStatus: "pending" | "running" | "ready" | "failed";
+  readonly recovery: boolean;
+};
+export type WriterResultInvariant = WriterDraftResult & {
+  readonly research: { readonly requested: boolean; readonly completed: boolean };
+  readonly assetIntents: readonly { readonly id: string }[];
+};
 
 const TITLE_SIGNAL = /(?:标题|标题名|headline|title)/iu;
 const TITLE_ONLY_SIGNAL = /(?:仅|只|只需|只要|only|just)/iu;
@@ -21,6 +37,50 @@ export function isWriterTitleOnlyRevisionRequest(query: string) {
 }
 
 export function isIncompleteWriterRevisionContent(content: string) { return INCOMPLETE_REVISION_SIGNAL.test(content); }
+
+/** Enforce result invariants after a host validates its transport schema. */
+export function validateWriterResultInvariants<T extends WriterResultInvariant>(result: T): T {
+  const normalized = result.outcome === "needs_clarification" && result.draft
+    ? { ...result, outcome: "draft_ready" as const } as T
+    : result;
+  if (normalized.outcome === "draft_ready" && !normalized.draft) throw new Error("writer_result_draft_missing");
+  if (normalized.research.completed && !normalized.research.requested) throw new Error("writer_result_research_state_invalid");
+  const ids = new Set<string>();
+  for (const intent of normalized.assetIntents) {
+    if (ids.has(intent.id)) throw new Error(`writer_result_duplicate_asset:${intent.id}`);
+    ids.add(intent.id);
+  }
+  return normalized;
+}
+
+/** Normalize portable Writer session data; hosts add storage keys and hashes. */
+export function buildWriterSessionContext(input: {
+  readonly conversationId?: string;
+  readonly platform: string;
+  readonly currentTurn: string;
+  readonly activeDraft: WriterSessionDraft | null;
+  readonly recentTurns: readonly WriterSessionTurn[];
+  readonly recentTurnLimit?: number;
+  readonly taskStatus: WriterSessionContext["taskStatus"];
+  readonly recovery?: boolean;
+}): WriterSessionContext {
+  const activeDraft = input.activeDraft ? {
+    revision: input.activeDraft.revision,
+    title: input.activeDraft.title,
+    content: input.activeDraft.content,
+    sourceUrls: [...input.activeDraft.sourceUrls],
+  } : null;
+  return {
+    schemaVersion: 1,
+    conversationId: input.conversationId?.trim() || "unknown",
+    platform: input.platform.trim(),
+    currentTurn: input.currentTurn.trim(),
+    activeDraft,
+    recentTurns: input.recentTurns.slice(-(input.recentTurnLimit ?? 12)).map((turn) => ({ role: turn.role, content: turn.content })),
+    taskStatus: input.taskStatus,
+    recovery: input.recovery === true,
+  };
+}
 
 function replaceMarkdownTitle(content: string, title: string) {
   const normalizedTitle = title.trim();
@@ -53,7 +113,11 @@ export function reconcilePendingWriterMessages<T extends PendingWriterMessageLik
   const explicitAssistant = pending.optimisticAssistantMessageId ? currentMessages.find((message) => message.id === pending.optimisticAssistantMessageId && message.role === "assistant") ?? null : null;
   const assistantIndex = explicitAssistant ? currentMessages.findIndex((message) => message.id === explicitAssistant.id) : findLast(currentMessages, (message) => message.role === "assistant" && normalize(message.content) === generatingContent);
   const assistant = explicitAssistant || currentMessages[assistantIndex] || null;
-  const userIndex = explicitUserIndex >= 0 ? explicitUserIndex : findLast(currentMessages, (message) => message.role === "user" && normalize(message.content) === requestedPrompt);
+  const userIndex = explicitUserIndex >= 0
+    ? explicitUserIndex
+    : assistantIndex > 0 && currentMessages[assistantIndex - 1]?.role === "user"
+      ? assistantIndex - 1
+      : findLast(currentMessages, (message) => message.role === "user" && normalize(message.content) === requestedPrompt);
   const prompt = requestedPrompt || (userIndex >= 0 ? normalize(currentMessages[userIndex].content) : "");
   if (!prompt || !assistant || normalize(assistant.content) !== generatingContent) return serverMessages;
   const user = userIndex >= 0 ? currentMessages[userIndex] : null;

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { buildWriterSessionContext } from "@aimarketing/writer-core"
 
 import type { WriterPlatform } from "@/lib/writer/config"
 
@@ -82,31 +83,50 @@ export function buildWriterRuntimeContext(input: {
     userId: 0,
     conversationId: input.conversationId || "unknown",
   })
-  const base: Omit<WriterRuntimeContext, "contextHash"> = {
-    schemaVersion: 1,
-    sessionKey,
-    conversationId: input.conversationId || "unknown",
+  const normalized = buildWriterSessionContext({
+    conversationId: input.conversationId,
     platform: input.platform,
-    currentTurn: input.currentTurn.trim(),
-    activeDraft: cloneDraft(input.activeDraft),
+    currentTurn: input.currentTurn,
+    activeDraft: input.activeDraft,
+    recentTurns: input.recentTurns,
+    recentTurnLimit: input.recentTurnLimit,
+    taskStatus: input.taskStatus,
+  })
+  const base: Omit<WriterRuntimeContext, "contextHash"> = {
+    schemaVersion: normalized.schemaVersion,
+    sessionKey,
+    conversationId: normalized.conversationId,
+    platform: normalized.platform as WriterPlatform,
+    currentTurn: normalized.currentTurn,
+    activeDraft: cloneDraft(normalized.activeDraft),
     // History is bounded independently. The active draft is never included
     // in this array, so clipping history cannot clip the document.
-    recentTurns: input.recentTurns.slice(-(input.recentTurnLimit ?? 12)).map((turn) => ({
+    recentTurns: normalized.recentTurns.map((turn) => ({
       role: turn.role,
       content: turn.content,
     })),
-    taskStatus: input.taskStatus,
-    recovery: false,
+    taskStatus: normalized.taskStatus,
+    recovery: normalized.recovery,
   }
   return { ...base, contextHash: hashContext(base) }
 }
 
 export function buildWriterRecoveryContext(context: WriterRuntimeContext): WriterRuntimeContext {
+  const normalized = buildWriterSessionContext({
+    conversationId: context.conversationId,
+    platform: context.platform,
+    currentTurn: context.currentTurn,
+    activeDraft: context.activeDraft,
+    recentTurns: context.recentTurns,
+    recentTurnLimit: Math.max(1, context.recentTurns.length),
+    taskStatus: context.taskStatus,
+    recovery: true,
+  })
   const base = {
     ...context,
-    activeDraft: cloneDraft(context.activeDraft),
-    recentTurns: context.recentTurns.map((turn) => ({ ...turn })),
-    recovery: true as const,
+    activeDraft: cloneDraft(normalized.activeDraft),
+    recentTurns: normalized.recentTurns.map((turn) => ({ ...turn })),
+    recovery: normalized.recovery,
   }
   return { ...base, contextHash: hashContext(base) }
 }
