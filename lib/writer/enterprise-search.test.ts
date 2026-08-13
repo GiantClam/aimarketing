@@ -38,7 +38,6 @@ test("writer enterprise search binds retrieval to the authenticated enterprise",
   assert.equal(result?.snippets[0]?.content, "product supports workflow automation.")
   assert.equal(JSON.stringify(result).includes("secret-do-not-return"), false)
 })
-
 test("writer enterprise search is read-only and returns no cross-enterprise context", async () => {
   let called = false
   const result = await searchWriterEnterpriseKnowledge(
@@ -55,4 +54,3 @@ test("writer enterprise search is read-only and returns no cross-enterprise cont
   assert.equal(result, null)
   assert.equal(called, false)
 })
-
