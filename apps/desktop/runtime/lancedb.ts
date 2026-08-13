@@ -9,7 +9,7 @@ export const LOCAL_EMBEDDING_DIMENSION = 384;
 const TABLE_NAME = "document_chunks";
 const DEFAULT_EMBEDDING_URL = "http://127.0.0.1:11434";
 
-export type LocalEmbeddingOptions = { readonly baseUrl?: string; readonly model?: string; readonly fetchImpl?: typeof fetch; readonly timeoutMs?: number };
+export type LocalEmbeddingOptions = { readonly mode?: "local" | "remote"; readonly baseUrl?: string; readonly model?: string; readonly apiKey?: string; readonly fetchImpl?: typeof fetch; readonly timeoutMs?: number };
 
 async function loadLance() {
   try {
@@ -60,6 +60,10 @@ function isLoopbackUrl(value: string) {
   } catch { return false; }
 }
 
+function isRemoteEmbeddingUrl(value: string) {
+  try { return new URL(value).protocol === "https:"; } catch { return false; }
+}
+
 async function embedWithOllama(texts: readonly string[], options: LocalEmbeddingOptions) {
   const baseUrl = (options.baseUrl ?? process.env.AIMARKETING_EMBEDDING_BASE_URL ?? DEFAULT_EMBEDDING_URL).replace(/\/$/u, "");
   if (!isLoopbackUrl(baseUrl)) throw new Error("embedding_endpoint_must_be_loopback");
@@ -78,10 +82,32 @@ async function embedWithOllama(texts: readonly string[], options: LocalEmbedding
   } finally { clearTimeout(timer); }
 }
 
-async function embedTexts(texts: readonly string[], options: LocalEmbeddingOptions = {}, fallbackDimension = LOCAL_EMBEDDING_DIMENSION) {
-  if (!texts.length) return { model: options.model ? `ollama/${options.model}` : LOCAL_EMBEDDING_MODEL, dimension: fallbackDimension, vectors: [] as number[][], semantic: false };
+async function embedWithRemote(texts: readonly string[], options: LocalEmbeddingOptions) {
+  const baseUrl = options.baseUrl?.replace(/\/$/u, "") ?? "";
+  const model = options.model?.trim() ?? "";
+  const apiKey = options.apiKey?.trim() ?? "";
+  if (!isRemoteEmbeddingUrl(baseUrl)) throw new Error("remote_embedding_endpoint_must_be_https");
+  if (!model || !apiKey) throw new Error("remote_embedding_configuration_required");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 10_000);
   try {
-    const result = await embedWithOllama(texts, options);
+    const response = await (options.fetchImpl ?? fetch)(`${baseUrl}/embeddings`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` }, body: JSON.stringify({ model, input: texts }), signal: controller.signal });
+    if (!response.ok) throw new Error(`remote_embedding_http_${response.status}`);
+    const payload = await response.json() as { data?: unknown };
+    if (!Array.isArray(payload.data) || payload.data.length !== texts.length) throw new Error("remote_embedding_response_invalid");
+    const vectors = payload.data.map((item) => typeof item === "object" && item !== null ? (item as { embedding?: unknown }).embedding : undefined);
+    if (!vectors.every((item) => Array.isArray(item) && item.every((value) => typeof value === "number" && Number.isFinite(value)))) throw new Error("remote_embedding_response_invalid");
+    const typedVectors = vectors as number[][];
+    const dimension = typedVectors[0]?.length ?? 0;
+    if (!dimension || typedVectors.some((vector) => vector.length !== dimension)) throw new Error("remote_embedding_dimension_invalid");
+    return { model: `remote/${model}`, dimension, vectors: typedVectors };
+  } finally { clearTimeout(timer); }
+}
+
+async function embedTexts(texts: readonly string[], options: LocalEmbeddingOptions = {}, fallbackDimension = LOCAL_EMBEDDING_DIMENSION) {
+  if (!texts.length) return { model: options.mode === "remote" && options.model ? `remote/${options.model}` : options.model ? `ollama/${options.model}` : LOCAL_EMBEDDING_MODEL, dimension: fallbackDimension, vectors: [] as number[][], semantic: false };
+  try {
+    const result = options.mode === "remote" ? await embedWithRemote(texts, options) : await embedWithOllama(texts, options);
     return { ...result, semantic: true };
   } catch {
     return { model: options.model ? `local-hash-${fallbackDimension}-v1` : "local-hash-384-v1", dimension: fallbackDimension, vectors: texts.map((text) => embedLocal(text, fallbackDimension)), semantic: false };

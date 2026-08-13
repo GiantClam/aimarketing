@@ -261,6 +261,14 @@ test("desktop settings can detach a Vault without deleting local files", () => {
   assert.match(appSource, /obsidianVaultPath: undefined, obsidianIndexPath: undefined/);
 });
 
+test("desktop settings keep Vault embeddings local unless the user explicitly selects remote", () => {
+  const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  assert.match(appSource, /localEmbedding: "Local only \(default\)"/);
+  assert.match(appSource, /remoteEmbedding: "Remote \(send chunks\)"/);
+  assert.match(appSource, /mode: "remote"/);
+  assert.match(appSource, /https:\/\/…\/v1/);
+});
+
 test("media readiness follows Provider source instead of the default local id", () => {
   const source = readFileSync(resolve(process.cwd(), "src/provider-config.ts"), "utf8");
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");

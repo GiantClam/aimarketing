@@ -58,7 +58,7 @@
 - [ ] 4.3 写入 `index-state.json` 并在不兼容时建立新 generation 后原子切换
 - [ ] 4.4 实现 lexical + vector hybrid retrieval 和 top-k 限制
 - [ ] 4.5 返回 Vault 相对路径、标题、段落、行范围和可点击引用
-- [ ] 4.6 实现可选远程 embedding，并在 UI 明示远程发送范围
+- [x] 4.6 实现可选远程 embedding，并在 UI 明示远程发送范围。✓ 2026-08-13 — 默认 local-only embedding；用户在设置中显式切换 Remote 后才通过 HTTPS OpenAI-compatible `/embeddings` 发送待索引片段，独立 API key 仅透传给 Host，不写入 SQLite/日志/诊断包；回归覆盖远程 opt-in、鉴权与模型记录。
 
 **Quality Gate:**
 - [ ] `app.db` 不含 chunk、vector 或 Vault 原文

@@ -153,7 +153,9 @@ async function writeOpenCodeConfig(configDirectory: string, provider: ProviderCo
   await rename(temporary, target);
 }
 
-async function rebuildVaultIndex(vaultPath: string, indexPath: string, embedding: { readonly baseUrl?: string; readonly model?: string }) {
+type EmbeddingConfig = { readonly mode?: "local" | "remote"; readonly baseUrl?: string; readonly model?: string; readonly apiKey?: string };
+
+async function rebuildVaultIndex(vaultPath: string, indexPath: string, embedding: EmbeddingConfig) {
   const generationPath = createIndexGenerationPath(indexPath);
   const manifest = await indexObsidianVault(vaultPath, indexPath, 0, generationPath);
   let state: Awaited<ReturnType<typeof buildLanceIndex>>;
@@ -166,7 +168,7 @@ async function rebuildVaultIndex(vaultPath: string, indexPath: string, embedding
   return { manifest, state };
 }
 
-function watchVault(vaultPath: string, indexPath: string, embedding: { readonly baseUrl?: string; readonly model?: string }) {
+function watchVault(vaultPath: string, indexPath: string, embedding: EmbeddingConfig) {
   const existing = vaultWatchers.get(indexPath);
   existing?.stop();
   const watcher = new ObsidianVaultWatcher(vaultPath, () => {
@@ -214,7 +216,7 @@ async function runWorkflow(command: HostCommand) {
         const indexPath = typeof config.indexPath === "string" ? config.indexPath : typeof command.payload?.indexPath === "string" ? command.payload.indexPath : "";
         if (!indexPath) throw new Error("knowledge_index_required");
         const query = typeof config.query === "string" ? config.query : typeof inputs.text === "string" ? inputs.text : "";
-        const citations = await searchVaultIndex(indexPath, query, Number(config.limit ?? 8), { baseUrl: typeof config.embeddingBaseUrl === "string" ? config.embeddingBaseUrl : undefined, model: typeof config.embeddingModel === "string" ? config.embeddingModel : undefined });
+        const citations = await searchVaultIndex(indexPath, query, Number(config.limit ?? 8), { mode: config.embeddingMode === "remote" ? "remote" : "local", baseUrl: typeof config.embeddingBaseUrl === "string" ? config.embeddingBaseUrl : undefined, model: typeof config.embeddingModel === "string" ? config.embeddingModel : undefined, apiKey: typeof config.embeddingApiKey === "string" ? config.embeddingApiKey : undefined });
         return { citations, text: citations.map((item) => `[${item.documentPath}${item.heading ? `#${item.heading}` : ""}] ${item.excerpt}`).join("\n") };
       }
       if (executorId === "knowledge_write") {
@@ -391,8 +393,8 @@ createRpcReader(process.stdin, (raw) => {
     const vaultPath = typeof command.payload?.vaultPath === "string" ? command.payload.vaultPath : "";
     const indexPath = typeof command.payload?.indexPath === "string" ? command.payload.indexPath : "";
     if (!vaultPath || !indexPath) return fail(command, "invalid_vault_index", "vaultPath and indexPath are required");
-    return void rebuildVaultIndex(vaultPath, indexPath, command.payload?.embedding && typeof command.payload.embedding === "object" ? command.payload.embedding as { baseUrl?: string; model?: string } : {}).then(async ({ manifest, state }) => {
-      const embedding = command.payload?.embedding && typeof command.payload.embedding === "object" ? command.payload.embedding as { baseUrl?: string; model?: string } : {};
+    return void rebuildVaultIndex(vaultPath, indexPath, command.payload?.embedding && typeof command.payload.embedding === "object" ? command.payload.embedding as EmbeddingConfig : {}).then(async ({ manifest, state }) => {
+      const embedding = command.payload?.embedding && typeof command.payload.embedding === "object" ? command.payload.embedding as EmbeddingConfig : {};
       try {
         watchVault(vaultPath, indexPath, embedding);
         respond(command, { generation: manifest.generation, documents: manifest.documents.length, chunks: manifest.chunks.length, indexPath, semantic: state.status === "semantic_ready", embeddingModel: state.embeddingModel, embeddingDimension: state.embeddingDimension, watcher: "active" });
@@ -406,7 +408,7 @@ createRpcReader(process.stdin, (raw) => {
     const indexPath = typeof command.payload?.indexPath === "string" ? command.payload.indexPath : "";
     const query = typeof command.payload?.query === "string" ? command.payload.query.trim() : "";
       if (!indexPath || !query) return fail(command, "invalid_knowledge_search", "indexPath and query are required");
-    return void searchVaultIndex(indexPath, query, Number(command.payload?.limit ?? 8), { baseUrl: typeof command.payload?.embeddingBaseUrl === "string" ? command.payload.embeddingBaseUrl : undefined, model: typeof command.payload?.embeddingModel === "string" ? command.payload.embeddingModel : undefined })
+    return void searchVaultIndex(indexPath, query, Number(command.payload?.limit ?? 8), { mode: command.payload?.embeddingMode === "remote" ? "remote" : "local", baseUrl: typeof command.payload?.embeddingBaseUrl === "string" ? command.payload.embeddingBaseUrl : undefined, model: typeof command.payload?.embeddingModel === "string" ? command.payload.embeddingModel : undefined, apiKey: typeof command.payload?.embeddingApiKey === "string" ? command.payload.embeddingApiKey : undefined })
       .then((results) => respond(command, { indexPath, query, results }))
       .catch((error) => fail(command, "knowledge_search_failed", error instanceof Error ? error.message : String(error)));
   }
