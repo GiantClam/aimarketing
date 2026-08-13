@@ -350,6 +350,18 @@ test("desktop conversation history and retry flow consume the injected Workbench
   assert.match(appSource, /workbenchClient\.workflows\.save\(/);
 });
 
+test("task center exposes persisted node, event and usage evidence", () => {
+  const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  const storageSource = readFileSync(resolve(process.cwd(), "src-tauri/src/storage.rs"), "utf8");
+  const tauriSource = readFileSync(resolve(process.cwd(), "src-tauri/src/lib.rs"), "utf8");
+  assert.match(appSource, /onInspectRun=\{\(runId\) => tauriBridge\.invoke<RunDetail>\("inspect_run"/);
+  assert.match(appSource, /run-evidence-panel/);
+  assert.match(appSource, /payloadPreview/);
+  assert.match(storageSource, /pub fn inspect_run\(/);
+  assert.match(storageSource, /RunDetail \{ pub run: RunRow, pub nodes:/);
+  assert.match(tauriSource, /fn inspect_run\(/);
+});
+
 test("desktop media and asset artifact reveals consume the WorkbenchClient file port", () => {
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
   const tauriSource = readFileSync(resolve(process.cwd(), "src-tauri/src/lib.rs"), "utf8");

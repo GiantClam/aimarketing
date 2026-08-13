@@ -522,6 +522,11 @@ fn list_runs(app: tauri::AppHandle) -> Result<Vec<storage::RunRow>, String> {
 }
 
 #[tauri::command]
+fn inspect_run(app: tauri::AppHandle, run_id: String) -> Result<storage::RunDetail, String> {
+    storage::inspect_run(&database_path(&app)?, &run_id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn list_recoverable_attempts(app: tauri::AppHandle) -> Result<Vec<storage::RunAttemptRow>, String> {
     storage::list_recoverable_attempts(&database_path(&app)?).map_err(|error| error.to_string())
 }
@@ -570,7 +575,7 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .manage(instance_lock)
         .manage(host::HostState::default())
-        .invoke_handler(tauri::generate_handler![health, runtime_probe, repair_runtime, runtime_paths, initialize_local_state, read_config, write_config, begin_local_attachment, append_local_attachment_chunk, finish_local_attachment, abort_local_attachment, allocate_media_temp, write_writer_draft, inspect_artifact, register_artifact, list_artifacts, remove_artifact, export_diagnostics, open_workspace, pick_directory, open_artifact, open_artifact_default, open_vault_file, create_conversation, set_conversation_session, append_message, create_run, append_run_event, finish_run, record_usage, record_run_node, record_run_checkpoint, record_run_attempt, list_conversations, list_messages, list_runs, list_recoverable_attempts, save_workflow, list_workflows, usage_summary, host::host_start, host::host_send, host::host_stop]);
+        .invoke_handler(tauri::generate_handler![health, runtime_probe, repair_runtime, runtime_paths, initialize_local_state, read_config, write_config, begin_local_attachment, append_local_attachment_chunk, finish_local_attachment, abort_local_attachment, allocate_media_temp, write_writer_draft, inspect_artifact, register_artifact, list_artifacts, remove_artifact, export_diagnostics, open_workspace, pick_directory, open_artifact, open_artifact_default, open_vault_file, create_conversation, set_conversation_session, append_message, create_run, append_run_event, finish_run, record_usage, record_run_node, record_run_checkpoint, record_run_attempt, list_conversations, list_messages, list_runs, inspect_run, list_recoverable_attempts, save_workflow, list_workflows, usage_summary, host::host_start, host::host_send, host::host_stop]);
     let app = builder.build(tauri::generate_context!()).expect("error while building AI Marketing");
     app.run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {

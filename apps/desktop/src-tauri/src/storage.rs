@@ -191,6 +191,18 @@ pub struct RunRow { pub id: String, pub conversation_id: Option<String>, pub sta
 pub struct RunAttemptRow { pub idempotency_key: String, pub run_id: String, pub node_key: String, pub provider: Option<String>, pub provider_task_id: Option<String>, pub status: String, pub payload_json: Option<String>, pub updated_at: String }
 
 #[derive(Debug, Serialize)]
+pub struct RunEventRow { pub sequence: i64, pub event_type: String, pub payload_json: String, pub created_at: String }
+
+#[derive(Debug, Serialize)]
+pub struct RunNodeRow { pub node_key: String, pub status: String, pub output_json: Option<String>, pub updated_at: String }
+
+#[derive(Debug, Serialize)]
+pub struct RunUsageRow { pub provider: Option<String>, pub model: String, pub input_tokens: Option<i64>, pub output_tokens: Option<i64>, pub provider_cost: Option<f64>, pub estimated_cost: Option<f64>, pub created_at: String }
+
+#[derive(Debug, Serialize)]
+pub struct RunDetail { pub run: RunRow, pub nodes: Vec<RunNodeRow>, pub events: Vec<RunEventRow>, pub usage: Vec<RunUsageRow> }
+
+#[derive(Debug, Serialize)]
 pub struct WorkflowRow { pub id: String, pub project_id: Option<String>, pub name: String, pub definition_json: String, pub updated_at: String }
 
 #[derive(Debug, Serialize)]
@@ -330,6 +342,16 @@ pub fn list_runs(path: &Path) -> Result<Vec<RunRow>> {
     Ok(rows)
 }
 
+pub fn inspect_run(path: &Path, run_id: &str) -> Result<RunDetail> {
+    initialize(path)?;
+    let connection = open(path)?;
+    let run = connection.query_row("SELECT id, conversation_id, status, model, started_at, finished_at FROM runs WHERE id=?1", [run_id], |row| Ok(RunRow { id: row.get(0)?, conversation_id: row.get(1)?, status: row.get(2)?, model: row.get(3)?, started_at: row.get(4)?, finished_at: row.get(5)? }))?;
+    let events = connection.prepare("SELECT sequence, event_type, payload_json, created_at FROM run_events WHERE run_id=?1 ORDER BY sequence ASC")?.query_map([run_id], |row| Ok(RunEventRow { sequence: row.get(0)?, event_type: row.get(1)?, payload_json: row.get(2)?, created_at: row.get(3)? }))?.collect::<Result<Vec<_>, _>>()?;
+    let nodes = connection.prepare("SELECT node_key, status, output_json, updated_at FROM run_nodes WHERE run_id=?1 ORDER BY node_key ASC")?.query_map([run_id], |row| Ok(RunNodeRow { node_key: row.get(0)?, status: row.get(1)?, output_json: row.get(2)?, updated_at: row.get(3)? }))?.collect::<Result<Vec<_>, _>>()?;
+    let usage = connection.prepare("SELECT provider, model, input_tokens, output_tokens, provider_cost, estimated_cost, created_at FROM usage_records WHERE run_id=?1 ORDER BY created_at ASC, id ASC")?.query_map([run_id], |row| Ok(RunUsageRow { provider: row.get(0)?, model: row.get(1)?, input_tokens: row.get(2)?, output_tokens: row.get(3)?, provider_cost: row.get(4)?, estimated_cost: row.get(5)?, created_at: row.get(6)? }))?.collect::<Result<Vec<_>, _>>()?;
+    Ok(RunDetail { run, nodes, events, usage })
+}
+
 pub fn list_recoverable_attempts(path: &Path) -> Result<Vec<RunAttemptRow>> {
     initialize(path)?;
     let connection = open(path)?;
@@ -408,6 +430,11 @@ mod tests {
         assert_eq!(connection.query_row("SELECT sequence FROM run_checkpoints WHERE run_id='run-1' AND checkpoint_key='writer'", [], |row| row.get::<_, i64>(0)).unwrap(), 3);
         assert_eq!(connection.query_row("SELECT output_json FROM run_checkpoints WHERE run_id='run-1' AND checkpoint_key='writer'", [], |row| row.get::<_, String>(0)).unwrap(), r#"{"text":"最终"}"#);
         assert_eq!(connection.query_row("SELECT provider_task_id FROM run_attempts WHERE idempotency_key='run-1:media:1'", [], |row| row.get::<_, String>(0)).unwrap(), "provider-task-1");
+        let detail = inspect_run(&path, "run-1").unwrap();
+        assert_eq!(detail.run.status, "succeeded");
+        assert_eq!(detail.nodes.iter().find(|node| node.node_key == "writer").and_then(|node| node.output_json.as_deref()), Some(r#"{"text":"完成"}"#));
+        assert_eq!(detail.events.len(), 1);
+        assert_eq!(detail.events[0].event_type, "text_delta");
         assert!(integrity(&path).unwrap());
         let identity: String = open(&path).unwrap().query_row("SELECT device_id FROM identity WHERE id=1", [], |row| row.get(0)).unwrap();
         assert!(identity.starts_with("local-") && identity.len() > 20);

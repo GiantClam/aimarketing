@@ -89,7 +89,8 @@
 
 - [ ] 5.1 使用共享 workflow builder 和 desktop WorkbenchClient
 - [x] 5.2 未配置 Provider 的媒体节点保持可见，画布显示双语“需要配置 / Configuration required”状态并提供模型配置入口；运行时仍保留结构化 configuration-required 错误。 ✓ 2026-08-13
-- [ ] 5.3 运行页展示文本、工具、媒体进度、产物、错误和用量
+- [x] 5.3 运行页展示文本、工具、媒体进度、产物、错误和用量
+  - [x] 2026-08-13 Task Center can inspect any persisted run and displays node statuses/outputs, ordered tool/media/error events, local artifacts referenced by events, retry entry points, and per-run usage totals from SQLite.
 - [ ] 5.4 实现版本化 workflow JSON export/import 和 schema migration
 - [ ] 5.5 在另一台机器导入后重新绑定本地路径/Provider，不复制数据库 ID
 
