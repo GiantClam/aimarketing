@@ -8,6 +8,7 @@ test("normalizes skill ids and sorts catalog entries deterministically", () => {
 });
 
 test("rejects duplicate or malformed catalog entries", () => {
-  assert.equal(validateSkillCatalog({ schemaVersion: 1, sourceRoot: "content/skills", generatedAt: "2026-08-11T00:00:00Z", skills: [{ id: "writer", digest: "bad", relativePath: "writer/SKILL.md" }] }), false);
-  assert.equal(validateSkillCatalog({ schemaVersion: 1, sourceRoot: "content/skills", generatedAt: "2026-08-11T00:00:00Z", skills: [{ id: "writer", digest: "a".repeat(64), relativePath: "writer/SKILL.md" }] }), true);
+  assert.equal(validateSkillCatalog({ schemaVersion: 1, sourceRoot: "content/skills", sourceDigest: "a".repeat(64), generatedAt: "deterministic", skills: [{ id: "writer", digest: "bad", relativePath: "writer/SKILL.md" }] }), false);
+  assert.equal(validateSkillCatalog({ schemaVersion: 1, sourceRoot: "content/skills", sourceDigest: "bad", generatedAt: "deterministic", skills: [{ id: "writer", digest: "a".repeat(64), relativePath: "writer/SKILL.md" }] }), false);
+  assert.equal(validateSkillCatalog({ schemaVersion: 1, sourceRoot: "content/skills", sourceDigest: "b".repeat(64), generatedAt: "deterministic", skills: [{ id: "writer", digest: "a".repeat(64), relativePath: "writer/SKILL.md" }] }), true);
 });

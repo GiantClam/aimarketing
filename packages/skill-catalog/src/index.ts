@@ -7,6 +7,7 @@ export type SkillDescriptor = {
 export type SkillCatalog = {
   readonly schemaVersion: 1;
   readonly sourceRoot: string;
+  readonly sourceDigest: string;
   readonly generatedAt: string;
   readonly skills: readonly SkillDescriptor[];
 };
@@ -25,5 +26,5 @@ export function validateSkillCatalog(catalog: SkillCatalog) {
     if (!skill.id || ids.has(skill.id) || !/^[a-f0-9]{64}$/u.test(skill.digest) || !skill.relativePath.endsWith("SKILL.md")) return false;
     ids.add(skill.id);
   }
-  return catalog.schemaVersion === 1 && catalog.skills.length === ids.size;
+  return catalog.schemaVersion === 1 && /^[a-f0-9]{64}$/u.test(catalog.sourceDigest) && catalog.skills.length === ids.size;
 }

@@ -56,7 +56,7 @@
 - [x] 5.1 Extract Writer types, result validation, revision guard, message reconciliation, and session context without DB/R2 dependencies. ✓ 2026-08-13 — `writer-core` now owns result invariants, revision/message reconciliation and bounded portable context; SaaS retains only Zod transport validation, storage identity and context hashing.
 - [x] 5.2a 将 `content/skills/` 作为唯一 canonical source，并新增可复现的 skill catalog 类型、校验器和生成脚本。
 - [x] 5.2b 为 catalog 条目生成 SHA-256 digest，并通过包级测试验证排序、重复 ID 与非法条目拒绝。
-- [ ] 5.2 Make `content/skills/` the canonical Skill source and generate host-specific bundles plus verifiable catalog digests.
+- [x] 5.2 Make `content/skills/` the canonical Skill source and generate host-specific bundles plus verifiable catalog digests. ✓ 2026-08-13 — the deterministic canonical catalog carries a source digest, and desktop bundle builds validate every canonical entry while explicitly allowing the pinned `ppt-master` extension.
 - [x] 5.3 Define `WorkbenchClient`, streaming subscription, file action, and `NavigationAdapter` interfaces.
 - [ ] 5.4 Convert shared AI Entry message rendering and workflow UI slices to injected clients and navigation.
 - [ ] 5.5 Implement the Web adapter with the current `/api/*` contracts and Next navigation.
