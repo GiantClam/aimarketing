@@ -96,7 +96,7 @@
 - [x] 6.1a workflow-host bundle 通过 esbuild 固定为 Node ESM，并由 Tauri host_start/host_send/host_stop 命令管理 stdin/stdout/stderr。
 - [x] 6.1b 事件通过 Tauri `desktop://runtime-response` / `desktop://runtime-log` 转发，发布资源清单包含 host bundle。
 - [x] 6.2 创建私有 Node workflow-host，装载共享 packages 和 desktop ports — 2026-08-14 `build:host` bundles the private ESM host and knowledge service; desktop host-session tests exercise the shared workflow-core ports.
-- [ ] 6.3 workflow-host 通过双向 RPC 请求 repository、artifact、RAG 和 runtime services
+- [x] 6.3 workflow-host 通过双向 RPC 请求 repository、artifact、RAG 和 runtime services — 2026-08-14 host-session workflow integration now asserts reverse service requests for repository status, ordered events, runtime artifact writes, and artifact registration; the knowledge-service route regression covers RAG/Obsidian RPC.
   - [x] 2026-08-14 RAG/index/write operations run in a separate `knowledge.mjs` Node service and are reached from workflow-host through Tauri reverse RPC; workflow repository, artifact, ordered event ports, and bounded text artifact writes now use typed reverse-service methods. Remaining runtime/process controls are still open.
 - [x] 6.4 Tauri 使用 Windows Job Object 监管 workflow-host 与 OpenCode process slots
 - [x] 6.5 Host workflow invalid/cancel paths clean controller state and emit structured terminal errors.
