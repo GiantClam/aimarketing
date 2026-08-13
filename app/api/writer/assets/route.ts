@@ -45,6 +45,25 @@ const WRITER_IMAGE_REQUEST_TIMEOUT_MS = Math.max(
   60_000,
   Math.min(180_000, Number.parseInt(process.env.WRITER_IMAGE_REQUEST_TIMEOUT_MS || "180000", 10) || 180_000),
 )
+
+function normalizeWriterAssetIdempotencyKey(input: unknown) {
+  if (typeof input !== "string") return null
+  const value = input.trim()
+  if (!value || value.length > 128) return null
+  return /^[A-Za-z0-9._:-]+$/u.test(value) ? value : null
+}
+
+function resolveWriterAssetRequestKey(request: NextRequest, body: Record<string, unknown>) {
+  const headerKey = request.headers?.get?.("Idempotency-Key")
+  return (
+    normalizeWriterAssetIdempotencyKey(body.idempotencyKey) ||
+    normalizeWriterAssetIdempotencyKey(body.request_id) ||
+    normalizeWriterAssetIdempotencyKey(body.requestId) ||
+    normalizeWriterAssetIdempotencyKey(headerKey) ||
+    `task-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`
+  )
+}
+
 type WriterImageProvider = OpenAiCompatibleImageProviderId
 type WriterPlannedAsset = ReturnType<typeof buildPendingWriterAssets>[number]
 type WriterGeneratedAsset = WriterPlannedAsset & {
@@ -601,6 +620,8 @@ export async function POST(request: NextRequest) {
     const platform = normalizeWriterPlatform(body?.platform)
     const mode = normalizeWriterMode(platform, body?.mode)
     const conversationId = typeof body?.conversationId === "string" ? body.conversationId : null
+    const requestKey = resolveWriterAssetRequestKey(request, body as Record<string, unknown>)
+    const billingOperationKey = `writer-image:${auth.user.id}:${requestKey}`
     const plannedAssets = buildPendingWriterAssets(markdown, platform, mode)
     const baseProviderPlan = buildWriterImageProviderPlan()
 
@@ -732,7 +753,7 @@ export async function POST(request: NextRequest) {
                 enterpriseId: auth.user.enterpriseId,
                 provider: preferredProvider,
                 imageCount: plannedAssets.length,
-                idempotencyKey: `writer-image:stream:reserve:${auth.user.id}:${conversationId || "new"}:${Date.now()}`,
+                idempotencyKey: `${billingOperationKey}:reserve`,
                 conversationId,
               })
             } catch (billingError) {
@@ -797,7 +818,7 @@ export async function POST(request: NextRequest) {
               enterpriseId: auth.user.enterpriseId,
               provider: resolvedProvider,
               successCount,
-              idempotencyKey: `writer-image:stream:debit:${auth.user.id}:${conversationId || "new"}:${Date.now()}`,
+              idempotencyKey: `${billingOperationKey}:debit`,
               conversationId,
             }).then(() => {
               creditFinalized = true
@@ -812,7 +833,7 @@ export async function POST(request: NextRequest) {
               reservation: creditReservation,
               userId: auth.user.id,
               enterpriseId: auth.user.enterpriseId,
-              idempotencyKey: `writer-image:stream:release:${auth.user.id}:${conversationId || "new"}:${Date.now()}`,
+              idempotencyKey: `${billingOperationKey}:release`,
               reason: "writer_assets_failed",
             })
           }
@@ -829,7 +850,7 @@ export async function POST(request: NextRequest) {
               reservation: creditReservation,
               userId: auth.user.id,
               enterpriseId: auth.user.enterpriseId,
-              idempotencyKey: `writer-image:stream:release:${auth.user.id}:${conversationId || "new"}:${Date.now()}`,
+              idempotencyKey: `${billingOperationKey}:release`,
               reason: error instanceof Error ? error.message : "writer_assets_failed",
             }).catch((billingError) => {
               console.warn("writer.assets.billing.release_failed", {
@@ -853,7 +874,7 @@ export async function POST(request: NextRequest) {
           enterpriseId: auth.user.enterpriseId,
           provider: preferredProvider,
           imageCount: plannedAssets.length,
-          idempotencyKey: `writer-image:reserve:${auth.user.id}:${conversationId || "new"}:${Date.now()}`,
+          idempotencyKey: `${billingOperationKey}:reserve`,
           conversationId,
         })
       }
@@ -881,7 +902,7 @@ export async function POST(request: NextRequest) {
         reservation: creditReservation,
         userId: auth.user.id,
         enterpriseId: auth.user.enterpriseId,
-        idempotencyKey: `writer-image:release:${auth.user.id}:${conversationId || "new"}:${Date.now()}`,
+        idempotencyKey: `${billingOperationKey}:release`,
         reason: "writer_assets_failed",
       }).catch((billingError) => {
         console.warn("writer.assets.billing.release_failed", {
@@ -910,7 +931,7 @@ export async function POST(request: NextRequest) {
       enterpriseId: auth.user.enterpriseId,
       provider: resolvedProvider,
       successCount,
-      idempotencyKey: `writer-image:debit:${auth.user.id}:${conversationId || "new"}:${Date.now()}`,
+      idempotencyKey: `${billingOperationKey}:debit`,
       conversationId,
     }).catch((billingError) => {
       console.warn("writer.assets.billing.finalize_failed", {

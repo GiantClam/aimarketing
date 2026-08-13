@@ -9,6 +9,7 @@ const nodeModule = require("node:module") as {
 const originalLoad = nodeModule._load
 
 const updateCalls: Array<{ userId: number; conversationId: string; meta: Record<string, unknown> }> = []
+const reserveIdempotencyKeys: string[] = []
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -63,7 +64,8 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 
   if (request === "@/lib/billing/runtime") {
     return {
-      reserveFeatureCredits: async () => {
+      reserveFeatureCredits: async (input: { idempotencyKey?: string }) => {
+        if (input.idempotencyKey) reserveIdempotencyKeys.push(input.idempotencyKey)
         throw new Error("insufficient_credits")
       },
       finalizeReservedCredits: async () => null,
@@ -180,6 +182,7 @@ test.before(async () => {
 
 test.beforeEach(() => {
   updateCalls.length = 0
+  reserveIdempotencyKeys.length = 0
 })
 
 test.after(() => {
@@ -220,5 +223,24 @@ test("writer assets stream reports insufficient credits and marks conversation f
   assert.deepEqual(updateCalls, [
     { userId: 7, conversationId: "conv-2", meta: { status: "image_generating", imagesRequested: true } },
     { userId: 7, conversationId: "conv-2", meta: { status: "failed", imagesRequested: true } },
+  ])
+})
+
+test("writer assets reuses a supplied idempotency key when a request is retried", async () => {
+  const body = {
+    markdown: "![cover](writer-asset://cover)",
+    conversationId: "conv-retry",
+    idempotencyKey: "writer-image-retry-7",
+  }
+
+  const first = await POST(buildRequest(body))
+  const second = await POST(buildRequest(body))
+
+  if (!first || !second) throw new Error("writer asset retry response missing")
+  assert.equal(first.status, 402)
+  assert.equal(second.status, 402)
+  assert.deepEqual(reserveIdempotencyKeys, [
+    "writer-image:7:writer-image-retry-7:reserve",
+    "writer-image:7:writer-image-retry-7:reserve",
   ])
 })
