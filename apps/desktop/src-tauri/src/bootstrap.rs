@@ -2,17 +2,112 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[cfg(windows)]
+use std::ffi::OsStr;
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
+#[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
 const WEBVIEW2_BOOTSTRAPPER_URL: &str = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+fn webview_repair_progress_messages() -> [&'static str; 3] {
+    [
+        "正在检查 WebView2 运行时…",
+        "正在下载 WebView2 修复程序…",
+        "正在安装 WebView2 并重新探测…",
+    ]
+}
+
+struct StartupProgress {
+    #[cfg(windows)]
+    hwnd: windows_sys::Win32::Foundation::HWND,
+}
+
+impl StartupProgress {
+    fn new(message: &str) -> Self {
+        #[cfg(windows)]
+        {
+            use std::ptr::{null, null_mut};
+            use windows_sys::Win32::UI::WindowsAndMessaging::{
+                CreateWindowExW, ShowWindow, WS_CAPTION, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+                WS_OVERLAPPED, WS_SYSMENU, SW_SHOW,
+            };
+
+            let class = wide("STATIC");
+            let title = wide("AI Marketing 环境修复");
+            let hwnd = unsafe {
+                CreateWindowExW(
+                    WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+                    class.as_ptr(),
+                    title.as_ptr(),
+                    WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+                    0,
+                    0,
+                    520,
+                    140,
+                    null_mut(),
+                    null_mut(),
+                    null_mut(),
+                    null(),
+                )
+            };
+            let progress = Self { hwnd };
+            if !progress.hwnd.is_null() {
+                unsafe { ShowWindow(progress.hwnd, SW_SHOW); }
+            }
+            progress.update(message);
+            progress
+        }
+        #[cfg(not(windows))]
+        {
+            eprintln!("NATIVE_STATUS: {message}");
+            Self {}
+        }
+    }
+
+    fn update(&self, message: &str) {
+        #[cfg(windows)]
+        {
+            if self.hwnd.is_null() { return; }
+            let text = wide(message);
+            use windows_sys::Win32::Graphics::Gdi::UpdateWindow;
+            use windows_sys::Win32::UI::WindowsAndMessaging::SetWindowTextW;
+            unsafe {
+                SetWindowTextW(self.hwnd, text.as_ptr());
+                UpdateWindow(self.hwnd);
+            }
+        }
+        #[cfg(not(windows))]
+        eprintln!("NATIVE_STATUS: {message}");
+    }
+}
+
+impl Drop for StartupProgress {
+    fn drop(&mut self) {
+        #[cfg(windows)]
+        if !self.hwnd.is_null() {
+            use windows_sys::Win32::UI::WindowsAndMessaging::DestroyWindow;
+            unsafe { DestroyWindow(self.hwnd); }
+        }
+    }
+}
+
+#[cfg(windows)]
+fn wide(value: &str) -> Vec<u16> {
+    OsStr::new(value).encode_wide().chain(Some(0)).collect()
+}
+
 pub fn ensure_webview2() -> Result<(), String> {
     if webview2_installed() { return Ok(()); }
+    let progress_messages = webview_repair_progress_messages();
+    let progress = StartupProgress::new(progress_messages[0]);
     let bootstrapper = bundled_bootstrapper().unwrap_or_else(|| std::env::temp_dir().join("AI-Marketing-WebView2Bootstrapper.exe"));
     if !bootstrapper.is_file() {
+        progress.update(progress_messages[1]);
         download_bootstrapper(&bootstrapper)?;
     }
+    progress.update(progress_messages[2]);
     install_bootstrapper(&bootstrapper)?;
     if webview2_installed() { return Ok(()); }
     Err("webview2_install_incomplete".to_string())
@@ -256,5 +351,17 @@ mod tests {
 
         assert_eq!(configured_runtime_path(&root, "nodePath"), Some(canonical));
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn webview_repair_progress_has_visible_ordered_stages() {
+        assert_eq!(
+            webview_repair_progress_messages(),
+            [
+                "正在检查 WebView2 运行时…",
+                "正在下载 WebView2 修复程序…",
+                "正在安装 WebView2 并重新探测…",
+            ]
+        );
     }
 }
