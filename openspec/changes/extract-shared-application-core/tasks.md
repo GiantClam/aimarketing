@@ -46,6 +46,7 @@
 - [x] 4.4 Extract execution and iteration behavior without enterprise IDs, credit fields, Next responses, or database record types. ✓ 2026-08-13 — shared execution owns deterministic DAG/foreach lifecycle while desktop supplies local capability and provider-task recovery adapters.
 - [ ] 4.5 Implement a SaaS adapter that preserves existing store, task, billing, artifact, and route behavior.
 - [ ] 4.6 Keep original `lib/workflows/*` paths as thin re-exports or SaaS composition modules.
+  - [x] 4.6a `lib/workflows/node-definitions/*` now re-export the same `workflow-core` node types, built-ins, registry and port compatibility instances; SaaS-specific node execution remains host composition.
 
 **Quality Gate:** PASSED for the shared workflow core — workflow-core contract tests/typecheck and desktop host integration tests pass. The SaaS adapter/re-export parity work remains open in 4.5–4.6.
 

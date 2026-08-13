@@ -1,7 +1,14 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { WORKFLOW_BUILTIN_NODE_DEFINITIONS as sharedDefinitions, workflowNodeRegistry as sharedRegistry } from "@aimarketing/workflow-core"
 import { workflowNodeRegistry } from "@/lib/workflows/node-definitions/registry"
+import { WORKFLOW_BUILTIN_NODE_DEFINITIONS } from "@/lib/workflows/node-definitions/builtins"
+
+test("legacy registry exports are the shared workflow-core instances", () => {
+  assert.equal(workflowNodeRegistry, sharedRegistry)
+  assert.equal(WORKFLOW_BUILTIN_NODE_DEFINITIONS, sharedDefinitions)
+})
 
 test("workflow registry contains every canonical built-in node definition", () => {
   const definitions = workflowNodeRegistry.list()

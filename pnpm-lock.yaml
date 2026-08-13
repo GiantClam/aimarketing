@@ -17,6 +17,9 @@ importers:
       '@aimarketing/runtime-contracts':
         specifier: workspace:*
         version: link:packages/runtime-contracts
+      '@aimarketing/workflow-core':
+        specifier: workspace:*
+        version: link:packages/workflow-core
       '@aws-sdk/client-s3':
         specifier: 3.1013.0
         version: 3.1013.0

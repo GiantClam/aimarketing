@@ -85,6 +85,7 @@
   },
   "dependencies": {
     "@aimarketing/runtime-contracts": "workspace:*",
+    "@aimarketing/workflow-core": "workspace:*",
     "@ai-sdk/mcp": "^2.0.22",
     "@ai-sdk/openai": "^4.0.27",
     "@aws-sdk/client-s3": "3.1013.0",

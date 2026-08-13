@@ -17,3 +17,11 @@ test("preserves localized default titles", () => {
   assert.equal(getDefaultWorkflowNodeTitle("ppt_generate", "zh"), "PPT 生成");
   assert.equal(getDefaultWorkflowNodeTitle("ppt_generate", "en"), "PPT Generate");
 });
+
+test("preserves SaaS control-node defaults in the shared definition catalog", () => {
+  const collect = workflowNodeRegistry.require("collect");
+  const output = workflowNodeRegistry.require("output");
+  assert.equal(collect.defaultConfig.includeFailures, false);
+  assert.equal(output.defaultConfig.allowEmpty, false);
+  assert.equal(output.defaultConfig.requireAllSucceeded, true);
+});

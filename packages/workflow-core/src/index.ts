@@ -1,4 +1,5 @@
 export * from "./node-definitions/types";
+export * from "./node-definitions/builtins";
 export * from "./node-definitions/registry";
 export * from "./schema";
 export * from "./connect";
