@@ -28,7 +28,12 @@ function defaultOpenCodeExecutable() {
   }
   return "opencode";
 }
-const serveClient = new OpenCodeServeClient(defaultOpenCodeExecutable(), join(process.env.OPENCODE_RUNTIME_DIR ?? process.cwd(), ".opencode-server"));
+const configuredOpenCodeExecutable = defaultOpenCodeExecutable();
+const serveClient = new OpenCodeServeClient(
+  /\.(?:mjs|cjs|js)$/iu.test(configuredOpenCodeExecutable) ? process.execPath : configuredOpenCodeExecutable,
+  join(process.env.OPENCODE_RUNTIME_DIR ?? process.cwd(), ".opencode-server"),
+  /\.(?:mjs|cjs|js)$/iu.test(configuredOpenCodeExecutable) ? [configuredOpenCodeExecutable] : [],
+);
 
 async function shutdownHost() {
   if (shuttingDown) return;

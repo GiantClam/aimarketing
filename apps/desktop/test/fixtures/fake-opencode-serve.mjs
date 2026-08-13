@@ -49,6 +49,9 @@ const server = createServer(async (request, response) => {
       return;
     }
     const prompt = payload.parts?.[0]?.text;
+    if (typeof prompt === "string" && prompt.includes("ppt-master")) {
+      writeFileSync("workflow-deck.pptx", Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]));
+    }
     const answer = prompt === "First turn" ? "First answer" : prompt === "Second turn" ? "Second answer" : prompt === "Create artifact" ? "Artifact created" : "Recovered answer";
     const tool = prompt === "Create artifact" ? "artifact:result" : "write";
     setTimeout(() => {

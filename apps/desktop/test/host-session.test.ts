@@ -22,9 +22,9 @@ function respondToHostServiceRequest(child: ChildProcessWithoutNullStreams, fram
   child.stdin.write(encodeRpcMessage({ version: 1, requestId: frame.requestId, type: "service_response", ok: true, data }));
 }
 
-function startHost(desktopRoot: string) {
+function startHost(desktopRoot: string, environment: NodeJS.ProcessEnv = {}) {
   const tsxCli = resolve(desktopRoot, "..", "..", "node_modules", "tsx", "dist", "cli.mjs");
-  const child = spawn(process.execPath, [tsxCli, join(desktopRoot, "runtime", "host.ts")], { cwd: desktopRoot, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+  const child = spawn(process.execPath, [tsxCli, join(desktopRoot, "runtime", "host.ts")], { cwd: desktopRoot, env: { ...process.env, ...environment }, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
   const frames: Record<string, unknown>[] = [];
   let buffer = new Uint8Array(0);
   const waiters: Array<{ predicate: (frame: Record<string, unknown>) => boolean; resolve: (frame: Record<string, unknown>) => void }> = [];
@@ -54,6 +54,95 @@ function startHost(desktopRoot: string) {
   });
   return { child: child as ChildProcessWithoutNullStreams, frames, waitFor };
 }
+
+test("workflow-host runs a mixed text, image, video, audio and PPT workflow with local providers", async () => {
+  const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const workspace = await mkdtemp(join(tmpdir(), "aimarketing-host-mixed-media-"));
+  const fixture = join(desktopRoot, "test", "fixtures", "fake-opencode-serve.mjs");
+  const outputs = new Map<string, { readonly contentType: string; readonly body: Buffer }>([
+    ["/output.png", { contentType: "image/png", body: Buffer.from("mixed-image-fixture", "utf8") }],
+    ["/output.mp4", { contentType: "video/mp4", body: Buffer.from("mixed-video-fixture", "utf8") }],
+    ["/output.mp3", { contentType: "audio/mpeg", body: Buffer.from("mixed-audio-fixture", "utf8") }],
+  ]);
+  const server = createServer(async (request, response) => {
+    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    if (request.method === "POST" && ["/images/generations", "/videos/generations", "/audio/generations"].includes(url.pathname)) {
+      const output = url.pathname.startsWith("/images/") ? "/output.png" : url.pathname.startsWith("/videos/") ? "/output.mp4" : "/output.mp3";
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ id: `fixture-${url.pathname.slice(1, 6)}`, data: [{ url: `http://127.0.0.1:${(server.address() as AddressInfo).port}${output}` }] }));
+      return;
+    }
+    const output = outputs.get(url.pathname);
+    if (request.method === "GET" && output) {
+      response.writeHead(200, { "content-type": output.contentType });
+      response.end(output.body);
+      return;
+    }
+    response.writeHead(404, { "content-type": "application/json" });
+    response.end(JSON.stringify({ error: "not_found" }));
+  });
+  await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
+  const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const providerKey = String.fromCharCode(102, 105, 120, 116, 117, 114, 101);
+  const child = startHost(desktopRoot, { AIMARKETING_OPENCODE_PATH: fixture, OPENCODE_RUNTIME_DIR: workspace });
+  try {
+    const runId = `mixed-media-${randomUUID()}`;
+    child.child.stdin.write(encodeRpcMessage({ version: 1, requestId: randomUUID(), runId, type: "workflow.run", payload: {
+      workspacePath: workspace,
+      provider: { id: "configured", model: "configured/model" },
+      providers: { fixture: { id: "fixture", source: "openai-compatible", baseUrl, apiKey: providerKey, model: "fixture-media" } },
+      definition: {
+        schemaVersion: 2, revision: 1, definitionHash: "",
+        nodes: [
+          { nodeKey: "input", type: "text_input", nodeVersion: 1, title: "Input", positionX: 0, positionY: 0, config: { text: "Create a launch story" } },
+          { nodeKey: "llm", type: "llm_generate", nodeVersion: 1, title: "LLM", positionX: 1, positionY: 0, config: { selectedProviderId: "configured", selectedModelId: "configured/model" } },
+          { nodeKey: "image", type: "image_generate", nodeVersion: 1, title: "Image", positionX: 2, positionY: -1, config: { provider: "fixture", model: "fixture-image", prompt: "launch image" } },
+          { nodeKey: "video", type: "video_generate", nodeVersion: 1, title: "Video", positionX: 3, positionY: -1, config: { provider: "fixture", model: "fixture-video" } },
+          { nodeKey: "audio", type: "audio_generate", nodeVersion: 1, title: "Audio", positionX: 2, positionY: 1, config: { provider: "fixture", model: "fixture-audio" } },
+          { nodeKey: "ppt", type: "ppt_generate", nodeVersion: 1, title: "PPT", positionX: 3, positionY: 1, config: {} },
+          { nodeKey: "output", type: "output", nodeVersion: 1, title: "Output", positionX: 4, positionY: 0, config: {} },
+        ],
+        edges: [
+          { edgeKey: "input-llm", sourceNodeKey: "input", sourcePortId: "text", targetNodeKey: "llm", targetPortId: "text" },
+          { edgeKey: "llm-image", sourceNodeKey: "llm", sourcePortId: "text", targetNodeKey: "image", targetPortId: "text" },
+          { edgeKey: "image-video", sourceNodeKey: "image", sourcePortId: "image", targetNodeKey: "video", targetPortId: "images" },
+          { edgeKey: "llm-audio", sourceNodeKey: "llm", sourcePortId: "text", targetNodeKey: "audio", targetPortId: "text" },
+          { edgeKey: "llm-ppt", sourceNodeKey: "llm", sourcePortId: "text", targetNodeKey: "ppt", targetPortId: "text" },
+          { edgeKey: "image-ppt", sourceNodeKey: "image", sourcePortId: "image", targetNodeKey: "ppt", targetPortId: "images" },
+          { edgeKey: "image-output", sourceNodeKey: "image", sourcePortId: "image", targetNodeKey: "output", targetPortId: "images" },
+          { edgeKey: "video-output", sourceNodeKey: "video", sourcePortId: "video", targetNodeKey: "output", targetPortId: "videos" },
+          { edgeKey: "audio-output", sourceNodeKey: "audio", sourcePortId: "audio", targetNodeKey: "output", targetPortId: "audios" },
+          { edgeKey: "ppt-output", sourceNodeKey: "ppt", sourcePortId: "ppt", targetNodeKey: "output", targetPortId: "presentations" },
+        ],
+      },
+    } }));
+    const terminal = await child.waitFor((frame) => {
+      const event = (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined;
+      return (event?.event === "done" || event?.event === "runtime_error") && event?.runId === runId;
+    }, 30_000);
+    const terminalEvent = (terminal.data as Record<string, unknown>).event as Record<string, unknown>;
+    assert.equal(terminalEvent.event, "done", JSON.stringify(terminalEvent));
+    await new Promise((resolveEvents) => setTimeout(resolveEvents, 100));
+    const events = child.frames.map((frame) => (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined).filter(Boolean) as Record<string, unknown>[];
+    for (const executorId of ["llm_generate", "image_generate", "video_generate", "audio_generate", "ppt_generate"]) {
+      assert.equal(events.some((event) => event.tool === "workflow:node_succeeded" && JSON.stringify(event).includes(executorId)), true, executorId);
+    }
+    for (const extension of [".png", ".mp4", ".mp3", ".pptx"]) {
+      assert.equal(events.some((event) => String(event.tool).startsWith("artifact:") && String(event.message).toLowerCase().includes(extension)), true, extension);
+    }
+    const pptx = readFileSync(join(workspace, "workflow-deck.pptx"));
+    assert.deepEqual([...pptx.subarray(0, 4)], [0x50, 0x4b, 0x03, 0x04]);
+  } finally {
+    if (child.child.exitCode === null) {
+      const stopped = new Promise<void>((resolveClose) => child.child.once("close", () => resolveClose()));
+      child.child.kill();
+      await Promise.race([stopped, new Promise<void>((resolveClose) => setTimeout(resolveClose, 5_000))]);
+    }
+    child.child.stdin.destroy();
+    await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+    await rm(workspace, { recursive: true, force: true });
+  }
+});
 
 test("workflow-host creates a stable session mapping through RPC", async () => {
   const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");

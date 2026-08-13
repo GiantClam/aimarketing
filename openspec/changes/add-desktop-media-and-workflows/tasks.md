@@ -122,7 +122,8 @@
   - [x] 2026-08-13 portability sanitizer removes Provider/model bindings, credentials, database IDs and absolute paths while preserving relative references; import migrates/validates and saves a new local ID.
 
 **Quality Gate:**
-- [ ] 混合文本→图片→视频→音频→PPT 工作流 E2E 通过
+- [x] 混合文本→图片→视频→音频→PPT 工作流 E2E 通过
+  - 2026-08-14 `apps/desktop/test/host-session.test.ts` runs a local fake OpenCode serve plus injected HTTP media Provider through one v2 DAG; text, image, video, audio and PPT nodes all reach `node_succeeded`, artifacts are downloaded under the workspace, and the generated PPTX fixture has the ZIP signature. The test uses no real Seedance/video smoke request.
 - [x] workflow JSON 可通过普通文件共享并成功导入
   - [x] 2026-08-13 `apps/desktop/test/workflow-storage.test.ts` writes the versioned export to an ordinary UTF-8 `workflow.json`, reads it back, runs migration/validation, strips Provider/path bindings, and verifies a fresh portable definition hash.
 - [x] 不支持共享或并发打开 `app.db`/LanceDB 的文档已明确
