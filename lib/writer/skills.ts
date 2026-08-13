@@ -186,6 +186,7 @@ async function runWriterOpenCodeText(params: {
 export type WriterSkillsTurnResult =
   | ({
       outcome: "needs_clarification"
+      operation: WriterSubmitResult["operation"]
       answer: string
       diagnostics: WriterTurnDiagnostics
       usage?: WriterRuntimeUsage
@@ -193,6 +194,7 @@ export type WriterSkillsTurnResult =
     } & WriterBriefPlan)
   | ({
       outcome: "draft_ready"
+      operation: WriterSubmitResult["operation"]
       answer: string
       diagnostics: WriterTurnDiagnostics
       usage?: WriterRuntimeUsage
@@ -269,6 +271,8 @@ function createEmptyResearchResult(status: WriterResearchResult["status"]): Writ
     status,
   }
 }
+
+type WriterFixtureScenario = "clarification" | "create" | "revise" | "translate" | "adapt_platform" | "research"
 
 
 function safeBuildFixtureKnowledgeBlock(enterpriseKnowledge?: EnterpriseKnowledgeContext | null) {
@@ -738,10 +742,17 @@ function buildWriterFixtureFirstTurnResult(params: {
   writerContext?: WriterRuntimeContext | null
   platformLabel: string
   binding: ReturnType<typeof resolveWriterPlatformBinding>
+  fixtureScenario?: WriterFixtureScenario
 }) {
   const priorUserTurns = params.writerContext?.recentTurns.filter((turn) => turn.role === "user").length || 0
   const hasActiveDraft = Boolean(params.writerContext?.activeDraft)
-  const shouldClarify = !hasActiveDraft && priorUserTurns === 0
+  const inferredScenario: WriterFixtureScenario = !hasActiveDraft && priorUserTurns === 0
+    ? "clarification"
+    : hasActiveDraft
+      ? "revise"
+      : "create"
+  const scenario = params.fixtureScenario || inferredScenario
+  const shouldClarify = scenario === "clarification"
   const contentType: WriterContentType = ["wechat", "xiaohongshu", "weibo", "douyin"].includes(params.platform)
     ? "social_cn"
     : "social_global"
@@ -769,18 +780,39 @@ function buildWriterFixtureFirstTurnResult(params: {
 
   const content = safeBuildFixtureDraft(params.platform, params.mode, params.preferredLanguage)
   const title = content.match(/^#\s+(.+)$/mu)?.[1]?.trim() || "Writer Fixture Draft"
+  const operation = scenario === "translate" || scenario === "adapt_platform"
+    ? scenario
+    : scenario === "revise" || (scenario === "research" && hasActiveDraft)
+      ? "revise"
+      : "create"
   const result: WriterSubmitResult = {
     schemaVersion: 1,
     outcome: "draft_ready",
-    operation: hasActiveDraft ? "revise" : "create",
+    operation,
     platform: params.platform,
-    userMessage: params.preferredLanguage === "zh" ? "已完成文章草稿。" : "The article draft is ready.",
+    userMessage: params.preferredLanguage === "zh"
+      ? scenario === "translate"
+        ? "已完成翻译稿。"
+        : scenario === "adapt_platform"
+          ? "已完成平台适配稿。"
+          : scenario === "research"
+            ? "已完成研究并更新文章草稿。"
+            : "已完成文章草稿。"
+      : scenario === "translate"
+        ? "The translated draft is ready."
+        : scenario === "adapt_platform"
+          ? "The platform-adapted draft is ready."
+          : scenario === "research"
+            ? "The researched draft is ready."
+            : "The article draft is ready.",
     draft: {
       title,
       content,
       baseRevision: params.writerContext?.activeDraft?.revision || 0,
     },
-    research: { requested: false, completed: false, sourceUrls: [] },
+    research: scenario === "research"
+      ? { requested: true, completed: true, sourceUrls: ["https://example.test/writer-research"] }
+      : { requested: false, completed: false, sourceUrls: [] },
     assetIntents: params.binding.assets.cover
       ? [{
           id: "cover",
@@ -805,6 +837,8 @@ export async function runWriterSkillFirstTurn(params: {
   writerContext?: WriterRuntimeContext | null
   selectedProviderId?: AiEntryProviderId | null
   selectedModelId?: string | null
+  /** Test-only deterministic scenario; ignored unless WRITER_E2E_FIXTURES=true. */
+  fixtureScenario?: WriterFixtureScenario
 }): Promise<WriterSkillsTurnResult> {
   const preferredLanguage = params.preferredLanguage || "auto"
   const platformConfig = WRITER_PLATFORM_CONFIG[params.platform]
@@ -851,6 +885,7 @@ export async function runWriterSkillFirstTurn(params: {
       writerContext: params.writerContext,
       platformLabel,
       binding,
+      fixtureScenario: params.fixtureScenario,
     })
     const writerResult = fixture.result
     validateWriterSkillFirstTurnResult({
@@ -865,14 +900,20 @@ export async function runWriterSkillFirstTurn(params: {
       resultToolCallCount: 1,
     })
     const diagnostics = buildWriterTurnDiagnostics({
-      retrievalStrategy: "no_retrieval",
+      retrievalStrategy: writerResult.research.requested ? "fresh_external" : "no_retrieval",
       enterpriseKnowledge: null,
       enterpriseKnowledgeEnabled: Boolean(params.enterpriseId),
-      research: createEmptyResearchResult("skipped"),
+      research: createEmptyResearchResult(
+        writerResult.research.completed ? "ready" : writerResult.research.requested ? "unavailable" : "skipped",
+      ),
       routing,
     })
+    diagnostics.webResearchUsed = writerResult.research.completed
+    diagnostics.webSourceCount = writerResult.research.sourceUrls.length
+    diagnostics.webSourceUrls = writerResult.research.sourceUrls
     return {
       outcome: writerResult.outcome,
+      operation: writerResult.operation,
       answer: writerResult.outcome === "draft_ready" ? writerResult.draft?.content || writerResult.userMessage : writerResult.userMessage,
       diagnostics,
       brief: createEmptyWriterBrief(),
@@ -939,6 +980,7 @@ export async function runWriterSkillFirstTurn(params: {
   diagnostics.webSourceUrls = writerResult.research.sourceUrls
   return {
     outcome: writerResult.outcome,
+    operation: writerResult.operation,
     answer: writerResult.outcome === "draft_ready"
       ? postProcessWriterDraft(params.platform, params.mode, answer, language, { ensureCoverPlaceholder: false, preserveTitle: true })
       : writerResult.userMessage,

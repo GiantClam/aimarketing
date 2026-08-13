@@ -174,6 +174,32 @@ test("multi-image runs allow cumulative near-timeout execution and settle billin
   assert.ok(progress.every((markdown) => markdown.includes("https://cdn.example.com/")))
 })
 
+test("inline-capable platform plans generate cover and inline images through the same runtime", async () => {
+  const platforms = ["wechat", "xiaohongshu", "instagram", "facebook"] as const
+
+  for (const platform of platforms) {
+    const result = await generateWriterAssetsForTask({
+      markdown: `# ${platform} article\n\nBody`,
+      platform,
+      mode: "article",
+      userId: 7,
+      conversationId: `conversation-inline-${platform}`,
+      taskId: `task-inline-${platform}`,
+      expectedRevision: 1,
+      assetIntents: intents(["cover", "inline-1"]),
+    })
+
+    assert.equal(result.status, "ready", platform)
+    assert.equal(result.assets.length, 2, platform)
+    assert.equal(result.assets.find((asset) => asset.id === "cover")?.status, "ready", platform)
+    assert.equal(result.assets.find((asset) => asset.id === "inline-1")?.status, "ready", platform)
+    assert.match(result.assets.find((asset) => asset.id === "inline-1")?.url || "", /cdn\.example\.com\/inline-1\.png/u, platform)
+  }
+
+  assert.equal(finalizations.length, platforms.length)
+  assert.equal(releases.length, 0)
+})
+
 test("partial success preserves stored URLs and reports partial status", async () => {
   failedPrompts.add("inline-2")
 
