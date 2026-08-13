@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WORKFLOW_NODE_TYPES, areWorkflowPortsCompatible, getDefaultWorkflowNodeTitle, resolveWorkflowPortConnection, workflowNodeRegistry } from "../src";
+import { WORKFLOW_NODE_TYPES, areWorkflowPortsCompatible, canWorkflowNodeConnectValueKind, getDefaultWorkflowNodeTitle, resolveWorkflowPortConnection, workflowNodeRegistry } from "../src";
 
 test("registers the complete v1 node set without invalid definitions", () => {
   assert.equal(workflowNodeRegistry.validate().length, 0);
@@ -24,4 +24,9 @@ test("preserves SaaS control-node defaults in the shared definition catalog", ()
   assert.equal(collect.defaultConfig.includeFailures, false);
   assert.equal(output.defaultConfig.allowEmpty, false);
   assert.equal(output.defaultConfig.requireAllSucceeded, true);
+});
+
+test("accepts generic assets for media inputs but not text-only nodes", () => {
+  assert.equal(canWorkflowNodeConnectValueKind("image_generate", "asset"), true);
+  assert.equal(canWorkflowNodeConnectValueKind("writer", "asset"), false);
 });

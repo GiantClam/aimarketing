@@ -22,3 +22,13 @@ export function isDefaultWorkflowNodeTitle(type: WorkflowNodeType, value: string
   return Object.values(definition.title).includes(value.trim()) || (definition.legacyTitles ?? []).includes(value.trim());
 }
 export function resolveWorkflowNodeTitle(type: WorkflowNodeType, value: string | null | undefined, locale: WorkflowLocale = "en") { return isDefaultWorkflowNodeTitle(type, value) ? getDefaultWorkflowNodeTitle(type, locale) : value!.trim(); }
+
+export function canWorkflowNodeAcceptValueKind(type: WorkflowNodeType, valueKind: WorkflowValueKind) {
+  return getAllowedWorkflowTargetInputKinds(type).includes(valueKind);
+}
+
+export function canWorkflowNodeConnectValueKind(type: WorkflowNodeType, valueKind: WorkflowValueKind) {
+  if (canWorkflowNodeAcceptValueKind(type, valueKind)) return true;
+  if (valueKind !== "asset") return false;
+  return getAllowedWorkflowTargetInputKinds(type).some((kind) => isWorkflowFileKind(kind) && kind !== "asset");
+}

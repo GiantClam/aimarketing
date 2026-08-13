@@ -1,13 +1,26 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { WORKFLOW_BUILTIN_NODE_DEFINITIONS as sharedDefinitions, workflowNodeRegistry as sharedRegistry } from "@aimarketing/workflow-core"
+import {
+  WORKFLOW_BUILTIN_NODE_DEFINITIONS as sharedDefinitions,
+  canWorkflowNodeConnectValueKind as sharedCanConnectValueKind,
+  getWorkflowNodeDefinition as sharedGetDefinition,
+  workflowNodeRegistry as sharedRegistry,
+} from "@aimarketing/workflow-core"
 import { workflowNodeRegistry } from "@/lib/workflows/node-definitions/registry"
 import { WORKFLOW_BUILTIN_NODE_DEFINITIONS } from "@/lib/workflows/node-definitions/builtins"
+import { canWorkflowNodeConnectValueKind, getWorkflowNodeDefinition } from "@/lib/workflows/schema"
 
 test("legacy registry exports are the shared workflow-core instances", () => {
   assert.equal(workflowNodeRegistry, sharedRegistry)
   assert.equal(WORKFLOW_BUILTIN_NODE_DEFINITIONS, sharedDefinitions)
+  assert.equal(getWorkflowNodeDefinition, sharedGetDefinition)
+  assert.equal(canWorkflowNodeConnectValueKind, sharedCanConnectValueKind)
+})
+
+test("legacy schema keeps asset-to-media compatibility from the shared core", () => {
+  assert.equal(canWorkflowNodeConnectValueKind("image_generate", "asset"), true)
+  assert.equal(canWorkflowNodeConnectValueKind("writer", "asset"), false)
 })
 
 test("workflow registry contains every canonical built-in node definition", () => {
