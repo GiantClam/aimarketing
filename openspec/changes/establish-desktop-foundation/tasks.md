@@ -89,18 +89,19 @@
 - [ ] 6.1 为 framing、correlation、反向请求、events、取消、最大消息和坏消息写 tests
   - [x] 6.1a Node workflow-host framing tests 覆盖 UTF-8 byte length、严格数字前缀、8 MiB 上限、坏 frame 后继续处理下一条合法请求；Rust host 额外覆盖 stdout 长度/UTF-8/JSON/v1 response schema 和超长行丢弃。
   - [x] 2026-08-14 reverse-RPC framing now has a separate `service_request`/`service_response` schema, Rust validation coverage, and a desktop source-level delegation regression.
+  - [x] 2026-08-14 workflow repository create/status, ordered event append, and artifact registration now use typed reverse-service methods; direct Node-host workflow integration tests include a mock framed service responder.
 - [x] 6.1a workflow-host bundle 通过 esbuild 固定为 Node ESM，并由 Tauri host_start/host_send/host_stop 命令管理 stdin/stdout/stderr。
 - [x] 6.1b 事件通过 Tauri `desktop://runtime-response` / `desktop://runtime-log` 转发，发布资源清单包含 host bundle。
 - [ ] 6.2 创建私有 Node workflow-host，装载共享 packages 和 desktop ports
 - [ ] 6.3 workflow-host 通过双向 RPC 请求 repository、artifact、RAG 和 runtime services
-  - [x] 2026-08-14 RAG/index/write operations run in a separate `knowledge.mjs` Node service and are reached from workflow-host through Tauri reverse RPC; repository/artifact/runtime port migration remains open.
+  - [x] 2026-08-14 RAG/index/write operations run in a separate `knowledge.mjs` Node service and are reached from workflow-host through Tauri reverse RPC; workflow repository, artifact, and ordered event ports now use the same typed reverse-service seam. Remaining runtime/process controls are still open.
 - [x] 6.4 Tauri 使用 Windows Job Object 监管 workflow-host 与 OpenCode process slots
 - [x] 6.5 Host workflow invalid/cancel paths clean controller state and emit structured terminal errors.
 - [ ] 6.5 实现 crash detection、supervised restart 和 interrupted 状态基础
 - [x] 6.6 验证 stdout 仅承载 framed RPC，日志使用 stderr→JSONL。✓ 2026-08-13 — Rust host 只转发长度、UTF-8、JSON 均验证且不超过 8 MiB 的 stdout frame；无效或超长行被丢弃并以结构化 runtime log 记录，stderr 仍单独写入 redacted per-run JSONL。
 
 **Quality Gate:**
-- [ ] 并发/反向 RPC 与取消 tests 通过
+- [x] 并发/反向 RPC 与取消 tests 通过 — 2026-08-14 desktop 96/96, Rust 30/30, and workflow/foreach host integration paths passed with framed service responses.
 - [ ] 主进程强杀后无孤儿子进程
 - [x] workflow-host 未打开 SQLite/LanceDB — 2026-08-14 `runtime/host.ts` no longer imports RAG/Obsidian/LanceDB; the isolated `knowledge.mjs` service owns those modules and is supervised by a dedicated Job Object.
 

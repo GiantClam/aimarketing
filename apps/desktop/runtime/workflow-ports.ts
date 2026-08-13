@@ -13,6 +13,7 @@ export interface DesktopWorkflowPortDependencies {
   readonly runId: string;
   readonly emit: (event: OpenCodeRuntimeEvent) => void;
   readonly capability: WorkflowCapabilityPort;
+  readonly requestService: (method: "workflow.repository.create" | "workflow.repository.update_status" | "workflow.artifact.register" | "workflow.event.append", payload: Record<string, unknown>) => Promise<Record<string, unknown>>;
 }
 
 export interface DesktopWorkflowPorts {
@@ -43,16 +44,19 @@ export function createDesktopWorkflowPorts(dependencies: DesktopWorkflowPortDepe
 
   const repository: WorkflowRunRepository = {
     async create(input: { readonly runId: string; readonly definition: WorkflowDefinitionEnvelope }) {
+      await dependencies.requestService("workflow.repository.create", { runId: input.runId, definition: input.definition });
       emitTool("workflow:run_created", { runId: input.runId, definitionHash: input.definition.definitionHash }, "started");
     },
     async updateStatus(runId, status) {
+      await dependencies.requestService("workflow.repository.update_status", { runId, status });
       emitTool("workflow:run_status", { runId, status }, "completed");
     },
   };
 
   const artifacts: WorkflowArtifactPort = {
     async register(input) {
-      const artifactId = `${dependencies.runId}:${input.relativePath}`;
+      const result = await dependencies.requestService("workflow.artifact.register", { runId: dependencies.runId, ...input });
+      const artifactId = typeof result.artifactId === "string" ? result.artifactId : `${dependencies.runId}:${input.relativePath}`;
       emitTool("workflow:artifact_registered", { artifactId, ...input }, "completed");
       return { artifactId };
     },
@@ -60,6 +64,7 @@ export function createDesktopWorkflowPorts(dependencies: DesktopWorkflowPortDepe
 
   const events: WorkflowRunEventSink = {
     async append(event) {
+      await dependencies.requestService("workflow.event.append", { runId: event.runId, sequence: event.sequence, type: event.type, payload: event.payload });
       const phase = event.type === "node_started" ? "started" : event.type === "node_failed" ? "failed" : "completed";
       const payload = { sequence: event.sequence, ...event.payload };
       const serialized = JSON.stringify(payload);

@@ -42,3 +42,15 @@ test("ordinary chat remains on the OpenCode session path", () => {
   assert.match(host, /command\.type === ["']session\.prompt["']/u);
   assert.match(host, /runOpenCode\(command, session\)/u);
 });
+
+test("workflow persistence and artifact evidence use the typed desktop service seam", () => {
+  const host = readFileSync(join(desktopRoot, "runtime", "host.ts"), "utf8");
+  const ports = readFileSync(join(desktopRoot, "runtime", "workflow-ports.ts"), "utf8");
+  assert.match(host, /requestService: \(method, payload\) => requestService\(method, payload, controller\.signal\)/u);
+  assert.match(ports, /workflow\.repository\.create/u);
+  assert.match(ports, /workflow\.repository\.update_status/u);
+  assert.match(ports, /workflow\.artifact\.register/u);
+  assert.match(ports, /workflow\.event\.append/u);
+  assert.doesNotMatch(host, /from ["']\.\/storage["']/u);
+  assert.doesNotMatch(host, /from ["']\.\/artifacts["']/u);
+});

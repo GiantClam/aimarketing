@@ -16,6 +16,7 @@ type ProviderConfig = { readonly id?: string; readonly source?: string; readonly
 const active = new Map<string, ReturnType<typeof spawn>>();
 const workflowControllers = new Map<string, AbortController>();
 const sessions = new Map<string, { readonly conversationId: string; readonly workspacePath: string; readonly sessionId: string; readonly provider?: ProviderConfig }>();
+type DesktopServiceMethod = "knowledge.index" | "knowledge.search" | "knowledge.write" | "workflow.repository.create" | "workflow.repository.update_status" | "workflow.artifact.register" | "workflow.event.append";
 const serviceRequests = new Map<string, { readonly resolve: (value: Record<string, unknown>) => void; readonly reject: (error: Error) => void; readonly timer: ReturnType<typeof setTimeout> }>();
 let shuttingDown = false;
 function defaultOpenCodeExecutable() {
@@ -42,7 +43,7 @@ process.once("SIGINT", () => { void shutdownHost(); });
 function respond(command: HostCommand, data: unknown) { writeRpcResponse(process.stdout, { version: 1, requestId: command.requestId, ok: true, data }); }
 function fail(command: HostCommand, code: string, message: string) { writeRpcResponse(process.stdout, { version: 1, requestId: command.requestId, ok: false, error: { code, message, retryable: false } }); }
 
-function requestService(method: "knowledge.index" | "knowledge.search" | "knowledge.write", payload: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
+function requestService(method: DesktopServiceMethod, payload: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
   const requestId = randomUUID();
   const response = new Promise<Record<string, unknown>>((resolve, reject) => {
     const timer = setTimeout(() => { serviceRequests.delete(requestId); reject(new Error("service_request_timeout")); }, 120_000);
@@ -274,7 +275,7 @@ async function runWorkflow(command: HostCommand) {
       }
       throw new Error(`workflow_recovery_unsupported:${executorId}`);
     } };
-  const ports = createDesktopWorkflowPorts({ runId, emit: (event) => emit(command, event), capability });
+  const ports = createDesktopWorkflowPorts({ runId, emit: (event) => emit(command, event), requestService: (method, payload) => requestService(method, payload, controller.signal), capability });
   artifactPort = ports.artifacts;
   const recoveryDefinitionHash = typeof command.payload?.recoveryDefinitionHash === "string" && command.payload.recoveryDefinitionHash.trim() ? command.payload.recoveryDefinitionHash.trim() : undefined;
   try { result = await executeWorkflow(normalizedDefinition, { runId, signal: controller.signal, recovering: readWorkflowRecovery(command.payload?.recovering), ...(recoveryDefinitionHash ? { recoveryDefinitionHash } : {}), ...(command.payload?.completed && typeof command.payload.completed === "object" ? { completed: command.payload.completed as Record<string, Record<string, unknown>> } : {}), ports }); } catch (error) {

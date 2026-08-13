@@ -11,6 +11,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { encodeRpcMessage } from "../runtime/rpc";
 
+function respondToHostServiceRequest(child: ChildProcessWithoutNullStreams, frame: Record<string, unknown>) {
+  if (frame.type !== "service_request" || typeof frame.requestId !== "string") return;
+  const payload = frame.payload && typeof frame.payload === "object" ? frame.payload as Record<string, unknown> : {};
+  const data = frame.method === "workflow.artifact.register"
+    ? { artifactId: `${String(payload.runId ?? "run")}:${String(payload.relativePath ?? "artifact")}` }
+    : { runId: payload.runId, sequence: payload.sequence, status: payload.status };
+  child.stdin.write(encodeRpcMessage({ version: 1, requestId: frame.requestId, type: "service_response", ok: true, data }));
+}
+
 function startHost(desktopRoot: string) {
   const tsxCli = resolve(desktopRoot, "..", "..", "node_modules", "tsx", "dist", "cli.mjs");
   const child = spawn(process.execPath, [tsxCli, join(desktopRoot, "runtime", "host.ts")], { cwd: desktopRoot, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
@@ -28,6 +37,7 @@ function startHost(desktopRoot: string) {
       if (!Number.isFinite(size) || end > buffer.length) return;
       const frame = JSON.parse(view.subarray(separator + 1, end).toString("utf8")) as Record<string, unknown>;
       frames.push(frame); buffer = buffer.subarray(end);
+      respondToHostServiceRequest(child as ChildProcessWithoutNullStreams, frame);
       for (let index = waiters.length - 1; index >= 0; index -= 1) {
         if (!waiters[index].predicate(frame)) continue;
         const waiter = waiters.splice(index, 1)[0]; waiter.resolve(frame);
@@ -87,6 +97,7 @@ test("workflow-host executes a v2 local file workflow and streams node lifecycle
       if (!Number.isFinite(size) || end > buffer.length) return;
       const frame = JSON.parse(view.subarray(separator + 1, end).toString("utf8")) as Record<string, unknown>;
       frames.push(frame); buffer = buffer.subarray(end);
+      respondToHostServiceRequest(child as ChildProcessWithoutNullStreams, frame);
       const event = (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined;
       if (event?.event === "done" || event?.event === "runtime_error") resolveDone?.();
     }
@@ -135,6 +146,7 @@ test("workflow-host expands foreach items instead of passing one array to the bo
       const size = Number.parseInt(view.subarray(0, separator).toString("ascii"), 10); const end = separator + 1 + size;
       if (!Number.isFinite(size) || end > buffer.length) return;
       const frame = JSON.parse(view.subarray(separator + 1, end).toString("utf8")) as Record<string, unknown>; buffer = buffer.subarray(end);
+      respondToHostServiceRequest(child as ChildProcessWithoutNullStreams, frame);
       const event = (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined;
       if (event) events.push(event);
       if (event?.event === "done" || event?.event === "runtime_error") resolveDone?.();

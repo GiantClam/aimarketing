@@ -58,7 +58,7 @@ fn parse_host_frame(raw: &[u8]) -> Result<serde_json::Value, &'static str> {
     }
     if value.get("type").and_then(serde_json::Value::as_str) == Some("service_request") {
         let method = value.get("method").and_then(serde_json::Value::as_str).ok_or("runtime_frame_invalid_service_request")?;
-        if !matches!(method, "knowledge.index" | "knowledge.search" | "knowledge.write") { return Err("runtime_frame_invalid_service_method"); }
+        if !matches!(method, "knowledge.index" | "knowledge.search" | "knowledge.write" | "workflow.repository.create" | "workflow.repository.update_status" | "workflow.artifact.register" | "workflow.event.append") { return Err("runtime_frame_invalid_service_method"); }
         return Ok(value);
     }
     if value.get("ok").and_then(serde_json::Value::as_bool).is_none() { return Err("runtime_frame_invalid_response"); }
@@ -217,6 +217,49 @@ fn service_response(request_id: &str, result: Result<serde_json::Value, String>)
     }
 }
 
+fn payload_string<'a>(request: &'a serde_json::Value, key: &str) -> Result<&'a str, String> {
+    request.get("payload").and_then(|payload| payload.get(key)).and_then(serde_json::Value::as_str).filter(|value| !value.trim().is_empty()).ok_or_else(|| format!("service_payload_required:{key}"))
+}
+
+fn dispatch_workflow_service_request(app: &AppHandle, request: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let method = request.get("method").and_then(serde_json::Value::as_str).ok_or_else(|| "service_method_required".to_string())?;
+    let database = crate::database_path(app)?;
+    match method {
+        "workflow.repository.create" => {
+            let run_id = payload_string(request, "runId")?;
+            crate::storage::create_run(&database, run_id, None, None).map_err(|error| error.to_string())?;
+            Ok(serde_json::json!({ "runId": run_id }))
+        }
+        "workflow.repository.update_status" => {
+            let run_id = payload_string(request, "runId")?;
+            let status = payload_string(request, "status")?;
+            if !matches!(status, "running" | "succeeded" | "failed" | "cancelled" | "interrupted") { return Err("workflow_status_invalid".to_string()); }
+            if status == "running" { crate::storage::create_run(&database, run_id, None, None).map_err(|error| error.to_string())?; }
+            else { crate::storage::finish_run(&database, run_id, status).map_err(|error| error.to_string())?; }
+            Ok(serde_json::json!({ "runId": run_id, "status": status }))
+        }
+        "workflow.event.append" => {
+            let run_id = payload_string(request, "runId")?;
+            let event_type = payload_string(request, "type")?;
+            let sequence = request.get("payload").and_then(|payload| payload.get("sequence")).and_then(serde_json::Value::as_i64).ok_or_else(|| "service_payload_required:sequence".to_string())?;
+            let event_payload = request.get("payload").and_then(|payload| payload.get("payload")).cloned().unwrap_or_else(|| serde_json::json!({}));
+            let payload_json = serde_json::to_string(&event_payload).map_err(|error| error.to_string())?;
+            crate::storage::append_run_event(&database, run_id, sequence, event_type, &payload_json).map_err(|error| error.to_string())?;
+            Ok(serde_json::json!({ "runId": run_id, "sequence": sequence }))
+        }
+        "workflow.artifact.register" => {
+            let run_id = payload_string(request, "runId")?;
+            let relative_path = payload_string(request, "relativePath")?;
+            let mime_type = payload_string(request, "mimeType")?;
+            let metadata = crate::artifacts::inspect(&crate::project_root(app)?, relative_path, mime_type)?;
+            let artifact_id = format!("{run_id}:{relative_path}");
+            crate::storage::register_artifact(&database, &artifact_id, None, &metadata).map_err(|error| error.to_string())?;
+            Ok(serde_json::json!({ "artifactId": artifact_id, "relativePath": metadata.relative_path, "mimeType": metadata.mime_type, "byteLength": metadata.byte_length, "sha256": metadata.sha256 }))
+        }
+        _ => Err("service_method_not_supported".to_string()),
+    }
+}
+
 fn ensure_knowledge_process(app: &AppHandle, state: &Arc<Mutex<Option<KnowledgeProcess>>>) -> Result<(), String> {
     let mut guard = state.lock().map_err(|_| "knowledge_state_poisoned".to_string())?;
     if let Some(process) = guard.as_mut() {
@@ -329,7 +372,12 @@ pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), Str
                 }
             };
             if value.get("type").and_then(serde_json::Value::as_str) == Some("service_request") {
-                let response = dispatch_service_request(&event_app, &knowledge_state, &value);
+                let method = value.get("method").and_then(serde_json::Value::as_str).unwrap_or("");
+                let response = if method.starts_with("workflow.") {
+                    service_response(value.get("requestId").and_then(serde_json::Value::as_str).unwrap_or("unknown"), dispatch_workflow_service_request(&event_app, &value))
+                } else {
+                    dispatch_service_request(&event_app, &knowledge_state, &value)
+                };
                 if let Ok(frame) = encode_frame(&response) {
                     if let Ok(mut writer) = host_stdin.lock() {
                         let _ = writer.write_all(frame.as_bytes()).and_then(|_| writer.flush());
