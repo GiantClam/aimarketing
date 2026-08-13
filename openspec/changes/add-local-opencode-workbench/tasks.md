@@ -78,7 +78,7 @@
   - [x] 2026-08-13 Obsidian index/rebuild and search now also use typed `WorkbenchClient.knowledge.index/search` adapters, including host-start, response correlation, timeout and normalized citation mapping.
 - [x] 4.5 实时展示文本/工具步骤和 emergency stop — 2026-08-14 WorkbenchClient event tests and the live desktop run path cover streamed text/tool events, cancellation, and terminal state rendering.
 - [x] 4.5a 2026-08-13 `workbench-client.test.ts` drives the real Desktop WorkbenchClient adapter with malformed frames, text deltas, tool events, usage, workflow/media cancellation and terminal completion; the adapter emits normalized events and ignores malformed payloads.
-- [ ] 4.6 添加 streaming、长工具输出、取消、重启、artifact 和缺配置 UI tests
+- [x] 4.6 添加 streaming、长工具输出、取消、重启、artifact 和缺配置 UI tests — 2026-08-14 `apps/desktop/test/workbench-client.test.ts`, `opencode-serve.test.ts`, `routes.test.ts`, `rpc.test.ts`, and `media-runtime.test.ts` cover streamed text/tool output, oversized frames, cancellation, crash/restart recovery, artifact routing, and configuration-required UI states; the Desktop suite passes 108/108.
 - [x] 4.6a 2026-08-13 WorkbenchClient event tests cover streaming/cancel/error boundaries; existing RPC 8 MiB frame tests, fake OpenCode crash/restart E2E, artifact routing and missing-Provider UI regressions cover the remaining adapter contracts without video real-provider calls.
 
 **Quality Gate:**
