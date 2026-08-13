@@ -78,7 +78,8 @@
   - Evidence (2026-08-14): buildResearchContext now accepts only explicitly governed sourceUrls; it no longer scans raw Writer requests. The regression test proves a URL in the raw request remains untouched when research is skipped, while the OpenCode route tests continue to assert the complete raw request is forwarded.
 - [x] 8.2 Harden `writer_webfetch` tests for HTTP/HTTPS-only access, DNS/IP SSRF protection, redirects, response size/type, timeout, final URL, and bounded failure.
   - [x] 2026-08-14 `content/opencode-tools/writer_webfetch.test.ts` uses injected local HTTP fixtures to cover protocol/credentials/private DNS rejection, redirect final URL/limit, content type and HTTP error handling, response-size bounds, timeout, and bounded readable output without contacting public providers.
-- [ ] 8.3 Add tenant-bound read-only enterprise search that ignores model-supplied enterprise identifiers and never exposes credentials.
+- [x] 8.3 Add tenant-bound read-only enterprise search that ignores model-supplied enterprise identifiers and never exposes credentials.
+  - Evidence (2026-08-14): `lib/writer/enterprise-search.ts` binds retrieval exclusively to the authenticated enterprise scope, ignores `requestedEnterpriseId`, exposes only bounded normalized datasets/snippets, strips credential-shaped text, and has no write surface. `enterprise-search.test.ts` covers cross-enterprise rejection, authenticated binding, and credential non-disclosure.
 - [x] 8.4 Persist research requested/completed status and final source URLs in diagnostics without logging source bodies.
 - [x] 8.5 Convert validated result asset intents into application-owned cover/inline generation records and reject platform-incompatible intents.
 - [x] 8.6 Remove any overall Writer asset timeout that is shorter than cumulative per-image execution while preserving an independent timeout for each image.

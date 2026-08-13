@@ -51,6 +51,7 @@ import {
   type WriterRuntimeContext,
 } from "@/lib/writer/runtime/session-runtime"
 import { validateWriterSubmitResult, type WriterSubmitResult } from "@/lib/writer/writer-result"
+import { searchWriterEnterpriseKnowledge } from "@/lib/writer/enterprise-search"
 
 const SERPER_API_KEY = process.env.SERPER_API_KEY || ""
 const SERPER_API_BASE = (process.env.SERPER_API_BASE || "https://google.serper.dev").replace(/\/+$/, "")
@@ -107,8 +108,14 @@ async function loadWriterEnterpriseKnowledgeContext(params: {
   platform: string
   mode: string
 }) {
-  const { loadEnterpriseKnowledgeContext } = await import("@/lib/knowledge/service")
-  return loadEnterpriseKnowledgeContext(params)
+  return searchWriterEnterpriseKnowledge({
+    authenticatedEnterpriseId: params.enterpriseId,
+    query: params.query,
+    queryVariants: params.queryVariants,
+    preferredScopes: params.preferredScopes,
+    platform: params.platform,
+    mode: params.mode,
+  })
 }
 
 type SearchItem = {
