@@ -103,7 +103,8 @@
 - [x] 6.2 用一个真实配置 Provider 运行普通对话 smoke。✓ 2026-08-13 — `apps/desktop/real-providers.test.local.json` 驱动的 `test:real-providers` 返回 LLM `/chat/completions` HTTP 200（choices/usage）及图片 HTTP 200；视频按 v1 验证范围明确未执行。
 - [x] 6.3 捕获证据证明所有普通 desktop chat 选择 OpenCode
   - [x] 2026-08-13 architecture-boundary and route tests require `session.create`/`session.prompt` and reject direct chat-completions or `ai-sdk-native` paths.
-- [ ] 6.4 扫描 bundle 和网络日志，确认无排除的 SaaS 模块/端点
+- [x] 6.4 扫描 bundle 和网络日志，确认无排除的 SaaS 模块/端点
+  - [x] 2026-08-13 `desktop:verify-bundle` scans Vite assets and the bundled workflow host for excluded SaaS routes/capability markers and cloud-only integrations; the scanner intentionally permits the approved Full Access warning copy.
 - [ ] 6.5 运行共享 tests、desktop TS/Rust tests/build、root lint、Next build 和 SaaS regressions
 
 **Completion Quality Gate:**
