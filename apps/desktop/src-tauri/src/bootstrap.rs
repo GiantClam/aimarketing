@@ -27,6 +27,22 @@ fn webview_repair_progress_messages_for(chinese: bool) -> [&'static str; 3] {
     }
 }
 
+fn runtime_repair_progress_messages_for(chinese: bool) -> [&'static str; 3] {
+    if chinese {
+        [
+            "检查本地运行环境…",
+            "正在安装或修复本地运行环境…",
+            "正在重新探测本地运行环境…",
+        ]
+    } else {
+        [
+            "Checking the local runtime…",
+            "Installing or repairing the local runtime…",
+            "Probing the local runtime again…",
+        ]
+    }
+}
+
 struct StartupProgress {
     #[cfg(windows)]
     hwnd: windows_sys::Win32::Foundation::HWND,
@@ -177,6 +193,10 @@ pub fn ensure_runtime_before_window() -> Result<(), String> {
         std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(|| executable_dir.join("data")).join("AIMarketing")
     };
     if runtime_ready(&resource_roots, &install_root) { return Ok(()); }
+    let chinese = startup_is_chinese();
+    let progress_messages = runtime_repair_progress_messages_for(chinese);
+    let progress = StartupProgress::new(progress_messages[0], chinese);
+    progress.update(progress_messages[1]);
     let status = Command::new("powershell.exe")
         .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
         .arg(&script)
@@ -188,6 +208,7 @@ pub fn ensure_runtime_before_window() -> Result<(), String> {
         .status()
         .map_err(|error| format!("runtime_installer_spawn_failed: {error}"))?;
     if !status.success() { return Err(format!("runtime_install_failed:{}", status.code().unwrap_or(-1))); }
+    progress.update(progress_messages[2]);
     if runtime_ready(&resource_roots, &install_root) { Ok(()) } else { Err("runtime_install_incomplete".to_string()) }
 }
 
@@ -404,6 +425,26 @@ mod tests {
                 "Checking the WebView2 runtime…",
                 "Downloading the WebView2 repair package…",
                 "Installing WebView2 and probing again…",
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_repair_progress_has_visible_ordered_stages() {
+        assert_eq!(
+            runtime_repair_progress_messages_for(true),
+            [
+                "检查本地运行环境…",
+                "正在安装或修复本地运行环境…",
+                "正在重新探测本地运行环境…",
+            ]
+        );
+        assert_eq!(
+            runtime_repair_progress_messages_for(false),
+            [
+                "Checking the local runtime…",
+                "Installing or repairing the local runtime…",
+                "Probing the local runtime again…",
             ]
         );
     }
