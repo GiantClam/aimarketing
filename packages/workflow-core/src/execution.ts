@@ -40,7 +40,7 @@ export async function executeWorkflow(definition: WorkflowDefinitionEnvelope, op
         const executorId = workflowNodeRegistry.require(node.type).executorId;
         await appendEvent(options, sequence, "node_started", { nodeKey: node.nodeKey, executorId });
       }
-      const results = await Promise.all(ready.map(async (step) => {
+      const settled = await Promise.allSettled(ready.map(async (step) => {
         const node = definition.nodes.find((candidate) => candidate.nodeKey === step.nodeKey)!;
         const executorId = workflowNodeRegistry.require(node.type).executorId;
         const inputs = collectInputs(definition, node.nodeKey, outputs);
@@ -56,12 +56,18 @@ export async function executeWorkflow(definition: WorkflowDefinitionEnvelope, op
           throw error;
         }
       }));
-      for (const { step, executorId, output, consumedNodeKeys = [] } of results.sort((left, right) => left.step.nodeKey.localeCompare(right.step.nodeKey))) {
+      const results = settled
+        .filter((outcome): outcome is PromiseFulfilledResult<{ readonly step: CompiledWorkflowPlanStep; readonly executorId: string; readonly output: Record<string, unknown>; readonly consumedNodeKeys: readonly string[] }> => outcome.status === "fulfilled")
+        .map((outcome) => outcome.value)
+        .sort((left, right) => left.step.nodeKey.localeCompare(right.step.nodeKey));
+      for (const { step, executorId, output, consumedNodeKeys = [] } of results) {
         outputs[step.nodeKey] = output;
         pending.delete(step.nodeKey);
         for (const nodeKey of consumedNodeKeys) pending.delete(nodeKey);
         await appendEvent(options, sequence, "node_succeeded", { nodeKey: step.nodeKey, executorId });
       }
+      const failure = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === "rejected");
+      if (failure) throw failure.reason;
     }
     await options.ports.repository?.updateStatus(options.runId, "succeeded");
     await appendEvent(options, sequence, "run_succeeded", { nodeCount: plan.steps.length });

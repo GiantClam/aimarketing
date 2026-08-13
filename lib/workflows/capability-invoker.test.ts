@@ -320,9 +320,9 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     }
   }
 
-  if (request === "@/lib/workflows/execution") {
+  if (request === "@/lib/workflows/shared-execution-adapter") {
     return {
-      runWorkflowDefinition: async ({ nodes }: { nodes: Array<{ nodeKey: string; type: string; config: Record<string, unknown> }> }) => {
+      runSaasWorkflowWithSharedCore: async ({ nodes }: { nodes: Array<{ nodeKey: string; type: string; config: Record<string, unknown> }> }) => {
         const syntheticTextNode = nodes.find((node) => node.nodeKey.includes("agent-42-input-text"))
         return {
           status: "succeeded",

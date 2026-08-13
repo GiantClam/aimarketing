@@ -11,6 +11,7 @@ import {
   type WorkflowNodeExecutionResult,
   type WorkflowNodeInputBundle,
   type WorkflowNodeOutputBundle,
+  type WorkflowMediaRef,
 } from "@/lib/workflows/node-executors"
 import type { WorkflowNodeRunState } from "@/lib/workflows/execution"
 import type { WorkflowDefinition } from "@/lib/workflows/store"
@@ -46,13 +47,86 @@ function cloneOutput(output: WorkflowNodeOutputBundle): WorkflowNodeOutputBundle
   }
 }
 
-function bundleFromPortInputs(inputs: Record<string, unknown>, seed?: Partial<WorkflowNodeInputBundle>): WorkflowNodeInputBundle {
+function portKind(portId: string): keyof WorkflowNodeInputBundle | null {
+  const normalized = portId.replace(/^items\./, "")
+  if (normalized === "text") return "text"
+  if (normalized === "asset" || normalized === "assets") return "asset"
+  if (normalized === "image" || normalized === "images" || normalized === "image.reference" || normalized === "image.last_frame") return "image"
+  if (normalized === "video" || normalized === "videos") return "video"
+  if (normalized === "audio" || normalized === "audios") return "audio"
+  if (normalized === "ppt" || normalized === "presentations" || normalized === "presentation") return "ppt"
+  return null
+}
+
+function mediaKindMatchesAsset(kind: Exclude<keyof WorkflowNodeInputBundle, "text" | "asset">, mimeType: unknown) {
+  const mime = typeof mimeType === "string" ? mimeType.toLowerCase() : "application/octet-stream"
+  if (kind === "image") return mime.startsWith("image/")
+  if (kind === "video") return mime.startsWith("video/")
+  if (kind === "audio") return mime.startsWith("audio/")
+  return mime.includes("presentation") || mime.includes("powerpoint")
+}
+
+function asArray(value: unknown) { return Array.isArray(value) ? value : value === undefined ? [] : [value] }
+
+function mediaRef(value: unknown, sourceNodeKey: string): WorkflowMediaRef {
+  const record = value && typeof value === "object" ? value as Record<string, unknown> : {}
+  return {
+    url: typeof record.url === "string" ? record.url : null,
+    downloadUrl: typeof record.downloadUrl === "string" ? record.downloadUrl : null,
+    title: typeof record.title === "string" ? record.title : typeof record.fileName === "string" ? record.fileName : null,
+    mimeType: typeof record.mimeType === "string" ? record.mimeType : null,
+    artifactId: typeof record.artifactId === "number" ? record.artifactId : undefined,
+    assetId: typeof record.assetId === "string" ? record.assetId : null,
+    storageKey: typeof record.storageKey === "string" ? record.storageKey : undefined,
+    sourceNodeKey: typeof record.sourceNodeKey === "string" ? record.sourceNodeKey : sourceNodeKey,
+  }
+}
+
+function appendMedia(bundle: WorkflowNodeInputBundle, kind: "image" | "video" | "audio" | "ppt", values: WorkflowMediaRef[]) {
+  if (kind === "image") bundle.image.push(...values)
+  else if (kind === "video") bundle.video.push(...values)
+  else if (kind === "audio") bundle.audio.push(...values)
+  else bundle.ppt.push(...values)
+}
+
+function bundleForNode(input: {
+  nodeKey: string
+  edges: WorkflowDefinitionEnvelope["edges"]
+  outputs: ReadonlyMap<string, Record<string, unknown>>
+  seed?: Partial<WorkflowNodeInputBundle>
+}): WorkflowNodeInputBundle {
   const bundle = createWorkflowNodeInputBundle()
-  for (const kind of ["text", "asset", "image", "video", "audio", "ppt"] as const) {
-    const value = inputs[kind]
-    if (Array.isArray(value)) bundle[kind] = [...value] as never
-    else if (value !== undefined) bundle[kind] = [value] as never
-    else if (seed?.[kind]) bundle[kind] = [...seed[kind]!] as never
+  let receivedInput = false
+  for (const edge of input.edges.filter((candidate) => candidate.targetNodeKey === input.nodeKey)) {
+    const value = input.outputs.get(edge.sourceNodeKey)?.[edge.sourcePortId ?? ""]
+    if (value === undefined) continue
+    const kind = portKind(edge.targetPortId ?? edge.inputName ?? "")
+    if (!kind) continue
+    receivedInput = true
+    if (kind === "text") {
+      bundle.text.push(...asArray(value).filter((item): item is string => typeof item === "string"))
+    } else if (kind === "asset") {
+      bundle.asset.push(...asArray(value) as typeof bundle.asset)
+    } else {
+      const values = asArray(value)
+      if (edge.sourcePortId === "asset") {
+        for (const asset of values) {
+          const record = asset && typeof asset === "object" ? asset as Record<string, unknown> : {}
+          if (!mediaKindMatchesAsset(kind, record.mimeType)) throw new Error(`workflow_edge_asset_type_mismatch:${input.nodeKey}:${kind}`)
+          appendMedia(bundle, kind, [mediaRef(asset, edge.sourceNodeKey)])
+        }
+      } else {
+        appendMedia(bundle, kind, values.map((item) => mediaRef(item, edge.sourceNodeKey)))
+      }
+    }
+  }
+  if (!receivedInput) {
+    if (input.seed?.text) bundle.text = [...input.seed.text]
+    if (input.seed?.asset) bundle.asset = [...input.seed.asset]
+    if (input.seed?.image) bundle.image = [...input.seed.image]
+    if (input.seed?.video) bundle.video = [...input.seed.video]
+    if (input.seed?.audio) bundle.audio = [...input.seed.audio]
+    if (input.seed?.ppt) bundle.ppt = [...input.seed.ppt]
   }
   return bundle
 }
@@ -82,6 +156,29 @@ function legacyDefinition(nodes: WorkflowDefinition["nodes"], edges: WorkflowDef
   })
 }
 
+function collectBlockedRetryNodeKeys(input: {
+  definition: WorkflowDefinitionEnvelope
+  initialNodeStates: Record<string, WorkflowNodeRunState> | undefined
+  rerunNodeKeys: ReadonlySet<string>
+}) {
+  const blocked = new Set<string>()
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const edge of input.definition.edges) {
+      if (!input.rerunNodeKeys.has(edge.targetNodeKey) || blocked.has(edge.targetNodeKey)) continue
+      const sourceState = input.initialNodeStates?.[edge.sourceNodeKey]
+      const sourceIsTerminalAndUnretried = !input.rerunNodeKeys.has(edge.sourceNodeKey)
+        && (sourceState?.status === "failed" || sourceState?.status === "cancelled")
+      if (sourceIsTerminalAndUnretried || blocked.has(edge.sourceNodeKey)) {
+        blocked.add(edge.targetNodeKey)
+        changed = true
+      }
+    }
+  }
+  return blocked
+}
+
 /**
  * SaaS composition for ordinary DAGs.  Capability execution remains in the
  * existing host layer so billing, task persistence and artifact behavior are
@@ -93,29 +190,41 @@ export async function runSaasWorkflowWithSharedCore(input: SharedSaasWorkflowExe
   const nodeStates: Record<string, WorkflowNodeRunState> = Object.fromEntries(Object.entries(input.initialNodeStates ?? {}).map(([nodeKey, state]) => [nodeKey, { ...state, output: cloneOutput(state.output) }]))
   const results = new Map<string, WorkflowNodeExecutionResult>()
   const rerunNodeKeys = new Set(input.rerunNodeKeys ?? [])
+  const blockedRetryNodeKeys = collectBlockedRetryNodeKeys({ definition, initialNodeStates: input.initialNodeStates, rerunNodeKeys })
+  const executionDefinition = input.initialNodeStates && rerunNodeKeys.size > 0
+    ? {
+        ...definition,
+        nodes: definition.nodes.filter((node) => (rerunNodeKeys.has(node.nodeKey) && !blockedRetryNodeKeys.has(node.nodeKey)) || input.initialNodeStates?.[node.nodeKey]?.status === "succeeded"),
+        edges: definition.edges.filter((edge) => ((rerunNodeKeys.has(edge.sourceNodeKey) && !blockedRetryNodeKeys.has(edge.sourceNodeKey)) || input.initialNodeStates?.[edge.sourceNodeKey]?.status === "succeeded") && ((rerunNodeKeys.has(edge.targetNodeKey) && !blockedRetryNodeKeys.has(edge.targetNodeKey)) || input.initialNodeStates?.[edge.targetNodeKey]?.status === "succeeded")),
+      }
+    : definition
   const completed = Object.fromEntries(
     Object.entries(input.initialNodeStates ?? {})
       .filter(([nodeKey, state]) => state.status === "succeeded" && !rerunNodeKeys.has(nodeKey))
       .map(([nodeKey, state]) => [nodeKey, cloneOutput(state.output) as Record<string, unknown>]),
   )
+  const outputs = new Map<string, Record<string, unknown>>([
+    ...Object.entries(completed),
+  ])
 
-  const result = await executeWorkflow(definition, {
+  const result = await executeWorkflow(executionDefinition, {
     runId: "saas-workflow-adapter",
     signal: input.signal,
     completed,
     ports: {
       capability: {
-        execute: async ({ nodeKey, inputs }) => {
+        execute: async ({ nodeKey }) => {
           const node = sourceNodes.get(nodeKey)
           if (!node) throw new Error(`workflow_node_missing:${nodeKey}`)
           const execution = await resolveWorkflowNodeExecutor(node.type).execute({
             enterpriseId: input.enterpriseId,
             ownerUserId: input.ownerUserId,
             node,
-            input: bundleFromPortInputs(inputs, input.seedInput),
+            input: bundleForNode({ nodeKey, edges: definition.edges, outputs, seed: input.seedInput }),
             ...input.executorContext,
           })
           results.set(nodeKey, execution)
+          outputs.set(nodeKey, execution.output as Record<string, unknown>)
           return execution.output as Record<string, unknown>
         },
       },
@@ -150,7 +259,7 @@ export async function runSaasWorkflowWithSharedCore(input: SharedSaasWorkflowExe
     throw error
   }
   if (result.status === "failed") {
-    for (const node of definition.nodes) {
+    for (const node of executionDefinition.nodes) {
       if (nodeStates[node.nodeKey]) continue
       const state = newState(node.nodeKey, "cancelled", {}, "workflow_upstream_failed", undefined, nodeStates[node.nodeKey])
       nodeStates[node.nodeKey] = state
@@ -160,5 +269,6 @@ export async function runSaasWorkflowWithSharedCore(input: SharedSaasWorkflowExe
   const finalNodeKeys = definition.nodes
     .filter((node) => !definition.edges.some((edge) => edge.sourceNodeKey === node.nodeKey))
     .map((node) => node.nodeKey)
-  return { status: result.status === "succeeded" ? "succeeded" : "failed", definition, nodeStates, finalNodeKeys }
+  const hasTerminalFailure = Object.values(nodeStates).some((state) => state.status === "failed" || state.status === "cancelled")
+  return { status: result.status === "succeeded" && !hasTerminalFailure ? "succeeded" : "failed", definition, nodeStates, finalNodeKeys }
 }

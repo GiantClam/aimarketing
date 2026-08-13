@@ -1,12 +1,12 @@
 import {
   createWorkflowNodeInputBundle,
   mergeWorkflowNodeOutputBundles,
-  resolveWorkflowNodeExecutor,
   type WorkflowNodeExecutionContext,
   type WorkflowMediaRef,
   type WorkflowNodeInputBundle,
   type WorkflowNodeOutputBundle,
 } from "@/lib/workflows/node-executors"
+import { runSaasWorkflowWithSharedCore } from "@/lib/workflows/shared-execution-adapter"
 import {
   canWorkflowNodeConnectValueKind,
   getWorkflowNodeDefinition,
@@ -65,12 +65,6 @@ export type WorkflowRunResult = {
 
 function unique(values: string[]) {
   return [...new Set(values)]
-}
-
-function toErrorMessage(error: unknown) {
-  if (error instanceof Error && error.message) return error.message
-  if (typeof error === "string" && error.trim()) return error.trim()
-  return "workflow_node_execution_failed"
 }
 
 function inputNameToValueKind(inputName: string | null | undefined) {
@@ -373,145 +367,27 @@ export function collectWorkflowNodeInput(input: {
   return collectUpstreamInputs(input.nodeKey, input.parentMap, input.edges, input.nodeStates, input.seedInput, input.nodes)
 }
 
-function buildInitialNodeStates(input: {
-  nodes: WorkflowDefinitionNode[]
-  initialState?: Record<string, WorkflowNodeRunState>
-  rerunNodeKeys?: string[]
-}) {
-  const rerunNodeKeys = new Set(input.rerunNodeKeys ?? [])
-  const states: Record<string, WorkflowNodeRunState> = {}
-
-  for (const node of input.nodes) {
-    const existing = input.initialState?.[node.nodeKey]
-    if (existing && !rerunNodeKeys.has(node.nodeKey)) {
-      states[node.nodeKey] = {
-        ...existing,
-        output: { ...existing.output },
-      }
-      continue
-    }
-
-    states[node.nodeKey] = {
-      nodeKey: node.nodeKey,
-      status: "queued",
-      attemptCount: existing ? existing.attemptCount : 0,
-      output: {},
-      startedAt: null,
-      finishedAt: null,
-      providerId: null,
-      modelId: null,
-      taskRunId: null,
-      creditsConsumed: 0,
-      errorMessage: null,
-      metadata: null,
-    }
-  }
-
-  return states
-}
-
 export async function runWorkflowDefinition(input: WorkflowRunDefinitionInput): Promise<WorkflowRunResult> {
   const plan = buildExecutableWorkflowPlan({
     nodes: input.nodes,
     edges: input.edges,
   })
-  const nodeStates = buildInitialNodeStates({
+  const shared = await runSaasWorkflowWithSharedCore({
+    enterpriseId: input.enterpriseId,
+    ownerUserId: input.ownerUserId,
     nodes: input.nodes,
-    initialState: input.initialState,
+    edges: input.edges,
+    seedInput: input.seedInput,
+    executorContext: input.executorContext,
+    initialNodeStates: input.initialState,
     rerunNodeKeys: input.rerunNodeKeys,
+    onNodeStateChange: input.onNodeStateChange,
   })
-  const blockedNodes = new Set<string>()
-
-  while (true) {
-    const runnableNodes = input.nodes.filter((node) => {
-      const state = nodeStates[node.nodeKey]
-      if (!state || state.status !== "queued") return false
-      const parents = plan.parentMap.get(node.nodeKey) ?? []
-      return parents.every((parentNodeKey) => nodeStates[parentNodeKey]?.status === "succeeded")
-    })
-
-    if (runnableNodes.length === 0) {
-      for (const node of input.nodes) {
-        const state = nodeStates[node.nodeKey]
-        if (!state || state.status !== "queued") continue
-
-        const parents = plan.parentMap.get(node.nodeKey) ?? []
-        if (
-          parents.some((parentNodeKey) => {
-            const parentStatus = nodeStates[parentNodeKey]?.status
-            return parentStatus === "failed" || parentStatus === "cancelled"
-          })
-        ) {
-          state.status = "cancelled"
-          state.finishedAt = new Date()
-          state.errorMessage = "workflow_upstream_failed"
-          await input.onNodeStateChange?.({ ...state, output: { ...state.output } })
-          blockedNodes.add(node.nodeKey)
-        }
-      }
-
-      const remainingQueued = Object.values(nodeStates).some((state) => state.status === "queued")
-      if (!remainingQueued) break
-      throw new Error("workflow_execution_stalled")
-    }
-
-    const settled = await Promise.allSettled(
-      runnableNodes.map(async (node) => {
-        const state = nodeStates[node.nodeKey]
-        state.status = "running"
-        state.startedAt = new Date()
-        state.attemptCount += 1
-        await input.onNodeStateChange?.({ ...state, output: { ...state.output } })
-
-        const executor = resolveWorkflowNodeExecutor(node.type)
-        const result = await executor.execute({
-          enterpriseId: input.enterpriseId,
-          ownerUserId: input.ownerUserId,
-          node,
-          input: collectUpstreamInputs(node.nodeKey, plan.parentMap, input.edges, nodeStates, input.seedInput, input.nodes),
-          ...input.executorContext,
-        })
-
-        return { node, result }
-      }),
-    )
-
-    for (let index = 0; index < settled.length; index += 1) {
-      const node = runnableNodes[index]
-      const state = nodeStates[node.nodeKey]
-      const outcome = settled[index]
-      state.finishedAt = new Date()
-
-      if (outcome?.status === "fulfilled") {
-        const result = outcome.value.result
-        state.status = "succeeded"
-        state.output = result.output
-        state.providerId = result.providerId ?? null
-        state.modelId = result.modelId ?? null
-        state.taskRunId = result.taskRunId ?? null
-        state.creditsConsumed = result.creditsConsumed ?? 0
-        state.errorMessage = null
-        state.metadata = result.metadata ?? null
-      } else {
-        state.status = "failed"
-        state.errorMessage = toErrorMessage(outcome?.reason)
-        state.output = {}
-      }
-
-      await input.onNodeStateChange?.({ ...state, output: { ...state.output } })
-    }
-  }
-
-  const finalNodeKeys = input.nodes
-    .filter((node) => (plan.childMap.get(node.nodeKey) ?? []).length === 0)
-    .map((node) => node.nodeKey)
-  const hasFailure = Object.values(nodeStates).some((state) => state.status === "failed" || state.status === "cancelled")
-
   return {
-    status: hasFailure ? "failed" : "succeeded",
+    status: shared.status,
     parallelLevels: plan.parallelLevels,
-    nodeStates,
-    finalNodeKeys,
+    nodeStates: shared.nodeStates,
+    finalNodeKeys: shared.finalNodeKeys,
   }
 }
 

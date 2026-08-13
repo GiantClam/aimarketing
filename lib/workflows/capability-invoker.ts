@@ -50,7 +50,8 @@ import type {
   WorkflowNodeInputBundle,
   WorkflowNodeExecutionResult,
 } from "@/lib/workflows/node-executors"
-import { runWorkflowDefinition, type WorkflowNodeRunState } from "@/lib/workflows/execution"
+import { type WorkflowNodeRunState } from "@/lib/workflows/execution"
+import { runSaasWorkflowWithSharedCore } from "@/lib/workflows/shared-execution-adapter"
 import { getWorkflowDefinition } from "@/lib/workflows/store"
 import { isWorkflowBuiltinAgentSelectable } from "@/lib/workflows/builtin-agent-policy"
 import {
@@ -1516,7 +1517,7 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
                   linkedWorkflow.id,
                 ],
               })
-              const delegatedResult = await runWorkflowDefinition({
+              const delegatedResult = await runSaasWorkflowWithSharedCore({
                 enterpriseId: linkedWorkflow.enterpriseId,
                 ownerUserId: linkedWorkflow.ownerUserId,
                 nodes: delegatedGraph.nodes,

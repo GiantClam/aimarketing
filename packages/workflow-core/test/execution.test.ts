@@ -38,6 +38,30 @@ test("workflow executes independent DAG levels concurrently and emits determinis
   assert.deepEqual(events, ["run_started:", "node_started:input", "node_succeeded:input", "node_started:writer-a", "node_started:writer-b", "node_succeeded:writer-a", "node_succeeded:writer-b", "run_succeeded:"]);
 });
 
+test("workflow preserves successful parallel sibling outputs when another sibling fails", async () => {
+  const parallelDefinition: WorkflowDefinitionEnvelope = { schemaVersion: 2, revision: 1, definitionHash: "", nodes: [
+    { nodeKey: "input", type: "text_input", nodeVersion: 1, title: "Text", positionX: 0, positionY: 0, config: { text: "hello" } },
+    { nodeKey: "writer-a", type: "writer", nodeVersion: 1, title: "Writer A", positionX: 1, positionY: 0, config: {} },
+    { nodeKey: "writer-b", type: "writer", nodeVersion: 1, title: "Writer B", positionX: 1, positionY: 1, config: {} },
+  ], edges: [
+    { edgeKey: "a", sourceNodeKey: "input", sourcePortId: "text", targetNodeKey: "writer-a", targetPortId: "text" },
+    { edgeKey: "b", sourceNodeKey: "input", sourcePortId: "text", targetNodeKey: "writer-b", targetPortId: "text" },
+  ] };
+  const events: string[] = [];
+  const result = await executeWorkflow(parallelDefinition, { runId: "parallel-failure", ports: {
+    capability: { execute: async ({ nodeKey }) => {
+      if (nodeKey === "input") return { text: "hello" };
+      if (nodeKey === "writer-b") throw new Error("provider_down");
+      return { text: "writer-a-complete" };
+    } },
+    events: { append: async (event) => { events.push(`${event.type}:${String(event.payload.nodeKey ?? "")}`); } },
+  } });
+  assert.equal(result.status, "failed");
+  assert.equal(result.outputs["writer-a"]?.text, "writer-a-complete");
+  assert.ok(events.includes("node_succeeded:writer-a"));
+  assert.ok(events.includes("node_failed:writer-b"));
+});
+
 test("workflow emits a node failure event before returning a failed run", async () => {
   const events: string[] = [];
   const result = await executeWorkflow(definition, { runId: "failed-run", ports: {
