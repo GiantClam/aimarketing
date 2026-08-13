@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-11T12:16:03.553Z",
+  "candidates": [
+    {
+      "kind": "system",
+      "runnable": true,
+      "executableSha256": "ffb708146358bf233e9d97dac5022844577cce7031c1029ab3e0bf46e3bd4c69"
+    },
+    {
+      "kind": "private",
+      "runnable": true,
+      "executableSha256": "f37cb2773654449b4e20dd5dcf47cfdd55fe569628cae9081f480baeea9a80dd"
+    },
+    {
+      "kind": "desktop-gui",
+      "runnable": false,
+      "reason": "desktop_bundle_has_no_supported_serve_cli_contract",
+      "executableSha256": "fc4a8ca088d8c1321c7c1471d7f84066be9dd6e29c02b7373f522058aa0780c2"
+    }
+  ],
+  "results": [
+    {
+      "candidate": {
+        "kind": "system",
+        "version": "1.17.15",
+        "executableSha256": "ffb708146358bf233e9d97dac5022844577cce7031c1029ab3e0bf46e3bd4c69"
+      },
+      "verdict": {
+        "transport": "pass",
+        "modelBacked": "pass",
+        "overall": "changes-required"
+      },
+      "evidenceFile": "system.json",
+      "evidenceSha256": "2328ca34fb0f5273e3db2e261cdd2b8fec1f53622ed11fb4fae7207abb1ac82d"
+    },
+    {
+      "candidate": {
+        "kind": "private",
+        "version": "1.18.14",
+        "executableSha256": "f37cb2773654449b4e20dd5dcf47cfdd55fe569628cae9081f480baeea9a80dd"
+      },
+      "verdict": {
+        "transport": "pass",
+        "modelBacked": "pass",
+        "overall": "changes-required"
+      },
+      "evidenceFile": "private.json",
+      "evidenceSha256": "4a3b4f25b07c24f9fe8949a4b0ae48661c2e1a2be3c4e152b72e4d48a28d39cf"
+    }
+  ]
+}

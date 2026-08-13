@@ -1,0 +1,434 @@
+{
+  "schemaVersion": 1,
+  "spikeId": "opencode-session-private",
+  "status": "changes-required",
+  "runId": "5eaf9c80-d8cb-4222-bf8e-95e21717c430",
+  "environment": {
+    "osCaption": "Windows 11 Home China",
+    "osVersion": "10.0.26200",
+    "build": "26200",
+    "architecture": "x64",
+    "processArchitecture": "x64",
+    "powershellVersion": "7.6.4",
+    "cleanVm": false,
+    "baselineId": "local-26200-x64",
+    "node": "v24.15.0"
+  },
+  "components": [
+    {
+      "name": "opencode-private",
+      "version": "1.18.14",
+      "executableSha256": "f37cb2773654449b4e20dd5dcf47cfdd55fe569628cae9081f480baeea9a80dd"
+    }
+  ],
+  "commands": [
+    {
+      "id": "opencode-serve",
+      "startedAtUtc": "2026-08-11T12:15:12.230Z",
+      "finishedAtUtc": "2026-08-11T12:15:58.410Z",
+      "exitCode": null,
+      "signal": "SIGTERM",
+      "durationMs": 2054,
+      "stdoutSummary": "bytes=52 sha256=bf688c87b58612e8562d7bfde646165725409b33021e4ca09194c1387932131c",
+      "stderrSummary": "bytes=9714 sha256=4d663962e9b537dda6b786e4298e152977b2c5fc80e631dfefd80e57a68fd4fd"
+    },
+    {
+      "id": "opencode-serve-restart",
+      "startedAtUtc": "2026-08-11T12:15:58.429Z",
+      "finishedAtUtc": "2026-08-11T12:16:02.418Z",
+      "exitCode": null,
+      "signal": "SIGTERM",
+      "durationMs": 2038,
+      "stdoutSummary": "bytes=52 sha256=d3d70a84aa12bd0e3e3dfdacdfd839ab80dab198c0d3ca0c9b49b7fadb9064fd",
+      "stderrSummary": "bytes=803 sha256=2f1923dbaf765317ff9051c41ac108813efca204cb12313fd94b2b65560f2f76"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "protocol_fixture_compatibility",
+      "status": "pass",
+      "details": "{\"observedEventTypes\":[\"future.protocol.event\",\"message.part.updated\",\"message.updated\",\"session.status\"],\"textEvents\":1,\"textCharacters\":8,\"textPreview\":\"OpenCode\",\"toolPhases\":[\"started\",\"completed\",\"failed\"],\"tools\":[\"bash\"],\"usageEvents\":1,\"terminalEvents\":1,\"errorEvents\":0,\"errorMessages\":[],\"unknownEventTypes\":[\"future.protocol.event\"]}"
+    },
+    {
+      "id": "model_provider_preflight",
+      "status": "pass",
+      "details": "{\"model\":\"aiberm/openai/gpt-5.4\",\"providerConfigured\":true,\"credentialsConfigured\":true}"
+    },
+    {
+      "id": "candidate_version",
+      "status": "pass",
+      "details": "{\"version\":\"1.18.14\",\"exitCode\":0}"
+    },
+    {
+      "id": "random_loopback_basic_auth_start",
+      "status": "pass",
+      "details": "{\"hostname\":\"127.0.0.1\",\"portSelection\":\"ephemeral-random\",\"username\":\"[generated]\",\"password\":\"[redacted]\",\"mdns\":\"default-disabled\",\"cors\":\"not-enabled\"}"
+    },
+    {
+      "id": "health",
+      "status": "pass",
+      "details": "{\"status\":200}"
+    },
+    {
+      "id": "unauthenticated_rejection",
+      "status": "pass",
+      "details": "{\"sessionListStatus\":401,\"sessionCreateStatus\":401}"
+    },
+    {
+      "id": "session_create",
+      "status": "pass",
+      "details": "{\"status\":200,\"sessionIdPresent\":true}"
+    },
+    {
+      "id": "event_stream_connect",
+      "status": "pass",
+      "details": "pass"
+    },
+    {
+      "id": "prompt_turn_1",
+      "status": "pass",
+      "details": "{\"status\":204,\"completed\":true,\"markerPresent\":true,\"timedOut\":false,\"model\":\"aiberm/openai/gpt-5.4\"}"
+    },
+    {
+      "id": "prompt_turn_2_same_session",
+      "status": "pass",
+      "details": "{\"status\":204,\"completed\":true,\"markerPresent\":true,\"sameSessionUserMessages\":2,\"model\":\"aiberm/openai/gpt-5.4\"}"
+    },
+    {
+      "id": "abort_endpoint",
+      "status": "pass",
+      "details": "{\"status\":200}"
+    },
+    {
+      "id": "abort_active_prompt",
+      "status": "pass",
+      "details": "{\"activeAtAbort\":true,\"settledWithinFiveSeconds\":true,\"tool\":\"bash\",\"toolPartIdPresent\":true,\"toolStatusAtAbort\":\"running\",\"toolStatusAfterAbort\":\"error\",\"toolStopped\":true}"
+    },
+    {
+      "id": "stream_text",
+      "status": "pass",
+      "details": "{\"count\":9,\"characters\":381}"
+    },
+    {
+      "id": "tool_events",
+      "status": "pass",
+      "details": "{\"tools\":[\"bash\"],\"phases\":[\"started\",\"started\",\"started\",\"started\",\"completed\",\"started\",\"started\",\"started\",\"failed\"]}"
+    },
+    {
+      "id": "usage_events",
+      "status": "pass",
+      "details": "{\"count\":20}"
+    },
+    {
+      "id": "process_exit",
+      "status": "pass",
+      "details": "{\"exitCode\":null,\"signal\":\"SIGTERM\"}"
+    },
+    {
+      "id": "restart",
+      "status": "pass",
+      "details": "{\"newRandomPort\":true,\"healthStatus\":200,\"unauthenticatedStatus\":401}"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "fixtures/protocol-events.json",
+      "sizeBytes": 2395,
+      "sha256": "d67ce7f9531749e0f1dfc79d5bb706429690e334c6a470765c3d03ceb71da83b"
+    }
+  ],
+  "limitations": [
+    "Current evidence is from the development machine, not a clean Windows 10 22H2 or Windows 11 x64 VM."
+  ],
+  "candidate": {
+    "kind": "private",
+    "version": "1.18.14",
+    "executableSha256": "f37cb2773654449b4e20dd5dcf47cfdd55fe569628cae9081f480baeea9a80dd"
+  },
+  "startedAtUtc": "2026-08-11T12:15:11.481Z",
+  "finishedAtUtc": "2026-08-11T12:16:02.418Z",
+  "durationMs": 50937,
+  "verdict": {
+    "transport": "pass",
+    "modelBacked": "pass",
+    "overall": "changes-required"
+  },
+  "checks": [
+    {
+      "name": "protocol_fixture_compatibility",
+      "status": "pass",
+      "durationMs": 0,
+      "observed": {
+        "observedEventTypes": [
+          "future.protocol.event",
+          "message.part.updated",
+          "message.updated",
+          "session.status"
+        ],
+        "textEvents": 1,
+        "textCharacters": 8,
+        "textPreview": "OpenCode",
+        "toolPhases": [
+          "started",
+          "completed",
+          "failed"
+        ],
+        "tools": [
+          "bash"
+        ],
+        "usageEvents": 1,
+        "terminalEvents": 1,
+        "errorEvents": 0,
+        "errorMessages": [],
+        "unknownEventTypes": [
+          "future.protocol.event"
+        ]
+      }
+    },
+    {
+      "name": "model_provider_preflight",
+      "status": "pass",
+      "durationMs": 0,
+      "observed": {
+        "model": "aiberm/openai/gpt-5.4",
+        "providerConfigured": true,
+        "credentialsConfigured": "[redacted]"
+      }
+    },
+    {
+      "name": "candidate_version",
+      "status": "pass",
+      "durationMs": 0,
+      "observed": {
+        "version": "1.18.14",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "random_loopback_basic_auth_start",
+      "status": "pass",
+      "durationMs": 1066,
+      "observed": {
+        "hostname": "127.0.0.1",
+        "portSelection": "ephemeral-random",
+        "username": "[generated]",
+        "password": "[redacted]",
+        "mdns": "default-disabled",
+        "cors": "not-enabled"
+      }
+    },
+    {
+      "name": "health",
+      "status": "pass",
+      "durationMs": 7,
+      "observed": {
+        "status": 200
+      }
+    },
+    {
+      "name": "unauthenticated_rejection",
+      "status": "pass",
+      "durationMs": 5,
+      "observed": {
+        "sessionListStatus": 401,
+        "sessionCreateStatus": 401
+      }
+    },
+    {
+      "name": "session_create",
+      "status": "pass",
+      "durationMs": 216,
+      "observed": {
+        "status": 200,
+        "sessionIdPresent": true
+      }
+    },
+    {
+      "name": "event_stream_connect",
+      "status": "pass",
+      "durationMs": 13
+    },
+    {
+      "name": "prompt_turn_1",
+      "status": "pass",
+      "durationMs": 24439,
+      "observed": {
+        "status": 204,
+        "completed": true,
+        "markerPresent": true,
+        "timedOut": false,
+        "model": "aiberm/openai/gpt-5.4"
+      }
+    },
+    {
+      "name": "prompt_turn_2_same_session",
+      "status": "pass",
+      "durationMs": 10002,
+      "observed": {
+        "status": 204,
+        "completed": true,
+        "markerPresent": true,
+        "sameSessionUserMessages": 2,
+        "model": "aiberm/openai/gpt-5.4"
+      }
+    },
+    {
+      "name": "abort_endpoint",
+      "status": "pass",
+      "durationMs": 351,
+      "observed": {
+        "status": 200
+      }
+    },
+    {
+      "name": "abort_active_prompt",
+      "status": "pass",
+      "durationMs": 663,
+      "observed": {
+        "activeAtAbort": true,
+        "settledWithinFiveSeconds": true,
+        "tool": "bash",
+        "toolPartIdPresent": true,
+        "toolStatusAtAbort": "running",
+        "toolStatusAfterAbort": "error",
+        "toolStopped": true
+      }
+    },
+    {
+      "name": "stream_text",
+      "status": "pass",
+      "durationMs": 0,
+      "observed": {
+        "count": 9,
+        "characters": 381
+      }
+    },
+    {
+      "name": "tool_events",
+      "status": "pass",
+      "durationMs": 0,
+      "observed": {
+        "tools": [
+          "bash"
+        ],
+        "phases": [
+          "started",
+          "started",
+          "started",
+          "started",
+          "completed",
+          "started",
+          "started",
+          "started",
+          "failed"
+        ]
+      }
+    },
+    {
+      "name": "usage_events",
+      "status": "pass",
+      "durationMs": 0,
+      "observed": {
+        "count": 20
+      }
+    },
+    {
+      "name": "process_exit",
+      "status": "pass",
+      "durationMs": 2054,
+      "observed": {
+        "exitCode": null,
+        "signal": "SIGTERM"
+      }
+    },
+    {
+      "name": "restart",
+      "status": "pass",
+      "durationMs": 1970,
+      "observed": {
+        "newRandomPort": true,
+        "healthStatus": 200,
+        "unauthenticatedStatus": 401
+      }
+    }
+  ],
+  "process": {
+    "startedAtUtc": "2026-08-11T12:15:12.230Z",
+    "finishedAtUtc": "2026-08-11T12:15:58.410Z",
+    "exited": true,
+    "exitCode": null,
+    "signal": "SIGTERM",
+    "durationMs": 2054,
+    "stdoutBytes": 52,
+    "stderrBytes": 9714,
+    "stdoutSha256": "bf688c87b58612e8562d7bfde646165725409b33021e4ca09194c1387932131c",
+    "stderrSha256": "4d663962e9b537dda6b786e4298e152977b2c5fc80e631dfefd80e57a68fd4fd",
+    "restartProcess": {
+      "startedAtUtc": "2026-08-11T12:15:58.429Z",
+      "finishedAtUtc": "2026-08-11T12:16:02.418Z",
+      "exited": true,
+      "exitCode": null,
+      "signal": "SIGTERM",
+      "durationMs": 2038,
+      "stdoutBytes": 52,
+      "stderrBytes": 803,
+      "stdoutSha256": "d3d70a84aa12bd0e3e3dfdacdfd839ab80dab198c0d3ca0c9b49b7fadb9064fd",
+      "stderrSha256": "2f1923dbaf765317ff9051c41ac108813efca204cb12313fd94b2b65560f2f76"
+    }
+  },
+  "protocol": {
+    "eventSummary": {
+      "observedEventTypes": [
+        "catalog.updated",
+        "integration.updated",
+        "message.part.delta",
+        "message.part.updated",
+        "message.updated",
+        "plugin.added",
+        "reference.updated",
+        "server.connected",
+        "server.heartbeat",
+        "session.diff",
+        "session.error",
+        "session.idle",
+        "session.status",
+        "session.updated"
+      ],
+      "textEvents": 9,
+      "textCharacters": 381,
+      "textPreview": "Reply with exactly SPIKE_TURN_ONE. Do not use tools.SPIKE_TURN_ONEUse the bash tool to run `node -e \"console.log('SPIKE_TOOL_OK')\"`, then reply with exactly SPIKE_TURN_TWO.SPIKE_TURN_TWOUse the bash tool to run `node -e \"setTimeout(() => console.log('SPIKE_ABORT_TOO_LATE'), 30000)\"`. Do not finish before the command exits.Running the requested command and waiting for it to exit.",
+      "toolPhases": [
+        "started",
+        "started",
+        "started",
+        "started",
+        "completed",
+        "started",
+        "started",
+        "started",
+        "failed"
+      ],
+      "tools": [
+        "bash"
+      ],
+      "usageEvents": 20,
+      "terminalEvents": 18,
+      "errorEvents": 1,
+      "errorMessages": [
+        "Aborted"
+      ],
+      "unknownEventTypes": [
+        "catalog.updated",
+        "integration.updated",
+        "message.part.delta",
+        "message.part.updated",
+        "plugin.added",
+        "reference.updated",
+        "server.connected",
+        "server.heartbeat",
+        "session.diff",
+        "session.updated"
+      ]
+    }
+  }
+}

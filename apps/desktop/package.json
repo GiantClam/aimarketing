@@ -1,0 +1,42 @@
+{
+  "name": "@aimarketing/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "pnpm run build:runtime && pnpm run build:host && pnpm run build:skills && tsc -p tsconfig.json --noEmit && vite build",
+    "package:zip": "powershell -NoProfile -ExecutionPolicy Bypass -File ../../scripts/package-desktop-zip.ps1",
+    "package:portable-zip": "powershell -NoProfile -ExecutionPolicy Bypass -File ../../scripts/package-desktop-zip.ps1 -Portable",
+    "build:runtime": "powershell -NoProfile -ExecutionPolicy Bypass -File ../../scripts/stage-desktop-runtime.ps1",
+    "build:host": "node ../../scripts/clean-desktop-host.mjs && esbuild runtime/host.ts --bundle --platform=node --format=esm --outfile=dist-runtime/host.mjs --external:node:* --external:@lancedb/lancedb",
+    "build:skills": "node ../../scripts/generate-shared-skill-catalog.mjs && node ../../scripts/bundle-desktop-skills.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test test/**/*.test.ts",
+    "test:real-providers": "node ../../scripts/test-desktop-real-providers.mjs",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "dependencies": {
+    "@aimarketing/knowledge-runtime": "workspace:*",
+    "@aimarketing/media-runtime": "workspace:*",
+    "@aimarketing/provider-runtime": "workspace:*",
+    "@aimarketing/runtime-contracts": "workspace:*",
+    "@aimarketing/workbench-client": "workspace:*",
+    "@aimarketing/workbench-ui": "workspace:*",
+    "@aimarketing/workflow-core": "workspace:*",
+    "@lancedb/lancedb": "0.37.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.4.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.4.1",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.8.2",
+    "vite": "^6.3.5"
+  }
+}

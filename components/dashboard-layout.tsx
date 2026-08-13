@@ -63,6 +63,12 @@ import {
   type LocalizedWorkspaceBusinessEntry,
 } from "@/lib/platform/workspace-business"
 import { cn } from "@/lib/utils"
+import { WORKBENCH_ROUTE_MANIFEST, WorkbenchRouteIcon, WorkbenchShellFrame } from "@aimarketing/workbench-ui"
+
+function sharedRouteLabel(path: string, locale: "zh" | "en") {
+  const route = WORKBENCH_ROUTE_MANIFEST.find((item) => item.path === path)
+  return route ? route.label[locale] : path
+}
 
 // Client-only: page-agent touches window/document, so never SSR it.
 const PageAgentWidget = dynamic(
@@ -170,8 +176,8 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
     return true
   }, [])
 
-  const aiEntryLabel = locale === "zh" ? "AI \u5bf9\u8bdd" : "AI Chat"
-  const consultingAdvisorLabel = locale === "zh" ? "\u54a8\u8be2\u4e13\u5bb6" : "Consulting Advisor"
+  const aiEntryLabel = sharedRouteLabel("/dashboard/ai", locale)
+  const consultingAdvisorLabel = sharedRouteLabel("/dashboard/ai?entry=consulting-advisor", locale)
   const consultingAdvisorHref = "/dashboard/ai?entry=consulting-advisor"
   // Brand/Growth advisors are served by the AI Entry skill chain (claude-sonnet-4.6),
   // not the Dify workflow. Lock the model via entry=consulting-advisor.
@@ -296,19 +302,19 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const platformSectionLabel = locale === "zh" ? "\u5e73\u53f0\u4e2d\u53f0" : "Platform"
   const capabilityCenterLabel = locale === "zh" ? "\u80fd\u529b\u4e2d\u5fc3" : "Capabilities"
   const agentPlatformLabel = locale === "zh" ? "\u667a\u80fd\u4f53\u4e2d\u53f0" : "Agent Platform"
-  const workflowsLabel = locale === "zh" ? "\u5de5\u4f5c\u6d41" : "Workflows"
+  const workflowsLabel = sharedRouteLabel("/dashboard/workflows", locale)
   const platformSettingsLabel = locale === "zh" ? "\u4f01\u4e1a\u8bbe\u7f6e" : "Enterprise Settings"
   const resourcesSectionLabel = locale === "zh" ? "资源入口" : "Resources"
-  const taskCenterLabel = locale === "zh" ? "任务中心" : "Task Center"
-  const assetLibraryLabel = locale === "zh" ? "资产库" : "Asset Library"
-  const knowledgeBaseLabel = locale === "zh" ? "知识库" : "Knowledge Base"
+  const taskCenterLabel = sharedRouteLabel("/dashboard/tasks", locale)
+  const assetLibraryLabel = sharedRouteLabel("/dashboard/assets", locale)
+  const knowledgeBaseLabel = sharedRouteLabel("/dashboard/knowledge-base", locale)
   const billingLabel = locale === "zh" ? "计费与用量" : "Billing and usage"
 
   const isSidebarLinkActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`)
 
   return (
-    <div className="dashboard-shell flex h-screen bg-transparent">
+    <WorkbenchShellFrame className="dashboard-shell flex h-screen bg-transparent">
       {sidebarOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
       <aside
@@ -365,6 +371,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                   href="/dashboard"
                   label={locale === "zh" ? "首页" : "Home"}
                   icon={House}
+                  iconName="home"
                   collapsed={sidebarCollapsed}
                   active={pathname === "/dashboard"}
                 />
@@ -631,17 +638,17 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                   )}
                   {sidebarCollapsed ? (
                     <div className="space-y-1">
-                      <DashboardMenuLink href="/dashboard/capabilities" label={capabilityCenterLabel} icon={LayoutGrid} collapsed active={isSidebarLinkActive("/dashboard/capabilities")} />
+                      <DashboardMenuLink href="/dashboard/capabilities" label={capabilityCenterLabel} icon={LayoutGrid} iconName="capability" collapsed active={isSidebarLinkActive("/dashboard/capabilities")} />
                       <DashboardMenuLink href="/dashboard/agent-platform" label={agentPlatformLabel} icon={Bot} collapsed active={isSidebarLinkActive("/dashboard/agent-platform")} />
-                      <DashboardMenuLink href="/dashboard/workflows" label={workflowsLabel} icon={Workflow} collapsed active={isSidebarLinkActive("/dashboard/workflows")} />
-                      <DashboardMenuLink href="/dashboard/platform-settings" label={platformSettingsLabel} icon={Settings} collapsed active={isSidebarLinkActive("/dashboard/platform-settings")} />
+                      <DashboardMenuLink href="/dashboard/workflows" label={workflowsLabel} icon={Workflow} iconName="workflow" collapsed active={isSidebarLinkActive("/dashboard/workflows")} />
+                      <DashboardMenuLink href="/dashboard/platform-settings" label={platformSettingsLabel} icon={Settings} iconName="settings" collapsed active={isSidebarLinkActive("/dashboard/platform-settings")} />
                     </div>
                   ) : (
                     <div className="space-y-1">
-                      <DashboardMenuLink href="/dashboard/capabilities" label={capabilityCenterLabel} icon={LayoutGrid} collapsed={false} active={isSidebarLinkActive("/dashboard/capabilities")} />
+                      <DashboardMenuLink href="/dashboard/capabilities" label={capabilityCenterLabel} icon={LayoutGrid} iconName="capability" collapsed={false} active={isSidebarLinkActive("/dashboard/capabilities")} />
                       <DashboardMenuLink href="/dashboard/agent-platform" label={agentPlatformLabel} icon={Bot} collapsed={false} active={isSidebarLinkActive("/dashboard/agent-platform")} />
-                      <DashboardMenuLink href="/dashboard/workflows" label={workflowsLabel} icon={Workflow} collapsed={false} active={isSidebarLinkActive("/dashboard/workflows")} />
-                      <DashboardMenuLink href="/dashboard/platform-settings" label={platformSettingsLabel} icon={Settings} collapsed={false} active={isSidebarLinkActive("/dashboard/platform-settings")} />
+                      <DashboardMenuLink href="/dashboard/workflows" label={workflowsLabel} icon={Workflow} iconName="workflow" collapsed={false} active={isSidebarLinkActive("/dashboard/workflows")} />
+                      <DashboardMenuLink href="/dashboard/platform-settings" label={platformSettingsLabel} icon={Settings} iconName="settings" collapsed={false} active={isSidebarLinkActive("/dashboard/platform-settings")} />
                     </div>
                   )}
                 </div>
@@ -651,9 +658,9 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                     <h3 className="dashboard-kicker mb-2 text-sidebar-foreground/65">{resourcesSectionLabel}</h3>
                   )}
                   <div className="space-y-1">
-                    <DashboardMenuLink href="/dashboard/tasks" label={taskCenterLabel} icon={Workflow} collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/tasks")} />
-                    <DashboardMenuLink href="/dashboard/assets" label={assetLibraryLabel} icon={ImageIcon} collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/assets")} />
-                    <DashboardMenuLink href="/dashboard/knowledge-base" label={knowledgeBaseLabel} icon={Database} collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/knowledge-base")} />
+                    <DashboardMenuLink href="/dashboard/tasks" label={taskCenterLabel} icon={Workflow} iconName="task" collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/tasks")} />
+                    <DashboardMenuLink href="/dashboard/assets" label={assetLibraryLabel} icon={ImageIcon} iconName="asset" collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/assets")} />
+                    <DashboardMenuLink href="/dashboard/knowledge-base" label={knowledgeBaseLabel} icon={Database} iconName="knowledge" collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/knowledge-base")} />
                     <DashboardMenuLink href="/dashboard/billing" label={billingLabel} icon={CreditCard} collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/billing")} />
                   </div>
                 </div>
@@ -797,7 +804,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
       </main>
 
       {user && !loading ? <PageAgentWidget /> : null}
-    </div>
+    </WorkbenchShellFrame>
   )
 }
 
@@ -805,6 +812,7 @@ function DashboardMenuLink({
   href,
   label,
   icon: Icon,
+  iconName,
   collapsed,
   active,
   highlighted,
@@ -812,6 +820,7 @@ function DashboardMenuLink({
   href: string
   label: string
   icon: LucideIcon
+  iconName?: string
   collapsed: boolean
   active: boolean
   highlighted?: boolean
@@ -835,7 +844,7 @@ function DashboardMenuLink({
           <button> inside the link — clicking the anchor navigates directly,
           which is what page-agent (and real clicks) expect. */}
       <Link href={href} data-agent-nav={label}>
-        <Icon className={collapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />
+        {iconName ? <WorkbenchRouteIcon name={iconName} size={16} className={collapsed ? "" : "mr-2"} /> : <Icon className={collapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />}
         {!collapsed && label}
       </Link>
     </Button>

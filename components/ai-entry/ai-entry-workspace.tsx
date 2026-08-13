@@ -4308,7 +4308,7 @@ export function AiEntryWorkspace({
                   parsedArtifact && !hasParts && !parsedPptPreview && !fallbackPptPreview,
                 )
                 return isAssistant ? (
-                  <Message key={message.id} className="items-start">
+                  <Message key={message.id} className="items-start wb-cloud-message wb-cloud-message-assistant" data-cloud-surface="message">
                     <div className="ai-avatar mt-1 shrink-0">AI</div>
                     <article className="message-card assistant-message">
                       <div className="message-header assistant-message-header">
@@ -4437,7 +4437,7 @@ export function AiEntryWorkspace({
                     </article>
                   </Message>
                 ) : (
-                  <Message key={message.id} className="justify-end">
+                  <Message key={message.id} className="justify-end wb-cloud-message wb-cloud-message-user" data-cloud-surface="message">
                     <div className="message-card-user">
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <div className="dashboard-kicker text-primary">{isZh ? "你的指令" : "Your Command"}</div>

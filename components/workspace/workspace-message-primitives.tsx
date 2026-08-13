@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react"
 
+import { WorkbenchMessageFrame, WorkbenchTaskEvents } from "@aimarketing/workbench-ui"
+
 import { TypingIndicator } from "@/components/ui/typing-indicator"
 import type { PendingTaskEvent } from "@/lib/assistant-task-events"
 import { cn } from "@/lib/utils"
@@ -27,40 +29,7 @@ export function WorkspaceMessageFrame({
   className,
   bodyClassName,
 }: WorkspaceMessageFrameProps) {
-  const isUser = role === "user"
-  const toneClass =
-    role === "assistant"
-      ? "bg-card text-foreground"
-      : role === "user"
-        ? "bg-background text-foreground"
-        : "bg-muted/45 text-foreground"
-  const avatarClass =
-    role === "assistant"
-      ? "bg-primary text-primary-foreground"
-      : role === "user"
-        ? "bg-muted text-foreground"
-        : "bg-secondary text-secondary-foreground"
-
-  return (
-    <div className={cn("w-full border-b border-border px-4 py-3.5 selection:bg-[#E8E8E8]", toneClass, className)}>
-      <div className="mx-auto flex w-full max-w-5xl gap-3">
-        <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-[6px] border border-border/40", avatarClass)}>
-          {icon ?? <span className="text-xs font-bold">{isUser ? "U" : "AI"}</span>}
-        </div>
-        <div className="min-w-0 flex-1">
-          {(label || action) ? (
-            <div className="mb-1.5 flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2">
-                {label ? <span className="truncate text-[13px] font-medium text-foreground">{label}</span> : null}
-              </div>
-              {action}
-            </div>
-          ) : null}
-          <div className={bodyClassName}>{children}</div>
-        </div>
-      </div>
-    </div>
-  )
+  return <WorkbenchMessageFrame role={role} label={label} icon={icon} action={action} className={cn("selection:bg-[#E8E8E8]", className)} bodyClassName={bodyClassName}>{children}</WorkbenchMessageFrame>
 }
 
 export function WorkspaceLoadingMessage({
@@ -96,37 +65,7 @@ export function WorkspaceTaskEvents({
   limit?: number
   className?: string
 }) {
-  const recentEvents = events.slice(-Math.max(1, limit))
-  if (recentEvents.length === 0) return null
-
-  return (
-    <div className={cn("space-y-1.5 pl-6 text-xs", className)} data-testid="workspace-task-events">
-      {recentEvents.map((event, eventIndex) => (
-        <div
-          key={`${event.type}-${event.at}-${eventIndex}`}
-          className="flex items-start gap-2"
-          data-testid={`workspace-task-event-${event.type}`}
-        >
-          <span
-            className={cn(
-              "mt-1.5 h-1.5 w-1.5 rounded-full",
-              event.status === "failed"
-                ? "bg-destructive"
-                : event.status === "completed"
-                  ? "bg-emerald-500"
-                  : event.status === "running"
-                    ? "bg-primary"
-                    : "bg-muted-foreground",
-            )}
-          />
-          <span>
-            {event.label}
-            {event.detail ? <span className="ml-1 text-muted-foreground/80">{event.detail}</span> : null}
-          </span>
-        </div>
-      ))}
-    </div>
-  )
+  return <WorkbenchTaskEvents events={events.map((event) => ({ type: event.type, label: event.label, detail: event.detail, status: event.status }))} limit={limit} className={className} />
 }
 
 type WorkspaceResultCardProps = {

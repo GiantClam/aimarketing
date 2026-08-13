@@ -1,0 +1,116 @@
+[
+  {
+    "name": "text-delta",
+    "event": {
+      "type": "message.part.updated",
+      "properties": {
+        "part": {
+          "id": "part_text",
+          "sessionID": "session_fixture",
+          "type": "text",
+          "text": "你好，OpenCode"
+        },
+        "delta": "OpenCode"
+      }
+    },
+    "expectedKind": "text"
+  },
+  {
+    "name": "tool-started",
+    "event": {
+      "type": "message.part.updated",
+      "properties": {
+        "part": {
+          "id": "part_tool",
+          "sessionID": "session_fixture",
+          "type": "tool",
+          "tool": "bash",
+          "state": {
+            "status": "running",
+            "title": "fixture command"
+          }
+        }
+      }
+    },
+    "expectedKind": "tool"
+  },
+  {
+    "name": "tool-completed",
+    "event": {
+      "type": "message.part.updated",
+      "properties": {
+        "part": {
+          "id": "part_tool",
+          "sessionID": "session_fixture",
+          "type": "tool",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "title": "fixture command"
+          }
+        }
+      }
+    },
+    "expectedKind": "tool"
+  },
+  {
+    "name": "tool-failed",
+    "event": {
+      "type": "message.part.updated",
+      "properties": {
+        "part": {
+          "id": "part_tool_failed",
+          "sessionID": "session_fixture",
+          "type": "tool",
+          "tool": "bash",
+          "state": {
+            "status": "error",
+            "title": "fixture failure"
+          }
+        }
+      }
+    },
+    "expectedKind": "tool"
+  },
+  {
+    "name": "usage",
+    "event": {
+      "type": "message.updated",
+      "properties": {
+        "info": {
+          "sessionID": "session_fixture",
+          "tokens": {
+            "input": 7,
+            "output": 5
+          },
+          "cost": 0.001
+        }
+      }
+    },
+    "expectedKind": "usage"
+  },
+  {
+    "name": "idle",
+    "event": {
+      "type": "session.status",
+      "properties": {
+        "sessionID": "session_fixture",
+        "status": {
+          "type": "idle"
+        }
+      }
+    },
+    "expectedKind": "terminal"
+  },
+  {
+    "name": "unknown-forward-compatible",
+    "event": {
+      "type": "future.protocol.event",
+      "properties": {
+        "sessionID": "session_fixture",
+        "password": "must-not-survive"
+      }
+    },
+    "expectedKind": "unknown"
+  }
+]

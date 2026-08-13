@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aimarketing.local/schemas/desktop-spike-evidence-v1.json",
+  "title": "AIMarketing Desktop Spike Evidence",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "spikeId",
+    "status",
+    "startedAtUtc",
+    "finishedAtUtc",
+    "environment",
+    "components",
+    "commands",
+    "assertions",
+    "artifacts",
+    "limitations"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "spikeId": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["pass", "changes-required", "fail", "not-run"] },
+    "startedAtUtc": { "type": "string", "format": "date-time" },
+    "finishedAtUtc": { "type": "string", "format": "date-time" },
+    "environment": {
+      "type": "object",
+      "required": ["osCaption", "osVersion", "build", "architecture", "powershellVersion", "cleanVm"],
+      "additionalProperties": true
+    },
+    "components": { "type": "array", "items": { "type": "object" } },
+    "commands": { "type": "array", "items": { "type": "object" } },
+    "assertions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "details"],
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "enum": ["pass", "changes-required", "fail", "not-run"] },
+          "details": { "type": "string" }
+        }
+      }
+    },
+    "artifacts": { "type": "array", "items": { "type": "object" } },
+    "limitations": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": true
+}

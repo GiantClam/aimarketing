@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "font_source": "C:/Windows/Fonts/msyh.ttc",
+  "private_font_file": "msyh.ttc",
+  "private_font_sha256": "d79c55e68b1131eea0cc1c47be4f572d964f28c682e143db2ad09c1e4cb07a3f",
+  "font_family_reported_by_pillow": "Microsoft YaHei",
+  "font_style_reported_by_pillow": "Regular",
+  "image_file": "private-font-evidence.png",
+  "image_sha256": "de3c17d67933a98da64577ed1ea5cd0ebce4f399a1be0e0e0a9d6694a6f553d9",
+  "image_size": [
+    1280,
+    720
+  ],
+  "loaded_via_absolute_private_path": true
+}

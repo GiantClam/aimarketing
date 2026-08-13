@@ -1,0 +1,333 @@
+use rusqlite::{params, Connection, Result};
+use serde::Serialize;
+use sha2::Digest;
+use std::path::{Path, PathBuf};
+
+const SCHEMA: &str = r#"
+PRAGMA journal_mode = WAL;
+PRAGMA foreign_keys = ON;
+PRAGMA busy_timeout = 5000;
+CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS identity (id INTEGER PRIMARY KEY CHECK (id = 1), device_id TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, root_path TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, project_id TEXT REFERENCES projects(id), title TEXT NOT NULL, opencode_session_id TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id), role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, conversation_id TEXT REFERENCES conversations(id), status TEXT NOT NULL, model TEXT, started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, finished_at TEXT);
+CREATE TABLE IF NOT EXISTS run_events (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id), sequence INTEGER NOT NULL, event_type TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(run_id, sequence));
+CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, project_id TEXT REFERENCES projects(id), relative_path TEXT NOT NULL, mime_type TEXT NOT NULL, byte_length INTEGER NOT NULL, sha256 TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS usage_records (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT REFERENCES runs(id), model TEXT NOT NULL, input_tokens INTEGER, output_tokens INTEGER, estimated_cost REAL, idempotency_key TEXT UNIQUE, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS workflows (id TEXT PRIMARY KEY, project_id TEXT REFERENCES projects(id), name TEXT NOT NULL, definition_json TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS workflow_revisions (id TEXT PRIMARY KEY, workflow_id TEXT NOT NULL REFERENCES workflows(id), revision INTEGER NOT NULL, definition_json TEXT NOT NULL, definition_hash TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(workflow_id, revision));
+CREATE TABLE IF NOT EXISTS run_nodes (run_id TEXT NOT NULL REFERENCES runs(id), node_key TEXT NOT NULL, status TEXT NOT NULL, output_json TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(run_id, node_key));
+CREATE TABLE IF NOT EXISTS run_attempts (idempotency_key TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id), node_key TEXT NOT NULL, provider TEXT, provider_task_id TEXT, status TEXT NOT NULL, payload_json TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS vault_mappings (id TEXT PRIMARY KEY, vault_path TEXT NOT NULL UNIQUE, index_path TEXT NOT NULL, embedding_model TEXT NOT NULL, embedding_dimension INTEGER NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+"#;
+
+pub fn data_root(executable: &Path, local_app_data: Option<PathBuf>) -> PathBuf {
+    if executable.join("portable.flag").exists() { return executable.join("data"); }
+    local_app_data.unwrap_or_else(|| PathBuf::from(".").join("AIMarketing"))
+}
+
+pub fn initialize(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() { std::fs::create_dir_all(parent).map_err(|_| rusqlite::Error::InvalidPath(parent.to_path_buf()))?; }
+    let connection = open(path)?;
+    connection.execute_batch(SCHEMA)?;
+    let device_id = stable_device_id(path);
+    connection.execute("INSERT OR IGNORE INTO identity(id, device_id) VALUES (1, ?1)", [device_id])?;
+    connection.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (1)", [])?;
+    let _ = connection.execute("ALTER TABLE usage_records ADD COLUMN idempotency_key TEXT", []);
+    let _ = connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS usage_idempotency_key ON usage_records(idempotency_key) WHERE idempotency_key IS NOT NULL", []);
+    connection.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (2)", [])?;
+    Ok(())
+}
+
+/// Marks non-terminal runs as interrupted during startup. A crash must never
+/// make an unfinished OpenCode/provider request look successful.
+pub fn recover_interrupted(path: &Path) -> Result<i64> {
+    initialize(path)?;
+    let connection = open(path)?;
+    let changed = connection.execute("UPDATE runs SET status='interrupted', finished_at=CURRENT_TIMESTAMP WHERE status IN ('running', 'queued', 'started')", [])?;
+    Ok(changed as i64)
+}
+
+fn stable_device_id(path: &Path) -> String {
+    let mut digest = sha2::Sha256::new();
+    digest.update(path.to_string_lossy().as_bytes());
+    digest.update(std::env::var("COMPUTERNAME").unwrap_or_default().as_bytes());
+    digest.update(std::env::var("USERNAME").unwrap_or_default().as_bytes());
+    format!("local-{:x}", digest.finalize())
+}
+
+pub fn integrity(path: &Path) -> Result<bool> {
+    let connection = open(path)?;
+    Ok(connection.query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0))? == "ok")
+}
+
+pub fn migrations_ready(path: &Path) -> Result<bool> {
+    initialize(path)?;
+    let connection = open(path)?;
+    let latest: i64 = connection.query_row("SELECT COALESCE(MAX(version), 0) FROM schema_migrations", [], |row| row.get(0))?;
+    Ok(latest >= 2)
+}
+
+fn open(path: &Path) -> Result<Connection> {
+    let connection = Connection::open(path)?;
+    connection.busy_timeout(std::time::Duration::from_secs(5))?;
+    connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;")?;
+    Ok(connection)
+}
+
+#[derive(Debug, Serialize)]
+pub struct ConversationRow { pub id: String, pub title: String, pub opencode_session_id: Option<String>, pub updated_at: String }
+
+#[derive(Debug, Serialize)]
+pub struct ArtifactRow { pub id: String, pub project_id: Option<String>, pub relative_path: String, pub mime_type: String, pub byte_length: i64, pub sha256: String, pub created_at: String, pub available: bool }
+
+#[derive(Debug, Serialize)]
+pub struct MessageRow { pub id: String, pub conversation_id: String, pub role: String, pub content: String, pub created_at: String }
+
+#[derive(Debug, Serialize)]
+pub struct RunRow { pub id: String, pub conversation_id: Option<String>, pub status: String, pub model: Option<String>, pub started_at: String, pub finished_at: Option<String> }
+
+#[derive(Debug, Serialize)]
+pub struct RunAttemptRow { pub idempotency_key: String, pub run_id: String, pub node_key: String, pub provider: Option<String>, pub provider_task_id: Option<String>, pub status: String, pub payload_json: Option<String>, pub updated_at: String }
+
+#[derive(Debug, Serialize)]
+pub struct WorkflowRow { pub id: String, pub project_id: Option<String>, pub name: String, pub definition_json: String, pub updated_at: String }
+
+#[derive(Debug, Serialize)]
+pub struct UsageSummary { pub runs: i64, pub input_tokens: i64, pub output_tokens: i64, pub estimated_cost: f64, pub artifacts: i64 }
+
+pub fn create_conversation(path: &Path, id: &str, title: &str, project_id: Option<&str>) -> Result<ConversationRow> {
+    initialize(path)?;
+    let connection = open(path)?;
+    connection.execute("INSERT INTO conversations(id, project_id, title) VALUES (?1, ?2, ?3) ON CONFLICT(id) DO UPDATE SET title=excluded.title, updated_at=CURRENT_TIMESTAMP", params![id, project_id, title])?;
+    connection.query_row("SELECT id, title, opencode_session_id, updated_at FROM conversations WHERE id=?1", [id], |row| Ok(ConversationRow { id: row.get(0)?, title: row.get(1)?, opencode_session_id: row.get(2)?, updated_at: row.get(3)? }))
+}
+
+pub fn upsert_project(path: &Path, root_path: &str, name: &str) -> Result<String> {
+    initialize(path)?;
+    let connection = open(path)?;
+    let id = format!("project-{:x}", sha2::Sha256::digest(root_path.as_bytes()));
+    connection.execute("INSERT INTO projects(id, name, root_path) VALUES (?1, ?2, ?3) ON CONFLICT(root_path) DO UPDATE SET name=excluded.name", params![id, name, root_path])?;
+    Ok(id)
+}
+
+pub fn set_session_id(path: &Path, conversation_id: &str, session_id: &str) -> Result<()> {
+    initialize(path)?;
+    let connection = open(path)?;
+    connection.execute("UPDATE conversations SET opencode_session_id=?2, updated_at=CURRENT_TIMESTAMP WHERE id=?1", params![conversation_id, session_id])?;
+    Ok(())
+}
+
+pub fn append_message(path: &Path, id: &str, conversation_id: &str, role: &str, content: &str) -> Result<()> {
+    initialize(path)?;
+    let connection = open(path)?;
+    connection.execute("INSERT INTO messages(id, conversation_id, role, content) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(id) DO NOTHING", params![id, conversation_id, role, content])?;
+    connection.execute("UPDATE conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?1", [conversation_id])?;
+    Ok(())
+}
+
+pub fn create_run(path: &Path, id: &str, conversation_id: Option<&str>, model: Option<&str>) -> Result<()> {
+    initialize(path)?;
+    let connection = open(path)?;
+    connection.execute("INSERT INTO runs(id, conversation_id, status, model) VALUES (?1, ?2, 'running', ?3) ON CONFLICT(id) DO NOTHING", params![id, conversation_id, model])?;
+    Ok(())
+}
+
+pub fn append_run_event(path: &Path, run_id: &str, sequence: i64, event_type: &str, payload_json: &str) -> Result<()> {
+    initialize(path)?;
+    let connection = open(path)?;
+    connection.execute("INSERT INTO run_events(run_id, sequence, event_type, payload_json) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(run_id, sequence) DO NOTHING", params![run_id, sequence, event_type, payload_json])?;
+    Ok(())
+}
+
+pub fn register_artifact(path: &Path, id: &str, project_id: Option<&str>, metadata: &crate::artifacts::ArtifactMetadata) -> Result<()> {
+    initialize(path)?;
+    let connection = open(path)?;
+    connection.execute("INSERT INTO artifacts(id, project_id, relative_path, mime_type, byte_length, sha256) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(id) DO UPDATE SET relative_path=excluded.relative_path, mime_type=excluded.mime_type, byte_length=excluded.byte_length, sha256=excluded.sha256", params![id, project_id, metadata.relative_path, metadata.mime_type, metadata.byte_length as i64, metadata.sha256])?;
+    Ok(())
+}
+
+pub fn finish_run(path: &Path, run_id: &str, status: &str) -> Result<()> {
+    initialize(path)?;
+    let connection = open(path)?;
+    connection.execute("UPDATE runs SET status=?2, finished_at=CURRENT_TIMESTAMP WHERE id=?1", params![run_id, status])?;
+    Ok(())
+}
+
+pub fn record_usage(path: &Path, run_id: &str, model: &str, input_tokens: Option<i64>, output_tokens: Option<i64>, estimated_cost: Option<f64>, idempotency_key: Option<&str>) -> Result<()> {
+    initialize(path)?;
+    let connection = open(path)?;
+    connection.execute("INSERT INTO usage_records(run_id, model, input_tokens, output_tokens, estimated_cost, idempotency_key) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(idempotency_key) DO NOTHING", params![run_id, model, input_tokens, output_tokens, estimated_cost, idempotency_key])?;
+    Ok(())
+}
+
+pub fn record_run_node(path: &Path, run_id: &str, node_key: &str, status: &str, output_json: Option<&str>) -> Result<()> {
+    initialize(path)?;
+    let connection = open(path)?;
+    connection.execute("INSERT INTO run_nodes(run_id, node_key, status, output_json) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(run_id, node_key) DO UPDATE SET status=excluded.status, output_json=excluded.output_json, updated_at=CURRENT_TIMESTAMP", params![run_id, node_key, status, output_json])?;
+    Ok(())
+}
+
+pub fn record_run_attempt(path: &Path, idempotency_key: &str, run_id: &str, node_key: &str, provider: Option<&str>, provider_task_id: Option<&str>, status: &str, payload_json: Option<&str>) -> Result<()> {
+    initialize(path)?;
+    let connection = open(path)?;
+    connection.execute("INSERT INTO run_attempts(idempotency_key, run_id, node_key, provider, provider_task_id, status, payload_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(idempotency_key) DO UPDATE SET provider_task_id=COALESCE(excluded.provider_task_id, run_attempts.provider_task_id), status=excluded.status, payload_json=excluded.payload_json, updated_at=CURRENT_TIMESTAMP", params![idempotency_key, run_id, node_key, provider, provider_task_id, status, payload_json])?;
+    Ok(())
+}
+
+pub fn upsert_vault_mapping(path: &Path, vault_path: &str, index_path: &str, embedding_model: &str, embedding_dimension: i64) -> Result<()> {
+    initialize(path)?;
+    let connection = open(path)?;
+    let id = format!("vault-{:x}", sha2::Sha256::digest(vault_path.as_bytes()));
+    connection.execute("INSERT INTO vault_mappings(id, vault_path, index_path, embedding_model, embedding_dimension) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(vault_path) DO UPDATE SET index_path=excluded.index_path, embedding_model=excluded.embedding_model, embedding_dimension=excluded.embedding_dimension, updated_at=CURRENT_TIMESTAMP", params![id, vault_path, index_path, embedding_model, embedding_dimension])?;
+    Ok(())
+}
+
+pub fn list_conversations(path: &Path) -> Result<Vec<ConversationRow>> {
+    initialize(path)?;
+    let connection = open(path)?;
+    let mut statement = connection.prepare("SELECT id, title, opencode_session_id, updated_at FROM conversations ORDER BY updated_at DESC")?;
+    let rows = statement.query_map([], |row| Ok(ConversationRow { id: row.get(0)?, title: row.get(1)?, opencode_session_id: row.get(2)?, updated_at: row.get(3)? }))?.collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+pub fn list_artifacts(path: &Path) -> Result<Vec<ArtifactRow>> {
+    initialize(path)?;
+    let connection = open(path)?;
+    let mut statement = connection.prepare("SELECT id, project_id, relative_path, mime_type, byte_length, sha256, created_at FROM artifacts ORDER BY created_at DESC")?;
+    let rows = statement.query_map([], |row| Ok(ArtifactRow { id: row.get(0)?, project_id: row.get(1)?, relative_path: row.get(2)?, mime_type: row.get(3)?, byte_length: row.get(4)?, sha256: row.get(5)?, created_at: row.get(6)?, available: false }))?.collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+pub fn remove_artifact(path: &Path, artifact_id: &str) -> Result<()> {
+    initialize(path)?;
+    let connection = open(path)?;
+    connection.execute("DELETE FROM artifacts WHERE id=?1", [artifact_id])?;
+    Ok(())
+}
+
+pub fn list_messages(path: &Path, conversation_id: &str) -> Result<Vec<MessageRow>> {
+    initialize(path)?;
+    let connection = open(path)?;
+    let mut statement = connection.prepare("SELECT id, conversation_id, role, content, created_at FROM messages WHERE conversation_id=?1 ORDER BY created_at ASC, id ASC")?;
+    let rows = statement.query_map([conversation_id], |row| Ok(MessageRow { id: row.get(0)?, conversation_id: row.get(1)?, role: row.get(2)?, content: row.get(3)?, created_at: row.get(4)? }))?.collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+pub fn list_runs(path: &Path) -> Result<Vec<RunRow>> {
+    initialize(path)?;
+    let connection = open(path)?;
+    let mut statement = connection.prepare("SELECT id, conversation_id, status, model, started_at, finished_at FROM runs ORDER BY started_at DESC LIMIT 100")?;
+    let rows = statement.query_map([], |row| Ok(RunRow { id: row.get(0)?, conversation_id: row.get(1)?, status: row.get(2)?, model: row.get(3)?, started_at: row.get(4)?, finished_at: row.get(5)? }))?.collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+pub fn list_recoverable_attempts(path: &Path) -> Result<Vec<RunAttemptRow>> {
+    initialize(path)?;
+    let connection = open(path)?;
+    let mut statement = connection.prepare("SELECT idempotency_key, run_id, node_key, provider, provider_task_id, status, payload_json, updated_at FROM run_attempts WHERE status IN ('queued', 'running', 'submitted') AND provider_task_id IS NOT NULL ORDER BY updated_at ASC")?;
+    let rows = statement.query_map([], |row| Ok(RunAttemptRow {
+        idempotency_key: row.get(0)?,
+        run_id: row.get(1)?,
+        node_key: row.get(2)?,
+        provider: row.get(3)?,
+        provider_task_id: row.get(4)?,
+        status: row.get(5)?,
+        payload_json: row.get(6)?,
+        updated_at: row.get(7)?,
+    }))?.collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+pub fn save_workflow(path: &Path, id: &str, name: &str, project_id: Option<&str>, definition_json: &str) -> Result<WorkflowRow> {
+    initialize(path)?;
+    let connection = open(path)?;
+    let hash = format!("{:x}", sha2::Sha256::digest(definition_json.as_bytes()));
+    connection.execute("INSERT INTO workflows(id, project_id, name, definition_json) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(id) DO UPDATE SET project_id=excluded.project_id, name=excluded.name, definition_json=excluded.definition_json, updated_at=CURRENT_TIMESTAMP", params![id, project_id, name, definition_json])?;
+    let revision: i64 = connection.query_row("SELECT COALESCE(MAX(revision), 0) + 1 FROM workflow_revisions WHERE workflow_id=?1", [id], |row| row.get(0))?;
+    let revision_id = format!("{id}:revision:{revision}");
+    connection.execute("INSERT OR IGNORE INTO workflow_revisions(id, workflow_id, revision, definition_json, definition_hash) VALUES (?1, ?2, ?3, ?4, ?5)", params![revision_id, id, revision, definition_json, hash])?;
+    connection.query_row("SELECT id, project_id, name, definition_json, updated_at FROM workflows WHERE id=?1", [id], |row| Ok(WorkflowRow { id: row.get(0)?, project_id: row.get(1)?, name: row.get(2)?, definition_json: row.get(3)?, updated_at: row.get(4)? }))
+}
+
+pub fn list_workflows(path: &Path) -> Result<Vec<WorkflowRow>> {
+    initialize(path)?;
+    let connection = open(path)?;
+    let mut statement = connection.prepare("SELECT id, project_id, name, definition_json, updated_at FROM workflows ORDER BY updated_at DESC")?;
+    let rows = statement.query_map([], |row| Ok(WorkflowRow { id: row.get(0)?, project_id: row.get(1)?, name: row.get(2)?, definition_json: row.get(3)?, updated_at: row.get(4)? }))?.collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+pub fn usage_summary(path: &Path) -> Result<UsageSummary> {
+    initialize(path)?;
+    let connection = open(path)?;
+    let runs: i64 = connection.query_row("SELECT COUNT(*) FROM runs", [], |row| row.get(0))?;
+    let (input_tokens, output_tokens, estimated_cost): (i64, i64, f64) = connection.query_row("SELECT COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), COALESCE(SUM(estimated_cost),0) FROM usage_records", [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
+    let artifacts: i64 = connection.query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))?;
+    Ok(UsageSummary { runs, input_tokens, output_tokens, estimated_cost, artifacts })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn repository_round_trip_is_idempotent() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-storage-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let path = root.join("app.db");
+        let row = create_conversation(&path, "conversation-1", "本地会话", None).unwrap();
+        assert_eq!(row.title, "本地会话");
+        append_message(&path, "message-1", "conversation-1", "user", "你好").unwrap();
+        append_message(&path, "message-1", "conversation-1", "user", "重复不会覆盖").unwrap();
+        create_run(&path, "run-1", Some("conversation-1"), Some("local-model")).unwrap();
+        append_run_event(&path, "run-1", 1, "text_delta", r#"{"text":"你好"}"#).unwrap();
+        record_run_node(&path, "run-1", "writer", "succeeded", Some(r#"{"text":"完成"}"#)).unwrap();
+        record_run_attempt(&path, "run-1:media:1", "run-1", "media", Some("openai"), Some("provider-task-1"), "submitted", Some(r#"{"provider":"openai"}"#)).unwrap();
+        assert_eq!(list_recoverable_attempts(&path).unwrap().len(), 1);
+        finish_run(&path, "run-1", "succeeded").unwrap();
+        assert_eq!(list_conversations(&path).unwrap().len(), 1);
+        assert_eq!(list_runs(&path).unwrap().len(), 1);
+        let connection = open(&path).unwrap();
+        assert_eq!(connection.query_row("SELECT status FROM run_nodes WHERE run_id='run-1' AND node_key='writer'", [], |row| row.get::<_, String>(0)).unwrap(), "succeeded");
+        assert_eq!(connection.query_row("SELECT provider_task_id FROM run_attempts WHERE idempotency_key='run-1:media:1'", [], |row| row.get::<_, String>(0)).unwrap(), "provider-task-1");
+        assert!(integrity(&path).unwrap());
+        let identity: String = open(&path).unwrap().query_row("SELECT device_id FROM identity WHERE id=1", [], |row| row.get(0)).unwrap();
+        assert!(identity.starts_with("local-") && identity.len() > 20);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn startup_recovery_marks_active_runs_interrupted() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-recovery-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let path = root.join("app.db");
+        create_run(&path, "run-active", None, Some("local")).unwrap();
+        assert_eq!(recover_interrupted(&path).unwrap(), 1);
+        assert_eq!(open(&path).unwrap().query_row("SELECT status FROM runs WHERE id='run-active'", [], |row| row.get::<_, String>(0)).unwrap(), "interrupted");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn workflow_revisions_and_usage_summary_are_persisted() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-workflow-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let path = root.join("app.db");
+        let workflow = save_workflow(&path, "wf-1", "内容流水线", None, r#"{"version":1,"nodes":[]}"#).unwrap();
+        assert_eq!(workflow.name, "内容流水线");
+        save_workflow(&path, "wf-1", "内容流水线 v2", None, r#"{"version":1,"nodes":[{"type":"text_input"}]}"#).unwrap();
+        assert_eq!(list_workflows(&path).unwrap().len(), 1);
+        let revisions: i64 = open(&path).unwrap().query_row("SELECT COUNT(*) FROM workflow_revisions WHERE workflow_id='wf-1'", [], |row| row.get(0)).unwrap();
+        assert_eq!(revisions, 2);
+        create_run(&path, "run-1", None, Some("local")).unwrap();
+        finish_run(&path, "run-1", "succeeded").unwrap();
+        record_usage(&path, "run-1", "local", Some(3), Some(5), Some(0.1), Some("run-1:usage")).unwrap();
+        let summary = usage_summary(&path).unwrap();
+        assert_eq!(summary.runs, 1);
+        assert_eq!(summary.input_tokens + summary.output_tokens, 8);
+        assert_eq!(summary.artifacts, 0);
+        let _ = std::fs::remove_dir_all(root);
+    }
+}

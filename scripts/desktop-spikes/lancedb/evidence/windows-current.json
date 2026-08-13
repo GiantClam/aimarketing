@@ -1,0 +1,227 @@
+{
+  "schemaVersion": 1,
+  "spikeId": "windows-rust-lancedb",
+  "status": "changes-required",
+  "startedAtUtc": "2026-08-11T12:16:55.2150138Z",
+  "finishedAtUtc": "2026-08-11T12:17:00.4616148Z",
+  "environment": {
+    "osCaption": "Microsoft Windows 11 家庭版 中文版",
+    "osVersion": "10.0.26200",
+    "build": "26200",
+    "architecture": "64 位",
+    "processArchitecture": "X64",
+    "powershellVersion": "7.6.4",
+    "cleanVm": false,
+    "baselineId": "local-26200-X64"
+  },
+  "components": [
+    {
+      "name": "rustc",
+      "version": "rustc 1.93.0 (254b59607 2026-01-19)",
+      "host": "x86_64-pc-windows-msvc"
+    },
+    {
+      "name": "cargo",
+      "version": "cargo 1.93.0 (083ac5135 2025-12-15)"
+    },
+    {
+      "name": "lancedb",
+      "version": "0.37.1",
+      "defaultFeatures": false,
+      "mode": "embedded"
+    },
+    {
+      "name": "protoc",
+      "version": "libprotoc 31.1",
+      "source": "protoc-bin-vendored 3.2.0",
+      "sha256": "cbd1ca1fd6afd1bb6ddd1c09c118ecd4c50f928980857f16fe6fc23704ea17e2"
+    },
+    {
+      "name": "msvc-x64",
+      "version": "14.51.36252.0"
+    },
+    {
+      "name": "cmake",
+      "availableOnPath": false,
+      "requiredByObservedBuild": false
+    },
+    {
+      "name": "runtime-dll-imports",
+      "values": [
+        "api-ms-win-core-synch-l1-2-0.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll",
+        "api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-math-l1-1-0.dll",
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll",
+        "api-ms-win-crt-string-l1-1-0.dll",
+        "api-ms-win-crt-time-l1-1-0.dll",
+        "api-ms-win-crt-utility-l1-1-0.dll",
+        "bcryptprimitives.dll",
+        "combase.dll",
+        "kernel32.dll",
+        "ntdll.dll",
+        "shell32.dll",
+        "USERENV.dll",
+        "VCRUNTIME140.dll"
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "command": "cargo run --locked --quiet --manifest-path protoc-bootstrap/Cargo.toml",
+      "startedAtUtc": "2026-08-11T12:16:55.6071319Z",
+      "finishedAtUtc": "2026-08-11T12:16:55.8290161Z",
+      "exitCode": 0,
+      "stdoutSummary": "<USER_PROFILE>\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\protoc-bin-vendored-win32-3.2.0\\bin\\protoc.exe",
+      "stderrSummary": "<none>"
+    },
+    {
+      "command": "cargo test --locked --all-targets",
+      "startedAtUtc": "2026-08-11T12:16:55.8419433Z",
+      "finishedAtUtc": "2026-08-11T12:16:56.7212105Z",
+      "exitCode": 0,
+      "stdoutSummary": "running 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 4 tests\ntest reports_a_clear_diagnostic_for_an_invalid_database_path ... ok\ntest reports_a_clear_diagnostic_when_the_vault_is_locked ... ok\ntest persists_reopens_and_ranks_records_in_a_chinese_space_path ... ok\ntest keeps_vault_directories_independent ... ok\n\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s",
+      "stderrSummary": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.52s\n     Running unittests src\\lib.rs (target\\debug\\deps\\windows_lancedb_spike-212d6a4ef536ad36.exe)\n     Running unittests src\\main.rs (target\\debug\\deps\\windows_lancedb_spike-bca718a7d1262615.exe)\n     Running tests\\feasibility.rs (target\\debug\\deps\\feasibility-e1110603c07ba8ab.exe)"
+    },
+    {
+      "command": "cargo clippy --locked --all-targets -- -D warnings",
+      "startedAtUtc": "2026-08-11T12:16:56.7229361Z",
+      "finishedAtUtc": "2026-08-11T12:16:57.7494252Z",
+      "exitCode": 0,
+      "stdoutSummary": "<none>",
+      "stderrSummary": "Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.67s"
+    },
+    {
+      "command": "cargo build --locked",
+      "startedAtUtc": "2026-08-11T12:16:57.7500510Z",
+      "finishedAtUtc": "2026-08-11T12:16:58.5645595Z",
+      "exitCode": 0,
+      "stdoutSummary": "<none>",
+      "stderrSummary": "Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.65s"
+    },
+    {
+      "command": "target/debug/windows-lancedb-spike.exe --root <redacted-runtime-root>",
+      "startedAtUtc": "2026-08-11T12:16:58.6008017Z",
+      "finishedAtUtc": "2026-08-11T12:16:58.7180595Z",
+      "exitCode": 0,
+      "stdoutSummary": "{\n  \"status\": \"pass\",\n  \"lancedb_version\": \"0.37.1\",\n  \"embedded\": true,\n  \"independent_database_service\": false,\n  \"vector_dimension\": 4,\n  \"vaults\": [\n    {\n      \"redacted_path\": \"<spike-root>/Vault A 中文/向量 数据库\",\n      \"disk_size_bytes\": 2723,\n      \"record_count\": 3\n    },\n    {\n      \"redacted_path\": \"<spike-root>/Vault B 含 空格/向量 数据库\",\n      \"disk_size_bytes\": 2723,\n      \"record_count\": 3\n    }\n  ],\n  \"ranking\": [\n    {\n      \"rank\": 1,\n      \"document_path\": \"知识库 A/产品 规划.md\",\n      \"distance\": 0.0\n    },\n    {\n      \"rank\": 2,\n      \"document_path\": \"知识库 A/检索 设计.md\",\n      \"distance\": 0.08\n    },\n    {\n      \"rank\": 3,\n      \"document_path\": \"知识库 A/无关.md\",\n      \"distance\": 2.0\n    }\n  ],\n  \"lock_diagnostic\": \"vault directory is locked or unavailable; another spike process may be using it\"\n}",
+      "stderrSummary": "<none>"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "rust-lancedb-builds-on-current-windows-x64",
+      "status": "pass",
+      "details": "LanceDB 0.37.1 compiled for x86_64-pc-windows-msvc after provisioning vendored protoc 31.1."
+    },
+    {
+      "id": "persist-close-reopen-query",
+      "status": "pass",
+      "details": "Document path, Chinese chunk text, vector dimension, and Float32 vectors persisted and were queried through a new connection."
+    },
+    {
+      "id": "local-embedding-model",
+      "status": "changes-required",
+      "details": "The probe uses locally precomputed deterministic vectors; the v1 local embedding model is not connected yet."
+    },
+    {
+      "id": "similarity-ranking",
+      "status": "pass",
+      "details": "Three results were returned in ascending vector distance order."
+    },
+    {
+      "id": "chinese-space-path-and-vault-isolation",
+      "status": "pass",
+      "details": "Two Chinese/space-containing per-Vault directories returned only their own records."
+    },
+    {
+      "id": "embedded-no-service",
+      "status": "pass",
+      "details": "The probe used local LanceDB directories and started no independent database service."
+    },
+    {
+      "id": "repeat-run-isolation",
+      "status": "pass",
+      "details": "The runner validates and resets only its owned runtime subtree before each probe, so no previous database version is reused."
+    },
+    {
+      "id": "lock-and-failure-diagnostics",
+      "status": "pass",
+      "details": "vault directory is locked or unavailable; another spike process may be using it; the integration suite also verified the explicit invalid database-path diagnostic."
+    },
+    {
+      "id": "clean-target-vms",
+      "status": "changes-required",
+      "details": "This is a non-clean Windows 11 development host; clean Windows 10 22H2 and clean Windows 11 x64 VM runs are still required."
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "target/debug/windows-lancedb-spike.exe",
+      "kind": "file",
+      "sizeBytes": 230345216,
+      "sha256": "60f4c01b8c5a1f3e48bd3dc06a8bec2719ee5653c8d07484836eb5a987e936d5"
+    },
+    {
+      "path": "<runtime-root>/Vault A 中文/向量 数据库",
+      "kind": "directory-tree",
+      "fileCount": 5,
+      "sizeBytes": 2723.0,
+      "sha256": "101ceb53d38db0393362d4f618d6d8968faeb8aeb5cf785603907ce4ae3cf5bd"
+    },
+    {
+      "path": "<runtime-root>/Vault B 含 空格/向量 数据库",
+      "kind": "directory-tree",
+      "fileCount": 5,
+      "sizeBytes": 2723.0,
+      "sha256": "e95b8c98f6631767a738c4ce45a7ac32458023c358aab8ceeeb3b743f44a5e87"
+    }
+  ],
+  "limitations": [
+    "This evidence is from the current non-clean Windows 11 development host only.",
+    "Windows 10 22H2 has not been validated.",
+    "A clean Windows 11 x64 VM has not been validated.",
+    "Compilation requires MSVC x64 build tools and protoc; run.ps1 provisions protoc 31.1 from protoc-bin-vendored 3.2.0.",
+    "No auditable optimized release build was captured; the recorded executable size is the successful debug artifact and is not a shipping-size estimate.",
+    "The probe validates vector persistence/query with locally precomputed deterministic vectors, not an end-to-end local embedding model.",
+    "The deterministic lock diagnostic is an explicit per-Vault guard around the embedded LanceDB store."
+  ],
+  "spikeDetails": {
+    "status": "pass",
+    "lancedb_version": "0.37.1",
+    "embedded": true,
+    "independent_database_service": false,
+    "vector_dimension": 4,
+    "vaults": [
+      {
+        "redacted_path": "<spike-root>/Vault A 中文/向量 数据库",
+        "disk_size_bytes": 2723,
+        "record_count": 3
+      },
+      {
+        "redacted_path": "<spike-root>/Vault B 含 空格/向量 数据库",
+        "disk_size_bytes": 2723,
+        "record_count": 3
+      }
+    ],
+    "ranking": [
+      {
+        "rank": 1,
+        "document_path": "知识库 A/产品 规划.md",
+        "distance": 0.0
+      },
+      {
+        "rank": 2,
+        "document_path": "知识库 A/检索 设计.md",
+        "distance": 0.08
+      },
+      {
+        "rank": 3,
+        "document_path": "知识库 A/无关.md",
+        "distance": 2.0
+      }
+    ],
+    "lock_diagnostic": "vault directory is locked or unavailable; another spike process may be using it"
+  }
+}

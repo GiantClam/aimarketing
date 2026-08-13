@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "upstream_repository": "https://github.com/hugohe3/ppt-master",
+  "upstream_commit": "4e6ecbcb0dc079efebd3c79b775c0f02581509fe",
+  "skill_version": "4.5.0",
+  "python": "Python 3.13.12",
+  "python_is_private": true,
+  "opencode": "1.17.15",
+  "powerpoint_available": true
+}

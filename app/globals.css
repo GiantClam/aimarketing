@@ -426,6 +426,13 @@
     background-size: 48px 48px;
   }
 
+  .wb-shell-frame {
+    background-image:
+      linear-gradient(var(--dashboard-grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--dashboard-grid-line) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
   .dashboard-panel {
     position: relative;
     border: 1px solid var(--border);
@@ -470,6 +477,33 @@
     letter-spacing: -0.03em;
     text-transform: uppercase;
   }
+
+  /* Shared with @aimarketing/workbench-ui so Web and Tauri render the same message geometry. */
+  .wb-message-frame { width: 100%; padding: 0.875rem 1rem; border-bottom: 1px solid var(--border); }
+  .wb-message-inner { display: flex; width: 100%; max-width: 64rem; margin-inline: auto; gap: 0.75rem; }
+  .wb-message-assistant { background: var(--card); color: var(--foreground); }
+  .wb-message-user { background: var(--background); color: var(--foreground); }
+  .wb-message-system { background: color-mix(in srgb, var(--muted) 45%, transparent); color: var(--foreground); }
+  .wb-message-avatar { display: flex; width: 2.25rem; height: 2.25rem; flex: 0 0 2.25rem; align-items: center; justify-content: center; border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); border-radius: 6px; background: var(--primary); color: var(--primary-foreground); font-size: 0.6875rem; font-weight: 700; }
+  .wb-message-user .wb-message-avatar { background: var(--muted); }
+  .wb-message-content { min-width: 0; flex: 1; }
+  .wb-message-header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.375rem; }
+  .wb-message-label { color: var(--foreground); font-size: 0.8125rem; font-weight: 600; }
+  .wb-message-body { white-space: pre-wrap; color: var(--foreground); font-size: 0.875rem; line-height: 1.75; }
+  .wb-message-events { display: grid; gap: 0.375rem; margin-top: 0.75rem; padding-left: 1.5rem; color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.45; }
+  .wb-artifact-section { margin-top: 1rem; }
+  .wb-artifact-title { margin-bottom: 0.5rem; color: var(--muted-foreground); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+  .wb-artifact-grid { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); }
+  .wb-artifact-card { display: grid; gap: 0.3125rem; min-width: 0; border: 1px solid var(--border); border-radius: 0.625rem; padding: 0.625rem 0.6875rem; background: var(--background); color: var(--foreground); text-align: left; }
+  .wb-artifact-card:hover { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--background)); }
+  .wb-artifact-name { overflow: hidden; font-size: 0.75rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+  .wb-artifact-card small { overflow: hidden; color: var(--muted-foreground); font-size: 0.625rem; text-overflow: ellipsis; white-space: nowrap; }
+  .wb-message-event { display: flex; align-items: flex-start; gap: 0.5rem; }
+  .wb-event-dot { width: 0.375rem; height: 0.375rem; flex: 0 0 0.375rem; margin-top: 0.375rem; border-radius: 999px; background: var(--muted-foreground); }
+  .wb-event-running { background: var(--primary); }
+  .wb-event-completed { background: #10b981; }
+  .wb-event-failed { background: var(--destructive); }
+  .wb-event-detail { margin-left: 0.25rem; color: var(--muted-foreground); }
 
   .workspace-command-hero {
     overflow: hidden;
@@ -1027,6 +1061,28 @@
     background: #fff;
     padding: 28px 32px;
     box-shadow: 0 18px 44px rgba(0, 0, 0, 0.07);
+  }
+
+  /* The cloud message outer frame is also consumed by the Tauri adapter. Keep
+     the wrapper contract here so both surfaces use identical row geometry. */
+  .wb-cloud-message {
+    display: flex;
+    width: 100%;
+    align-items: flex-start;
+    gap: 14px;
+    margin: 0 auto 18px;
+  }
+
+  .wb-cloud-message-user {
+    justify-content: flex-end;
+  }
+
+  .wb-cloud-message-assistant {
+    justify-content: flex-start;
+  }
+
+  .wb-cloud-message-user .message-card-user {
+    flex: 0 1 auto;
   }
 
   .assistant-message {

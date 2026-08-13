@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "started_utc": "2026-08-11T11:34:55.8665532+00:00",
+  "finished_utc": "2026-08-11T11:35:17.7813643+00:00",
+  "duration_ms": 21915.0,
+  "exit_code": 1,
+  "model": "openai/gpt-5.4",
+  "opencode_version": "1.17.15",
+  "upstream_commit": "4e6ecbcb0dc079efebd3c79b775c0f02581509fe",
+  "railway_worker_used": false
+}

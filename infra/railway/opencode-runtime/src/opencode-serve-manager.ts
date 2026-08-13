@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process"
 import { mkdir } from "node:fs/promises"
 
 import type { AgentRuntimeEvent, AgentRuntimeInput, AgentRuntimeInputV2, OpenCodeProviderConfig } from "../../../../lib/ai-runtime/contracts.js"
+import { createOpenCodeServeEventState, normalizeOpenCodeServeEvent, type OpenCodeServeEventState } from "@aimarketing/runtime-contracts/opencode"
 
 type JsonRecord = Record<string, unknown>
 
@@ -14,8 +15,7 @@ type PendingRun = {
   resolve: (completed: boolean) => void
   timer: ReturnType<typeof setTimeout>
   done: boolean
-  messageRoles: Map<string, string>
-  textLengths: Map<string, number>
+  serveEvents: OpenCodeServeEventState
 }
 
 type OpenCodeServeManagerOptions = {
@@ -216,8 +216,7 @@ export class OpenCodeServeManager {
         resolve,
         timer,
         done: false,
-        messageRoles: new Map(),
-        textLengths: new Map(),
+        serveEvents: createOpenCodeServeEventState(),
       })
     })
     let response: Response
@@ -340,51 +339,17 @@ export class OpenCodeServeManager {
     if (!sessionId) return
     const run = [...this.pending.values()].find((candidate) => candidate.sessionId === sessionId)
     if (!run) return
-    const type = stringValue(record?.type)
-    if (type === "message.updated") {
-      const info = asRecord(properties?.info)
-      const messageId = stringValue(info?.id)
-      if (messageId) run.messageRoles.set(messageId, stringValue(info?.role))
-      return
-    }
-    if (type === "message.part.updated") {
-      const part = asRecord(properties?.part)
-      const messageId = stringValue(part?.messageID)
-      if (messageId && run.messageRoles.get(messageId) === "user") return
-      const partType = stringValue(part?.type)
-      if (partType === "text") {
-        const text = typeof part?.text === "string" ? part.text : ""
-        const id = stringValue(part?.id) || messageId || "text"
-        const previousLength = run.textLengths.get(id) || 0
-        const delta = text.startsWith(text.slice(0, previousLength)) ? text.slice(previousLength) : text
-        run.textLengths.set(id, text.length)
-        if (delta) run.emit({ event: "text_delta", delta, runId: run.runId })
-        return
+    const normalized = normalizeOpenCodeServeEvent(run.runId, payload, run.serveEvents)
+    for (const event of normalized.events) {
+      if (event.event === "tool_event") {
+        run.emit({ ...event, phase: event.phase === "progress" ? "started" : event.phase })
+      } else {
+        run.emit(event)
       }
-      if (partType === "tool") {
-        const state = asRecord(part?.state)
-        const status = stringValue(state?.status, part?.status).toLowerCase()
-        const phase = status === "error" || status === "failed" ? "failed" : status === "completed" || status === "success" ? "completed" : "started"
-        run.emit({ event: "tool_event", tool: stringValue(part?.tool, part?.name) || "tool", ...(stringValue(part?.id) ? { toolCallId: stringValue(part?.id) } : {}), phase, ...(stringValue(state?.title, state?.message) ? { message: diagnostic(stringValue(state?.title, state?.message), "") } : {}), runId: run.runId })
-        return
-      }
-      if (partType === "step-finish" || partType === "step_finish") {
-        const tokens = asRecord(part?.tokens)
-        const inputTokens = typeof tokens?.input === "number" ? tokens.input : undefined
-        const outputTokens = typeof tokens?.output === "number" ? tokens.output : undefined
-        const costUsd = typeof part?.cost === "number" ? part.cost : undefined
-        if (inputTokens !== undefined || outputTokens !== undefined || costUsd !== undefined) run.emit({ event: "usage", ...(inputTokens === undefined ? {} : { inputTokens }), ...(outputTokens === undefined ? {} : { outputTokens }), ...(costUsd === undefined ? {} : { costUsd }), runId: run.runId })
-        return
-      }
-      return
     }
-    if (type === "session.error") {
-      this.finishRun(run, false, { code: "opencode_error", message: diagnostic(properties?.error, "OpenCode runtime failed.") })
-      return
-    }
-    // Completion is resolved by the synchronous `/message` response. An
-    // idle event alone is not sufficient: it may be emitted before the
-    // prompt starts, or be lost while the native event stream reconnects.
+    if (normalized.terminalError) this.finishRun(run, false, normalized.terminalError)
+    // Completion is resolved by the synchronous `/message` response. An idle
+    // event alone is not sufficient because a reconnect can report stale idle.
   }
 
   private finishRun(run: PendingRun, completed: boolean, error?: { code: string; message: string }) {
