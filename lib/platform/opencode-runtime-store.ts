@@ -64,6 +64,24 @@ function firstRow<T>(result: DbResult) {
   return (result.rows?.[0] as T | undefined) ?? null
 }
 
+function asDate(value: unknown, field: string) {
+  const date = value instanceof Date ? value : new Date(String(value))
+  if (Number.isNaN(date.getTime())) throw new Error(`opencode_runtime_invalid_${field}`)
+  return date
+}
+
+function normalizeRuntimeRun(row: OpenCodeRuntimeRunRecord | null) {
+  if (!row) return null
+  return {
+    ...row,
+    deadlineAt: asDate(row.deadlineAt, "deadline"),
+    leaseExpiresAt: row.leaseExpiresAt ? asDate(row.leaseExpiresAt, "lease_expiry") : null,
+    createdAt: asDate(row.createdAt, "created_at"),
+    updatedAt: asDate(row.updatedAt, "updated_at"),
+    finishedAt: row.finishedAt ? asDate(row.finishedAt, "finished_at") : null,
+  }
+}
+
 function jsonb(value: Record<string, unknown> | number[] | null | undefined) {
   return value === undefined || value === null ? null : JSON.stringify(value)
 }
@@ -301,7 +319,7 @@ export async function createOpenCodeRuntimeRun(input: {
       updated_at AS "updatedAt",
       finished_at AS "finishedAt"
   `)
-  const row = firstRow<OpenCodeRuntimeRunRecord>(result)
+  const row = normalizeRuntimeRun(firstRow<OpenCodeRuntimeRunRecord>(result))
   if (!row) throw new Error("opencode_runtime_run_create_failed")
   return row
 }
@@ -351,7 +369,7 @@ export async function claimOpenCodeRuntimeRun(runtimeRunId: string, owner: strin
       updated_at AS "updatedAt",
       finished_at AS "finishedAt"
   `)
-  return firstRow<OpenCodeRuntimeRunRecord>(result)
+  return normalizeRuntimeRun(firstRow<OpenCodeRuntimeRunRecord>(result))
 }
 
 export async function updateOpenCodeRuntimeRun(runtimeRunId: string, input: {
@@ -452,7 +470,7 @@ export async function getOpenCodeRuntimeRunByRuntimeId(runtimeRunId: string) {
     WHERE runtime_run_id = ${runtimeRunId}::uuid
     LIMIT 1
   `)
-  return firstRow<OpenCodeRuntimeRunRecord>(result)
+  return normalizeRuntimeRun(firstRow<OpenCodeRuntimeRunRecord>(result))
 }
 
 export async function getOpenCodeRuntimeRunByTaskRunId(taskRunId: number) {
@@ -488,5 +506,5 @@ export async function getOpenCodeRuntimeRunByTaskRunId(taskRunId: number) {
     WHERE task_run_id = ${taskRunId}
     LIMIT 1
   `)
-  return firstRow<OpenCodeRuntimeRunRecord>(result)
+  return normalizeRuntimeRun(firstRow<OpenCodeRuntimeRunRecord>(result))
 }

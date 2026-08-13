@@ -11,7 +11,8 @@ TARGET_DLQ_QUEUE="aimarketing-opencode-runs-dlq"
 PRODUCTION_URL="https://www.aimarketingsite.com"
 RUNNER_URL="https://${WORKER_NAME}.liulanggoukk.workers.dev"
 PPT_RUNNER_URL="https://ppt-master-worker-production.up.railway.app"
-RAILWAY_OPENCODE_URL="${RAILWAY_OPENCODE_RUNTIME_URL:-https://ppt-master-worker-production.up.railway.app}"
+OPENCODE_RUNNER_URL="https://opencode-runtime-production.up.railway.app"
+RAILWAY_OPENCODE_URL="${RAILWAY_OPENCODE_RUNTIME_URL:-$OPENCODE_RUNNER_URL}"
 
 load_env_file() {
   local file="$1"

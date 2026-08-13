@@ -27,6 +27,8 @@
     "Hiragino Sans GB",
     "Microsoft YaHei",
     sans-serif;
+  --font-display: var(--font-display-fallback);
+  --font-body: var(--font-body-fallback);
 
   /* AI Marketing command-center system */
   --background: #fdfdfb;
