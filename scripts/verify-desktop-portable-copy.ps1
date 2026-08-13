@@ -20,7 +20,15 @@ function Assert-File([string]$path, [string]$label) {
 
 function File-Fingerprint([string]$path) {
   $item = Get-Item -LiteralPath $path
-  [ordered]@{ bytes = [int64]$item.Length; sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() }
+  $sha = [Security.Cryptography.SHA256]::Create()
+  $stream = [IO.File]::OpenRead($path)
+  try {
+    $digest = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $stream.Dispose()
+    $sha.Dispose()
+  }
+  [ordered]@{ bytes = [int64]$item.Length; sha256 = $digest }
 }
 
 try {

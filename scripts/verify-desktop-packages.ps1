@@ -36,6 +36,19 @@ function Verify-Package {
     if ($ExpectPortable) { $required += "$packageName/portable.flag" }
     if (-not $ExpectPortable -and (Find-Entry $archive "$packageName/portable.flag")) { throw "desktop_package_unexpected_portable_flag: $Mode" }
 
+    $fullRuntimeMarkers = @(
+      "$packageName/_up_/dist-runtime/runtime/python/",
+      "$packageName/_up_/dist-runtime/runtime/node/node_modules/",
+      "$packageName/_up_/dist-runtime/runtime/opencode/node_modules/",
+      "$packageName/_up_/dist-runtime/AIMarketing-Runtime-x64.zip"
+    )
+    foreach ($entry in $archive.Entries) {
+      $normalizedEntry = $entry.FullName.Replace('\', '/')
+      foreach ($marker in $fullRuntimeMarkers) {
+        if ($normalizedEntry.StartsWith($marker, [StringComparison]::OrdinalIgnoreCase)) { throw "desktop_package_embeds_full_runtime:${Mode}:$normalizedEntry" }
+      }
+    }
+
     $missing = @($required | Where-Object { -not (Find-Entry $archive $_) })
     if ($missing.Count) { throw "desktop_package_missing_entries: $($missing -join ', ')" }
 

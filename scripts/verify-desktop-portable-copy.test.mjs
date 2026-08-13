@@ -9,7 +9,7 @@ test("portable copy verifier checks adjacent data and copied runtime fingerprint
   assert.match(script, /portable\.flag/u);
   assert.match(script, /dataRoot/u);
   assert.match(script, /File-Fingerprint/u);
-  assert.match(script, /Get-FileHash[^\n]+SHA256/u);
+  assert.match(script, /Security\.Cryptography\.SHA256\]::Create\(\)/u);
   assert.match(script, /desktop_portable_copy_runtime_changed/u);
   assert.match(script, /localAppDataCreated/u);
 });

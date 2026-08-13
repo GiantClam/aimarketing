@@ -51,7 +51,8 @@
 - [ ] 干净离线 VM 可通过本地包完成门禁
 - [x] 被篡改离线包不会修改当前 runtime
   - [x] 2026-08-13 `install-desktop-runtime.test.mjs` repacks a tampered embedded manifest, observes fail-closed `runtime_offline_manifest_mismatch`, and confirms no runtime file is created or replaced.
-- [ ] 主程序 ZIP 不重复内置完整 runtime
+- [x] 主程序 ZIP 不重复内置完整 runtime
+  - [x] 2026-08-13 `desktop:verify-packages` now fails closed if normal/portable archives contain embedded Python, Node/OpenCode `node_modules`, or a nested `AIMarketing-Runtime-x64.zip`; both current archives pass with 268,943,017 / 269,006,577 compressed bytes.
 
 ## 4. Normal and portable packages
 
@@ -67,6 +68,7 @@
   - [x] 2026-08-13 `cargo test ... instance_lock::tests` 通过 2/2，覆盖同一路径互斥和未知 owner 提示。
 - [x] 4.4 验证便携目录复制到另一台兼容电脑后只重新 probe，不重复下载合格 runtime
   - [x] 2026-08-13 `verify-desktop-portable-copy.ps1` extracts the portable ZIP into an isolated source root, copies it to a second target root, creates only adjacent `data/`, and compares SHA-256/byte fingerprints for host, runtime manifest and ppt-master Skill; the run reports `localAppDataCreated=false`, proving the self-contained runtime is reusable without a download step.
+  - [x] 2026-08-13 fingerprinting uses .NET `SHA256` directly instead of relying on Windows PowerShell module auto-loading; the pnpm verifier passes in the release shell and reports identical source/copied hashes.
 - [x] 4.5 明示外部 Obsidian Vault、系统 WebView2 不随便携目录复制
   - [x] 便携 ZIP README 明确提示外部 Vault 路径需在目标机保持可用或重定位，系统 WebView2 在目标机重新 probe/repair。
 - [x] 4.6 明示便携复制同时复制明文 API Key
@@ -83,7 +85,8 @@
 ## 5. Release hardening and verification
 
 - [ ] 5.1 在 Win10 22H2/Win11 x64 运行中文用户名、空格、长路径和 OneDrive 测试
-- [ ] 5.2 运行 OpenCode/workflow-host 强杀、恢复和 Windows Job Object 测试
+- [x] 5.2 运行 OpenCode/workflow-host 强杀、恢复和 Windows Job Object 测试
+  - [x] 2026-08-13 desktop fake OpenCode E2E covers crash/restart and retryable interruption; `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml` passes 27/27 including a Windows-only Job Object child-tree termination test.
 - [x] 5.3 执行日志 30 天/1GB 清理和诊断包脱敏测试
   - [x] 2026-08-13 Rust tests verify 30-day expiry, oldest-first 1GB retention, recursive API-key/token/password/authorization redaction, and a real PowerShell diagnostic ZIP extraction containing only `[REDACTED]` secrets. The same pass also fixed `Compress-Archive -LiteralPath 'staging\\*'` so diagnostics are actually produced.
 - [x] 5.4 执行主 ZIP、解压后、runtime 补齐后的组件级 size budget
