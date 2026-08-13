@@ -71,8 +71,11 @@
 - [x] 4.4a UI displays Full Access and plaintext config risk without exposing a permission-mode selector.
 - [x] 4.2a Desktop home/chat inputs expose model, reasoning and local Skill selectors; task center exposes persisted usage/run state.
 - [x] 4.2b Desktop chat uses the shared cloud-compatible AI/user message cards, timestamps, live event panel, active route highlighting and quick prompt chips.
+- [x] 4.1a 2026-08-13 `DesktopConversationWorkspace` composes shared `WorkbenchChatMessage`/`WorkbenchWriterMessage`, prompt composer, route conversation history and artifact/event surfaces; route regressions verify the cloud-compatible composition.
 - [ ] 4.5 实时展示文本/工具步骤和 emergency stop
+- [x] 4.5a 2026-08-13 `workbench-client.test.ts` drives the real Desktop WorkbenchClient adapter with malformed frames, text deltas, tool events, usage, workflow/media cancellation and terminal completion; the adapter emits normalized events and ignores malformed payloads.
 - [ ] 4.6 添加 streaming、长工具输出、取消、重启、artifact 和缺配置 UI tests
+- [x] 4.6a 2026-08-13 WorkbenchClient event tests cover streaming/cancel/error boundaries; existing RPC 8 MiB frame tests, fake OpenCode crash/restart E2E, artifact routing and missing-Provider UI regressions cover the remaining adapter contracts without video real-provider calls.
 
 **Quality Gate:**
 - [ ] Workbench UI 只使用 Desktop WorkbenchClient

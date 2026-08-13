@@ -92,7 +92,10 @@ export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: Wo
           if (event.event === "text_delta") onEvent({ type: "text", delta: String(event.delta ?? "") });
           else if (event.event === "usage") onEvent({ type: "usage", usage: { runId, provider: typeof event.provider === "string" ? event.provider : undefined, model: String(event.model ?? "unknown"), inputTokens: Number(event.inputTokens ?? 0), outputTokens: Number(event.outputTokens ?? 0), providerCost: typeof event.costUsd === "number" ? event.costUsd : undefined } });
           else if (event.event === "done") onEvent({ type: "status", status: "succeeded" });
-          else if (event.event === "runtime_error") onEvent({ type: "status", status: event.code === "opencode_aborted" ? "cancelled" : "failed" });
+          else if (event.event === "runtime_error") {
+            const code = String(event.code ?? "");
+            onEvent({ type: "status", status: ["opencode_aborted", "workflow_cancelled", "media_cancelled"].includes(code) ? "cancelled" : "failed" });
+          }
           else if (event.event === "tool_event") onEvent({ type: "tool", tool: String(event.tool ?? "tool"), phase: "started", message: typeof event.message === "string" ? event.message : undefined });
         } catch { /* malformed frames remain in host diagnostics */ }
       }).then((unlisten) => { dispose = unlisten; }).catch(() => undefined);

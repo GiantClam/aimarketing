@@ -39,3 +39,38 @@ test("desktop WorkbenchClient adapts conversations, workflows and file actions t
   await client.runs.emergencyStop("run-1");
   assert.equal((calls.at(-1)?.args?.message as { type?: string } | undefined)?.type, "run.emergency_stop");
 });
+
+test("desktop WorkbenchClient streams text, tool, usage, cancellation and terminal events", async () => {
+  let listener: ((payload: { raw: string }) => void) | undefined;
+  const bridge = {
+    async invoke<T>() { return undefined as T; },
+    async listen<T>(_event: string, callback: (payload: T) => void) {
+      listener = callback as unknown as (payload: { raw: string }) => void;
+      return () => { listener = undefined; };
+    },
+  };
+  const client = createDesktopWorkbenchClient(bridge, { go: () => undefined, replace: () => undefined, current: () => "/dashboard/ai" });
+  const events: Array<Record<string, unknown>> = [];
+  const dispose = client.runs.subscribe("run-stream", (event) => events.push(event as unknown as Record<string, unknown>));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(listener);
+  const emit = (event: Record<string, unknown>) => {
+    const body = JSON.stringify({ version: 1, requestId: "request-1", ok: true, data: { event: { runId: "run-stream", ...event } } });
+    listener?.({ raw: `${Buffer.byteLength(body, "utf8")}:${body}` });
+  };
+  listener?.({ raw: "not-a-frame" });
+  emit({ event: "text_delta", delta: "hello" });
+  emit({ event: "tool_event", tool: "writer", message: "started" });
+  emit({ event: "usage", provider: "fixture", model: "fixture/model", inputTokens: 3, outputTokens: 5, costUsd: 0.02 });
+  emit({ event: "runtime_error", code: "workflow_cancelled" });
+  emit({ event: "done" });
+  assert.deepEqual(events, [
+    { type: "text", delta: "hello" },
+    { type: "tool", tool: "writer", phase: "started", message: "started" },
+    { type: "usage", usage: { runId: "run-stream", provider: "fixture", model: "fixture/model", inputTokens: 3, outputTokens: 5, providerCost: 0.02 } },
+    { type: "status", status: "cancelled" },
+    { type: "status", status: "succeeded" },
+  ]);
+  dispose();
+  assert.equal(listener, undefined);
+});
