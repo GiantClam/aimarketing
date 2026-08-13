@@ -279,7 +279,43 @@ export function createMiniMaxAudioAdapter(options: DirectProviderOptions): Media
     provider: options.provider,
     execute: async (request, cancellation) => {
       const input = request.input as Record<string, unknown>;
-      const kind = text(input.kind) || "speech";
+      const featureId = text(input.featureId);
+      if (featureId === "voice-clone" || text(input.kind) === "voice_clone") {
+        const sourceFileId = text(input.sourceFileId);
+        if (!sourceFileId) throw new Error("voice_clone_source_file_required");
+        const numericSourceFileId = Number(sourceFileId);
+        if (!Number.isSafeInteger(numericSourceFileId) || numericSourceFileId <= 0) throw new Error("voice_clone_source_file_invalid");
+        const voiceId = text(input.voiceId) || `desktop-voice-${Date.now()}`;
+        const body: Record<string, unknown> = {
+          file_id: numericSourceFileId,
+          voice_id: voiceId,
+          need_noise_reduction: String(input.needNoiseReduction ?? "false") === "true",
+          need_volume_normalization: String(input.needVolumeNormalization ?? "false") === "true",
+          aigc_watermark: false,
+        };
+        const previewText = text(input.previewText) || text(input.prompt);
+        if (previewText) {
+          body.text = previewText;
+          body.model = request.modelId || "speech-2.8-turbo";
+          body.language_boost = text(input.languageBoost) || "auto";
+        }
+        const promptAudioFileId = text(input.promptAudioFileId);
+        const promptText = text(input.promptText);
+        if (promptAudioFileId && promptText) {
+          const numericPromptAudioFileId = Number(promptAudioFileId);
+          if (!Number.isSafeInteger(numericPromptAudioFileId) || numericPromptAudioFileId <= 0) throw new Error("voice_clone_prompt_audio_invalid");
+          body.clone_prompt = { prompt_audio: numericPromptAudioFileId, prompt_text: promptText };
+        }
+        const payload = await jsonRequest(options, "/voice_clone", { method: "POST", body: JSON.stringify(body) }, cancellation);
+        const task = asTask(options.provider, payload);
+        const previewUrl = text(payload.demo_audio);
+        return {
+          ...task,
+          status: "succeeded",
+          outputs: [...task.outputs, ...(previewUrl ? [{ url: previewUrl }] : []), { voiceId }],
+        };
+      }
+      const kind = text(input.kind) || (featureId === "ai-music" ? "music" : "speech");
       const path = kind === "music" ? "/music_generation" : "/t2a_async_v2";
       const payload = await jsonRequest(options, path, { method: "POST", body: JSON.stringify({ model: request.modelId, ...input }) }, cancellation);
       const task = asTask(options.provider, payload);

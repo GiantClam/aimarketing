@@ -61,6 +61,35 @@ test("MiniMax music adapter keeps synchronous base64 output local", async () => 
   assert.equal(task.outputs[0]?.b64_json, "AQID");
 });
 
+test("MiniMax voice-clone capability calls the clone endpoint and preserves the preview", async () => {
+  let request: { url: string; init?: RequestInit } | undefined;
+  const adapter = createMiniMaxAudioAdapter({ provider: "minimax" as MediaProviderId, baseUrl: "https://api.minimax.io/v1", apiKey: "secret", fetchImpl: async (input, init) => {
+    request = { url: String(input), init };
+    return new Response(JSON.stringify({ demo_audio: "https://files.invalid/voice-preview.mp3", extra_info: { voice_id: "voice-1" } }), { status: 200 });
+  } });
+  const task = await adapter.execute({ provider: "minimax" as MediaProviderId, modelId: "speech-2.8-turbo", input: { featureId: "voice-clone", sourceFileId: "42", voiceId: "voice-1", previewText: "你好" } }, cancellation());
+  assert.equal(task.status, "succeeded");
+  assert.equal(task.outputs[0]?.url, "https://files.invalid/voice-preview.mp3");
+  assert.equal(request?.url, "https://api.minimax.io/v1/voice_clone");
+  const body = JSON.parse(String(request?.init?.body)) as Record<string, unknown>;
+  assert.equal(body.file_id, 42);
+  assert.equal(body.voice_id, "voice-1");
+  assert.equal(body.text, "你好");
+});
+
+test("MiniMax voice-synthesis capability creates and polls an async speech task", async () => {
+  let calls = 0;
+  const adapter = createMiniMaxAudioAdapter({ provider: "minimax" as MediaProviderId, baseUrl: "https://api.minimax.io/v1", apiKey: "secret", fetchImpl: async (input) => {
+    calls += 1;
+    return new Response(JSON.stringify(calls === 1 ? { task_id: "speech-task-1", status: "Pending" } : { task_id: "speech-task-1", status: "Success", file_id: "99" }), { status: 200 });
+  } });
+  const first = await adapter.execute({ provider: "minimax" as MediaProviderId, modelId: "speech-2.8-hd", input: { featureId: "voice-synthesis", prompt: "Hello", voiceId: "English_Trustworth_Man" } }, cancellation());
+  const second = await adapter.query!(first.providerTaskId, cancellation());
+  assert.equal(first.status, "queued");
+  assert.equal(second.status, "succeeded");
+  assert.match(String(second.outputs[0]?.url), /files\/retrieve_content\?file_id=99/);
+});
+
 test("RunningHub adapter submits and queries task results without SaaS transport", async () => {
   let call = 0;
   const adapter = createRunningHubAdapter({ provider: "runninghub" as MediaProviderId, baseUrl: "https://www.runninghub.cn", apiKey: "secret", submitPath: "/openapi/v2/rhart-video/demo", fetchImpl: async (_input, init) => {
