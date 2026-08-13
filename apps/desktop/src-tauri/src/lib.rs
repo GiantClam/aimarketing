@@ -344,21 +344,40 @@ fn export_diagnostics(app: tauri::AppHandle) -> Result<serde_json::Value, String
     let staging = diagnostics_root.join(format!("staging-{stamp}"));
     fs::create_dir_all(&staging).map_err(|error| error.to_string())?;
     let mut config_value = config::read(&data.join("config.json"), &data)?;
-    if let Some(provider) = config_value.get_mut("provider").and_then(serde_json::Value::as_object_mut) {
-        if provider.contains_key("apiKey") { provider.insert("apiKey".to_string(), serde_json::Value::String("[REDACTED]".to_string())); }
-    }
+    redact_diagnostic_value(&mut config_value);
     fs::write(staging.join("config.redacted.json"), serde_json::to_vec_pretty(&config_value).map_err(|error| error.to_string())?).map_err(|error| error.to_string())?;
     fs::write(staging.join("metadata.json"), serde_json::to_vec_pretty(&serde_json::json!({ "version": env!("CARGO_PKG_VERSION"), "dataRoot": "[REDACTED]", "createdAt": stamp })).map_err(|error| error.to_string())?).map_err(|error| error.to_string())?;
     let logs = data.join("logs");
     if logs.exists() { copy_directory(&logs, &staging.join("logs"))?; }
     let zip_path = diagnostics_root.join(format!("AI-Marketing-diagnostics-{stamp}.zip"));
-    let source = powershell_quote(&staging.to_string_lossy());
-    let destination = powershell_quote(&zip_path.to_string_lossy());
-    let command = format!("Compress-Archive -LiteralPath '{}\\*' -DestinationPath '{}' -Force", source, destination);
-    let output = Command::new("powershell.exe").args(["-NoProfile", "-Command", &command]).output().map_err(|error| format!("diagnostics_archive_spawn_failed: {error}"))?;
+    archive_diagnostics(&staging, &zip_path)?;
     let _ = fs::remove_dir_all(&staging);
-    if !output.status.success() { return Err(format!("diagnostics_archive_failed: {}", String::from_utf8_lossy(&output.stderr).trim())); }
     Ok(serde_json::json!({ "path": zip_path, "redacted": true }))
+}
+
+fn redact_diagnostic_value(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Array(items) => items.iter_mut().for_each(redact_diagnostic_value),
+        serde_json::Value::Object(object) => {
+            for (key, nested) in object.iter_mut() {
+                let normalized = key.to_ascii_lowercase().replace(['-', '_'], "");
+                if normalized == "apikey"
+                    || normalized == "key"
+                    || normalized.ends_with("key")
+                    || normalized.contains("token")
+                    || normalized.contains("secret")
+                    || normalized.contains("password")
+                    || normalized.contains("authorization")
+                    || normalized.contains("credential")
+                {
+                    *nested = serde_json::Value::String("[REDACTED]".to_string());
+                } else {
+                    redact_diagnostic_value(nested);
+                }
+            }
+        }
+        _ => {}
+    }
 }
 
 fn chrono_like_timestamp() -> String {
@@ -366,6 +385,18 @@ fn chrono_like_timestamp() -> String {
 }
 
 fn powershell_quote(value: &str) -> String { value.replace('\'', "''") }
+
+fn archive_diagnostics(staging: &std::path::Path, zip_path: &std::path::Path) -> Result<(), String> {
+    let source = powershell_quote(&staging.to_string_lossy());
+    let destination = powershell_quote(&zip_path.to_string_lossy());
+    let command = format!("Compress-Archive -Path '{}\\*' -DestinationPath '{}' -Force", source, destination);
+    let output = Command::new("powershell.exe")
+        .args(["-NoProfile", "-Command", &command])
+        .output()
+        .map_err(|error| format!("diagnostics_archive_spawn_failed: {error}"))?;
+    if !output.status.success() { return Err(format!("diagnostics_archive_failed: {}", String::from_utf8_lossy(&output.stderr).trim())); }
+    Ok(())
+}
 
 fn copy_directory(source: &std::path::Path, destination: &std::path::Path) -> Result<(), String> {
     fs::create_dir_all(destination).map_err(|error| error.to_string())?;
@@ -628,7 +659,7 @@ fn lock_path() -> Result<std::path::PathBuf, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{config, configured_runtime_executable, persist_runtime_paths, safe_media_component};
+    use super::{archive_diagnostics, config, configured_runtime_executable, persist_runtime_paths, powershell_quote, redact_diagnostic_value, safe_media_component};
     use std::fs;
 
     #[test]
@@ -655,6 +686,56 @@ mod tests {
         let canonical_text = canonical.to_string_lossy().into_owned();
         assert_eq!(saved["runtime"]["nodePath"].as_str(), Some(canonical_text.as_str()));
         assert_eq!(configured_runtime_executable(&root, "nodePath"), Some(canonical));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn diagnostic_redaction_recurses_without_touching_non_secret_config() {
+        let mut value = serde_json::json!({
+            "provider": { "apiKey": "provider-secret", "model": "gpt-5.4" },
+            "nested": { "access_token": "token-secret", "privateKey": "key-secret", "authorization": "Bearer secret", "label": "中文" },
+            "items": [{ "password": "password-secret", "value": 7 }]
+        });
+
+        redact_diagnostic_value(&mut value);
+
+        assert_eq!(value["provider"]["apiKey"], "[REDACTED]");
+        assert_eq!(value["nested"]["access_token"], "[REDACTED]");
+        assert_eq!(value["nested"]["privateKey"], "[REDACTED]");
+        assert_eq!(value["nested"]["authorization"], "[REDACTED]");
+        assert_eq!(value["nested"]["label"], "中文");
+        assert_eq!(value["items"][0]["password"], "[REDACTED]");
+        assert_eq!(value["items"][0]["value"], 7);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn diagnostic_archive_contains_only_redacted_config() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-diagnostics-{}", std::process::id()));
+        let staging = root.join("staging");
+        let archive = root.join("diagnostics.zip");
+        let extracted = root.join("extracted");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&staging).unwrap();
+        let mut value = serde_json::json!({ "provider": { "apiKey": "archive-secret" }, "label": "中文" });
+        redact_diagnostic_value(&mut value);
+        fs::write(staging.join("config.redacted.json"), serde_json::to_vec(&value).unwrap()).unwrap();
+
+        archive_diagnostics(&staging, &archive).unwrap();
+        let command = format!(
+            "Expand-Archive -LiteralPath '{}' -DestinationPath '{}' -Force",
+            powershell_quote(&archive.to_string_lossy()),
+            powershell_quote(&extracted.to_string_lossy())
+        );
+        let output = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-Command", &command])
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        let archived = fs::read_to_string(extracted.join("config.redacted.json")).unwrap();
+        assert!(!archived.contains("archive-secret"));
+        assert!(archived.contains("[REDACTED]"));
+        assert!(archived.contains("中文"));
         let _ = fs::remove_dir_all(root);
     }
 }
