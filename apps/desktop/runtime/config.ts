@@ -9,12 +9,12 @@ export interface DesktopConfig {
   readonly obsidianVaultPath?: string;
   readonly obsidianIndexPath?: string;
   readonly offlineRuntimeZipPath?: string;
-  readonly provider: { readonly id: string; readonly source?: string; readonly model: string; readonly baseUrl?: string; readonly apiKey?: string; readonly reasoningEffort?: string; readonly endpoint?: string; readonly queryEndpoint?: string };
+  readonly provider: { readonly id: string; readonly source?: string; readonly model: string; readonly models?: readonly string[]; readonly baseUrl?: string; readonly apiKey?: string; readonly reasoningEffort?: string; readonly skillId?: string; readonly endpoint?: string; readonly queryEndpoint?: string };
   readonly runtime: { readonly source: "system" | "private"; readonly opencodePath?: string; readonly pythonPath?: string };
 }
 
 export function defaultDesktopConfig(paths: DesktopPaths): DesktopConfig {
-  return { schemaVersion: 1, locale: "auto", workspacePath: paths.projects, provider: { id: "local", source: "local", model: "ollama/qwen3:8b", baseUrl: "http://127.0.0.1:11434/v1", apiKey: "" }, runtime: { source: "system" } };
+  return { schemaVersion: 1, locale: "auto", workspacePath: paths.projects, provider: { id: "local", source: "local", model: "ollama/qwen3:8b", models: ["ollama/qwen3:8b"], baseUrl: "http://127.0.0.1:11434/v1", apiKey: "" }, runtime: { source: "system" } };
 }
 
 export async function readDesktopConfig(paths: DesktopPaths): Promise<DesktopConfig> {
@@ -36,6 +36,9 @@ export async function writeDesktopConfig(paths: DesktopPaths, config: DesktopCon
 function parseConfig(raw: string): DesktopConfig {
   const value = JSON.parse(raw) as Partial<DesktopConfig>;
   if (value.schemaVersion !== 1 || typeof value.workspacePath !== "string" || !value.provider || !value.runtime) throw new Error("invalid desktop config");
+  const models = normalizeConfiguredModels(value.provider.models);
+  const requestedModel = String(value.provider.model ?? "").trim();
+  const model = models.includes(requestedModel) ? requestedModel : (models[0] ?? requestedModel);
   return {
     schemaVersion: 1,
     locale: value.locale === "zh" || value.locale === "en" ? value.locale : "auto",
@@ -43,9 +46,14 @@ function parseConfig(raw: string): DesktopConfig {
     ...(typeof value.obsidianVaultPath === "string" ? { obsidianVaultPath: value.obsidianVaultPath } : {}),
     ...(typeof value.obsidianIndexPath === "string" ? { obsidianIndexPath: value.obsidianIndexPath } : {}),
     ...(typeof (value as Partial<DesktopConfig>).offlineRuntimeZipPath === "string" ? { offlineRuntimeZipPath: (value as Partial<DesktopConfig>).offlineRuntimeZipPath } : {}),
-    provider: { id: String(value.provider.id ?? "local"), model: String(value.provider.model ?? ""), ...(value.provider.source ? { source: String(value.provider.source) } : {}), ...(value.provider.baseUrl ? { baseUrl: String(value.provider.baseUrl) } : {}), ...(value.provider.apiKey ? { apiKey: String(value.provider.apiKey) } : {}), ...(value.provider.reasoningEffort ? { reasoningEffort: String(value.provider.reasoningEffort) } : {}), ...(value.provider.endpoint ? { endpoint: String(value.provider.endpoint) } : {}), ...(value.provider.queryEndpoint ? { queryEndpoint: String(value.provider.queryEndpoint) } : {}) },
+    provider: { id: String(value.provider.id ?? "local"), model, ...(models.length ? { models } : {}), ...(value.provider.source ? { source: String(value.provider.source) } : {}), ...(value.provider.baseUrl ? { baseUrl: String(value.provider.baseUrl) } : {}), ...(value.provider.apiKey ? { apiKey: String(value.provider.apiKey) } : {}), ...(value.provider.reasoningEffort ? { reasoningEffort: String(value.provider.reasoningEffort) } : {}), ...(typeof value.provider.skillId === "string" && value.provider.skillId.trim() ? { skillId: value.provider.skillId.trim() } : {}), ...(value.provider.endpoint ? { endpoint: String(value.provider.endpoint) } : {}), ...(value.provider.queryEndpoint ? { queryEndpoint: String(value.provider.queryEndpoint) } : {}) },
     runtime: { source: value.runtime.source === "private" ? "private" : "system", ...(value.runtime.opencodePath ? { opencodePath: String(value.runtime.opencodePath) } : {}), ...(value.runtime.pythonPath ? { pythonPath: String(value.runtime.pythonPath) } : {}) },
   };
+}
+
+function normalizeConfiguredModels(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((model): model is string => typeof model === "string").map((model) => model.trim()).filter(Boolean))];
 }
 
 export function redactSecrets(value: unknown): unknown {

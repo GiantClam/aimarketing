@@ -24,11 +24,14 @@ test("config writes atomically and recovers from backup", async () => {
     const initial = defaultDesktopConfig(paths);
     assert.equal(initial.locale, "auto");
     await writeDesktopConfig(paths, initial);
-    await writeDesktopConfig(paths, { ...initial, workspacePath: join(root, "项目"), obsidianIndexPath: join(root, "索引"), provider: { ...initial.provider, source: "openai-compatible", reasoningEffort: "high", endpoint: "/videos/generations", queryEndpoint: "/api/v1/tasks" } });
+    await writeDesktopConfig(paths, { ...initial, workspacePath: join(root, "项目"), obsidianIndexPath: join(root, "索引"), provider: { ...initial.provider, source: "openai-compatible", model: "retired/model", models: ["provider/fast", "provider/reasoning", "provider/fast", ""], reasoningEffort: "high", skillId: "ppt-master", endpoint: "/videos/generations", queryEndpoint: "/api/v1/tasks" } });
     const updated = await readDesktopConfig(paths);
     assert.equal(updated.obsidianIndexPath, join(root, "索引"));
     assert.equal(updated.provider.source, "openai-compatible");
+    assert.deepEqual(updated.provider.models, ["provider/fast", "provider/reasoning"]);
+    assert.equal(updated.provider.model, "provider/fast");
     assert.equal(updated.provider.reasoningEffort, "high");
+    assert.equal(updated.provider.skillId, "ppt-master");
     assert.equal(updated.provider.endpoint, "/videos/generations");
     assert.equal(updated.provider.queryEndpoint, "/api/v1/tasks");
     await writeDesktopConfig(paths, { ...updated, offlineRuntimeZipPath: join(root, "runtime.zip") });

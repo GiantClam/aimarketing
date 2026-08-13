@@ -27,6 +27,7 @@
 - [x] 2.2c Tauri startup lists persisted `run_attempts` with provider task IDs and host resume requests carry current config without persisting API keys.
 
 - [ ] 2.1 实现从明文 `config.json` 解析并脱敏传递 Provider 配置
+  - [x] 2.1a `config.json` now persists a normalized configured model list and selected Skill; stale selected models fall back to the first configured model.
 - [ ] 2.2 提交前持久化 idempotency key，提交后立即保存 provider task ID
 - [ ] 2.3 实现可恢复 poll 和 provider 支持时的 cancel
 - [ ] 2.4 从 Rust 请求 canonical temp path，流式下载并原子移动到项目目录
