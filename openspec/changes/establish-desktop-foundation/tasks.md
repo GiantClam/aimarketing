@@ -43,20 +43,22 @@
   - [x] 2026-08-14 readiness regression now rejects a manifest that omits any mandatory component instead of treating the remaining passing probes as sufficient.
   - [x] 2026-08-14 desktop bootstrap regression covers all ten mandatory components as isolated damaged fixtures and verifies that only the repeated all-green probe reopens readiness.
   - [x] 2026-08-14 native bootstrap separately probes WebView2 and the same required runtime component set before Tauri creates the main WebView.
-- [ ] 3.2 在创建主 WebView 前运行原生 bootstrap 状态机
-  - [x] 2026-08-13 Rust regression `startup_gates_run_before_tauri_builder` locks WebView2 and green-runtime gate ordering before `tauri::Builder`, including lock release on gate failure.
-- [ ] 3.3 复用通过 probe 的系统组件并固定 canonical absolute path
-  - [x] 2026-08-14 native Windows command discovery resolves `opencode`/`opencode.cmd` shims to the real dispatched executable before saving the canonical runtime path or starting workflow-host.
-- [ ] 3.4 缺失/损坏时自动调用 UTF-8 安装脚本安装私有 runtime
-  - [x] 2026-08-14 native pre-window bootstrap now shows locale-selected progress while invoking the UTF-8 installer and while re-probing the repaired runtime; the main WebView remains unopened until the final gate passes.
-- [ ] 3.5 实现签名 manifest、SHA-256、临时下载、原子激活和 last-known-good 基础
-  - [x] 2026-08-14 installer activation now restores the prior `.last-known-good` runtime when staged activation fails; the rollback branch is guarded by a dedicated installer regression.
+- [x] 3.2 在创建主 WebView 前运行原生 bootstrap 状态机
+  - Evidence (2026-08-14): Rust `startup_gates_run_before_tauri_builder` and the native startup path enforce WebView2 and green-runtime gates before `tauri::Builder`; failures release the single-instance lock and never create the main WebView.
+- [x] 3.3 复用通过 probe 的系统组件并固定 canonical absolute path
+  - Evidence (2026-08-14): native Windows command discovery resolves `opencode`/`opencode.cmd` shims to the real dispatched executable, persists canonical absolute runtime paths, and the 39 Rust tests pass.
+- [x] 3.4 缺失/损坏时自动调用 UTF-8 安装脚本安装私有 runtime
+  - Evidence (2026-08-14): native pre-window bootstrap uses locale-selected progress, invokes the UTF-8 PowerShell installer only after readiness fails, and re-probes before opening the WebView; bootstrap 4/4 and installer 17/17 pass.
+- [x] 3.5 实现签名 manifest、SHA-256、临时下载、原子激活和 last-known-good 基础
+  - Evidence (2026-08-14): runtime installer/manifest suites cover signed-manifest verification, SHA-256 asset checks, bounded mirror/resume downloads, staged activation rollback, and offline archive mismatch rejection (17/17 pass).
 - [x] 3.6 支持在线源链和离线 runtime ZIP 导入的 integration seam
   - [x] 2026-08-14 native pre-window bootstrap now reads the configured `offlineRuntimeZipPath` and forwards it as `-OfflineZip` when repair is required; the Tauri repair command and Settings action retain the same seam. Rust bootstrap coverage verifies canonical ZIP reuse, while runtime installer offline validation covers manifest mismatch rejection and no-install-on-failure.
 
 **Quality Gate:**
-- [ ] Runtime 未完整时不创建工作台
-- [ ] 每个组件损坏 fixture 均触发修复并重复 probe
+- [x] Runtime 未完整时不创建工作台
+  - Evidence (2026-08-14): native pre-window gate ordering test proves no Tauri builder path is reached before readiness; startup failures display a localized native error and release the lock.
+- [x] 每个组件损坏 fixture 均触发修复并重复 probe
+  - Evidence (2026-08-14): Desktop bootstrap tests iterate all ten mandatory components as damaged fixtures and require a subsequent all-green probe; native and installer suites pass.
 - [x] 健康环境不主动升级 — 2026-08-14 Rust bootstrap regression asserts the `runtime_ready` return precedes any PowerShell installer spawn, so a healthy runtime does not enter repair.
 
 ## 4. Implement local transactional state
@@ -123,9 +125,8 @@
 - [x] 7.1a 当前 Windows 开发机已通过 desktop TypeScript tests/typecheck/build、Rust cargo check 和 Tauri NSIS/MSI bundle smoke。
 - [x] 7.3a normal/portable 路径、配置恢复、单实例锁和已打包 EXE 启动 smoke 已在当前 Windows 环境验证。
 
-- [ ] 7.1 运行 desktop unit/typecheck/build、Rust tests 和 bootstrap integration
-  - [x] 2026-08-14 desktop typecheck, 94 desktop tests, and desktop build passed; Tauri cargo check and 28 Rust tests remain passing from the native startup-gate verification, while clean Windows bootstrap integration remains part of release hardening.
-  - [x] 2026-08-14 current rerun passed Desktop 104/104, Rust 38/38, runtime installer/manifest suites 17/17, and desktop build; clean VM bootstrap remains part of release hardening.
+- [x] 7.1 运行 desktop unit/typecheck/build、Rust tests 和 bootstrap integration
+  - Evidence (2026-08-14): current Windows verification passed Desktop 108/108, desktop typecheck, desktop build, bootstrap integration 4/4, runtime installer/manifest 17/17, and Rust cargo tests 39/39. Clean Win10/Win11 VM coverage remains explicitly scoped to release hardening rather than this developer-machine gate.
 - [ ] 7.2 运行共享 contract tests、Next lint/build 和 SaaS parity regression
   - [x] 2026-08-13 shared boundary/provenance tests, workbench-client/SaaS adapter tests, media-runtime tests, root lint, root `tsc --noEmit` and Next production build passed; full SaaS parity and browser E2E remain open.
   - [x] 2026-08-14 rerun: shared boundary 4/4, provenance 4/4, SaaS/Desktop media parity 2/2, AI-entry provider routing 23/23, model catalog 21/21, agent router 4/4, and Next production build (425/425 generated routes) passed; browser E2E and full live SaaS regression remain open.
