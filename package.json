@@ -77,7 +77,7 @@
     "test:e2e:ai-entry:agent-selection:ui": "python scripts/ai_entry_agent_selection_ui_e2e.py",
     "test:e2e:ai-entry:consulting-model-lock:ui": "python scripts/ai_entry_consulting_model_lock_ui_e2e.py",
     "test:upstream:credentials": "node scripts/verify_upstream_credentials.js",
-    "test:writer:skills": "tsx --test lib/writer/skills.regression.test.ts",
+    "test:writer:skills": "tsx --test lib/writer/skills.regression.test.ts lib/writer/skill-contract-fixtures.test.ts",
     "test:billing": "tsx --test lib/billing/*.test.ts",
     "test:billing:routes": "tsx --test app/api/billing/plans/route.test.ts app/api/billing/credits/route.test.ts app/api/billing/subscription/route.test.ts app/api/billing/credit-orders/route.test.ts app/api/paypal/browser-safe-client-token/route.test.ts app/api/paypal/create-subscription/route.test.ts app/api/paypal/webhook/route.test.ts app/api/stripe/create-checkout-session/route.test.ts app/api/stripe/confirm-checkout-session/route.test.ts app/api/stripe/webhook/route.test.ts",
     "test:paypal:webhook": "tsx --test lib/billing/paypal-webhook.test.ts",

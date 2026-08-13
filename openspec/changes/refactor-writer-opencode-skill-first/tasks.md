@@ -51,14 +51,14 @@
 
 ## 6. Migrate and Synchronize Every Platform Skill
 
-- [ ] 6.1 Update `khazix-writer` to implement the result contract, adaptive clarification, full-draft revision, title preservation, governed research, cover intent, inline-image intent, and self-review.
-- [ ] 6.2 Update Xiaohongshu, Weibo, Douyin, X, LinkedIn, Instagram, TikTok, Facebook, and Reddit Skills to the same interface while retaining platform-native behavior.
-- [ ] 6.3 Add per-platform fixtures for create, clarify, revise, translate, cross-platform adapt, URL research success/failure, and image policy.
+- [x] 6.1 Update `khazix-writer` to implement the result contract, adaptive clarification, full-draft revision, title preservation, governed research, cover intent, inline-image intent, and self-review. — 2026-08-14 canonical `khazix-writer/SKILL.md` defines the flat result contract, complete-draft revision/title rules, governed research/image boundaries, and four-layer self-review; Writer regression and contract fixture tests pass.
+- [x] 6.2 Update Xiaohongshu, Weibo, Douyin, X, LinkedIn, Instagram, TikTok, Facebook, and Reddit Skills to the same interface while retaining platform-native behavior. — 2026-08-14 each canonical platform Skill now documents the shared schema, clarification/revision/full-output rules, research state, and registry-compatible image policy while retaining its native format; canonical/runtime drift and Skill lint pass.
+- [x] 6.3 Add per-platform fixtures for create, clarify, revise, translate, cross-platform adapt, URL research success/failure, and image policy. — 2026-08-14 `lib/writer/skill-contract-fixtures.test.ts` exercises all ten registry platforms across create/clarification/revision/translation/adaptation/research-success/research-unavailable states and compatible cover policy; shared validator and existing incompatible-asset regressions pass.
 - [ ] 6.4 Add Khazix-specific fixtures for complete article revision, unchanged authored title, no fabricated personal experience/data/cases, cover generation, inline images, and workflow activation.
 - [x] 6.5 Implement a canonical-source synchronization command that generates Railway runtime Skills, references, catalog, and digests from `content/skills/`.
 - [x] 6.6 Add CI drift detection that regenerates Writer runtime Skills and fails when the working tree differs or a digest is invalid. — 2026-08-14 `scripts/sync-opencode-runtime.js --check` passes after synchronizing the canonical Writer Skills/tools; `.github/workflows/writer-new-features-e2e.yml` now runs this check in an independent job on every relevant change.
 - [ ] 6.7 Remove hand-maintained Writer Skill runtime copies after generated output is authoritative.
-- [ ] 6.8 Run all platform fixtures and Skill validation until they pass.
+- [x] 6.8 Run all platform fixtures and Skill validation until they pass. — 2026-08-14 `pnpm test:writer:skills` passes 40/40 (including ten-platform create/clarification/full-revision fixtures), `pnpm lint:skills` passes 352 files, and `pnpm opencode:runtime:check` passes.
 
 ## 7. Align Writer Workspace Editing and State
 

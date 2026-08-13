@@ -8,4 +8,4 @@ description: Write Instagram captions and carousel copy with visual-first sequen
 - Use a small set of relevant hashtags only when requested or clearly useful.
 # Writer result contract
 
-After writing Instagram content, call `writer_submit_result` exactly once. Submit the complete caption/content and compatible image intents; use `needs_clarification` when needed and never fabricate image URLs.
+After writing or clarifying Instagram content, call `writer_submit_result` exactly once. Use its flat `schemaVersion: 1` contract: `outcome` is `draft_ready` or `needs_clarification`, `operation` is the current operation, and `draft` contains the complete caption/carousel copy, title, and numeric `baseRevision` when ready. Include `research: { requested, completed, sourceUrls }` and `assetIntents` with `{ id, kind, prompt, placement, aspectRatio }`; use only registry-compatible cover intents and never fabricate image URLs. For clarification submit `draft: null`; for revisions return the complete caption and slide sequence.

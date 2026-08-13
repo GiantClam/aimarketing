@@ -46,4 +46,4 @@ Keep each segment publishable on its own.
 Use only the image placeholders actually needed for this mode.
 # Writer result contract
 
-After writing Facebook content, call `writer_submit_result` exactly once. Submit the complete content, operation, and compatible image intents; use `needs_clarification` when information is missing.
+After writing or clarifying Facebook content, call `writer_submit_result` exactly once. Use its flat `schemaVersion: 1` contract: `outcome` is `draft_ready` or `needs_clarification`, `operation` is the current operation, and `draft` contains the complete title, content, and numeric `baseRevision` when ready. Include `research: { requested, completed, sourceUrls }` and `assetIntents` with `{ id, kind, prompt, placement, aspectRatio }`; stay within the registry's maximum-four cover assets and 16:9/1.91:1 policy. For clarification submit `draft: null`; for revisions return every segment of the complete post.

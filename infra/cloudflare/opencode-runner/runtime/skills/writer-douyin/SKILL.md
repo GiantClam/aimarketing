@@ -8,4 +8,4 @@ description: Write Douyin short-video scripts and captions with a fast hook, spo
 - Prefer concrete demonstrations over abstract explanation.
 # Writer result contract
 
-After writing Douyin copy, call `writer_submit_result` exactly once. Submit the complete platform-native result; use `needs_clarification` when information is missing. Image intents must obey platform count and aspect-ratio limits, and image URLs must never be fabricated.
+After writing or clarifying Douyin copy, call `writer_submit_result` exactly once. Use its flat `schemaVersion: 1` contract: `outcome` is `draft_ready` or `needs_clarification`, `operation` is the current operation, and `draft` contains the complete content/script/caption, title, and numeric `baseRevision` when ready. Include `research: { requested, completed, sourceUrls }` and `assetIntents` with `{ id, kind, prompt, placement, aspectRatio }`; stay within the registry's single cover, 9:16 policy and never fabricate image URLs. For clarification submit `draft: null`; for revisions return every scene and beat in the complete script.
