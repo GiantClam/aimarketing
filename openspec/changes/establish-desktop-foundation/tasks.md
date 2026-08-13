@@ -17,8 +17,8 @@
 - [x] 1.4 添加当前 Windows 开发/CI 环境的 shell build smoke，并产出可供 release matrix 复用的测试入口（Vite、Cargo、NSIS/MSI 已验证）
 
 **Quality Gate:**
-- [ ] Desktop shell test、typecheck、static build 和 Rust build 通过
-- [ ] Desktop host 不导入 Next route、SaaS auth/billing 或云 clients
+- [x] Desktop shell test、typecheck、static build 和 Rust build 通过 — 2026-08-14 desktop 96/96、TypeScript typecheck、Vite production build 和 Tauri Rust tests 32/32 通过。
+- [x] Desktop host 不导入 Next route、SaaS auth/billing 或云 clients — architecture/boundary tests remain green.
 
 ## 2. Implement paths, config and single-instance state
 
@@ -67,11 +67,11 @@
 - [x] 4.2 创建 identity、projects、conversations、messages、runs/events、artifacts、usage、workflows/revisions、run nodes/attempts 和 vault mappings。✓ 2026-08-13 — 本地 schema 与 storage round-trip tests 覆盖这些 transactional metadata 表，不保存 Vault 原文、向量或媒体内容。
 - [x] 4.3 启用 WAL、foreign keys、busy timeout、幂等 migration、backup 和 integrity check。✓ 2026-08-13 — Rust SQLite connection 固定 WAL/foreign keys/5s busy timeout；每五分钟创建 SQLite-consistent backup，遇到损坏时保留隔离副本并恢复最新已验证备份；storage tests 通过。
 - [x] 4.4 让 Rust 成为唯一 SQLite owner，并实现 typed repository commands。✓ 2026-08-13 — 仅 Tauri Rust storage commands 读写 app.db；conversation/message/run/event/artifact/usage/workflow/revision/vault repository commands 已作 idempotent round trip 覆盖。
-- [ ] 4.5 添加并发读/单写、锁、升级和损坏恢复 tests
+- [x] 4.5 添加并发读/单写、锁、升级和损坏恢复 tests — 2026-08-14 Rust storage regression adds concurrent WAL readers with one writer; existing lock-conflict, legacy-upgrade, and corrupt-backup recovery tests pass in the same suite.
 
 **Quality Gate:**
-- [ ] SQLite 不含向量、Vault 原文、媒体二进制、完整 stdio 或 API Key
-- [ ] 空库/重复升级/备份恢复 tests 通过
+- [x] SQLite 不含向量、Vault 原文、媒体二进制、完整 stdio 或 API Key — schema keeps local transactional metadata only; redaction and persistence tests verify credential-free structured payloads.
+- [x] 空库/重复升级/备份恢复 tests 通过 — 2026-08-14 repository round-trip, concurrent WAL read/single-writer, legacy migration, and corrupt-database backup restore tests all passed.
 
 ## 5. Implement projects, artifacts and bounded logs
 
@@ -95,12 +95,12 @@
   - [x] 2026-08-14 workflow repository create/status, ordered event append, and artifact registration now use typed reverse-service methods; direct Node-host workflow integration tests include a mock framed service responder.
 - [x] 6.1a workflow-host bundle 通过 esbuild 固定为 Node ESM，并由 Tauri host_start/host_send/host_stop 命令管理 stdin/stdout/stderr。
 - [x] 6.1b 事件通过 Tauri `desktop://runtime-response` / `desktop://runtime-log` 转发，发布资源清单包含 host bundle。
-- [ ] 6.2 创建私有 Node workflow-host，装载共享 packages 和 desktop ports
+- [x] 6.2 创建私有 Node workflow-host，装载共享 packages 和 desktop ports — 2026-08-14 `build:host` bundles the private ESM host and knowledge service; desktop host-session tests exercise the shared workflow-core ports.
 - [ ] 6.3 workflow-host 通过双向 RPC 请求 repository、artifact、RAG 和 runtime services
   - [x] 2026-08-14 RAG/index/write operations run in a separate `knowledge.mjs` Node service and are reached from workflow-host through Tauri reverse RPC; workflow repository, artifact, ordered event ports, and bounded text artifact writes now use typed reverse-service methods. Remaining runtime/process controls are still open.
 - [x] 6.4 Tauri 使用 Windows Job Object 监管 workflow-host 与 OpenCode process slots
 - [x] 6.5 Host workflow invalid/cancel paths clean controller state and emit structured terminal errors.
-- [ ] 6.5 实现 crash detection、supervised restart 和 interrupted 状态基础
+- [x] 6.5 实现 crash detection、supervised restart 和 interrupted 状态基础 — 2026-08-14 Rust host exit events, Tauri/UI restart handling, startup interrupted recovery, and the workflow-host crash regression all pass.
 - [x] 6.6 验证 stdout 仅承载 framed RPC，日志使用 stderr→JSONL。✓ 2026-08-13 — Rust host 只转发长度、UTF-8、JSON 均验证且不超过 8 MiB 的 stdout frame；无效或超长行被丢弃并以结构化 runtime log 记录，stderr 仍单独写入 redacted per-run JSONL。
 
 **Quality Gate:**

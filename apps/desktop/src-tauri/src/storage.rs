@@ -453,6 +453,8 @@ pub fn usage_summary(path: &Path) -> Result<UsageSummary> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Barrier};
+    use std::thread;
 
     #[test]
     fn repository_round_trip_is_idempotent() {
@@ -492,6 +494,53 @@ mod tests {
         let identity: String = open(&path).unwrap().query_row("SELECT device_id FROM identity WHERE id=1", [], |row| row.get(0)).unwrap();
         assert!(identity.starts_with("local-") && identity.len() > 20);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn concurrent_readers_and_single_writer_keep_wal_storage_consistent() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-storage-concurrency-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let path = root.join("app.db");
+        create_conversation(&path, "conversation-concurrency", "并发读写", None).unwrap();
+
+        let barrier = Arc::new(Barrier::new(5));
+        let writer_path = path.clone();
+        let writer_barrier = Arc::clone(&barrier);
+        let writer = thread::spawn(move || {
+            writer_barrier.wait();
+            for index in 0..32 {
+                append_message(
+                    &writer_path,
+                    &format!("message-{index}"),
+                    "conversation-concurrency",
+                    "user",
+                    &format!("消息 {index}"),
+                )
+                .unwrap();
+            }
+        });
+
+        let readers = (0..4)
+            .map(|_| {
+                let reader_path = path.clone();
+                let reader_barrier = Arc::clone(&barrier);
+                thread::spawn(move || {
+                    reader_barrier.wait();
+                    for _ in 0..24 {
+                        let rows = list_messages(&reader_path, "conversation-concurrency").unwrap();
+                        assert!(rows.len() <= 32);
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        writer.join().unwrap();
+        for reader in readers {
+            reader.join().unwrap();
+        }
+        assert_eq!(list_messages(&path, "conversation-concurrency").unwrap().len(), 32);
+        assert!(integrity(&path).unwrap());
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
