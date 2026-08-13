@@ -7,7 +7,7 @@ export type OpenCodeCommandInput = { readonly modelHint?: string | null };
 export type OpenCodeRuntimeEvent =
   | { readonly event: "text_delta"; readonly delta: string; readonly runId: string }
   | { readonly event: "tool_event"; readonly tool: string; readonly toolCallId?: string; readonly phase: "started" | "progress" | "completed" | "failed"; readonly message?: string; readonly runId: string }
-  | { readonly event: "usage"; readonly inputTokens?: number; readonly outputTokens?: number; readonly costUsd?: number; readonly runId: string }
+  | { readonly event: "usage"; readonly provider?: string; readonly inputTokens?: number; readonly outputTokens?: number; readonly costUsd?: number; readonly runId: string }
   | { readonly event: "runtime_warning"; readonly code: string; readonly message: string; readonly runId: string }
   | { readonly event: "runtime_error"; readonly code: string; readonly message: string; readonly retryable: boolean; readonly runId: string }
   | { readonly event: "done"; readonly runId: string };

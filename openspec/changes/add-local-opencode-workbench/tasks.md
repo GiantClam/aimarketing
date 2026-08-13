@@ -68,7 +68,7 @@
 - [x] 5.1 使用 foundation repositories 保存 conversations/messages/runs/key events/artifacts/usage。✓ 2026-08-13 — local SQLite repository commands 是唯一持久化入口，Task Center、history、artifact 与 usage summary 均通过它读取。
 - [x] 5.1a Tauri commands persist conversations, messages, runs and key run events; UI run action writes user message and event/terminal status.
 - [x] 5.1c Task Center lists persisted SQLite runs, exposes terminal status and lets users load the original prompt for an explicit retry.
-- [x] 5.1b Usage events are recorded as model/token/cost metadata without billing or balance enforcement.
+- [x] 5.1b Usage events are recorded as Provider/model/token metadata with separate Provider-reported and local-estimated cost fields, without billing or balance enforcement. ✓ 2026-08-13 — SQLite migration v3 adds `provider` and `provider_cost`; OpenCode cost events are stored as Provider cost while unknown local estimates remain NULL, and the desktop stats surface keeps both values separate.
 - [x] 5.2a Tauri host writes redacted per-run JSONL from framed stdout and stderr with bounded rolling cleanup.
 - [x] 5.2 完整 OpenCode NDJSON 和工具 stdio 写 `logs/runs/<run-id>.jsonl` 并脱敏。✓ 2026-08-13 — Rust host 将验证后的 framed stdout 与 stderr 分开写入 redacted per-run JSONL，并采用 30 天/1GB 保留策略。
 - [x] 5.3 运行日志执行 30 天或 1GB 保留策略，只清理最早的 `logs/runs/*.jsonl`，不删除用户会话/产物/项目/usage；Rust 回归测试覆盖过期与超容量清理。 ✓ 2026-08-13

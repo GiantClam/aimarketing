@@ -41,9 +41,11 @@ export interface WorkbenchArtifact {
 
 export interface WorkbenchUsage {
   readonly runId: string;
+  readonly provider?: string;
   readonly model: string;
   readonly inputTokens?: number;
   readonly outputTokens?: number;
+  readonly providerCost?: number;
   readonly estimatedCost?: number;
 }
 

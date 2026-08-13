@@ -469,8 +469,8 @@ fn finish_run(app: tauri::AppHandle, run_id: String, status: String) -> Result<(
 }
 
 #[tauri::command]
-fn record_usage(app: tauri::AppHandle, run_id: String, model: String, input_tokens: Option<i64>, output_tokens: Option<i64>, estimated_cost: Option<f64>, idempotency_key: Option<String>) -> Result<(), String> {
-    storage::record_usage(&database_path(&app)?, &run_id, &model, input_tokens, output_tokens, estimated_cost, idempotency_key.as_deref()).map_err(|error| error.to_string())
+fn record_usage(app: tauri::AppHandle, run_id: String, provider: Option<String>, model: String, input_tokens: Option<i64>, output_tokens: Option<i64>, provider_cost: Option<f64>, estimated_cost: Option<f64>, idempotency_key: Option<String>) -> Result<(), String> {
+    storage::record_usage(&database_path(&app)?, &run_id, provider.as_deref(), &model, input_tokens, output_tokens, provider_cost, estimated_cost, idempotency_key.as_deref()).map_err(|error| error.to_string())
 }
 
 #[tauri::command]

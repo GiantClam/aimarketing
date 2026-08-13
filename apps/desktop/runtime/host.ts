@@ -50,24 +50,29 @@ async function runOpenCode(command: HostCommand, session?: { readonly workspaceP
   if (persistentSession?.sessionId) {
     if (options.respond !== false) respond(command, { runId });
     const events: OpenCodeRuntimeEvent[] = [];
-    await serveClient.prompt(persistentSession.sessionId, workspacePath, runId, prompt, provider ?? persistentSession.provider ?? {}, (event) => { events.push(event); emit(command, event); }, options.signal);
+    await serveClient.prompt(persistentSession.sessionId, workspacePath, runId, prompt, provider ?? persistentSession.provider ?? {}, (event) => { const enriched = enrichUsageEvent(event, provider ?? persistentSession.provider, modelHint); events.push(enriched); emit(command, enriched); }, options.signal);
     return events;
   }
   const child = spawn(executable, buildOpenCodeCommand({ modelHint }).args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true, cwd: workspacePath, env: environment });
   active.set(runId, child);
   const parser = createOpenCodeEventParser(runId);
   const events: OpenCodeRuntimeEvent[] = [];
-  child.stdout.on("data", (chunk: Buffer) => { for (const event of parser.push(chunk.toString("utf8"))) { events.push(event); emit(command, event); } });
+  child.stdout.on("data", (chunk: Buffer) => { for (const event of parser.push(chunk.toString("utf8"))) { const enriched = enrichUsageEvent(event, provider, modelHint); events.push(enriched); emit(command, enriched); } });
   child.stderr.on("data", (chunk: Buffer) => process.stderr.write(`[opencode:${runId}] ${chunk.toString("utf8")}`));
   const result = new Promise<readonly OpenCodeRuntimeEvent[]>((resolve) => {
     const abort = () => { if (!child.killed) child.kill(); };
     options.signal?.addEventListener("abort", abort, { once: true });
     child.on("error", (error) => { const event: OpenCodeRuntimeEvent = { event: "runtime_error", code: "opencode_spawn_failed", message: error.message.slice(0, 1024), retryable: true, runId }; events.push(event); emit(command, event); });
-    child.on("close", (code) => { options.signal?.removeEventListener("abort", abort); for (const event of parser.finish()) if (code === 0 || event.event !== "done") { events.push(event); emit(command, event); } active.delete(runId); if (code !== 0) { const event: OpenCodeRuntimeEvent = { event: "runtime_error", code: options.signal?.aborted ? "opencode_aborted" : "opencode_exit", message: options.signal?.aborted ? "OpenCode run cancelled." : `OpenCode exited with code ${code ?? "unknown"}`, retryable: !options.signal?.aborted, runId }; events.push(event); emit(command, event); } resolve(events); });
+    child.on("close", (code) => { options.signal?.removeEventListener("abort", abort); for (const event of parser.finish()) if (code === 0 || event.event !== "done") { const enriched = enrichUsageEvent(event, provider, modelHint); events.push(enriched); emit(command, enriched); } active.delete(runId); if (code !== 0) { const event: OpenCodeRuntimeEvent = { event: "runtime_error", code: options.signal?.aborted ? "opencode_aborted" : "opencode_exit", message: options.signal?.aborted ? "OpenCode run cancelled." : `OpenCode exited with code ${code ?? "unknown"}`, retryable: !options.signal?.aborted, runId }; events.push(event); emit(command, event); } resolve(events); });
   });
   child.stdin.end(prompt);
   if (options.respond !== false) respond(command, { runId });
   return result;
+}
+
+function enrichUsageEvent(event: OpenCodeRuntimeEvent, provider: ProviderConfig | undefined, modelHint: string | undefined): OpenCodeRuntimeEvent {
+  if (event.event !== "usage" || event.provider) return event;
+  return { ...event, provider: selectedModel(provider, modelHint).providerId };
 }
 
 function readProvider(value: unknown): ProviderConfig | undefined {

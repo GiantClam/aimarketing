@@ -81,7 +81,7 @@ export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: Wo
           const event = frame.data?.event;
           if (!event || event.runId !== runId) return;
           if (event.event === "text_delta") onEvent({ type: "text", delta: String(event.delta ?? "") });
-          else if (event.event === "usage") onEvent({ type: "usage", usage: { runId, model: String(event.model ?? "unknown"), inputTokens: Number(event.inputTokens ?? 0), outputTokens: Number(event.outputTokens ?? 0), estimatedCost: typeof event.costUsd === "number" ? event.costUsd : undefined } });
+          else if (event.event === "usage") onEvent({ type: "usage", usage: { runId, provider: typeof event.provider === "string" ? event.provider : undefined, model: String(event.model ?? "unknown"), inputTokens: Number(event.inputTokens ?? 0), outputTokens: Number(event.outputTokens ?? 0), providerCost: typeof event.costUsd === "number" ? event.costUsd : undefined } });
           else if (event.event === "done") onEvent({ type: "status", status: "succeeded" });
           else if (event.event === "runtime_error") onEvent({ type: "status", status: event.code === "opencode_aborted" ? "cancelled" : "failed" });
           else if (event.event === "tool_event") onEvent({ type: "tool", tool: String(event.tool ?? "tool"), phase: "started", message: typeof event.message === "string" ? event.message : undefined });
@@ -102,8 +102,8 @@ export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: Wo
     runs,
     usage: {
       async list(conversationId?: string): Promise<readonly WorkbenchUsage[]> {
-        const summary = await bridge.invoke<{ input_tokens: number; output_tokens: number; estimated_cost?: number }>("usage_summary");
-        return [{ runId: conversationId ?? "summary", model: "local", inputTokens: summary.input_tokens, outputTokens: summary.output_tokens, estimatedCost: summary.estimated_cost }];
+        const summary = await bridge.invoke<{ input_tokens: number; output_tokens: number; provider_cost?: number; estimated_cost?: number }>("usage_summary");
+        return [{ runId: conversationId ?? "summary", model: "local", inputTokens: summary.input_tokens, outputTokens: summary.output_tokens, providerCost: summary.provider_cost, estimatedCost: summary.estimated_cost }];
       },
     },
   };

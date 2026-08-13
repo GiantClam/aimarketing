@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversation_id TEXT N
 CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, conversation_id TEXT REFERENCES conversations(id), status TEXT NOT NULL, model TEXT, started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, finished_at TEXT);
 CREATE TABLE IF NOT EXISTS run_events (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id), sequence INTEGER NOT NULL, event_type TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(run_id, sequence));
 CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, project_id TEXT REFERENCES projects(id), relative_path TEXT NOT NULL, mime_type TEXT NOT NULL, byte_length INTEGER NOT NULL, sha256 TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS usage_records (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT REFERENCES runs(id), model TEXT NOT NULL, input_tokens INTEGER, output_tokens INTEGER, estimated_cost REAL, idempotency_key TEXT UNIQUE, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS usage_records (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT REFERENCES runs(id), provider TEXT, model TEXT NOT NULL, input_tokens INTEGER, output_tokens INTEGER, provider_cost REAL, estimated_cost REAL, idempotency_key TEXT UNIQUE, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS workflows (id TEXT PRIMARY KEY, project_id TEXT REFERENCES projects(id), name TEXT NOT NULL, definition_json TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS workflow_revisions (id TEXT PRIMARY KEY, workflow_id TEXT NOT NULL REFERENCES workflows(id), revision INTEGER NOT NULL, definition_json TEXT NOT NULL, definition_hash TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(workflow_id, revision));
 CREATE TABLE IF NOT EXISTS run_nodes (run_id TEXT NOT NULL REFERENCES runs(id), node_key TEXT NOT NULL, status TEXT NOT NULL, output_json TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(run_id, node_key));
@@ -53,6 +53,9 @@ fn initialize_schema(path: &Path) -> Result<()> {
     let _ = connection.execute("ALTER TABLE usage_records ADD COLUMN idempotency_key TEXT", []);
     let _ = connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS usage_idempotency_key ON usage_records(idempotency_key) WHERE idempotency_key IS NOT NULL", []);
     connection.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (2)", [])?;
+    let _ = connection.execute("ALTER TABLE usage_records ADD COLUMN provider TEXT", []);
+    let _ = connection.execute("ALTER TABLE usage_records ADD COLUMN provider_cost REAL", []);
+    connection.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (3)", [])?;
     Ok(())
 }
 
@@ -188,7 +191,7 @@ pub struct RunAttemptRow { pub idempotency_key: String, pub run_id: String, pub 
 pub struct WorkflowRow { pub id: String, pub project_id: Option<String>, pub name: String, pub definition_json: String, pub updated_at: String }
 
 #[derive(Debug, Serialize)]
-pub struct UsageSummary { pub runs: i64, pub input_tokens: i64, pub output_tokens: i64, pub estimated_cost: Option<f64>, pub artifacts: i64 }
+pub struct UsageSummary { pub runs: i64, pub input_tokens: i64, pub output_tokens: i64, pub provider_cost: Option<f64>, pub estimated_cost: Option<f64>, pub artifacts: i64 }
 
 pub fn create_conversation(path: &Path, id: &str, title: &str, project_id: Option<&str>) -> Result<ConversationRow> {
     initialize(path)?;
@@ -248,10 +251,10 @@ pub fn finish_run(path: &Path, run_id: &str, status: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn record_usage(path: &Path, run_id: &str, model: &str, input_tokens: Option<i64>, output_tokens: Option<i64>, estimated_cost: Option<f64>, idempotency_key: Option<&str>) -> Result<()> {
+pub fn record_usage(path: &Path, run_id: &str, provider: Option<&str>, model: &str, input_tokens: Option<i64>, output_tokens: Option<i64>, provider_cost: Option<f64>, estimated_cost: Option<f64>, idempotency_key: Option<&str>) -> Result<()> {
     initialize(path)?;
     let connection = open(path)?;
-    connection.execute("INSERT INTO usage_records(run_id, model, input_tokens, output_tokens, estimated_cost, idempotency_key) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(idempotency_key) DO NOTHING", params![run_id, model, input_tokens, output_tokens, estimated_cost, idempotency_key])?;
+    connection.execute("INSERT INTO usage_records(run_id, provider, model, input_tokens, output_tokens, provider_cost, estimated_cost, idempotency_key) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) ON CONFLICT(idempotency_key) DO NOTHING", params![run_id, provider, model, input_tokens, output_tokens, provider_cost, estimated_cost, idempotency_key])?;
     Ok(())
 }
 
@@ -356,9 +359,9 @@ pub fn usage_summary(path: &Path) -> Result<UsageSummary> {
     initialize(path)?;
     let connection = open(path)?;
     let runs: i64 = connection.query_row("SELECT COUNT(*) FROM runs", [], |row| row.get(0))?;
-    let (input_tokens, output_tokens, estimated_cost): (i64, i64, Option<f64>) = connection.query_row("SELECT COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), SUM(estimated_cost) FROM usage_records", [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
+    let (input_tokens, output_tokens, provider_cost, estimated_cost): (i64, i64, Option<f64>, Option<f64>) = connection.query_row("SELECT COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), SUM(provider_cost), SUM(estimated_cost) FROM usage_records", [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?;
     let artifacts: i64 = connection.query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))?;
-    Ok(UsageSummary { runs, input_tokens, output_tokens, estimated_cost, artifacts })
+    Ok(UsageSummary { runs, input_tokens, output_tokens, provider_cost, estimated_cost, artifacts })
 }
 
 #[cfg(test)]
@@ -419,12 +422,32 @@ mod tests {
         assert_eq!(revisions, 2);
         create_run(&path, "run-1", None, Some("local")).unwrap();
         finish_run(&path, "run-1", "succeeded").unwrap();
-        record_usage(&path, "run-1", "local", Some(3), Some(5), Some(0.1), Some("run-1:usage")).unwrap();
+        record_usage(&path, "run-1", Some("openai"), "local", Some(3), Some(5), Some(0.08), Some(0.1), Some("run-1:usage")).unwrap();
         let summary = usage_summary(&path).unwrap();
         assert_eq!(summary.runs, 1);
         assert_eq!(summary.input_tokens + summary.output_tokens, 8);
+        assert_eq!(summary.provider_cost, Some(0.08));
         assert_eq!(summary.estimated_cost, Some(0.1));
+        assert_eq!(open(&path).unwrap().query_row("SELECT provider, provider_cost FROM usage_records WHERE idempotency_key='run-1:usage'", [], |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<f64>>(1)?))).unwrap(), (Some("openai".to_string()), Some(0.08)));
         assert_eq!(summary.artifacts, 0);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn upgrades_legacy_usage_records_with_provider_cost_columns() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-usage-migration-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let path = root.join("app.db");
+        std::fs::create_dir_all(&root).unwrap();
+        let legacy = Connection::open(&path).unwrap();
+        legacy.execute_batch("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP); INSERT INTO schema_migrations(version) VALUES (1), (2); CREATE TABLE usage_records(id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT, model TEXT NOT NULL, input_tokens INTEGER, output_tokens INTEGER, estimated_cost REAL, idempotency_key TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);").unwrap();
+        drop(legacy);
+        initialize(&path).unwrap();
+        let connection = open(&path).unwrap();
+        let columns: Vec<String> = connection.prepare("PRAGMA table_info(usage_records)").unwrap().query_map([], |row| row.get(1)).unwrap().collect::<Result<_, _>>().unwrap();
+        assert!(columns.iter().any(|column| column == "provider"));
+        assert!(columns.iter().any(|column| column == "provider_cost"));
+        assert!(migrations_ready(&path).unwrap());
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -434,8 +457,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("app.db");
         create_run(&path, "run-unknown", None, Some("local")).unwrap();
-        record_usage(&path, "run-unknown", "local", Some(3), Some(5), None, Some("run-unknown:usage")).unwrap();
+        record_usage(&path, "run-unknown", Some("openai"), "local", Some(3), Some(5), None, None, Some("run-unknown:usage")).unwrap();
         let summary = usage_summary(&path).unwrap();
+        assert_eq!(summary.provider_cost, None);
         assert_eq!(summary.estimated_cost, None);
         assert_eq!(summary.input_tokens + summary.output_tokens, 8);
         let _ = std::fs::remove_dir_all(root);
