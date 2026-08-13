@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -51,6 +51,8 @@ test("installer keeps source fallback, resume, proxy and disk gates fail-closed"
   assert.match(source, /runtime_install_temp_disk_space_insufficient/u);
   assert.match(source, /Assert-SufficientDiskSpace\s*$/mu);
   assert.match(source, /--proxy/u);
+  assert.match(source, /Assert-OfflineArchiveManifest/u);
+  assert.match(source, /runtime_offline_manifest_mismatch/u);
 });
 
 test("installer validates the signed-manifest shape before touching the install root", async () => {
@@ -140,6 +142,40 @@ test("installer rejects a tampered required signature before touching the instal
     await writeFile(signedPath, `${JSON.stringify(signed)}\n`, "utf8");
     await assert.rejects(execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", testScript, "-ManifestPath", signedPath, "-InstallRoot", installRoot, "-ValidateOnly"], { windowsHide: true }));
     assert.equal(await readFile(signedPath, "utf8").then((value) => value.includes('"bytes":2')), true);
+    await assert.rejects(readFile(join(installRoot, "runtime", "fixture.bin")));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("offline validation rejects an archive whose embedded manifest diverges", async (t) => {
+  if (process.platform !== "win32") { t.skip("PowerShell offline validation is Windows-only"); return; }
+  const root = await mkdtemp(join(tmpdir(), "aimarketing-offline-manifest-"));
+  const archiveRoot = join(root, "archive");
+  const manifestPath = join(root, "manifest.json");
+  const archiveManifestPath = join(archiveRoot, "runtime-manifest.json");
+  const zipPath = join(root, "runtime.zip");
+  const installRoot = join(root, "install");
+  const manifest = {
+    schemaVersion: 1,
+    manifestId: "offline-fixture",
+    platform: "windows",
+    architecture: "x64",
+    compatibility: { architecture: "x64", windows: ["10-22H2", "11"] },
+    integrity: { hashAlgorithm: "sha256", signatureAlgorithm: "ed25519", required: false, signature: null },
+    assets: [{ id: "fixture", kind: "file", relativePath: "runtime/fixture.bin", sha256: "a".repeat(64), bytes: 1, urls: { official: "https://example.invalid/fixture.bin" } }],
+  };
+  const quote = (value) => `'${value.replaceAll("'", "''")}'`;
+  try {
+    await mkdir(archiveRoot, { recursive: true });
+    await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`, "utf8");
+    await writeFile(archiveManifestPath, `${JSON.stringify(manifest)}\n`, "utf8");
+    await execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", `Compress-Archive -Path ${quote(`${archiveRoot}\\*`)} -DestinationPath ${quote(zipPath)} -Force`], { windowsHide: true });
+    await execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath, "-ManifestPath", manifestPath, "-InstallRoot", installRoot, "-OfflineZip", zipPath, "-ValidateOnly"], { windowsHide: true });
+    const tampered = { ...manifest, manifestId: "tampered" };
+    await writeFile(archiveManifestPath, `${JSON.stringify(tampered)}\n`, "utf8");
+    await execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", `Compress-Archive -Path ${quote(`${archiveRoot}\\*`)} -DestinationPath ${quote(zipPath)} -Force`], { windowsHide: true });
+    await assert.rejects(execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath, "-ManifestPath", manifestPath, "-InstallRoot", installRoot, "-OfflineZip", zipPath, "-ValidateOnly"], { windowsHide: true }));
     await assert.rejects(readFile(join(installRoot, "runtime", "fixture.bin")));
   } finally {
     await rm(root, { recursive: true, force: true });

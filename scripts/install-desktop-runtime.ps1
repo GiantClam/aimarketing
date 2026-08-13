@@ -63,8 +63,30 @@ function Assert-ManifestSignature() {
   if ($LASTEXITCODE -ne 0) { throw "runtime_manifest_signature_invalid" }
 }
 
+function Assert-OfflineArchiveManifest([string]$archivePath) {
+  if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) { throw "runtime_offline_archive_missing" }
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $archive = [IO.Compression.ZipFile]::OpenRead([IO.Path]::GetFullPath($archivePath))
+  try {
+    $entry = $archive.Entries | Where-Object { $_.FullName.Replace('\', '/') -eq "runtime-manifest.json" } | Select-Object -First 1
+    if ($null -eq $entry) { throw "runtime_offline_manifest_missing" }
+    $reader = [IO.StreamReader]::new($entry.Open(), [Text.Encoding]::UTF8)
+    try { $embedded = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+  } finally { $archive.Dispose() }
+  if ([int]$embedded.schemaVersion -ne [int]$manifest.schemaVersion -or [string]$embedded.manifestId -ne [string]$manifest.manifestId -or [string]$embedded.platform -ne [string]$manifest.platform -or [string]$embedded.architecture -ne [string]$manifest.architecture) { throw "runtime_offline_manifest_mismatch" }
+  if ([string]$embedded.integrity.signature -ne [string]$manifest.integrity.signature -or [bool]$embedded.integrity.required -ne [bool]$manifest.integrity.required) { throw "runtime_offline_manifest_signature_mismatch" }
+  $expectedAssets = @($manifest.assets)
+  $embeddedAssets = @($embedded.assets)
+  if ($expectedAssets.Count -ne $embeddedAssets.Count) { throw "runtime_offline_manifest_assets_mismatch" }
+  foreach ($expected in $expectedAssets) {
+    $actual = $embeddedAssets | Where-Object { [string]$_.id -eq [string]$expected.id } | Select-Object -First 1
+    if ($null -eq $actual -or [string]$actual.kind -ne [string]$expected.kind -or [string]$actual.relativePath -ne [string]$expected.relativePath -or [string]$actual.extractPath -ne [string]$expected.extractPath -or [string]$actual.sha256 -ne [string]$expected.sha256 -or [int64]$actual.bytes -ne [int64]$expected.bytes) { throw "runtime_offline_manifest_asset_mismatch:$($expected.id)" }
+  }
+}
+
 Assert-RuntimeManifestSchema
 Assert-ManifestSignature
+if ($OfflineZip) { Assert-OfflineArchiveManifest $OfflineZip }
 if ($ValidateOnly) {
   Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
   Write-Output (ConvertTo-Json @{ status = "valid"; manifestId = $manifest.manifestId; platform = $manifest.platform; architecture = $manifest.architecture } -Compress)

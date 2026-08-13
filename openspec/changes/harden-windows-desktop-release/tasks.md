@@ -41,11 +41,13 @@
   - [x] 2026-08-13 `install-desktop-runtime.ps1 -OfflineZip` 使用 staging、manifest/size/hash 校验和 last-known-good 交换；离线安装返回 `status=ok`，重复执行使用独立 install root 验证幂等路径。
 - [x] 3.3 验证全部在线源不可用时可完成首次环境安装
   - [x] 2026-08-13 使用已生成 ZIP 执行离线首次安装，返回 `{"status":"ok","source":"offline","installed":["node-embed-amd64","python-embed-amd64","python-get-pip"]}`；PPTX capability probe 通过且未访问在线安装分支。
-- [ ] 3.4 验证离线包不覆盖较新的兼容用户数据或配置
+- [x] 3.4 验证离线包不覆盖较新的兼容用户数据或配置
+  - [x] 2026-08-13 installer preflights the offline ZIP's embedded `runtime-manifest.json` against the externally selected manifest before extraction; a fixture with a diverging manifest is rejected in `-ValidateOnly` and leaves the install root untouched.
 
 **Quality Gate:**
 - [ ] 干净离线 VM 可通过本地包完成门禁
-- [ ] 被篡改离线包不会修改当前 runtime
+- [x] 被篡改离线包不会修改当前 runtime
+  - [x] 2026-08-13 `install-desktop-runtime.test.mjs` repacks a tampered embedded manifest, observes fail-closed `runtime_offline_manifest_mismatch`, and confirms no runtime file is created or replaced.
 - [ ] 主程序 ZIP 不重复内置完整 runtime
 
 ## 4. Normal and portable packages
