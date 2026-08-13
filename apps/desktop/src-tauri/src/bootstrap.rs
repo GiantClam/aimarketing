@@ -223,6 +223,14 @@ mod tests {
     }
 
     #[test]
+    fn healthy_runtime_returns_before_spawning_the_installer() {
+        let source = include_str!("bootstrap.rs");
+        let ready_check = source.find("if runtime_ready(&resource_roots, &install_root) { return Ok(()); }").unwrap();
+        let installer_spawn = source.find("Command::new(\"powershell.exe\")").unwrap();
+        assert!(ready_check < installer_spawn, "healthy runtime must bypass repair before PowerShell is spawned");
+    }
+
+    #[test]
     fn pre_window_python_gate_uses_the_shared_ppt_probe() {
         let source = include_str!("bootstrap.rs");
         assert!(source.contains("crate::PPT_PYTHON_PROBE"));

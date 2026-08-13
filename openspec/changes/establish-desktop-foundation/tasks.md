@@ -52,7 +52,7 @@
 **Quality Gate:**
 - [ ] Runtime 未完整时不创建工作台
 - [ ] 每个组件损坏 fixture 均触发修复并重复 probe
-- [ ] 健康环境不主动升级
+- [x] 健康环境不主动升级 — 2026-08-14 Rust bootstrap regression asserts the `runtime_ready` return precedes any PowerShell installer spawn, so a healthy runtime does not enter repair.
 
 ## 4. Implement local transactional state
 
@@ -105,7 +105,7 @@
 
 **Quality Gate:**
 - [x] 并发/反向 RPC 与取消 tests 通过 — 2026-08-14 desktop 96/96, Rust 30/30, and workflow/foreach host integration paths passed with framed service responses.
-- [ ] 主进程强杀后无孤儿子进程
+- [x] 主进程强杀后无孤儿子进程 — 2026-08-14 Windows Job Object regression terminates an assigned child tree and asserts the child cannot complete normally after job termination.
 - [x] workflow-host 未打开 SQLite/LanceDB — 2026-08-14 `runtime/host.ts` no longer imports RAG/Obsidian/LanceDB; the isolated `knowledge.mjs` service owns those modules and is supervised by a dedicated Job Object.
 
 ## 7. Foundation integration handoff
