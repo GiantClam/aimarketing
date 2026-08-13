@@ -193,17 +193,21 @@ pub fn ensure_runtime_before_window() -> Result<(), String> {
         std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(|| executable_dir.join("data")).join("AIMarketing")
     };
     if runtime_ready(&resource_roots, &install_root) { return Ok(()); }
+    let offline_zip = configured_offline_runtime_zip(&install_root);
     let chinese = startup_is_chinese();
     let progress_messages = runtime_repair_progress_messages_for(chinese);
     let progress = StartupProgress::new(progress_messages[0], chinese);
     progress.update(progress_messages[1]);
-    let status = Command::new("powershell.exe")
+    let mut command = Command::new("powershell.exe");
+    command
         .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
         .arg(&script)
         .args(["-ManifestPath"])
         .arg(&manifest)
         .args(["-InstallRoot"])
-        .arg(&install_root)
+        .arg(&install_root);
+    if let Some(offline_zip) = offline_zip.as_ref() { command.args(["-OfflineZip"]).arg(offline_zip); }
+    let status = command
         .creation_flags(CREATE_NO_WINDOW)
         .status()
         .map_err(|error| format!("runtime_installer_spawn_failed: {error}"))?;
@@ -259,6 +263,13 @@ fn configured_runtime_path(install_root: &Path, key: &str) -> Option<PathBuf> {
     let value = crate::config::read(&install_root.join("config.json"), install_root).ok()?;
     let configured = value.get("runtime")?.get(key)?.as_str()?;
     std::fs::canonicalize(configured).ok()
+}
+
+fn configured_offline_runtime_zip(install_root: &Path) -> Option<PathBuf> {
+    let value = crate::config::read(&install_root.join("config.json"), install_root).ok()?;
+    let configured = value.get("offlineRuntimeZipPath")?.as_str()?;
+    let path = std::fs::canonicalize(configured).ok()?;
+    path.is_file().then_some(path)
 }
 
 fn lancedb_ready(root: &Path) -> bool {
@@ -400,6 +411,23 @@ mod tests {
     fn pre_window_gate_includes_sqlite_migrations() {
         let source = include_str!("bootstrap.rs");
         assert!(source.contains("migrations_ready"));
+    }
+
+    #[test]
+    fn pre_window_gate_reuses_a_configured_offline_runtime_zip() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-bootstrap-offline-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let zip = root.join("runtime bundle.zip");
+        std::fs::write(&zip, b"fixture").unwrap();
+        let mut value = crate::config::default_config(&root);
+        value["offlineRuntimeZipPath"] = serde_json::Value::String(zip.to_string_lossy().into_owned());
+        crate::config::write(&root.join("config.json"), &value).unwrap();
+
+        assert_eq!(configured_offline_runtime_zip(&root), Some(std::fs::canonicalize(zip).unwrap()));
+        let source = include_str!("bootstrap.rs");
+        assert!(source.contains("-OfflineZip"));
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

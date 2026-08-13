@@ -51,7 +51,8 @@
   - [x] 2026-08-14 native pre-window bootstrap now shows locale-selected progress while invoking the UTF-8 installer and while re-probing the repaired runtime; the main WebView remains unopened until the final gate passes.
 - [ ] 3.5 实现签名 manifest、SHA-256、临时下载、原子激活和 last-known-good 基础
   - [x] 2026-08-14 installer activation now restores the prior `.last-known-good` runtime when staged activation fails; the rollback branch is guarded by a dedicated installer regression.
-- [ ] 3.6 支持在线源链和离线 runtime ZIP 导入的 integration seam
+- [x] 3.6 支持在线源链和离线 runtime ZIP 导入的 integration seam
+  - [x] 2026-08-14 native pre-window bootstrap now reads the configured `offlineRuntimeZipPath` and forwards it as `-OfflineZip` when repair is required; the Tauri repair command and Settings action retain the same seam. Rust bootstrap coverage verifies canonical ZIP reuse, while runtime installer offline validation covers manifest mismatch rejection and no-install-on-failure.
 
 **Quality Gate:**
 - [ ] Runtime 未完整时不创建工作台
@@ -121,6 +122,7 @@
 
 - [ ] 7.1 运行 desktop unit/typecheck/build、Rust tests 和 bootstrap integration
   - [x] 2026-08-14 desktop typecheck, 94 desktop tests, and desktop build passed; Tauri cargo check and 28 Rust tests remain passing from the native startup-gate verification, while clean Windows bootstrap integration remains part of release hardening.
+  - [x] 2026-08-14 current rerun passed Desktop 104/104, Rust 38/38, runtime installer/manifest suites 17/17, and desktop build; clean VM bootstrap remains part of release hardening.
 - [ ] 7.2 运行共享 contract tests、Next lint/build 和 SaaS parity regression
   - [x] 2026-08-13 shared boundary/provenance tests, workbench-client/SaaS adapter tests, media-runtime tests, root lint, root `tsc --noEmit` and Next production build passed; full SaaS parity and browser E2E remain open.
   - [x] 2026-08-14 rerun: shared boundary 4/4, provenance 4/4, SaaS/Desktop media parity 2/2, AI-entry provider routing 23/23, model catalog 21/21, agent router 4/4, and Next production build (425/425 generated routes) passed; browser E2E and full live SaaS regression remain open.
