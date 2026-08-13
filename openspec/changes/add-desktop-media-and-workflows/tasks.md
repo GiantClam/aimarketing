@@ -92,4 +92,5 @@
 - [ ] 所有阶段与质量门禁通过
 - [ ] 三个 capability specs 全部满足
 - [ ] 每类真实 Provider smoke 结果已记录
+  - 2026-08-13：`apps/desktop/real-providers.test.local.json` 的顺序 smoke 已验证图片 Provider HTTP 200（响应含 `data`/`created`）；同一上游的 LLM `chat/completions` 在两次并行尝试及一次顺序尝试中均返回 HTTP 503，尚无可接受的 LLM 真实 smoke 证据。脚本已改为顺序执行以排除 client-side concurrency，且按验收范围未执行视频生成。
 - [ ] Ready for `openspec-archive add-desktop-media-and-workflows`
