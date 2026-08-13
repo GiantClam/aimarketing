@@ -1,8 +1,8 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { buildOpenCodeCommand, createOpenCodeEventParser, type OpenCodeRuntimeEvent } from "@aimarketing/runtime-contracts/opencode";
 import { createBailianImageAdapter, createBailianVideoAdapter, createHttpMediaAdapter, createMiniMaxAudioAdapter, createMiniMaxVideoAdapter, createOpenAICompatibleImageAdapter, createRunningHubAdapter, downloadMediaOutputs, runMediaJob, type MediaProviderId, type MediaProviderAdapter } from "@aimarketing/media-runtime";
 import { executeWorkflow, migrateWorkflowDefinitionToCurrent, type WorkflowArtifactPort, type WorkflowCapabilityPort, type WorkflowDefinitionEnvelope } from "@aimarketing/workflow-core";
@@ -16,7 +16,7 @@ type ProviderConfig = { readonly id?: string; readonly source?: string; readonly
 const active = new Map<string, ReturnType<typeof spawn>>();
 const workflowControllers = new Map<string, AbortController>();
 const sessions = new Map<string, { readonly conversationId: string; readonly workspacePath: string; readonly sessionId: string; readonly provider?: ProviderConfig }>();
-type DesktopServiceMethod = "knowledge.index" | "knowledge.search" | "knowledge.write" | "workflow.repository.create" | "workflow.repository.update_status" | "workflow.artifact.register" | "workflow.event.append";
+type DesktopServiceMethod = "knowledge.index" | "knowledge.search" | "knowledge.write" | "workflow.repository.create" | "workflow.repository.update_status" | "workflow.artifact.register" | "workflow.event.append" | "runtime.artifact.write";
 const serviceRequests = new Map<string, { readonly resolve: (value: Record<string, unknown>) => void; readonly reject: (error: Error) => void; readonly timer: ReturnType<typeof setTimeout> }>();
 let shuttingDown = false;
 function defaultOpenCodeExecutable() {
@@ -238,7 +238,7 @@ async function runWorkflow(command: HostCommand) {
         return inputPort === "asset" ? { assets: values, asset: values } : { images: values, image: values };
       }
       if (executorId === "file_create") {
-        const output = await createFileArtifact(workspacePath, runId, nodeKey, config, inputs);
+        const output = await createFileArtifact(workspacePath, runId, nodeKey, config, inputs, (method, payload) => requestService(method, payload, signal));
         const extension = output.artifact.relativePath.toLowerCase().split(".").pop() ?? "bin";
         const mimeType = extension === "md" ? "text/markdown" : extension === "txt" ? "text/plain" : "application/octet-stream";
         const registration = await artifactPort.register({ relativePath: output.artifact.relativePath, mimeType, byteLength: output.artifact.bytes, sha256: output.artifact.sha256 });
@@ -293,17 +293,16 @@ async function runWorkflow(command: HostCommand) {
 }
 
 
-async function createFileArtifact(workspacePath: string, runId: string, nodeKey: string, config: Record<string, unknown>, inputs: Record<string, unknown>) {
-  const directory = resolve(workspacePath, "artifacts", runId.replace(/[^a-zA-Z0-9_-]/g, "_"));
+async function createFileArtifact(workspacePath: string, runId: string, nodeKey: string, config: Record<string, unknown>, inputs: Record<string, unknown>, writeService: (method: "runtime.artifact.write", payload: Record<string, unknown>) => Promise<Record<string, unknown>>) {
+  const directory = join("artifacts", runId.replace(/[^a-zA-Z0-9_-]/g, "_"));
   const requested = typeof config.fileName === "string" && config.fileName.trim() ? config.fileName.trim() : `${nodeKey}.md`;
-  const target = resolve(directory, requested);
-  if (target !== directory && !target.startsWith(`${directory}${sep}`)) throw new Error("artifact_path_escape");
+  const safeName = requested.replace(/[\\/]/g, "_").replace(/\.\.+/g, "_").replace(/[^a-zA-Z0-9._ -]/g, "_").slice(0, 160) || `${nodeKey}.md`;
   const content = typeof inputs.text === "string" ? inputs.text : JSON.stringify(inputs, null, 2);
-  await mkdir(resolve(target, ".."), { recursive: true });
-  const temporary = `${target}.${process.pid}.tmp`;
-  await writeFile(temporary, content, "utf8"); await rename(temporary, target);
-  const hash = createHash("sha256").update(content).digest("hex");
-  return { artifact: { relativePath: relative(workspacePath, target).replaceAll("\\", "/"), bytes: Buffer.byteLength(content, "utf8"), sha256: hash }, text: content };
+  const relativePath = `${directory}/${safeName}`;
+  const extension = safeName.toLowerCase().split(".").pop() ?? "bin";
+  const mimeType = extension === "md" ? "text/markdown" : extension === "txt" ? "text/plain" : extension === "json" ? "application/json" : "application/octet-stream";
+  const result = await writeService("runtime.artifact.write", { relativePath, mimeType, content, workspacePath });
+  return { artifact: { relativePath: typeof result.relativePath === "string" ? result.relativePath : relativePath, bytes: Number(result.byteLength ?? Buffer.byteLength(content, "utf8")), sha256: typeof result.sha256 === "string" ? result.sha256 : "" }, text: content };
 }
 
 async function runMediaCapability(command: HostCommand, runId: string, nodeKey: string, executorId: string, config: Record<string, unknown>, inputs: Record<string, unknown>, workspacePath: string, signal?: AbortSignal, resumeProviderTaskId?: string) {

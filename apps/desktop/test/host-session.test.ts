@@ -16,6 +16,8 @@ function respondToHostServiceRequest(child: ChildProcessWithoutNullStreams, fram
   const payload = frame.payload && typeof frame.payload === "object" ? frame.payload as Record<string, unknown> : {};
   const data = frame.method === "workflow.artifact.register"
     ? { artifactId: `${String(payload.runId ?? "run")}:${String(payload.relativePath ?? "artifact")}` }
+    : frame.method === "runtime.artifact.write"
+      ? { relativePath: String(payload.relativePath ?? "artifacts/test.md"), mimeType: String(payload.mimeType ?? "text/plain"), byteLength: Buffer.byteLength(String(payload.content ?? ""), "utf8"), sha256: "test-sha256" }
     : { runId: payload.runId, sequence: payload.sequence, status: payload.status };
   child.stdin.write(encodeRpcMessage({ version: 1, requestId: frame.requestId, type: "service_response", ok: true, data }));
 }

@@ -76,6 +76,7 @@
 
 - [ ] 5.1 实现项目目录和 canonical temp output 分配
 - [ ] 5.2 实现路径归属、MIME、大小、hash 验证和原子 rename
+  - [x] 2026-08-14 workflow text artifacts now use `runtime.artifact.write`; Rust validates the configured workspace, rejects parent/absolute paths and payloads over 4 MiB, writes through a timestamped temporary file, atomically renames, and registers canonical MIME/size/SHA-256 metadata. Explorer/default-program actions and media finalization remain open.
 - [ ] 5.3 实现 Explorer、应用内和默认程序打开动作
 - [x] 5.4 关键事件写 SQLite，完整 NDJSON/stdout/stderr 写 per-run JSONL
 - [x] 5.5 实现 30 天或 1GB 原始日志滚动，不删除用户工作
@@ -94,7 +95,7 @@
 - [x] 6.1b 事件通过 Tauri `desktop://runtime-response` / `desktop://runtime-log` 转发，发布资源清单包含 host bundle。
 - [ ] 6.2 创建私有 Node workflow-host，装载共享 packages 和 desktop ports
 - [ ] 6.3 workflow-host 通过双向 RPC 请求 repository、artifact、RAG 和 runtime services
-  - [x] 2026-08-14 RAG/index/write operations run in a separate `knowledge.mjs` Node service and are reached from workflow-host through Tauri reverse RPC; workflow repository, artifact, and ordered event ports now use the same typed reverse-service seam. Remaining runtime/process controls are still open.
+  - [x] 2026-08-14 RAG/index/write operations run in a separate `knowledge.mjs` Node service and are reached from workflow-host through Tauri reverse RPC; workflow repository, artifact, ordered event ports, and bounded text artifact writes now use typed reverse-service methods. Remaining runtime/process controls are still open.
 - [x] 6.4 Tauri 使用 Windows Job Object 监管 workflow-host 与 OpenCode process slots
 - [x] 6.5 Host workflow invalid/cancel paths clean controller state and emit structured terminal errors.
 - [ ] 6.5 实现 crash detection、supervised restart 和 interrupted 状态基础

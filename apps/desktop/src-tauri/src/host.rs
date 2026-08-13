@@ -58,7 +58,7 @@ fn parse_host_frame(raw: &[u8]) -> Result<serde_json::Value, &'static str> {
     }
     if value.get("type").and_then(serde_json::Value::as_str) == Some("service_request") {
         let method = value.get("method").and_then(serde_json::Value::as_str).ok_or("runtime_frame_invalid_service_request")?;
-        if !matches!(method, "knowledge.index" | "knowledge.search" | "knowledge.write" | "workflow.repository.create" | "workflow.repository.update_status" | "workflow.artifact.register" | "workflow.event.append") { return Err("runtime_frame_invalid_service_method"); }
+        if !matches!(method, "knowledge.index" | "knowledge.search" | "knowledge.write" | "workflow.repository.create" | "workflow.repository.update_status" | "workflow.artifact.register" | "workflow.event.append" | "runtime.artifact.write") { return Err("runtime_frame_invalid_service_method"); }
         return Ok(value);
     }
     if value.get("ok").and_then(serde_json::Value::as_bool).is_none() { return Err("runtime_frame_invalid_response"); }
@@ -256,6 +256,29 @@ fn dispatch_workflow_service_request(app: &AppHandle, request: &serde_json::Valu
             crate::storage::register_artifact(&database, &artifact_id, None, &metadata).map_err(|error| error.to_string())?;
             Ok(serde_json::json!({ "artifactId": artifact_id, "relativePath": metadata.relative_path, "mimeType": metadata.mime_type, "byteLength": metadata.byte_length, "sha256": metadata.sha256 }))
         }
+        "runtime.artifact.write" => {
+            let relative_path = payload_string(request, "relativePath")?;
+            let mime_type = payload_string(request, "mimeType")?;
+            let content = payload_string(request, "content")?;
+            if content.len() > 4 * 1024 * 1024 { return Err("runtime_artifact_content_too_large".to_string()); }
+            let relative = std::path::PathBuf::from(relative_path);
+            if relative.is_absolute() || relative.components().any(|component| matches!(component, std::path::Component::ParentDir)) { return Err("runtime_artifact_path_escape".to_string()); }
+            let root = crate::project_root(app)?;
+            if let Some(workspace_path) = request.get("payload").and_then(|value| value.get("workspacePath")).and_then(serde_json::Value::as_str) {
+                let requested_root = std::path::PathBuf::from(workspace_path).canonicalize().map_err(|error| error.to_string())?;
+                let configured_root = root.canonicalize().map_err(|error| error.to_string())?;
+                if requested_root != configured_root { return Err("runtime_artifact_workspace_mismatch".to_string()); }
+            }
+            let target = root.join(relative_path.replace('/', "\\"));
+            if !target.starts_with(&root) { return Err("runtime_artifact_path_escape".to_string()); }
+            if let Some(parent) = target.parent() { std::fs::create_dir_all(parent).map_err(|error| error.to_string())?; }
+            let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|duration| duration.as_nanos()).unwrap_or(0);
+            let temporary = target.with_extension(format!("{}.{}.tmp", target.extension().and_then(|value| value.to_str()).unwrap_or("artifact"), stamp));
+            std::fs::write(&temporary, content.as_bytes()).map_err(|error| error.to_string())?;
+            std::fs::rename(&temporary, &target).map_err(|error| error.to_string())?;
+            let metadata = crate::artifacts::inspect(&root, relative_path, mime_type)?;
+            Ok(serde_json::json!({ "relativePath": metadata.relative_path, "mimeType": metadata.mime_type, "byteLength": metadata.byte_length, "sha256": metadata.sha256 }))
+        }
         _ => Err("service_method_not_supported".to_string()),
     }
 }
@@ -373,7 +396,7 @@ pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), Str
             };
             if value.get("type").and_then(serde_json::Value::as_str) == Some("service_request") {
                 let method = value.get("method").and_then(serde_json::Value::as_str).unwrap_or("");
-                let response = if method.starts_with("workflow.") {
+                let response = if method.starts_with("workflow.") || method.starts_with("runtime.") {
                     service_response(value.get("requestId").and_then(serde_json::Value::as_str).unwrap_or("unknown"), dispatch_workflow_service_request(&event_app, &value))
                 } else {
                     dispatch_service_request(&event_app, &knowledge_state, &value)
