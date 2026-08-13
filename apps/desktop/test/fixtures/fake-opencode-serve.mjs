@@ -39,6 +39,10 @@ const server = createServer(async (request, response) => {
     for await (const chunk of request) body += chunk;
     const payload = JSON.parse(body);
     if (payload.model?.providerID !== "configured" || payload.model?.modelID !== "model") return json(response, 400, { message: "model not forwarded" });
+    if (payload.parts?.[0]?.text === "Trigger crash") {
+      setTimeout(() => process.exit(23), 25);
+      return;
+    }
     setTimeout(() => {
       if (payload.parts?.[0]?.text === "Trigger error") {
         sendEvent({ payload: { type: "session.error", properties: { sessionID: "recovered-session", error: { message: "provider unavailable" } } } });

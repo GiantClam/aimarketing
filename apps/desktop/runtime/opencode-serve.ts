@@ -54,7 +54,7 @@ export class OpenCodeServeClient {
       windowsHide: true,
     });
     this.child.stderr?.on("data", (chunk: Buffer) => process.stderr.write(`[opencode-serve] ${chunk.toString("utf8").slice(-2048)}`));
-    this.child.once("close", () => { this.streamAbort?.abort(); this.streamAbort = undefined; if (!this.stopping) for (const active of this.active.values()) { active.failed = "OpenCode serve exited before the turn completed."; active.sink({ event: "runtime_error", code: "opencode_serve_exited", message: active.failed, retryable: true, runId: active.runId }); } });
+    this.child.once("close", () => { this.streamAbort?.abort(); this.streamAbort = undefined; if (!this.stopping) for (const active of this.active.values()) this.reportServeExit(active); });
     const deadline = Date.now() + 60_000;
     while (Date.now() < deadline) {
       try { const response = await this.request("/global/health", {}, 2_000); if (response.ok) { this.startEventStream(workspacePath); return; } } catch { /* retry until the bounded deadline */ }
@@ -96,9 +96,17 @@ export class OpenCodeServeClient {
       if (active.failed) throw new Error(active.failed);
       sink({ event: "done", runId });
     } catch (error) {
+      if (!active.failed && error instanceof TypeError) await new Promise((resolve) => setTimeout(resolve, 100));
+      if (!active.failed && this.child?.exitCode !== null) this.reportServeExit(active);
       if (active.failed) return;
       sink({ event: "runtime_error", code: signal?.aborted ? "opencode_aborted" : "opencode_prompt_failed", message: safe(error instanceof Error ? error.message : error), retryable: !signal?.aborted, runId });
     } finally { signal?.removeEventListener("abort", abort); this.active.delete(runId); }
+  }
+
+  private reportServeExit(active: ActiveRun) {
+    if (active.failed) return;
+    active.failed = "OpenCode serve exited before the turn completed.";
+    active.sink({ event: "runtime_error", code: "opencode_serve_exited", message: active.failed, retryable: true, runId: active.runId });
   }
 
   async abort(sessionId: string) { await this.request(openCodeServeSessionPath(sessionId, this.runtimeWorkspace, "abort"), { method: "POST" }).catch(() => undefined); }

@@ -6,7 +6,7 @@
 - [ ] 1.1 验证三个上游 change 的完成状态和接口版本
 - [ ] 1.2 添加 architecture tests，禁止 workbench 导入 Next API、SaaS auth/billing、R2、Railway、Cloudflare、Dify 或 RAGFlow
 - [ ] 1.3 添加失败测试，证明普通桌面对话不能选择 `ai-sdk-native` 或直接文本 Provider runtime
-- [ ] 1.4 用 fake OpenCode 固定 health/session/stream/tool/usage/abort/error fixtures
+- [x] 1.4 用 fake OpenCode 固定 health/session/stream/tool/usage/abort/error fixtures。✓ 2026-08-13 — `fake-opencode-serve.mjs` 在随机 loopback port 验证 Basic Auth、retained/lost session、text/tool/usage SSE、abort、terminal session error 和服务端 crash；桌面集成测试对每种状态断言归一化 runtime event。
 
 **Blocking Quality Gate:**
 - [ ] 上游 ports 稳定，无需本 change 定义第二套 contracts
@@ -18,7 +18,7 @@
 - [ ] 2.2 禁用外部 CORS/mDNS，使用 AIMarketing 私有 config/Skill/cache/session 目录
 - [ ] 2.3 一个 conversation 映射一个稳定 session，并验证跨 conversation/data root 隔离
 - [ ] 2.4 归一化 text、reasoning、tool、usage、warning、error、artifact 和 completion events
-- [ ] 2.5 实现 abort、紧急停止、crash detection、supervised restart 和 interrupted status
+- [x] 2.5 实现 abort、紧急停止、crash detection、supervised restart 和 interrupted status。✓ 2026-08-13 — `run.cancel` 通过 serve abort；服务端 close 使 active turn 统一产生 retryable `opencode_serve_exited`，避免 HTTP socket 竞态误报为 prompt failure；下一次 session 创建自动重启 serve，workflow-host 崩溃仍由 Tauri supervisor/UI 标记 interrupted 并支持显式 retry。
 - [ ] 2.6 验证进程树随 Tauri 退出且不自动请求管理员权限
 
 **Quality Gate:**

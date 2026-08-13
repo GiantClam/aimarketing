@@ -44,6 +44,10 @@ test("OpenCode Serve recreates a lost persisted session and preserves streamed e
     await client.prompt(sessionId, runtimeDirectory, "failed-run", "Trigger error", { model: "configured/model" }, (event) => failureEvents.push(event));
     assert.deepEqual(failureEvents.filter((event) => event.event === "runtime_error").map((event) => event.code), ["opencode_error"]);
     assert.equal(failureEvents.some((event) => event.event === "done"), false);
+    const crashEvents: Array<{ event: string; [key: string]: unknown }> = [];
+    await client.prompt(sessionId, runtimeDirectory, "crashed-run", "Trigger crash", { model: "configured/model" }, (event) => crashEvents.push(event));
+    assert.deepEqual(crashEvents.filter((event) => event.event === "runtime_error").map((event) => event.code), ["opencode_serve_exited"]);
+    assert.deepEqual(await client.createOrResumeSession(runtimeDirectory, undefined, { model: "configured/model" }, { FAKE_OPENCODE_ABORT_LOG: abortLog }), { sessionId: "recovered-session", recovered: false });
   } finally {
     await client.stop();
     await rm(runtimeDirectory, { recursive: true, force: true });
