@@ -188,7 +188,7 @@ pub struct RunAttemptRow { pub idempotency_key: String, pub run_id: String, pub 
 pub struct WorkflowRow { pub id: String, pub project_id: Option<String>, pub name: String, pub definition_json: String, pub updated_at: String }
 
 #[derive(Debug, Serialize)]
-pub struct UsageSummary { pub runs: i64, pub input_tokens: i64, pub output_tokens: i64, pub estimated_cost: f64, pub artifacts: i64 }
+pub struct UsageSummary { pub runs: i64, pub input_tokens: i64, pub output_tokens: i64, pub estimated_cost: Option<f64>, pub artifacts: i64 }
 
 pub fn create_conversation(path: &Path, id: &str, title: &str, project_id: Option<&str>) -> Result<ConversationRow> {
     initialize(path)?;
@@ -356,7 +356,7 @@ pub fn usage_summary(path: &Path) -> Result<UsageSummary> {
     initialize(path)?;
     let connection = open(path)?;
     let runs: i64 = connection.query_row("SELECT COUNT(*) FROM runs", [], |row| row.get(0))?;
-    let (input_tokens, output_tokens, estimated_cost): (i64, i64, f64) = connection.query_row("SELECT COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), COALESCE(SUM(estimated_cost),0) FROM usage_records", [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
+    let (input_tokens, output_tokens, estimated_cost): (i64, i64, Option<f64>) = connection.query_row("SELECT COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), SUM(estimated_cost) FROM usage_records", [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
     let artifacts: i64 = connection.query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))?;
     Ok(UsageSummary { runs, input_tokens, output_tokens, estimated_cost, artifacts })
 }
@@ -423,7 +423,21 @@ mod tests {
         let summary = usage_summary(&path).unwrap();
         assert_eq!(summary.runs, 1);
         assert_eq!(summary.input_tokens + summary.output_tokens, 8);
+        assert_eq!(summary.estimated_cost, Some(0.1));
         assert_eq!(summary.artifacts, 0);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn usage_summary_keeps_an_unknown_cost_unknown() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-usage-unknown-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let path = root.join("app.db");
+        create_run(&path, "run-unknown", None, Some("local")).unwrap();
+        record_usage(&path, "run-unknown", "local", Some(3), Some(5), None, Some("run-unknown:usage")).unwrap();
+        let summary = usage_summary(&path).unwrap();
+        assert_eq!(summary.estimated_cost, None);
+        assert_eq!(summary.input_tokens + summary.output_tokens, 8);
         let _ = std::fs::remove_dir_all(root);
     }
 
