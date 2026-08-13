@@ -55,16 +55,16 @@
 - [x] 被篡改离线包不会修改当前 runtime
   - [x] 2026-08-13 `install-desktop-runtime.test.mjs` repacks a tampered embedded manifest, observes fail-closed `runtime_offline_manifest_mismatch`, and confirms no runtime file is created or replaced.
 - [x] 主程序 ZIP 不重复内置完整 runtime
-  - [x] 2026-08-13 `desktop:verify-packages` now fails closed if normal/portable archives contain embedded Python, Node/OpenCode `node_modules`, or a nested `AIMarketing-Runtime-x64.zip`; both current archives pass with 268,943,017 / 269,006,577 compressed bytes.
+  - [x] 2026-08-14 `desktop:verify-packages` now fails closed if normal/portable archives contain embedded Python, Node/OpenCode `node_modules`, or a nested `AIMarketing-Runtime-x64.zip`; regenerated archives pass with 269,750,274 / 269,813,962 compressed bytes and include the current `knowledge.mjs` bundle.
 
 ## 4. Normal and portable packages
 
 - [x] 4.1 生成普通 ZIP，数据/runtime 默认位于 `%LOCALAPPDATA%\AIMarketing`
-  - [x] 2026-08-13 使用现有 Windows release 产物生成并读取校验 `AI-Marketing-Windows-x64-normal.zip`（268,943,017 bytes）；归档含 EXE、host、Skill catalog、runtime manifest，且不含 `portable.flag`。README 标注 `%LOCALAPPDATA%\AIMarketing`、Win10 22H2/Win11 x64 和人工升级方式。
+  - [x] 2026-08-14 使用现有 Windows release 产物生成并读取校验 `AI-Marketing-Windows-x64-normal.zip`（269,750,274 bytes）；归档含 EXE、host、knowledge service、Skill catalog、runtime manifest，且不含 `portable.flag`。README 标注 `%LOCALAPPDATA%\AIMarketing`、Win10 22H2/Win11 x64 和人工升级方式。
   - [x] `desktop:verify-packages` 可重复校验普通 ZIP 的必需条目、portable.flag 排除项及 EXE/host/catalog 字节长度。
 - [x] 4.2 生成含 `portable.flag` 的便携 ZIP，全部应用数据位于程序旁 `data/`
   - [x] 4.2a 打包脚本在压缩后检查 portable/runtime 必需条目，并核对可执行文件、host 和 Skill catalog 的归档字节长度。
-  - [x] 4.2b 2026-08-13 使用隔离的 release target 构建 Windows EXE 和 NSIS 包，并生成 269,006,577 字节的 `AI-Marketing-Windows-x64-portable.zip`；独立归档读取校验了 EXE、`portable.flag`、README、workflow host、Skill catalog 和 runtime manifest，以及 EXE、host、catalog 的字节长度。跨机器复制验证仍由 4.4 覆盖。
+  - [x] 4.2b 2026-08-14 使用隔离的 release target 构建 Windows EXE 和 NSIS 包，并生成 269,813,962 字节的 `AI-Marketing-Windows-x64-portable.zip`；独立归档读取校验了 EXE、`portable.flag`、README、workflow host、knowledge service、Skill catalog 和 runtime manifest，以及 EXE、host、knowledge、catalog 的字节长度。跨机器复制验证仍由 4.4 覆盖。
   - [x] `desktop:verify-packages` 可重复校验便携 ZIP 的必需条目、portable.flag 和 EXE/host/catalog 字节长度。
 - [x] 4.3 实现普通/便携单实例锁和数据库/索引占用提示
   - [x] `InstanceLock` 按 normal/portable 数据根目录创建单实例锁；冲突错误包含 owner PID 和关闭现有实例的可操作提示，SQLite 连接设置 5 秒 `busy_timeout`。
@@ -93,8 +93,8 @@
 - [x] 5.3 执行日志 30 天/1GB 清理和诊断包脱敏测试
   - [x] 2026-08-13 Rust tests verify 30-day expiry, oldest-first 1GB retention, recursive API-key/token/password/authorization redaction, and a real PowerShell diagnostic ZIP extraction containing only `[REDACTED]` secrets. The same pass also fixed `Compress-Archive -LiteralPath 'staging\\*'` so diagnostics are actually produced.
 - [x] 5.4 执行主 ZIP、解压后、runtime 补齐后的组件级 size budget
-  - [x] 2026-08-13 `scripts/verify-desktop-size-budget.ps1` reports compressed main normal/portable ZIPs, uncompressed extracted program contents, runtime ZIP size, and application/Node/OpenCode/Python/fonts/embedding/Skills ownership; configured budget overflow fails closed. Current normal/portable/runtime archives pass with 268,943,017 / 269,006,577 / 411,848,658 compressed bytes and 689,076,629 / 689,076,636 / 991,112,444 uncompressed bytes.
-  - [x] 2026-08-14 bundle boundaries, package contracts, size budget, and portable-copy verification all passed; normal/portable compressed sizes remain 268,943,017 / 269,006,577 bytes and runtime remains 411,848,658 bytes.
+  - [x] 2026-08-14 `scripts/verify-desktop-size-budget.ps1` reports compressed main normal/portable ZIPs, uncompressed extracted program contents, runtime ZIP size, and application/Node/OpenCode/Python/fonts/embedding/Skills ownership; configured budget overflow fails closed. Current normal/portable/runtime archives pass with 269,750,274 / 269,813,962 / 411,848,658 compressed bytes and 689,076,629 / 689,076,636 / 991,112,444 uncompressed bytes.
+  - [x] 2026-08-14 bundle boundaries, package contracts, size budget, and portable-copy verification all passed; normal/portable compressed sizes are 269,750,274 / 269,813,962 bytes and runtime remains 411,848,658 bytes.
 - [ ] 5.5 执行 Authenticode、manifest 签名、依赖漏洞和许可证审计
   - [x] 2026-08-14 `desktop:release-audit` now completes fail-closed when the local PowerShell security module is unavailable: normal/portable/runtime archives pass license evidence, while Authenticode is explicitly `not_available` and manifests remain `development_unsigned`.
   - [x] 2026-08-13 `desktop:release-audit` records current evidence without suppressing failures: license audit passes (28/28 packages per archive), Authenticode is incomplete for the unsigned development EXE/DLL, manifests are `development_unsigned`, and the approved npm registry audit reports 3 critical, 32 high, 29 moderate and 3 low vulnerabilities. `-RequireAuthenticode`, `-RequireSignedManifest` and `-RequireDependencyAudit` fail closed for release CI.
