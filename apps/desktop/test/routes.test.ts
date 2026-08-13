@@ -49,6 +49,11 @@ test("desktop workflow and media entry points expose the configured model select
   assert.match(appSource, /currentWorkflowDefinition\(\)[\s\S]*?model: config\.provider\.model/);
 });
 
+test("desktop usage records the model reported by the active Provider event", () => {
+  const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  assert.match(appSource, /event\.model\?\.trim\(\) \|\| configRef\.current\.provider\.model \|\| "unknown"/);
+});
+
 test("desktop home keeps the cloud entry grouping and excludes SaaS-only entries", () => {
   assert.deepEqual(WORKBENCH_HOME_GROUPS.map((group) => group.label), ["AI TEAM", "OFFICE TOOLS", "WORKFLOWS", "CONTENT CREATION", "MORE"]);
   const homePaths = WORKBENCH_HOME_GROUPS.flatMap((group) => group.entries.map((entry) => entry.path));

@@ -1309,7 +1309,7 @@ export function App() {
     void tauriBridge.listen<{ raw: string }>("desktop://runtime-response", (payload) => {
       try {
         const separator = payload.raw.indexOf(":");
-        const frame = JSON.parse(payload.raw.slice(separator + 1)) as { requestId?: string; ok?: boolean; data?: { sessionId?: string; event?: { event?: string; provider?: string; delta?: string; runId?: string; inputTokens?: number; outputTokens?: number; costUsd?: number } } };
+        const frame = JSON.parse(payload.raw.slice(separator + 1)) as { requestId?: string; ok?: boolean; data?: { sessionId?: string; event?: { event?: string; provider?: string; model?: string; delta?: string; runId?: string; inputTokens?: number; outputTokens?: number; costUsd?: number } } };
         if (frame.requestId) responseWaiters.current.get(frame.requestId)?.(frame as unknown as Record<string, unknown>);
         if (frame.requestId && frame.data?.sessionId) {
           const conversationId = frame.requestId.endsWith(":session") ? frame.requestId.slice(0, -":session".length) : "";
@@ -1324,7 +1324,7 @@ export function App() {
           const eventType = event.event ?? "unknown";
           const sequence = (sequences.get(event.runId) ?? 0) + 1; sequences.set(event.runId, sequence);
           void tauriBridge.invoke("append_run_event", { runId: event.runId, sequence, eventType, payloadJson: JSON.stringify(event) });
-          if (eventType === "usage") { setTokenCount((current) => current + (event.inputTokens ?? 0) + (event.outputTokens ?? 0)); if (typeof event.costUsd === "number") setProviderCost((current) => (current ?? 0) + event.costUsd!); void tauriBridge.invoke("record_usage", { runId: event.runId, provider: event.provider ?? configRef.current.provider.id ?? null, model: configRef.current.provider.model || "unknown", inputTokens: event.inputTokens ?? null, outputTokens: event.outputTokens ?? null, providerCost: event.costUsd ?? null, estimatedCost: null, idempotencyKey: `${event.runId}:usage:${sequence}` }); }
+          if (eventType === "usage") { setTokenCount((current) => current + (event.inputTokens ?? 0) + (event.outputTokens ?? 0)); if (typeof event.costUsd === "number") setProviderCost((current) => (current ?? 0) + event.costUsd!); void tauriBridge.invoke("record_usage", { runId: event.runId, provider: event.provider ?? configRef.current.provider.id ?? null, model: event.model?.trim() || configRef.current.provider.model || "unknown", inputTokens: event.inputTokens ?? null, outputTokens: event.outputTokens ?? null, providerCost: event.costUsd ?? null, estimatedCost: null, idempotencyKey: `${event.runId}:usage:${sequence}` }); }
           if (eventType === "tool_event") {
             const tool = typeof (event as { tool?: string }).tool === "string" ? (event as { tool: string }).tool : "tool";
             const detail = typeof (event as { message?: string }).message === "string" ? (event as { message: string }).message : "";
