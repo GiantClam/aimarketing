@@ -113,7 +113,29 @@ function Install-PythonPptxDependencies([switch]$Offline) {
   # Offline packages may already contain a complete embedded Python runtime.
   # Probe before touching pip so a portable ZIP never reaches the network path.
   $requirements = Join-Path $stageRoot "skills/ppt-master/requirements.txt"
-  $probe = "import pptx, xlsxwriter, skia_pathops, uharfbuzz, fitz, mammoth, markdownify, ebooklib, nbconvert, openpyxl, PIL, numpy, requests, bs4, curl_cffi, edge_tts, flask, google.genai"
+  $probe = @'
+import os, tempfile, zipfile
+import pptx, xlsxwriter, skia_pathops, uharfbuzz, fitz, mammoth, markdownify, ebooklib, nbconvert, openpyxl, PIL, numpy, requests, bs4, curl_cffi, edge_tts, flask, google.genai
+from pptx import Presentation
+from pptx.util import Inches
+presentation = Presentation()
+presentation.slide_width = Inches(13.333333)
+presentation.slide_height = Inches(7.5)
+slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+shape = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(10), Inches(1.2))
+run = shape.text_frame.paragraphs[0].add_run()
+run.text = "AIMarketing 中文 PPT probe"
+run.font.name = "Microsoft YaHei"
+descriptor, output = tempfile.mkstemp(suffix=".pptx")
+os.close(descriptor)
+try:
+    presentation.save(output)
+    assert os.path.getsize(output) > 0
+    with zipfile.ZipFile(output) as package:
+        assert "ppt/slides/slide1.xml" in package.namelist()
+finally:
+    if os.path.exists(output): os.remove(output)
+'@
   & $python -c $probe 2>&1 | Out-Null
   if ($LASTEXITCODE -eq 0) { return }
   if ($Offline) { throw "offline_python_pptx_missing" }
