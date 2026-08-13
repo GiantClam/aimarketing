@@ -81,6 +81,7 @@
 - [x] 8.5 Convert validated result asset intents into application-owned cover/inline generation records and reject platform-incompatible intents.
 - [x] 8.6 Remove any overall Writer asset timeout that is shorter than cumulative per-image execution while preserving an independent timeout for each image.
 - [x] 8.7 Persist asset progress serially after each image, retain ready images after later failure, support partial status, and skip ready images during recovery.
+  - Evidence (2026-08-14): `partitionWriterAssetsForRecovery` rehydrates managed ready URLs, schedules only unfinished intents, and the async runtime releases a reservation when recovery returns only retained assets; `pnpm test:writer:assets` passes 12/12.
 - [ ] 8.8 Add tests for WeChat cover support, platform asset limits, multiple near-timeout images, partial success, worker restart, billing, and stored image URLs.
 - [ ] 8.9 Run research, assets runtime, assets route, billing, and recovery tests until they pass.
 

@@ -56,14 +56,14 @@ test("all canonical platform Skills describe the governed Writer result contract
   for (const platform of platforms) {
     const document = readPlatformSkill(platform)
     assert.match(document, /# Writer (?:result|runtime) contract/i, platform)
-    assert.match(document, /writer_submit_result.*(?:exactly once|一次)/is, platform)
+    assert.match(document, /writer_submit_result[\s\S]*(?:exactly once|一次)/i, platform)
     assert.match(document, /schemaVersion:\s*1/i, platform)
-    assert.match(document, /draft_ready.*needs_clarification|needs_clarification.*draft_ready/is, platform)
-    assert.match(document, /draft.*(?:title|content)/is, platform)
-    assert.match(document, /(?:title|content).*baseRevision/is, platform)
-    assert.match(document, /research.*requested.*completed.*sourceUrls/is, platform)
-    assert.match(document, /(?:assetIntents|图片意图).*id.*kind.*prompt.*placement.*aspectRatio/is, platform)
-    assert.match(document, /(?:complete|完整).*(?:revision|thread|post|script|caption|content|修订|正文|文章|内容)/is, platform)
+    assert.match(document, /draft_ready[\s\S]*needs_clarification|needs_clarification[\s\S]*draft_ready/i, platform)
+    assert.match(document, /draft[\s\S]*(?:title|content)/i, platform)
+    assert.match(document, /(?:title|content)[\s\S]*baseRevision/i, platform)
+    assert.match(document, /research[\s\S]*requested[\s\S]*completed[\s\S]*sourceUrls/i, platform)
+    assert.match(document, /(?:assetIntents|图片意图)[\s\S]*id[\s\S]*kind[\s\S]*prompt[\s\S]*placement[\s\S]*aspectRatio/i, platform)
+    assert.match(document, /(?:complete|完整)[\s\S]*(?:revision|thread|post|script|caption|content|修订|正文|文章|内容)/i, platform)
   }
 })
 

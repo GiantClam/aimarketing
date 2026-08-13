@@ -5,6 +5,7 @@ import {
   buildWriterAssetBlueprints,
   buildPendingWriterAssets,
   extractWriterAssetsFromMarkdown,
+  partitionWriterAssetsForRecovery,
   resolveWriterAssetMarkdown,
   type WriterAsset,
 } from "./assets"
@@ -67,6 +68,38 @@ test("validated Skill asset intents control cover and inline asset records", () 
   assert.equal(pending[0]?.prompt, "A restrained editorial hero")
   assert.equal(pending[1]?.role, "inline")
   assert.equal(pending[1]?.prompt, "A supporting diagram")
+})
+
+test("asset recovery retains persisted WeChat cover and schedules only unfinished inline images", () => {
+  const markdown = [
+    "# Recovery article",
+    "",
+    "Opening paragraph.",
+    "",
+    "<!-- writer-asset-slot:start:cover -->",
+    "![Cover](https://cdn.example.com/cover-ready.png)",
+    "<!-- writer-asset-slot:end:cover -->",
+    "",
+    "## Evidence",
+    "",
+    "Supporting section.",
+    "",
+    "<!-- writer-asset-slot:start:inline-1 -->",
+    "![Inline Image 1](writer-asset://inline-1)",
+    "<!-- writer-asset-slot:end:inline-1 -->",
+  ].join("\n")
+  const intents = [
+    { id: "cover", kind: "cover" as const, prompt: "cover", placement: "after_title", aspectRatio: "16:9" },
+    { id: "inline-1", kind: "inline" as const, prompt: "evidence", placement: "after_section_1", aspectRatio: "16:9" },
+  ]
+  const partition = partitionWriterAssetsForRecovery(markdown, "wechat", "article", intents)
+
+  assert.deepEqual(partition.ready.map((asset) => ({ id: asset.id, url: asset.url, status: asset.status })), [
+    { id: "cover", url: "https://cdn.example.com/cover-ready.png", status: "ready" },
+  ])
+  assert.deepEqual(partition.pending.map((asset) => ({ id: asset.id, role: asset.role, status: asset.status })), [
+    { id: "inline-1", role: "inline", status: "loading" },
+  ])
 })
 
 test("resolved markdown stores managed asset blocks and can round-trip assets", () => {

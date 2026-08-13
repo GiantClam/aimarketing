@@ -13,7 +13,7 @@ import {
 import { buildImageAssistantProviderPlan } from "@/lib/image-assistant/aiberm"
 import { executeImageProviderPlan, type ImageGenerationProvider } from "@/lib/image-generation/provider-orchestration"
 import { withTaskTimeout } from "@/lib/task-timeout"
-import { buildPendingWriterAssets, ensureWriterAssetOrder, markWriterAssetsFailed, resolveWriterAssetMarkdown, type WriterAsset } from "@/lib/writer/assets"
+import { ensureWriterAssetOrder, markWriterAssetsFailed, partitionWriterAssetsForRecovery, resolveWriterAssetMarkdown, type WriterAsset } from "@/lib/writer/assets"
 import type { WriterSubmitResult } from "@/lib/writer/writer-result"
 import { normalizeWriterPlatform, WRITER_PLATFORM_CONFIG, type WriterMode } from "@/lib/writer/config"
 import { writerFetch } from "@/lib/writer/network"
@@ -337,22 +337,33 @@ export async function generateWriterAssetsForTask(input: {
   assetIntents?: WriterSubmitResult["assetIntents"]
   onAsset?: (asset: WriterGeneratedAsset, index: number, total: number, assets: WriterGeneratedAsset[]) => Promise<void> | void
 }): Promise<WriterAssetGenerationResult> {
-  const plannedAssets = buildPendingWriterAssets(input.markdown, input.platform, input.mode, input.assetIntents)
+  const recovered = partitionWriterAssetsForRecovery(input.markdown, input.platform, input.mode, input.assetIntents)
+  const retainedAssets: WriterGeneratedAsset[] = recovered.ready.map((asset) => ({
+    ...asset,
+    status: "ready" as const,
+    provider: asset.provider === "pptoken" || asset.provider === "crazyroute" ? asset.provider : "aiberm",
+  }))
+  const plannedAssets = recovered.pending
   const providerPlan = getWriterImageProviderPlan()
   const preferredProvider = getPreferredWriterImageProvider()
 
   await updateWriterAssetConversationStatus({ userId: input.userId, conversationId: input.conversationId, status: "image_generating" })
 
+  if (plannedAssets.length === 0 && retainedAssets.length > 0) {
+    await updateWriterAssetConversationStatus({ userId: input.userId, conversationId: input.conversationId, status: "ready" })
+    return { ok: true, assets: ensureWriterAssetOrder(retainedAssets, input.platform, input.mode) as WriterGeneratedAsset[], provider: (retainedAssets[0]?.provider || preferredProvider) as WriterImageProvider, model: getPreferredWriterImageModel() }
+  }
+
   if (providerPlan.length === 0) {
     const error = "Configure at least one writer image provider: pptoken, aiberm, crazyroute."
-    const assets = ensureWriterAssetOrder(markWriterAssetsFailed(plannedAssets, error), input.platform, input.mode) as WriterGeneratedAsset[]
+    const assets = ensureWriterAssetOrder([...retainedAssets, ...markWriterAssetsFailed(plannedAssets, error)], input.platform, input.mode) as WriterGeneratedAsset[]
     await updateWriterAssetConversationStatus({ userId: input.userId, conversationId: input.conversationId, status: "failed" })
     return { ok: false, assets, provider: preferredProvider, model: getPreferredWriterImageModel(), error }
   }
 
   if (!isWriterR2Available()) {
     const error = "writer_r2_config_missing"
-    const assets = ensureWriterAssetOrder(markWriterAssetsFailed(plannedAssets, error), input.platform, input.mode) as WriterGeneratedAsset[]
+    const assets = ensureWriterAssetOrder([...retainedAssets, ...markWriterAssetsFailed(plannedAssets, error)], input.platform, input.mode) as WriterGeneratedAsset[]
     await updateWriterAssetConversationStatus({ userId: input.userId, conversationId: input.conversationId, status: "failed" })
     return { ok: false, assets, provider: preferredProvider, model: getPreferredWriterImageModel(), error }
   }
@@ -389,20 +400,31 @@ export async function generateWriterAssetsForTask(input: {
         await input.onAsset?.(asset, index, total, assets)
       },
     })
-    const assets = ensureWriterAssetOrder(generated, input.platform, input.mode) as WriterGeneratedAsset[]
+    const assets = ensureWriterAssetOrder([...retainedAssets, ...generated], input.platform, input.mode) as WriterGeneratedAsset[]
+    const generatedSuccessCount = generated.filter((asset) => asset.status === "ready" && Boolean(asset.url)).length
     const successCount = assets.filter((asset) => asset.status === "ready" && Boolean(asset.url)).length
     const resolvedProvider = assets.find((asset) => asset.status === "ready")?.provider || preferredProvider
 
     if (successCount > 0) {
-      await finalizeWriterImageCredits({
-        reservation,
-        userId: input.userId,
-        enterpriseId: input.enterpriseId,
-        provider: resolvedProvider as WriterImageProvider,
-        successCount,
-        conversationId: input.conversationId,
-        idempotencyKey: `writer-image:async:debit:${input.taskId}`,
-      })
+      if (reservation && generatedSuccessCount > 0) {
+        await finalizeWriterImageCredits({
+          reservation,
+          userId: input.userId,
+          enterpriseId: input.enterpriseId,
+          provider: resolvedProvider as WriterImageProvider,
+          successCount: generatedSuccessCount,
+          conversationId: input.conversationId,
+          idempotencyKey: `writer-image:async:debit:${input.taskId}`,
+        })
+      } else if (reservation) {
+        await releaseReservedCredits({
+          reservation,
+          userId: input.userId,
+          enterpriseId: input.enterpriseId,
+          idempotencyKey: `writer-image:async:release:${input.taskId}`,
+          reason: "writer_assets_existing_only",
+        })
+      }
       await updateWriterAssetConversationStatus({ userId: input.userId, conversationId: input.conversationId, status: "ready" })
       return { ok: true, assets, provider: resolvedProvider as WriterImageProvider, model: getWriterImageModelForProvider(resolvedProvider as WriterImageProvider) }
     }

@@ -652,6 +652,25 @@ export function buildPendingWriterAssets(
   }))
 }
 
+export function partitionWriterAssetsForRecovery(
+  markdown: string,
+  platform: WriterPlatform,
+  mode: WriterMode = "article",
+  intents?: WriterSubmitResult["assetIntents"],
+) {
+  const requested = buildPendingWriterAssets(markdown, platform, mode, intents)
+  const persistedById = new Map(
+    extractWriterAssetsFromMarkdown(markdown, platform, mode)
+      .filter((asset) => asset.status === "ready" && Boolean(asset.url))
+      .map((asset) => [asset.id, asset]),
+  )
+  const ready = requested
+    .filter((asset) => persistedById.has(asset.id))
+    .map((asset) => ({ ...asset, ...persistedById.get(asset.id)! }))
+  const pending = requested.filter((asset) => !persistedById.has(asset.id))
+  return { ready, pending }
+}
+
 export function markWriterAssetsFailed(assets: WriterAsset[], error: string) {
   return assets.map((asset) => ({
     ...asset,
