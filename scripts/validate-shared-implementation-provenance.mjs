@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 const REPOSITORY_ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const DESKTOP_ROOT = join(REPOSITORY_ROOT, "apps", "desktop");
+export const GENERATED_DESKTOP_DIRECTORIES = Object.freeze([".opencode", ".opencode-server", "dist", "dist-runtime", "node_modules", "target"]);
+const GENERATED_DESKTOP_DIRECTORY_SET = new Set(GENERATED_DESKTOP_DIRECTORIES);
 
 export const COMPATIBILITY_SURFACES = Object.freeze([
   ["lib/ai-runtime/opencode-protocol.ts", "@aimarketing/runtime-contracts/opencode"],
@@ -35,7 +37,7 @@ function sourceFiles(rootDir) {
   const files = [];
   for (const entry of readdirSync(rootDir, { withFileTypes: true })) {
     const entryPath = join(rootDir, entry.name);
-    if (entry.isDirectory()) files.push(...sourceFiles(entryPath));
+    if (entry.isDirectory() && !GENERATED_DESKTOP_DIRECTORY_SET.has(entry.name)) files.push(...sourceFiles(entryPath));
     else if (/\.(?:ts|tsx|mts|cts)$/.test(entry.name) && !entry.name.endsWith(".d.ts")) files.push(entryPath);
   }
   return files;

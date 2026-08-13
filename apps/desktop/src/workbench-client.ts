@@ -3,6 +3,8 @@ import type {
   WorkbenchConversation,
   WorkbenchMessage,
   WorkbenchRun,
+  WorkbenchRunDetail,
+  WorkbenchArtifact,
   WorkbenchRunEvent,
   WorkbenchRunRequest,
   WorkbenchUsage,
@@ -14,6 +16,9 @@ import type { TauriBridge } from "./tauri";
 type DesktopConversationRow = { id: string; title: string; updated_at: string; message_count?: number };
 type DesktopMessageRow = { id: string; conversation_id: string; role: WorkbenchMessage["role"]; content: string; created_at: string };
 type DesktopWorkflowRow = { id: string; name: string; definition_json: string; updated_at: string };
+type DesktopArtifactRow = { id: string; relative_path: string; mime_type: string; byte_length: number; sha256: string; created_at: string; available?: boolean };
+type DesktopRunRow = { id: string; conversation_id?: string | null; status: WorkbenchRun["status"] | string; model?: string | null; started_at: string; finished_at?: string | null };
+type DesktopRunDetail = { run: DesktopRunRow; nodes: Array<{ node_key: string; status: string; output_json?: string | null; updated_at: string }>; events: Array<{ sequence: number; event_type: string; payload_json: string; created_at: string }>; usage: Array<{ provider?: string | null; model: string; input_tokens?: number | null; output_tokens?: number | null; provider_cost?: number | null; estimated_cost?: number | null; created_at: string }> };
 
 function makeId(prefix: string) {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
@@ -36,6 +41,24 @@ function readWorkflowDefinition(raw: string): WorkbenchWorkflow["definition"] {
 
 function toWorkbenchWorkflow(row: DesktopWorkflowRow): WorkbenchWorkflow {
   return { id: row.id, title: row.name, definition: readWorkflowDefinition(row.definition_json), updatedAt: row.updated_at };
+}
+
+function toWorkbenchArtifact(row: DesktopArtifactRow): WorkbenchArtifact {
+  return { id: row.id, relativePath: row.relative_path, title: row.relative_path, mimeType: row.mime_type, byteLength: row.byte_length, sha256: row.sha256, createdAt: row.created_at, available: row.available };
+}
+
+function toWorkbenchRun(row: DesktopRunRow): WorkbenchRun {
+  const status = ["queued", "running", "succeeded", "failed", "cancelled", "interrupted"].includes(row.status) ? row.status as WorkbenchRun["status"] : "interrupted";
+  return { id: row.id, conversationId: row.conversation_id ?? "", status, model: row.model ?? undefined, startedAt: row.started_at, finishedAt: row.finished_at ?? undefined };
+}
+
+function toWorkbenchRunDetail(detail: DesktopRunDetail): WorkbenchRunDetail {
+  return {
+    run: toWorkbenchRun(detail.run),
+    nodes: detail.nodes.map((node) => ({ nodeKey: node.node_key, status: node.status, outputJson: node.output_json, updatedAt: node.updated_at })),
+    events: detail.events.map((event) => ({ sequence: event.sequence, eventType: event.event_type, payloadJson: event.payload_json, createdAt: event.created_at })),
+    usage: detail.usage.map((item) => ({ provider: item.provider, model: item.model, inputTokens: item.input_tokens, outputTokens: item.output_tokens, providerCost: item.provider_cost, estimatedCost: item.estimated_cost, createdAt: item.created_at })),
+  };
 }
 
 export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: WorkbenchClient["navigation"]): WorkbenchClient {
@@ -75,6 +98,13 @@ export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: Wo
       await bridge.invoke("create_run", { runId: run.id, conversationId: run.conversationId, model: request.model ?? null });
       return run;
     },
+    async list(): Promise<readonly WorkbenchRun[]> {
+      const rows = await bridge.invoke<DesktopRunRow[]>("list_runs");
+      return rows.map(toWorkbenchRun);
+    },
+    async inspect(runId: string): Promise<WorkbenchRunDetail> {
+      return toWorkbenchRunDetail(await bridge.invoke<DesktopRunDetail>("inspect_run", { runId }));
+    },
     async cancel(runId: string) {
       await bridge.invoke("host_send", { message: { version: 1, requestId: makeId("cancel"), runId, type: "run.cancel", payload: { runId } } });
     },
@@ -108,6 +138,20 @@ export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: Wo
     files: {
       open: (relativePath, mimeType = "application/octet-stream") => bridge.invoke("open_artifact_default", { relativePath, mimeType }).then(() => undefined),
       reveal: (relativePath, mimeType = "application/octet-stream") => bridge.invoke("open_artifact", { relativePath, mimeType }).then(() => undefined),
+    },
+    artifacts: {
+      async list(): Promise<readonly WorkbenchArtifact[]> {
+        const rows = await bridge.invoke<DesktopArtifactRow[]>("list_artifacts");
+        return rows.map(toWorkbenchArtifact);
+      },
+      async remove(artifactId: string): Promise<void> {
+        await bridge.invoke("remove_artifact", { artifactId });
+      },
+    },
+    knowledge: {
+      async open(relativePath: string): Promise<void> {
+        await bridge.invoke("open_vault_file", { relativePath });
+      },
     },
     conversations,
     workflows,

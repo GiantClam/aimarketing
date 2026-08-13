@@ -72,6 +72,7 @@
 - [x] 4.2a Desktop home/chat inputs expose model, reasoning and local Skill selectors; task center exposes persisted usage/run state.
 - [x] 4.2b Desktop chat uses the shared cloud-compatible AI/user message cards, timestamps, live event panel, active route highlighting and quick prompt chips.
 - [x] 4.1a 2026-08-13 `DesktopConversationWorkspace` composes shared `WorkbenchChatMessage`/`WorkbenchWriterMessage`, prompt composer, route conversation history and artifact/event surfaces; route regressions verify the cloud-compatible composition.
+- [x] 4.2c 2026-08-13 `Desktop WorkbenchClient` now owns artifact listing/removal, run listing/inspection, usage summary reads, and Vault citation opening; the resource-library and task-center UI consume those typed adapters.
 - [ ] 4.5 实时展示文本/工具步骤和 emergency stop
 - [x] 4.5a 2026-08-13 `workbench-client.test.ts` drives the real Desktop WorkbenchClient adapter with malformed frames, text deltas, tool events, usage, workflow/media cancellation and terminal completion; the adapter emits normalized events and ignores malformed payloads.
 - [ ] 4.6 添加 streaming、长工具输出、取消、重启、artifact 和缺配置 UI tests
@@ -79,6 +80,7 @@
 
 **Quality Gate:**
 - [ ] Workbench UI 只使用 Desktop WorkbenchClient
+  - [x] 2026-08-13 library/task/knowledge read and action surfaces use `Desktop WorkbenchClient`; low-level bootstrap, host supervision, and persistence writes remain native runtime seams.
 - [ ] 桌面导航与确认范围一致
 - [x] Full Access 和明文 API Key 风险文案可见
   - [x] 2026-08-13 `apps/desktop/test/routes.test.ts` asserts bilingual settings warnings, workflow Full Access copy, persistence boundaries, and the absence of permission-mode/command-confirmation selectors.

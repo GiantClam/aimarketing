@@ -28,6 +28,14 @@ export interface WorkbenchRun {
   readonly status: WorkbenchRunStatus;
   readonly startedAt: string;
   readonly finishedAt?: string;
+  readonly model?: string;
+}
+
+export interface WorkbenchRunDetail {
+  readonly run: WorkbenchRun;
+  readonly nodes: readonly { readonly nodeKey: string; readonly status: string; readonly outputJson?: string | null; readonly updatedAt: string }[];
+  readonly events: readonly { readonly sequence: number; readonly eventType: string; readonly payloadJson: string; readonly createdAt: string }[];
+  readonly usage: readonly { readonly provider?: string | null; readonly model: string; readonly inputTokens?: number | null; readonly outputTokens?: number | null; readonly providerCost?: number | null; readonly estimatedCost?: number | null; readonly createdAt: string }[];
 }
 
 export interface WorkbenchArtifact {
@@ -37,6 +45,8 @@ export interface WorkbenchArtifact {
   readonly mimeType: string;
   readonly byteLength: number;
   readonly sha256: string;
+  readonly createdAt?: string;
+  readonly available?: boolean;
 }
 
 export interface WorkbenchUsage {
@@ -91,9 +101,18 @@ export interface FileActionsAdapter {
   readonly reveal: (relativePath: string, mimeType?: string) => Promise<void>;
 }
 
+export interface ArtifactActionsAdapter {
+  readonly list: () => Promise<readonly WorkbenchArtifact[]>;
+  readonly remove: (artifactId: string) => Promise<void>;
+}
+
 export interface WorkbenchClient {
   readonly navigation: NavigationAdapter;
   readonly files: FileActionsAdapter;
+  readonly artifacts: ArtifactActionsAdapter;
+  readonly knowledge: {
+    readonly open: (relativePath: string) => Promise<void>;
+  };
   readonly conversations: {
     readonly list: () => Promise<readonly WorkbenchConversation[]>;
     readonly create: (title?: string) => Promise<WorkbenchConversation>;
@@ -105,6 +124,8 @@ export interface WorkbenchClient {
   };
   readonly runs: {
     readonly start: (request: WorkbenchRunRequest) => Promise<WorkbenchRun>;
+    readonly list: () => Promise<readonly WorkbenchRun[]>;
+    readonly inspect: (runId: string) => Promise<WorkbenchRunDetail>;
     readonly cancel: (runId: string) => Promise<void>;
     readonly emergencyStop: (runId: string) => Promise<void>;
     readonly subscribe: (runId: string, onEvent: (event: WorkbenchRunEvent) => void) => () => void;

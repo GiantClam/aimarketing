@@ -11,6 +11,9 @@ test("desktop WorkbenchClient adapts conversations, workflows and file actions t
       if (command === "list_messages") return [{ id: "m1", conversation_id: "c1", role: "user", content: "你好", created_at: "2026-08-12T00:00:00Z" }] as T;
       if (command === "list_workflows") return [{ id: "w1", name: "内容工作流", definition_json: JSON.stringify({ schemaVersion: 2, revision: 3, definitionHash: "hash-1", nodes: [{ nodeKey: "input" }], edges: [] }), updated_at: "2026-08-12T00:00:00Z" }] as T;
       if (command === "save_workflow") return { id: String((args?.input as { id: string }).id), name: String((args?.input as { name: string }).name), definition_json: String((args?.input as { definition_json: string }).definition_json), updated_at: "2026-08-12T00:00:00Z" } as T;
+      if (command === "list_artifacts") return [{ id: "a1", relative_path: "artifacts/report.md", mime_type: "text/markdown", byte_length: 12, sha256: "hash-a", created_at: "2026-08-12T00:00:00Z", available: true }] as T;
+      if (command === "list_runs") return [{ id: "r1", conversation_id: "c1", status: "succeeded", model: "fixture/model", started_at: "2026-08-12T00:00:00Z", finished_at: "2026-08-12T00:01:00Z" }] as T;
+      if (command === "inspect_run") return { run: { id: "r1", conversation_id: "c1", status: "succeeded", model: "fixture/model", started_at: "2026-08-12T00:00:00Z", finished_at: "2026-08-12T00:01:00Z" }, nodes: [{ node_key: "writer", status: "succeeded", output_json: "{}", updated_at: "2026-08-12T00:01:00Z" }], events: [{ sequence: 1, event_type: "done", payload_json: "{}", created_at: "2026-08-12T00:01:00Z" }], usage: [{ provider: "fixture", model: "fixture/model", input_tokens: 2, output_tokens: 3, provider_cost: 0.01, estimated_cost: null, created_at: "2026-08-12T00:01:00Z" }] } as T;
       return undefined as T;
     },
     async listen() { return () => undefined; },
@@ -25,6 +28,15 @@ test("desktop WorkbenchClient adapts conversations, workflows and file actions t
   const savedWorkflow = await client.workflows.save({ id: "w2", title: "本地流程", definition: { nodes: [], edges: [] } });
   assert.equal(savedWorkflow.id, "w2");
   assert.equal(calls.at(-1)?.command, "save_workflow");
+  assert.equal((await client.artifacts.list())[0]?.relativePath, "artifacts/report.md");
+  await client.artifacts.remove("a1");
+  assert.equal(calls.at(-1)?.command, "remove_artifact");
+  assert.equal((await client.runs.list())[0]?.model, "fixture/model");
+  const detail = await client.runs.inspect("r1");
+  assert.equal(detail.nodes[0]?.nodeKey, "writer");
+  assert.equal(detail.usage[0]?.providerCost, 0.01);
+  await client.knowledge.open("notes/cited.md");
+  assert.equal(calls.at(-1)?.command, "open_vault_file");
   await client.files.open("output/report.md", "text/markdown");
   assert.equal(calls.at(-1)?.command, "open_artifact_default");
   assert.equal(calls.at(-1)?.args?.mimeType, "text/markdown");
