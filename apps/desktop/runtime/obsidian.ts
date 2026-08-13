@@ -142,12 +142,14 @@ async function collectMarkdown(directory: string, visited = new Set<string>(), r
 }
 
 function readIgnorePatterns(root: string): string[] {
-  try {
-    return readFileSync(join(resolve(root), ".gitignore"), "utf8")
-      .split(/\r?\n/u)
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith("#") && !line.startsWith("!"));
-  } catch { return []; }
+  return [".gitignore", ".aimarketingignore"].flatMap((filename) => {
+    try {
+      return readFileSync(join(resolve(root), filename), "utf8")
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith("#") && !line.startsWith("!"));
+    } catch { return []; }
+  });
 }
 
 function shouldIgnoreVaultPath(relativePath: string, patterns: readonly string[]): boolean {

@@ -33,10 +33,13 @@ test("honors Vault ignore rules and nested hidden paths", async () => {
     await mkdir(join(root, "ignored", "nested"), { recursive: true });
     await mkdir(join(root, ".hidden"), { recursive: true });
     await writeFile(join(root, ".gitignore"), "ignored/\n*.secret.md\n", "utf8");
+    await writeFile(join(root, ".aimarketingignore"), "private/\n", "utf8");
     await writeFile(join(root, "visible", "ok.md"), "# 可检索\n公开内容", "utf8");
     await writeFile(join(root, "ignored", "nested", "skip.md"), "# 不应出现\nignored", "utf8");
     await writeFile(join(root, ".hidden", "hidden.md"), "# 不应出现\nhidden", "utf8");
     await writeFile(join(root, "private.secret.md"), "# 不应出现\nsecret", "utf8");
+    await mkdir(join(root, "private"), { recursive: true });
+    await writeFile(join(root, "private", "personal.md"), "# 不应出现\nprivate", "utf8");
     const manifest = await indexObsidianVault(root, index);
     assert.deepEqual(manifest.documents.map((item) => item.documentPath), ["visible/ok.md"]);
   } finally { await rm(root, { recursive: true, force: true }); }
