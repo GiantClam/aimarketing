@@ -6,6 +6,7 @@ import { tauriBridge } from "./tauri";
 import { createDesktopWorkbenchClient } from "./workbench-client";
 import { capabilityEnglish, desktopCopy, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaPlaceholderEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale, workflowActionEnglish, writerContentTypeEnglish, writerLanguageEnglish, writerModeEnglish, writerPlatformEnglish, type DesktopLocalePreference } from "./i18n";
 import { capabilityForWorkflowAction, configuredModelOptions, isMediaProviderConfigured, modelOptionsForProvider, preferredConfiguredModel, providerForCapability, providerForId, requiresConfiguredProviderForWorkflowAction, type DesktopProviderConfig, type DesktopProviderDefaults, type DesktopProviderProfiles } from "./provider-config";
+import { bindWorkflowProviderDefaults, isMediaWorkflowNodeType } from "./workflow-provider-binding";
 import { createSessionRecoverySnapshot } from "./session-recovery";
 import { sanitizeWorkflowDefinitionForStorage } from "./workflow-storage";
 import { parseWorkflowImportText, serializeWorkflowExport } from "./workflow-portability";
@@ -1567,7 +1568,8 @@ export function App() {
     const base = workflowDefinition ?? buildWorkflowDefinition(prompt, workflowAction, config.provider);
     return sanitizeWorkflowDefinitionForStorage({ ...base, nodes: base.nodes.map((node) => {
       const title = node.nodeKey === "input" ? (locale === "en" ? "Input task" : "输入任务") : node.nodeKey === "output" ? (locale === "en" ? "Local artifact" : "本地产物") : (locale === "en" ? workflowActionEnglish[node.type] ?? node.title : node.title);
-      return node.nodeKey === "input" ? { ...node, title, config: { ...node.config, text: prompt } } : node.nodeKey !== "output" ? { ...node, title, config: { ...node.config, prompt, script: prompt, text: prompt, provider: activeProvider.id, model: activeProvider.model, baseUrl: activeProvider.baseUrl, endpoint: activeProvider.endpoint, queryEndpoint: activeProvider.queryEndpoint } } : { ...node, title };
+      const nodeProvider = providerForCapability(config, capabilityForWorkflowAction(node.type));
+      return node.nodeKey === "input" ? { ...node, title, config: { ...node.config, text: prompt } } : node.nodeKey !== "output" ? { ...node, title, config: { ...node.config, prompt, script: prompt, text: prompt, provider: nodeProvider.id, model: nodeProvider.model, baseUrl: nodeProvider.baseUrl, endpoint: nodeProvider.endpoint, queryEndpoint: nodeProvider.queryEndpoint } } : { ...node, title };
     }) });
   }
 
@@ -1650,9 +1652,10 @@ export function App() {
         ...(actionId === "knowledge_retrieve" && config.obsidianIndexPath ? { indexPath: config.obsidianIndexPath, query: userPrompt, embeddingMode: embeddingPayload(config).mode, embeddingBaseUrl: embeddingPayload(config).baseUrl, embeddingModel: embeddingPayload(config).model, embeddingApiKey: embeddingPayload(config).apiKey } : {}),
         ...(actionId === "knowledge_write" && config.obsidianVaultPath ? { vaultPath: config.obsidianVaultPath } : {}),
       };
-       const workflowDefinition = sanitizeWorkflowDefinitionForStorage(isWorkflowDefinition(workflowOverride) ? workflowOverride : selected.path === "/dashboard/workflows" ? currentWorkflowDefinition() : buildWorkflowDefinition(userPrompt, actionId, selectedProvider, capabilityConfig));
-      const mediaNodeTypes = new Set<WorkflowAction>(["image_generate", "video_generate", "digital_human", "music_generate", "voice_synthesis", "voice_clone", "audio_generate"]);
-      const mediaNodes = workflowDefinition.nodes.filter((node) => mediaNodeTypes.has(node.type as WorkflowAction));
+       const rawWorkflowDefinition = isWorkflowDefinition(workflowOverride) ? workflowOverride : selected.path === "/dashboard/workflows" ? currentWorkflowDefinition() : buildWorkflowDefinition(userPrompt, actionId, selectedProvider, capabilityConfig);
+       const workflowDefinition = sanitizeWorkflowDefinitionForStorage(rawWorkflowDefinition);
+       const hostWorkflowDefinition = bindWorkflowProviderDefaults(rawWorkflowDefinition, config);
+      const mediaNodes = hostWorkflowDefinition.nodes.filter((node) => isMediaWorkflowNodeType(node.type));
       const mediaTempDirectories = Object.fromEntries(await Promise.all(mediaNodes.map(async (node) => {
         const allocated = await tauriBridge.invoke<{ relativePath: string }>("allocate_media_temp", { runId, nodeKey: node.nodeKey });
         return [node.nodeKey, allocated.relativePath] as const;
@@ -1682,7 +1685,7 @@ export function App() {
         const workflowName = locale === "en" ? `${actionName} workflow` : `${actionName}工作流`;
         const saved = toSavedWorkflow(await workbenchClient.workflows.save({ id: workflowId, title: workflowName, definition: workflowDefinition }));
         setSavedWorkflows((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
-         await sendHostMessage({ version: 1, requestId: runId, runId, type: "workflow.run", payload: { workspacePath: config.workspacePath, provider: selectedProvider, media: selectedProvider, providers: config.providers, vaultPath: config.obsidianVaultPath, indexPath: config.obsidianIndexPath, executable: config.runtime.opencodePath, mediaTempDirectories, definition: workflowDefinition, ...(workflowRetry ? { completed: workflowRetry.completed, recoveryDefinitionHash: workflowRetry.recoveryDefinitionHash } : {}) } });
+         await sendHostMessage({ version: 1, requestId: runId, runId, type: "workflow.run", payload: { workspacePath: config.workspacePath, provider: selectedProvider, media: selectedProvider, providers: config.providers, vaultPath: config.obsidianVaultPath, indexPath: config.obsidianIndexPath, executable: config.runtime.opencodePath, mediaTempDirectories, definition: hostWorkflowDefinition, ...(workflowRetry ? { completed: workflowRetry.completed, recoveryDefinitionHash: workflowRetry.recoveryDefinitionHash } : {}) } });
       }
       setPrompt(""); setRunStatus(locale === "zh" ? "已发送，等待本地 Agent 事件…" : "Sent; waiting for local Agent events…");
     } catch (error) {

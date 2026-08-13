@@ -37,6 +37,7 @@
   - [x] 2.1a `config.json` now persists a normalized configured model list and selected Skill; stale selected models fall back to the first configured model.
   - [x] 2.1b Workflow definitions recursively remove Provider credentials before save, export, import, or host dispatch; credentials remain only in the current in-memory Provider payload.
   - [x] 2.1c 2026-08-13 desktop settings and host dispatch support multiple same-type Provider profiles with capability defaults for text/image/video/audio; each profile normalizes its model list and falls back to the first configured model.
+  - [x] 2026-08-14 mixed workflow dispatch keeps the sanitized portable definition separate from the in-memory host definition; media nodes are rebound to the configured image/video/audio profile and its preferred model before execution, with regression coverage proving stale bindings and API keys are not carried forward.
 - [x] 2.2 提交前持久化 idempotency key，提交后立即保存 provider task ID（桌面在发送 `workflow.run` 前为每个媒体节点写入 queued attempt；收到 provider task ID 事件后幂等更新同一记录）
 - [x] 2.3 实现可恢复 poll 和 provider 支持时的 cancel（`runMediaJob` 使用持久化 task ID 续 poll，并通过未 aborted 的控制端口发送 provider cancel）
 - [x] 2.4 从 Rust 请求 canonical temp path，流式下载并原子移动到项目目录

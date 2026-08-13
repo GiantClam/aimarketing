@@ -46,7 +46,8 @@ test("desktop workflow and media entry points expose the configured model select
   assert.ok((appSource.match(selector) ?? []).length >= 3);
   assert.match(appSource, /<DesktopWorkflowWorkspace[\s\S]*?model=\{activeModel\} models=\{activeModels\}[\s\S]*?onModelChange=\{updateModel\}/);
   assert.match(appSource, /<DesktopMediaWorkspace[\s\S]*?model=\{activeModel\} models=\{activeModels\}[\s\S]*?onModelChange=\{updateModel\}/);
-  assert.match(appSource, /currentWorkflowDefinition\(\)[\s\S]*?model: activeProvider\.model/);
+  assert.match(appSource, /currentWorkflowDefinition\(\)[\s\S]*?const nodeProvider = providerForCapability\(config, capabilityForWorkflowAction\(node\.type\)\)/);
+  assert.match(appSource, /hostWorkflowDefinition = bindWorkflowProviderDefaults\(rawWorkflowDefinition, config\)/);
 });
 
 test("desktop usage records the model reported by the active Provider event", () => {
