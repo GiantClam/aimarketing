@@ -129,5 +129,5 @@
 - [ ] 所有阶段与质量门禁通过
 - [ ] 三个 capability specs 全部满足
 - [x] 每类真实 Provider smoke 结果已记录
-  - 2026-08-13：使用 `apps/desktop/real-providers.test.local.json` 顺序 smoke（LLM → image，未执行视频生成）；两项均 HTTP 200 且通过 capability-specific response schema，LLM 响应键为 `id/object/created/model/choices/usage`，图片响应键为 `created/model/data/usage/quality/size/output_format`。脱敏输出明确记录 `scope.executed=[llm,image]` 与 `scope.excluded=[video]`，API key 不进入结果。
+  - 2026-08-13：使用 `apps/desktop/real-providers.test.local.json` 顺序 smoke（LLM → image → audio，未执行 video/seedance）；LLM HTTP 200 且 schema 通过，音频 profile `audio-minimax/speech-2.8-turbo` 提交 HTTP 200 并在第 8 次查询返回 `Success`，图片请求连续 3 次 HTTP 502（上游 `upstream_error`，非本地适配器失败）。脱敏输出明确记录 `scope.executed=[llm,image,audio]` 与 `scope.excluded=[video,seedance]`，API key 不进入结果。
 - [ ] Ready for `openspec-archive add-desktop-media-and-workflows`

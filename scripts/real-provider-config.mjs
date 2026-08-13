@@ -40,7 +40,11 @@ export function hasExpectedSmokeResponse(label, response) {
   if (!isRecord(response)) return false;
   if (label === "llm") return Array.isArray(response.choices) && isRecord(response.usage) && requiredString(response.model);
   if (label === "image") return Array.isArray(response.data) && response.data.length > 0;
+  if (label === "audio") {
+    const statusCode = response.base_resp && typeof response.base_resp === "object" ? response.base_resp.status_code : undefined;
+    return (requiredString(String(response.task_id ?? "")) && statusCode === 0 && ["Success", "Succeeded"].includes(String(response.status ?? ""))) || (isRecord(response.data) && requiredString(String(response.data.audio ?? "")));
+  }
   return false;
 }
 
-export const REAL_PROVIDER_SMOKE_SCOPE = Object.freeze({ executed: ["llm", "image"], excluded: ["video"] });
+export const REAL_PROVIDER_SMOKE_SCOPE = Object.freeze({ executed: ["llm", "image", "audio"], excluded: ["video", "seedance"] });

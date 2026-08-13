@@ -37,11 +37,48 @@ async function request(label, url, apiKey, body) {
   return lastResult ?? { label, ok: false, error: "provider_smoke_no_result" };
 }
 
+async function requestAudio(profile) {
+  const baseUrl = endpoint(profile.baseUrl, "t2a_async_v2");
+  const submit = await request("audio", baseUrl, profile.apiKey, {
+    model: profile.model,
+    text: "desktop audio provider smoke",
+    voice_setting: { voice_id: "English_Trustworth_Man", speed: 1, vol: 1, pitch: 0 },
+    audio_setting: { audio_type: "mp3" },
+  });
+  const submittedTaskId = submit.response?.task_id;
+  if (!submit.ok || submittedTaskId === undefined || submittedTaskId === null || submittedTaskId === 0) return submit;
+  const retries = Math.max(0, Number(process.env.AIMARKETING_PROVIDER_RETRIES ?? 2));
+  const attempts = Math.max(3, retries + 1);
+  let query;
+  for (let attempt = 1; attempt <= attempts * 8; attempt += 1) {
+    const response = await fetch(endpoint(profile.baseUrl, "query/t2a_async_query_v2") + `?task_id=${encodeURIComponent(String(submittedTaskId))}`, {
+      headers: { authorization: `Bearer ${profile.apiKey}` },
+      signal: AbortSignal.timeout(Number(process.env.AIMARKETING_PROVIDER_TIMEOUT_MS ?? 120000)),
+    });
+    const text = await response.text();
+    let parsed;
+    try { parsed = JSON.parse(text); } catch { parsed = undefined; }
+    query = { label: "audio", status: response.status, ok: response.ok, attempt, response: parsed };
+    const taskStatus = String(parsed?.status ?? "");
+    if (["Success", "Succeeded", "Failed", "Fail"].includes(taskStatus) || !response.ok) return query;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  return query ?? { label: "audio", ok: false, error: "audio_provider_smoke_no_query_result" };
+}
+
+function configuredAudioProfile(value) {
+  const profileId = value?.defaults?.audio;
+  const profile = profileId && value?.providers?.[profileId];
+  if (!profile || typeof profile !== "object") throw new Error("real_provider_config_audio_profile_missing");
+  for (const field of ["baseUrl", "apiKey", "model"]) if (typeof profile[field] !== "string" || !profile[field].trim()) throw new Error(`real_provider_config_audio_${field}_missing`);
+  return profile;
+}
+
 // The configured LLM and image entries can point at the same upstream. Run
 // them serially so a capacity-limited gateway does not turn a valid smoke into
 // a client-side concurrency failure. Transient upstream errors are retried a
-// bounded number of times; video generation remains intentionally out of this
-// smoke suite.
+// bounded number of times; video generation (including seedance) remains
+// intentionally out of this smoke suite.
 const results = [
   await request("llm", endpoint(config.llm.baseUrl, "chat/completions"), config.llm.apiKey, {
     model: config.llm.model,
@@ -56,6 +93,7 @@ const results = [
     n: 1,
     response_format: "url",
   }),
+  await requestAudio(configuredAudioProfile(config)),
 ];
 
 const sanitized = results.map((result) => ({
