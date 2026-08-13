@@ -117,7 +117,8 @@
 
 **Quality Gate:**
 - [ ] 混合文本→图片→视频→音频→PPT 工作流 E2E 通过
-- [ ] workflow JSON 可通过普通文件共享并成功导入
+- [x] workflow JSON 可通过普通文件共享并成功导入
+  - [x] 2026-08-13 `apps/desktop/test/workflow-storage.test.ts` writes the versioned export to an ordinary UTF-8 `workflow.json`, reads it back, runs migration/validation, strips Provider/path bindings, and verifies a fresh portable definition hash.
 - [x] 不支持共享或并发打开 `app.db`/LanceDB 的文档已明确
   - [x] 2026-08-13 `apps/desktop/README.md` and the portability spec explicitly prohibit sync-drive sharing/concurrent opens and describe the single-instance lock boundary.
 

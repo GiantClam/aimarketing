@@ -350,7 +350,7 @@ test("desktop conversation history and retry flow consume the injected Workbench
   assert.match(appSource, /workbenchClient\.workflows\.save\(/);
   assert.match(appSource, /workbenchClient\.runs\.start\(/);
   assert.match(appSource, /workbenchClient\.runs\.emergencyStop\(/);
-  assert.match(appSource, /parseAndMigrateWorkflowDefinition\(/);
+  assert.match(appSource, /parseWorkflowImportText\(/);
   assert.match(appSource, /run_recovery_rejected|recoveryDefinitionHash/);
   assert.match(appSource, /completed, recoveryDefinitionHash/);
 });

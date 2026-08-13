@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import type { WorkflowDefinitionEnvelope } from "@aimarketing/workflow-core";
 import { sanitizeWorkflowDefinitionForStorage } from "../src/workflow-storage";
+import { parseWorkflowImportText, serializeWorkflowExport } from "../src/workflow-portability";
 
 test("workflow persistence removes provider credentials without changing executable fields", () => {
   const credentialField = ["api", "Key"].join("");
@@ -62,4 +66,49 @@ test("workflow portability drops database/provider bindings but keeps relative f
     uploadedFiles: ["attachments/a.txt"],
     nested: { targetPath: "notes/output.md" },
   });
+});
+
+test("workflow JSON survives ordinary file sharing and imports with a fresh portable hash", async () => {
+  const credentialField = ["api", "Key"].join("");
+  const definition = {
+    schemaVersion: 2,
+    revision: 1,
+    definitionHash: "",
+    nodes: [{
+      nodeKey: "capability",
+      type: "image_generate",
+      nodeVersion: 1,
+      title: "Image",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        prompt: "A yellow square",
+        [credentialField]: "fixture-credential",
+        provider: "old-provider",
+        model: "old-model",
+        baseUrl: "https://old-provider.invalid/v1",
+        sourcePath: "C:\\old-machine\\input.png",
+        relativePath: "attachments/input.png",
+      },
+    }],
+    edges: [],
+  } as never as WorkflowDefinitionEnvelope;
+  const directory = await mkdtemp(join(tmpdir(), "aimarketing-workflow-share-"));
+  try {
+    const file = join(directory, "workflow.json");
+    await writeFile(file, serializeWorkflowExport(definition, "2026-08-13T00:00:00.000Z"), "utf8");
+    const imported = parseWorkflowImportText(await readFile(file, "utf8"));
+    const config = imported.nodes[0]?.config ?? {};
+    assert.equal(config.prompt, "A yellow square");
+    assert.equal(config.relativePath, "attachments/input.png");
+    assert.equal(config.provider, undefined);
+    assert.equal(config.model, undefined);
+    assert.equal(config.baseUrl, undefined);
+    assert.equal(config[credentialField], undefined);
+    assert.equal(config.sourcePath, undefined);
+    assert.match(imported.definitionHash, /^[a-f0-9]{64}$/);
+    assert.notEqual(imported.definitionHash, definition.definitionHash);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

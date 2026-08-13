@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { formatWorkbenchModelLabel, WORKBENCH_HOME_COPY, WORKBENCH_HOME_GROUPS, WORKBENCH_MEDIA_FEATURES, WORKBENCH_MESSAGE_FRAME, WORKBENCH_ROUTE_MANIFEST, WORKBENCH_THEME, WORKBENCH_WRITER_CONTENT_TYPES, WORKBENCH_WRITER_LANGUAGES, WORKBENCH_WRITER_MODES, WORKBENCH_WRITER_PLATFORMS, WORKBENCH_WRITER_QUICK_PROMPTS, WorkbenchChatMessage, WorkbenchRouteIcon, WorkbenchShell, WorkbenchWriterMessage, type WorkbenchMediaFeatureId } from "@aimarketing/workbench-ui";
-import { parseAndMigrateWorkflowDefinition, migrateWorkflowDefinitionToCurrent, validateWorkflowDefinition, workflowNodeRegistry, type WorkflowDefinitionEnvelope, type WorkflowDefinitionNodeV2 } from "@aimarketing/workflow-core";
+import { validateWorkflowDefinition, workflowNodeRegistry, type WorkflowDefinitionEnvelope, type WorkflowDefinitionNodeV2 } from "@aimarketing/workflow-core";
 import type { WorkbenchWorkflow } from "@aimarketing/workbench-client";
 import { tauriBridge } from "./tauri";
 import { createDesktopWorkbenchClient } from "./workbench-client";
@@ -8,6 +8,7 @@ import { capabilityEnglish, desktopCopy, mediaEnglish, mediaFieldEnglish, mediaO
 import { configuredModelOptions, isMediaProviderConfigured, preferredConfiguredModel, requiresConfiguredProviderForWorkflowAction } from "./provider-config";
 import { createSessionRecoverySnapshot } from "./session-recovery";
 import { sanitizeWorkflowDefinitionForStorage } from "./workflow-storage";
+import { parseWorkflowImportText, serializeWorkflowExport } from "./workflow-portability";
 
 type WorkspaceMode = "chat" | "writer" | "workflow" | "library";
 type SkillId = "auto" | "content-writing" | "marketing-analysis" | "ppt-master" | "obsidian-rag";
@@ -1514,8 +1515,7 @@ export function App() {
   }
 
   function exportCurrentWorkflow() {
-    const definition = sanitizeWorkflowDefinitionForStorage(currentWorkflowDefinition());
-    const blob = new Blob([JSON.stringify({ format: "aimarketing-workflow", exportedAt: new Date().toISOString(), definition }, null, 2)], { type: "application/json" });
+    const blob = new Blob([serializeWorkflowExport(currentWorkflowDefinition())], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = `ai-marketing-workflow-${Date.now()}.json`; anchor.click(); URL.revokeObjectURL(url);
     setRunStatus(locale === "zh" ? "工作流 JSON 已导出" : "Workflow JSON exported");
@@ -1523,8 +1523,7 @@ export function App() {
 
   async function importWorkflow(file: File) {
     try {
-      const parsed = JSON.parse(await file.text()) as { definition?: unknown };
-      const migrated = sanitizeWorkflowDefinitionForStorage(parseAndMigrateWorkflowDefinition((parsed.definition ?? parsed) as WorkflowDefinitionEnvelope));
+      const migrated = parseWorkflowImportText(await file.text());
       const capability = migrated.nodes.find((node) => node.nodeKey === "capability");
       const importedAction = workflowActions.find((item) => item.id === capability?.type);
       const importedConfig = capability?.config && typeof capability.config === "object" ? capability.config as Record<string, unknown> : {};

@@ -1,4 +1,4 @@
-import type { WorkflowDefinitionEnvelope } from "@aimarketing/workflow-core";
+import { hashWorkflowDefinition, type WorkflowDefinitionEnvelope } from "@aimarketing/workflow-core";
 
 const SENSITIVE_CONFIG_KEY = /(?:^|[_-])(api[_-]?key|access[_-]?token|authorization|secret|password|token)(?:$|[_-])/iu;
 const NON_PORTABLE_CONFIG_KEY = /^(?:(?:referenced[_-]?)?artifact[_-]?ids?|checkpoint[_-]?key|conversation[_-]?id|idempotency[_-]?key|project[_-]?id|provider[_-]?task[_-]?id|run[_-]?id|session[_-]?id)$/iu;
@@ -31,11 +31,12 @@ function stripPortableValue(value: unknown, key = ""): unknown {
  * carries a credential; the current Provider payload supplies it in memory.
  */
 export function sanitizeWorkflowDefinitionForStorage(definition: WorkflowDefinitionEnvelope): WorkflowDefinitionEnvelope {
-  return {
+  const sanitized = {
     ...definition,
     nodes: definition.nodes.map((node) => ({
       ...node,
       config: stripPortableValue(node.config) as Record<string, unknown>,
     })),
   };
+  return { ...sanitized, definitionHash: hashWorkflowDefinition({ ...sanitized, definitionHash: "" }) };
 }
