@@ -1,7 +1,11 @@
-use rusqlite::{params, Connection, Result};
+use rusqlite::{params, Connection, OpenFlags, Result};
 use serde::Serialize;
 use sha2::Digest;
+use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+const BACKUP_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
 const SCHEMA: &str = r#"
 PRAGMA journal_mode = WAL;
@@ -29,6 +33,17 @@ pub fn data_root(executable: &Path, local_app_data: Option<PathBuf>) -> PathBuf 
 }
 
 pub fn initialize(path: &Path) -> Result<()> {
+    match initialize_schema(path) {
+        Ok(()) => ensure_recent_consistent_backup(path),
+        Err(error) if is_database_corruption(&error) && restore_latest_consistent_backup(path).is_ok() => {
+            initialize_schema(path)?;
+            ensure_recent_consistent_backup(path)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn initialize_schema(path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() { std::fs::create_dir_all(parent).map_err(|_| rusqlite::Error::InvalidPath(parent.to_path_buf()))?; }
     let connection = open(path)?;
     connection.execute_batch(SCHEMA)?;
@@ -38,6 +53,83 @@ pub fn initialize(path: &Path) -> Result<()> {
     let _ = connection.execute("ALTER TABLE usage_records ADD COLUMN idempotency_key TEXT", []);
     let _ = connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS usage_idempotency_key ON usage_records(idempotency_key) WHERE idempotency_key IS NOT NULL", []);
     connection.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (2)", [])?;
+    Ok(())
+}
+
+fn backup_path(path: &Path) -> PathBuf { sibling_path(path, ".backup") }
+fn previous_backup_path(path: &Path) -> PathBuf { sibling_path(path, ".backup.previous") }
+fn temporary_backup_path(path: &Path) -> PathBuf { sibling_path(path, ".backup.next") }
+
+fn sibling_path(path: &Path, suffix: &str) -> PathBuf {
+    let file_name = path.file_name().and_then(|name| name.to_str()).unwrap_or("app.db");
+    path.with_file_name(format!("{file_name}{suffix}"))
+}
+
+fn is_database_corruption(error: &rusqlite::Error) -> bool {
+    let text = error.to_string().to_ascii_lowercase();
+    ["database disk image is malformed", "file is not a database", "database corruption", "malformed database schema"].iter().any(|needle| text.contains(needle))
+}
+
+fn ensure_recent_consistent_backup(path: &Path) -> Result<()> {
+    let backup = backup_path(path);
+    let stale = backup.metadata().and_then(|metadata| metadata.modified()).ok()
+        .and_then(|modified| SystemTime::now().duration_since(modified).ok())
+        .is_none_or(|age| age >= BACKUP_INTERVAL);
+    if stale { create_consistent_backup(path)?; }
+    Ok(())
+}
+
+/// Create a SQLite-consistent backup outside WAL by asking SQLite to copy it.
+/// The previous verified copy is retained until the new one has been written.
+fn create_consistent_backup(path: &Path) -> Result<()> {
+    let backup = backup_path(path);
+    let previous = previous_backup_path(path);
+    let temporary = temporary_backup_path(path);
+    let _ = fs::remove_file(&temporary);
+    let quoted_temporary = temporary.to_string_lossy().replace('\'', "''");
+    let connection = open(path)?;
+    connection.execute_batch(&format!("VACUUM INTO '{quoted_temporary}';"))?;
+    drop(connection);
+    if !backup_is_consistent(&temporary) {
+        let _ = fs::remove_file(&temporary);
+        return Err(rusqlite::Error::InvalidPath(temporary));
+    }
+    if backup.exists() {
+        let _ = fs::remove_file(&previous);
+        fs::rename(&backup, &previous).map_err(|_| rusqlite::Error::InvalidPath(backup.clone()))?;
+    }
+    if let Err(error) = fs::rename(&temporary, &backup) {
+        if previous.exists() { let _ = fs::rename(&previous, &backup); }
+        return Err(rusqlite::Error::InvalidPath(PathBuf::from(error.to_string())));
+    }
+    Ok(())
+}
+
+fn backup_is_consistent(path: &Path) -> bool {
+    Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .and_then(|connection| connection.query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0)))
+        .is_ok_and(|result| result == "ok")
+}
+
+fn restore_latest_consistent_backup(path: &Path) -> Result<()> {
+    let backup = [backup_path(path), previous_backup_path(path)].into_iter().find(|candidate| backup_is_consistent(candidate))
+        .ok_or_else(|| rusqlite::Error::InvalidPath(path.to_path_buf()))?;
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos();
+    if path.exists() {
+        let quarantine = sibling_path(path, &format!(".corrupt-{stamp}"));
+        fs::rename(path, quarantine).map_err(|_| rusqlite::Error::InvalidPath(path.to_path_buf()))?;
+    }
+    for suffix in ["-wal", "-shm"] {
+        let sidecar = sibling_path(path, suffix);
+        if sidecar.exists() {
+            let quarantine = sibling_path(path, &format!("{suffix}.corrupt-{stamp}"));
+            fs::rename(&sidecar, quarantine).map_err(|_| rusqlite::Error::InvalidPath(sidecar.clone()))?;
+        }
+    }
+    let restore_temporary = sibling_path(path, ".restore");
+    let _ = fs::remove_file(&restore_temporary);
+    fs::copy(&backup, &restore_temporary).map_err(|_| rusqlite::Error::InvalidPath(backup))?;
+    fs::rename(&restore_temporary, path).map_err(|_| rusqlite::Error::InvalidPath(path.to_path_buf()))?;
     Ok(())
 }
 
@@ -328,6 +420,25 @@ mod tests {
         assert_eq!(summary.runs, 1);
         assert_eq!(summary.input_tokens + summary.output_tokens, 8);
         assert_eq!(summary.artifacts, 0);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn restores_a_corrupt_database_from_the_latest_consistent_backup() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-storage-backup-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let path = root.join("app.db");
+        create_conversation(&path, "conversation-backup", "恢复会话", None).unwrap();
+        create_consistent_backup(&path).unwrap();
+
+        std::fs::write(sibling_path(&path, "-wal"), b"stale WAL sidecar").unwrap();
+        std::fs::write(&path, b"not a SQLite database").unwrap();
+        initialize(&path).unwrap();
+
+        assert_eq!(list_conversations(&path).unwrap().len(), 1);
+        assert!(integrity(&path).unwrap());
+        assert!(!sibling_path(&path, "-wal").exists());
+        assert!(root.read_dir().unwrap().filter_map(Result::ok).any(|entry| entry.file_name().to_string_lossy().contains("corrupt")));
         let _ = std::fs::remove_dir_all(root);
     }
 }

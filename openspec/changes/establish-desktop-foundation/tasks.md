@@ -1,13 +1,13 @@
 ## 0. Verify upstream dependencies
 
-- [ ] 0.1 确认 `validate-windows-desktop-feasibility` 的 foundation decision 为 `approved`
-- [ ] 0.2 确认 `extract-shared-application-core` 已归档或全部质量门禁通过
-- [ ] 0.3 链接 foundation architecture decision、runtime contracts 和 WorkbenchClient；runtime spike 仅作诊断参考
-- [ ] 0.4 任一依赖不满足时停止实施，不创建替代协议或复制核心
+- [x] 0.1 确认 `validate-windows-desktop-feasibility` 的 foundation decision 为 `approved`。✓ 2026-08-13 — `docs/desktop/windows-v1-feasibility-results.zh-CN.md` 明确记录 foundation 为 approved、release 为 pending。
+- [x] 0.2 确认 `extract-shared-application-core` 已归档或全部质量门禁通过。✓ 2026-08-13 — 所有 extract tasks 已完成，shared boundary/provenance、SaaS adapter parity、desktop tests、root typecheck/lint/production build 均通过。
+- [x] 0.3 链接 foundation architecture decision、runtime contracts 和 WorkbenchClient；runtime spike 仅作诊断参考。✓ 2026-08-13 — foundation 仅消费 `@aimarketing/runtime-contracts` 与 `@aimarketing/workbench-client` 的稳定导出；可行性文档将 spike 明确限定为诊断证据。
+- [x] 0.4 任一依赖不满足时停止实施，不创建替代协议或复制核心。✓ 2026-08-13 — 前置 status 已重验；桌面 adapter 继续经 shared contracts/ports 工作，不引入替代协议或 legacy shared imports。
 
 **Blocking Quality Gate:**
-- [ ] 依赖状态和接口版本均明确
-- [ ] Foundation decision 已批准，且所有未完成 runtime/release 验收均有明确下游 owner
+- [x] 依赖状态和接口版本均明确
+- [x] Foundation decision 已批准，且所有未完成 runtime/release 验收均有明确下游 owner
 
 ## 1. Create the Tauri host shell
 
@@ -58,10 +58,10 @@
 - [x] 5.4a OpenCode 关键事件和 usage 通过 Tauri commands 登记到 SQLite；完整 raw log rolling 仍待补齐。
 - [x] 5.4b Runtime probe and supervisor now resolve system Node/OpenCode/Python candidates to absolute paths and expose selected paths in diagnostics.
 
-- [ ] 4.1 新建独立 SQLite migrations，不导入 `lib/db/schema.ts`
-- [ ] 4.2 创建 identity、projects、conversations、messages、runs/events、artifacts、usage、workflows/revisions、run nodes/attempts 和 vault mappings
-- [ ] 4.3 启用 WAL、foreign keys、busy timeout、幂等 migration、backup 和 integrity check
-- [ ] 4.4 让 Rust 成为唯一 SQLite owner，并实现 typed repository commands
+- [x] 4.1 新建独立 SQLite migrations，不导入 `lib/db/schema.ts`。✓ 2026-08-13 — Rust `storage.rs` 维护 `schema_migrations`（当前 v2）及幂等 schema upgrades；桌面没有导入线上 schema。
+- [x] 4.2 创建 identity、projects、conversations、messages、runs/events、artifacts、usage、workflows/revisions、run nodes/attempts 和 vault mappings。✓ 2026-08-13 — 本地 schema 与 storage round-trip tests 覆盖这些 transactional metadata 表，不保存 Vault 原文、向量或媒体内容。
+- [x] 4.3 启用 WAL、foreign keys、busy timeout、幂等 migration、backup 和 integrity check。✓ 2026-08-13 — Rust SQLite connection 固定 WAL/foreign keys/5s busy timeout；每五分钟创建 SQLite-consistent backup，遇到损坏时保留隔离副本并恢复最新已验证备份；storage tests 通过。
+- [x] 4.4 让 Rust 成为唯一 SQLite owner，并实现 typed repository commands。✓ 2026-08-13 — 仅 Tauri Rust storage commands 读写 app.db；conversation/message/run/event/artifact/usage/workflow/revision/vault repository commands 已作 idempotent round trip 覆盖。
 - [ ] 4.5 添加并发读/单写、锁、升级和损坏恢复 tests
 
 **Quality Gate:**
