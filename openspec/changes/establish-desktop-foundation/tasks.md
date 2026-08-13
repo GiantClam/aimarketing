@@ -90,7 +90,7 @@
 - [x] 6.4 Tauri 使用 Windows Job Object 监管 workflow-host 与 OpenCode process slots
 - [x] 6.5 Host workflow invalid/cancel paths clean controller state and emit structured terminal errors.
 - [ ] 6.5 实现 crash detection、supervised restart 和 interrupted 状态基础
-- [ ] 6.6 验证 stdout 仅承载 framed RPC，日志使用 stderr→JSONL
+- [x] 6.6 验证 stdout 仅承载 framed RPC，日志使用 stderr→JSONL。✓ 2026-08-13 — Rust host 只转发长度、UTF-8、JSON 均验证且不超过 8 MiB 的 stdout frame；无效或超长行被丢弃并以结构化 runtime log 记录，stderr 仍单独写入 redacted per-run JSONL。
 
 **Quality Gate:**
 - [ ] 并发/反向 RPC 与取消 tests 通过

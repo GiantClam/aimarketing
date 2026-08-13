@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Mutex;
@@ -13,6 +13,62 @@ struct HostProcess { child: Child, stdin: ChildStdin, job: Option<crate::supervi
 
 #[derive(Clone, Debug, Serialize)]
 struct HostEvent { raw: String }
+
+const MAX_RUNTIME_MESSAGE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_RUNTIME_FRAME_BYTES: usize = MAX_RUNTIME_MESSAGE_BYTES + 32;
+
+fn parse_response_frame(raw: &[u8]) -> Result<serde_json::Value, &'static str> {
+    let separator = raw.iter().position(|byte| *byte == b':').ok_or("runtime_frame_invalid_prefix")?;
+    let (declared, payload) = raw.split_at(separator);
+    if declared.is_empty() || !declared.iter().all(u8::is_ascii_digit) { return Err("runtime_frame_invalid_prefix"); }
+    let expected = std::str::from_utf8(declared).ok().and_then(|value| value.parse::<usize>().ok()).ok_or("runtime_frame_invalid_prefix")?;
+    if expected > MAX_RUNTIME_MESSAGE_BYTES { return Err("runtime_message_too_large"); }
+    let payload = &payload[1..];
+    if payload.len() != expected { return Err("runtime_frame_length_mismatch"); }
+    let payload = std::str::from_utf8(payload).map_err(|_| "runtime_frame_invalid_utf8")?;
+    let value = serde_json::from_str::<serde_json::Value>(payload).map_err(|_| "runtime_frame_invalid_json")?;
+    if value.get("version").and_then(serde_json::Value::as_u64) != Some(1)
+        || value.get("requestId").and_then(serde_json::Value::as_str).is_none()
+        || value.get("ok").and_then(serde_json::Value::as_bool).is_none() {
+        return Err("runtime_frame_invalid_response");
+    }
+    Ok(value)
+}
+
+fn discard_until_newline(reader: &mut impl BufRead) -> io::Result<()> {
+    loop {
+        let available = reader.fill_buf()?;
+        if available.is_empty() { return Ok(()); }
+        if let Some(index) = available.iter().position(|byte| *byte == b'\n') {
+            reader.consume(index + 1);
+            return Ok(());
+        }
+        let length = available.len();
+        reader.consume(length);
+    }
+}
+
+fn read_bounded_line(reader: &mut impl BufRead) -> io::Result<Option<Vec<u8>>> {
+    let mut line = Vec::new();
+    loop {
+        let available = reader.fill_buf()?;
+        if available.is_empty() { return if line.is_empty() { Ok(None) } else { Ok(Some(line)) }; }
+        let newline = available.iter().position(|byte| *byte == b'\n');
+        let length = newline.map(|index| index + 1).unwrap_or(available.len());
+        if line.len().saturating_add(length) > MAX_RUNTIME_FRAME_BYTES {
+            reader.consume(length);
+            if newline.is_none() { discard_until_newline(reader)?; }
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "runtime_frame_too_large"));
+        }
+        line.extend_from_slice(&available[..length]);
+        reader.consume(length);
+        if newline.is_some() {
+            if line.last() == Some(&b'\n') { line.pop(); }
+            if line.last() == Some(&b'\r') { line.pop(); }
+            return Ok(Some(line));
+        }
+    }
+}
 
 fn host_script(app: &AppHandle) -> Result<PathBuf, String> {
     let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
@@ -124,12 +180,32 @@ pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), Str
     let log_root = crate::data_dir(&app).map_err(|error| error.to_string())?;
     let stderr_log_root = log_root.clone();
     std::thread::spawn(move || {
-        for line in BufReader::new(stdout).lines().flatten() {
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(line.split_once(':').map(|(_, body)| body).unwrap_or(&line)) {
-                let run_id = value.get("data").and_then(|data| data.get("event")).and_then(|event| event.get("runId")).and_then(serde_json::Value::as_str).unwrap_or("host");
-                crate::logs::append(&log_root, run_id, &line);
-            }
-            let _ = event_app.emit("desktop://runtime-response", HostEvent { raw: line });
+        let mut reader = BufReader::new(stdout);
+        loop {
+            let line = match read_bounded_line(&mut reader) {
+                Ok(Some(line)) => line,
+                Ok(None) => break,
+                Err(error) => {
+                    let raw = serde_json::json!({ "type": "workflow_host_protocol_error", "code": error.to_string() }).to_string();
+                    crate::logs::append(&log_root, "host", &raw);
+                    let _ = event_app.emit("desktop://runtime-log", HostEvent { raw });
+                    if error.kind() != io::ErrorKind::InvalidData { break; }
+                    continue;
+                }
+            };
+            let value = match parse_response_frame(&line) {
+                Ok(value) => value,
+                Err(code) => {
+                    let raw = serde_json::json!({ "type": "workflow_host_protocol_error", "code": code }).to_string();
+                    crate::logs::append(&log_root, "host", &raw);
+                    let _ = event_app.emit("desktop://runtime-log", HostEvent { raw });
+                    continue;
+                }
+            };
+            let run_id = value.get("data").and_then(|data| data.get("event")).and_then(|event| event.get("runId")).and_then(serde_json::Value::as_str).unwrap_or("host");
+            let raw = String::from_utf8(line).expect("validated UTF-8 RPC frame");
+            crate::logs::append(&log_root, run_id, &raw);
+            let _ = event_app.emit("desktop://runtime-response", HostEvent { raw });
         }
     });
     std::thread::spawn(move || {
@@ -164,7 +240,7 @@ pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), Str
 pub fn host_send(state: State<'_, HostState>, message: serde_json::Value) -> Result<(), String> {
     let body = serde_json::to_string(&message).map_err(|error| error.to_string())?;
     let bytes = body.as_bytes().len();
-    if bytes > 8 * 1024 * 1024 { return Err("runtime_message_too_large".to_string()); }
+    if bytes > MAX_RUNTIME_MESSAGE_BYTES { return Err("runtime_message_too_large".to_string()); }
     let mut guard = state.process.lock().map_err(|_| "host_state_poisoned".to_string())?;
     let process = guard.as_mut().ok_or_else(|| "workflow_host_not_running".to_string())?;
     if let Err(error) = write!(process.stdin, "{bytes}:{body}\n").and_then(|_| process.stdin.flush()) {
@@ -182,4 +258,33 @@ pub fn stop_state(state: &HostState) -> Result<(), String> {
     let mut guard = state.process.lock().map_err(|_| "host_state_poisoned".to_string())?;
     if let Some(mut process) = guard.take() { if let Some(job) = process.job.as_ref() { let _ = job.terminate(); } let _ = process.child.kill(); let _ = process.child.wait(); }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stdout_frames_require_a_bounded_utf8_json_payload() {
+        let payload = br#"{"version":1,"requestId":"request","ok":true}"#;
+        let valid = format!("{}:{}", payload.len(), std::str::from_utf8(payload).unwrap());
+        assert_eq!(parse_response_frame(valid.as_bytes()).unwrap()["requestId"], "request");
+        assert_eq!(parse_response_frame(br#"42:{"version":1}"#).unwrap_err(), "runtime_frame_length_mismatch");
+        assert_eq!(parse_response_frame(b"not-a-frame").unwrap_err(), "runtime_frame_invalid_prefix");
+        assert_eq!(parse_response_frame(br#"2:{]"#).unwrap_err(), "runtime_frame_invalid_json");
+        assert_eq!(parse_response_frame(br#"2:{}"#).unwrap_err(), "runtime_frame_invalid_response");
+        assert_eq!(parse_response_frame(b"8388609:{}").unwrap_err(), "runtime_message_too_large");
+    }
+
+    #[test]
+    fn stdout_reader_discards_an_oversized_line_before_parsing_the_next_frame() {
+        let mut source = vec![b'x'; MAX_RUNTIME_FRAME_BYTES + 1];
+        source.push(b'\n');
+        source.extend_from_slice(b"2:[]\n");
+        let mut reader = BufReader::new(std::io::Cursor::new(source));
+
+        let error = read_bounded_line(&mut reader).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(read_bounded_line(&mut reader).unwrap().unwrap(), b"2:[]");
+    }
 }
