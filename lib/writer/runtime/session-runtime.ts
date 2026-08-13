@@ -15,7 +15,7 @@ export type WriterActiveDraft = {
   revision: number
   title: string
   content: string
-  sourceUrls: string[]
+  sourceUrls: readonly string[]
 }
 
 export type WriterRuntimeTurn = {

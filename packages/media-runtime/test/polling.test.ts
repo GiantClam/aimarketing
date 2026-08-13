@@ -6,7 +6,7 @@ test("media runner persists submission then polls without resubmitting", async (
   let submits = 0; let polls = 0; const updates: string[] = [];
   const adapter: MediaProviderAdapter = { provider: "fake" as never, execute: async () => { submits += 1; return { providerTaskId: "task-1", status: "queued", outputs: [] }; }, query: async () => { polls += 1; return { providerTaskId: "task-1", status: polls > 1 ? "succeeded" : "running", outputs: polls > 1 ? [{ path: "out.mp4" }] : [] }; } };
   const cancellation: CancellationPort = { throwIfCancelled: () => undefined };
-  const result = await runMediaJob(adapter, { provider: "fake" as never, modelId: "video", input: {} }, cancellation, { pollIntervalMs: 10, onSubmitted: (task) => updates.push(task.providerTaskId), onUpdate: (task) => updates.push(task.status) });
+  const result = await runMediaJob(adapter, { provider: "fake" as never, modelId: "video", input: {} }, cancellation, { pollIntervalMs: 10, onSubmitted: (task) => { updates.push(task.providerTaskId); }, onUpdate: (task) => { updates.push(task.status); } });
   assert.equal(result.status, "succeeded"); assert.equal(submits, 1); assert.equal(polls, 2); assert.deepEqual(updates, ["task-1", "queued", "running", "succeeded"]);
 });
 

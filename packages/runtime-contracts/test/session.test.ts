@@ -5,7 +5,7 @@ import { OpenCodeSessionClient, type OpenCodeSessionTransport } from "../src/ind
 test("session client keeps conversation/session mapping on a host transport", async () => {
   const calls: string[] = [];
   const transport: OpenCodeSessionTransport = {
-    request: async (method) => { calls.push(method); return method === "session.create" ? { conversationId: "c", sessionId: "s", workspacePath: "p" } : { runId: "r" }; },
+    request: async <T>(method: string) => { calls.push(method); return (method === "session.create" ? { conversationId: "c", sessionId: "s", workspacePath: "p" } : { runId: "r" }) as T; },
     subscribe: (_runId, onEvent) => { onEvent({ event: "done", runId: "r" }); return () => undefined; },
   };
   const client = new OpenCodeSessionClient(transport);

@@ -75,7 +75,7 @@
 
 - [ ] 6.1 Run existing AI runtime, Writer, workflow, media adapter, route, cancellation, retry, and recovery tests.
 - [ ] 6.2 Add contract tests that run equivalent fixtures through the shared core and SaaS adapters.
-- [ ] 6.3 Run root TypeScript validation, ESLint, and Next production build.
+- [x] 6.3 Run root TypeScript validation, ESLint, and Next production build. ✓ 2026-08-13 — root `tsc --noEmit`, ESLint and production `next build` now pass against current source rather than stale per-probe `.next-*` validator outputs.
 - [ ] 6.4 Search production imports to prove there is one shared implementation rather than a copied desktop fork.
 - [ ] 6.5 Record any intentionally SaaS-only behavior and ensure it remains outside shared package exports.
 - [ ] 6.6 Mark this change ready only when all parity gates pass and downstream desktop changes can consume stable exports.

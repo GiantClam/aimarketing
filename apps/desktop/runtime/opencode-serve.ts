@@ -20,7 +20,7 @@ export class OpenCodeServeClient {
   private baseUrl = "";
   private stopping = false;
   private streamAbort: AbortController | undefined;
-  private runtimeEnvironment: NodeJS.ProcessEnv = {};
+  private runtimeEnvironment: NodeJS.ProcessEnv = { NODE_ENV: process.env.NODE_ENV ?? "production" };
   private runtimeWorkspace = "";
   private readonly active = new Map<string, ActiveRun>();
 

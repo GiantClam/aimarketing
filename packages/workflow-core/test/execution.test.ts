@@ -9,7 +9,7 @@ const definition: WorkflowDefinitionEnvelope = { schemaVersion: 2, revision: 1, 
 
 test("workflow execution propagates ports and emits ordered events", async () => {
   const calls: string[] = []; const events: number[] = [];
-  const result = await executeWorkflow(definition, { runId: "run-1", ports: { capability: { execute: async ({ executorId, inputs }) => { calls.push(`${executorId}:${JSON.stringify(inputs)}`); return executorId === "text_input" ? { text: "hello" } : { text: "done" }; } }, events: { append: async (event) => events.push(event.sequence) } } });
+  const result = await executeWorkflow(definition, { runId: "run-1", ports: { capability: { execute: async ({ executorId, inputs }) => { calls.push(`${executorId}:${JSON.stringify(inputs)}`); return executorId === "text_input" ? { text: "hello" } : { text: "done" }; } }, events: { append: async (event) => { events.push(event.sequence); } } } });
   assert.equal(result.status, "succeeded"); assert.equal(calls[1], 'writer:{"text":"hello"}'); assert.deepEqual(events, [1, 2, 3, 4, 5, 6]);
 });
 
