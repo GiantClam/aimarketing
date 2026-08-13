@@ -114,6 +114,7 @@
   - [x] 2026-08-13 `apps/desktop/test/opencode-serve.test.ts` runs one supervised fake-serve process through first and second prompts, asserts streamed text/tool-artifact/usage evidence, aborts a long turn through the cancel endpoint, observes serve crash as retryable, and recreates the session without replaying the prior turn.
 - [x] 6.2 用一个真实配置 Provider 运行普通对话 smoke。✓ 2026-08-13 — `apps/desktop/real-providers.test.local.json` 驱动的 `test:real-providers` 已确认 LLM `/chat/completions` HTTP 200（choices/usage）；同次图片请求连续 3 次 HTTP 502（上游 `upstream_error`，已记录为外部阻塞）；视频/seedance 按验证范围明确未执行。
   - [x] 2026-08-13 rerun: LLM remains HTTP 200 with the expected schema; the configured image endpoint returned upstream HTTP 502 after bounded retries, so this is recorded as an external Provider blocker rather than a local pass. Video remains excluded.
+  - [x] 2026-08-14 current rerun: using `apps/desktop/real-providers.test.local.json`, LLM HTTP 200/schema, OpenAI-compatible image HTTP 200/schema, and MiniMax audio HTTP 200/schema passed; video and Seedance remained explicitly excluded.
 - [x] 6.3 捕获证据证明所有普通 desktop chat 选择 OpenCode
   - [x] 2026-08-13 architecture-boundary and route tests require `session.create`/`session.prompt` and reject direct chat-completions or `ai-sdk-native` paths.
 - [x] 6.4 扫描 bundle 和网络日志，确认无排除的 SaaS 模块/端点

@@ -92,7 +92,8 @@
 
 - [ ] 9.1 Delete the Writer brief-extraction model pass, application intent/rewrite/URL regexes, status-gated draft injection, WeChat dual-Skill binding, and unused legacy prompt builders.
 - [x] 9.2 Verify by code search and tests that production Writer text generation has exactly one OpenCode + Skill path and no legacy fallback flag.
-- [ ] 9.3 Run the complete Writer unit, integration, route, billing, recovery, runtime, Skill, TypeScript, and ESLint suites.
+- [x] 9.3 Run the complete Writer unit, integration, route, billing, recovery, runtime, Skill, TypeScript, and ESLint suites.
+  - [x] 2026-08-14 Writer Skills 45/45, asset 14/14, asset-runtime 4/4, revision 2/2, UI 6/6, session recovery 4/4, billing 31/31, route/stream/demo 14/14, root TypeScript and ESLint all pass. Browser/production smoke gates remain separately open.
 - [ ] 9.4 Run local E2E for all ten platforms across create, adaptive clarification, complete-article revision, translation, platform adaptation, and URL research.
 - [ ] 9.5 Run local image E2E for WeChat cover, platform inline images, cumulative per-image duration, partial success, and recovery.
 - [ ] 9.6 Compare same-prompt article quality against the current production baseline and require no regression in factuality/platform compliance plus an improvement in blind editorial rating.
