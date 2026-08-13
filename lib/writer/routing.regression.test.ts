@@ -14,13 +14,13 @@ function assertRoute(
   }
 }
 
-test("wechat article routing works for Chinese article request", () => {
+test("wechat article routing keeps the registry primary as the only automatic authority", () => {
   assertRoute("帮我写一篇公众号文章，主题是 AI 销售自动化，目标是吸引制造业老板咨询", {
     contentType: "social_cn",
     targetPlatform: "WeChat Official Account",
     renderPlatform: "wechat",
     renderMode: "article",
-    selectedStyleSkillId: "khazix-writer",
+    selectedStyleSkillId: null,
   })
 })
 

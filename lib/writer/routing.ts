@@ -10,7 +10,6 @@ import {
   getWriterPlatformSkillByTargetPlatform,
   matchWriterPlatformSkill,
   matchWriterStyleSkill,
-  getWriterStyleSkillMeta,
 } from "@/lib/writer/skill-catalog"
 import type { WriterRoutingDecision } from "@/lib/writer/types"
 
@@ -387,9 +386,10 @@ export function buildWriterRoutingDecision(input: RoutingInput): WriterRoutingDe
   const selectedPlatformSkill =
     getWriterPlatformSkillByTargetPlatform(targetPlatform) || matchWriterPlatformSkill(input.query)
   const explicitStyleSkill = matchWriterStyleSkill(input.query)
-  const isKhazixWechatRoute = renderProfile.renderPlatform === "wechat" && renderProfile.renderMode === "article"
-  const selectedStyleSkill =
-    isKhazixWechatRoute ? explicitStyleSkill || getWriterStyleSkillMeta("khazix-writer") : explicitStyleSkill
+  // WeChat's `khazix-writer` binding is the registry primary Skill, not an
+  // automatically injected style Skill. Optional styles must be explicitly
+  // selected by the user and accepted by the active platform binding.
+  const selectedStyleSkill = explicitStyleSkill
 
   return {
     contentType,

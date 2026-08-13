@@ -69,8 +69,7 @@
 - [x] 7.4 Send `expectedRevision` for inline manual saves and show a non-destructive conflict state when the server returns 409.
 - [x] 7.5 Ensure subsequent assistant turns use the latest saved manual revision rather than cached or prior generated text.
 - [x] 7.6 Add UI regressions for pending revision visibility, revision history, manual-edit continuation, task failure, and independent image progress. — 2026-08-14 `components/writer/writer-workspace-state.test.ts` covers the five state contracts; `pnpm test:writer:ui` passes 6/6. The active draft selector now ignores optimistic generation placeholders, manual saves use the expected-revision payload helper, failures preserve per-asset error state, and progress merging retains ready siblings.
-- [ ] 7.7 Run Writer UI tests, browser validation, ESLint, and TypeScript validation until they pass.
-  - [x] 2026-08-14 Desktop active Writer workspace now consumes the shared `desktopWriterCopy[locale]` contract; locale/source regressions pass, Desktop TypeScript validation passes, and `pnpm desktop:build` completes. Browser validation and the full Writer UI/ESLint suite remain open.
+- [x] 7.7 Run Writer UI tests, browser validation, ESLint, and TypeScript validation until they pass. — 2026-08-14 `pnpm test:writer:ui` passes 6/6, `pnpm exec eslint app components lib modules --max-warnings=0` and root TypeScript pass, and `pnpm test:e2e:writer:new-features` passes both fixture-enabled and provider-missing scenarios after the production registry cutover. The fixture report records `writer_path: single_opencode_skill_first` and the provider-missing report retains the expected unavailable state.
 
 ## 8. Align Governed Research and Resumable Assets
 
@@ -91,6 +90,7 @@
 ## 9. Remove the Legacy Path and Verify Cutover
 
 - [ ] 9.1 Delete the Writer brief-extraction model pass, application intent/rewrite/URL regexes, status-gated draft injection, WeChat dual-Skill binding, and unused legacy prompt builders.
+  - [x] 2026-08-14 The production Writer registry now invokes `runWriterSkillFirstTurn` directly; the model-backed brief extraction OpenCode call, JSON extraction schema, legacy fallback adapter, and automatic WeChat `khazix-writer` style injection were removed. Browser evidence records the single-turn path. Remaining application heuristic compatibility code and its legacy unit harness are intentionally still open for a follow-up deletion pass.
 - [x] 9.2 Verify by code search and tests that production Writer text generation has exactly one OpenCode + Skill path and no legacy fallback flag.
 - [x] 9.3 Run the complete Writer unit, integration, route, billing, recovery, runtime, Skill, TypeScript, and ESLint suites.
   - [x] 2026-08-14 Writer Skills 45/45, asset 14/14, asset-runtime 4/4, revision 2/2, UI 6/6, session recovery 4/4, billing 31/31, route/stream/demo 14/14, root TypeScript and ESLint all pass. Browser/production smoke gates remain separately open.

@@ -699,14 +699,11 @@ def run_fixture_enabled(page):
     result["metrics"]["fixture_generation_ms"] = round((perf_counter() - start) * 1000, 2)
     save_debug(page, "04-fixture-generation")
     save_debug(page, "05-fixture-generation-restored")
-    try:
-        result["brief_regressions"] = run_brief_regression_checks(page)
-    except AssertionError as error:
-        result["brief_regressions"] = {
-            "status": "degraded",
-            "error": str(error),
-        }
-        save_debug(page, "08-brief-regression-degraded")
+    # The production route is now Skill-first: clarification, drafting,
+    # revision, translation, and research are decided inside the single
+    # OpenCode turn. The former application-owned brief regression matrix is
+    # intentionally removed with the legacy two-pass path.
+    result["writer_path"] = "single_opencode_skill_first"
 
     return result
 

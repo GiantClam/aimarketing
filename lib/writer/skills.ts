@@ -11,7 +11,6 @@ import { z } from "zod"
 import {
   WRITER_CONTENT_TYPE_CONFIG,
   WRITER_PLATFORM_CONFIG,
-  isWriterContentType,
   type WriterContentType,
   type WriterLanguage,
   type WriterMode,
@@ -365,7 +364,7 @@ const WRITER_PRIOR_DRAFT_MAX_CHARS = 6_000
 const WRITER_BRIEF_EXTRACTION_MAX_CHARS = 220
 const WRITER_BRIEF_FIELD_IDS = ["contentType", "targetPlatform", "topic", "audience", "objective", "tone"] as const
 const WRITER_TURN_INTENT_IDS = ["capability_question", "briefing", "direct_draft", "rewrite"] as const
-const WRITER_RETRIEVAL_HINT_SCHEMA = z
+const _WRITER_RETRIEVAL_HINT_SCHEMA = z
   .object({
     enterpriseKnowledgeNeeded: z.boolean().default(false),
     freshResearchNeeded: z.boolean().default(false),
@@ -378,34 +377,6 @@ const WRITER_RETRIEVAL_HINT_SCHEMA = z
     confidence: 0,
     reason: "",
   })
-const WRITER_BRIEF_EXTRACTION_SCHEMA = z.object({
-  resolvedBrief: z.object({
-    topic: z.string().default(""),
-    audience: z.string().default(""),
-    objective: z.string().default(""),
-    tone: z.string().default(""),
-    constraints: z.string().default(""),
-  }),
-  routingDecision: z.object({
-    contentType: z.string().default(""),
-    targetPlatform: z.string().default(""),
-    outputForm: z.string().default(""),
-    lengthTarget: z.string().default(""),
-  }).default({
-    contentType: "",
-    targetPlatform: "",
-    outputForm: "",
-    lengthTarget: "",
-  }),
-  answeredFields: z.array(z.enum(WRITER_BRIEF_FIELD_IDS)).default([]),
-  suggestedFollowUpFields: z.array(z.enum(WRITER_BRIEF_FIELD_IDS)).max(2).default([]),
-  suggestedFollowUpQuestion: z.string().default(""),
-  turnIntent: z.enum(WRITER_TURN_INTENT_IDS).default("briefing"),
-  userWantsDirectOutput: z.boolean().default(false),
-  briefSufficient: z.boolean().default(false),
-  retrievalHints: WRITER_RETRIEVAL_HINT_SCHEMA,
-  confidence: z.number().min(0).max(1).default(0),
-})
 const _WRITER_TONE_KEYWORDS = [
   "professional",
   "conversational",
@@ -460,7 +431,7 @@ const _CLEAN_WRITER_TONE_KEYWORDS = [
 
 type WriterBriefFieldId = (typeof WRITER_BRIEF_FIELD_IDS)[number]
 type WriterTurnIntent = (typeof WRITER_TURN_INTENT_IDS)[number]
-type WriterRetrievalHints = z.infer<typeof WRITER_RETRIEVAL_HINT_SCHEMA>
+type WriterRetrievalHints = z.infer<typeof _WRITER_RETRIEVAL_HINT_SCHEMA>
 
 type WriterConversationBrief = {
   topic: string
@@ -643,7 +614,7 @@ type WriterSkillsRuntime = {
   getBriefingGuide: typeof getWriterBriefingGuide
   getContentGuide: typeof getWriterContentGuide
   getRuntimeGuide: typeof getWriterRuntimeGuide
-  extractBrief: typeof extractWriterBriefWithModel
+  extractBrief: typeof extractWriterBriefWithFixture
   generateDraft: typeof generateWriterDraftWithSkills
 }
 
@@ -1269,21 +1240,6 @@ function sanitizeWriterBriefFields(fields: WriterBriefFieldId[]) {
   return fields.filter((field, index) => WRITER_BRIEF_FIELD_IDS.includes(field) && fields.indexOf(field) === index)
 }
 
-function extractJsonObjectFromText(text: string) {
-  const trimmed = text.trim()
-  if (!trimmed) return ""
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/iu.exec(trimmed)
-  if (fenced?.[1]) {
-    return fenced[1].trim()
-  }
-  const startIndex = trimmed.indexOf("{")
-  const endIndex = trimmed.lastIndexOf("}")
-  if (startIndex >= 0 && endIndex > startIndex) {
-    return trimmed.slice(startIndex, endIndex + 1)
-  }
-  return trimmed
-}
-
 function extractFirstMatch(text: string, patterns: RegExp[]) {
   for (const pattern of patterns) {
     const match = pattern.exec(text)
@@ -1332,22 +1288,6 @@ function _legacyExtractTopicFromText(text: string) {
   }
 
   return ""
-}
-
-function sanitizeStructuredRoutingDecision(routing: {
-  contentType: string
-  targetPlatform: string
-  outputForm: string
-  lengthTarget: string
-}): WriterRoutingHistory {
-  const contentType = routing.contentType.trim()
-
-  return {
-    contentType: isWriterContentType(contentType) ? contentType : undefined,
-    targetPlatform: routing.targetPlatform.trim() || undefined,
-    outputForm: routing.outputForm.trim() || undefined,
-    lengthTarget: routing.lengthTarget.trim() || undefined,
-  }
 }
 
 function _legacyExtractAudienceFromText(text: string) {
@@ -1897,7 +1837,7 @@ function buildWriterBriefExtractionContext(history: WriterHistoryEntry[], curren
   return turns.join("\n\n")
 }
 
-function buildWriterBriefExtractionPrompt(params: {
+function _legacyBuildWriterBriefExtractionPrompt(params: {
   query: string
   history: WriterHistoryEntry[]
   brief: WriterConversationBrief
@@ -2187,72 +2127,6 @@ function extractWriterBriefWithFixture(params: {
     briefSufficient,
     retrievalHints,
     confidence: inferredFromPromptedReply.objective || inferredFromPromptedReply.audience ? 0.96 : 0.72,
-  }
-}
-
-async function extractWriterBriefWithModel(params: {
-  query: string
-  history: WriterHistoryEntry[]
-  brief: WriterConversationBrief
-  platform: WriterPlatform
-  mode: WriterMode
-  preferredLanguage: WriterLanguage
-  briefingGuide: WriterBriefingSkillDocument
-  conversationStatus?: WriterConversationStatus
-  selectedProviderId?: AiEntryProviderId | null
-  selectedModelId?: string | null
-}): Promise<WriterBriefExtractionResult | null> {
-  if (shouldUseWriterE2EFixtures()) {
-    return extractWriterBriefWithFixture(params)
-  }
-
-  try {
-    const { systemPrompt, userPrompt } = buildWriterBriefExtractionPrompt(params)
-    const heuristicRouting = resolveWriterRoutingFromSignals({
-      query: params.query,
-      priorRouting: getPriorRoutingFromHistory(params.history),
-      conversationStatus: params.conversationStatus,
-    })
-    const result = await runWriterOpenCodeText({
-      systemPrompt,
-      userPrompt,
-      history: params.history,
-      selectedSkillIds: [
-        "writer-briefing",
-        ...resolveWriterOpenCodeSkillIds({
-          contentType: heuristicRouting.contentType,
-          targetPlatform: heuristicRouting.targetPlatform,
-          styleSkillId: heuristicRouting.selectedStyleSkillId,
-        }),
-      ],
-      writerPhase: "briefing",
-      allowNetwork: false,
-      conversationId: null,
-      selectedProviderId: params.selectedProviderId,
-      selectedModelId: params.selectedModelId,
-    })
-    const parsed = WRITER_BRIEF_EXTRACTION_SCHEMA.safeParse(JSON.parse(extractJsonObjectFromText(result.answer)))
-    if (!parsed.success) {
-      console.warn("writer.brief-extraction.invalid", parsed.error.flatten())
-      return null
-    }
-
-    return {
-      resolvedBrief: mergeStructuredWriterBrief(createEmptyWriterBrief(), parsed.data.resolvedBrief),
-      routingDecision: sanitizeStructuredRoutingDecision(parsed.data.routingDecision),
-      answeredFields: sanitizeWriterBriefFields(parsed.data.answeredFields),
-      suggestedFollowUpFields: sanitizeWriterBriefFields(parsed.data.suggestedFollowUpFields),
-      suggestedFollowUpQuestion: parsed.data.suggestedFollowUpQuestion.trim(),
-      turnIntent: parsed.data.turnIntent,
-      userWantsDirectOutput: parsed.data.userWantsDirectOutput,
-      briefSufficient: parsed.data.briefSufficient,
-      retrievalHints: parsed.data.retrievalHints,
-      confidence: parsed.data.confidence,
-      usage: result.usage,
-    }
-  } catch (error) {
-    console.warn("writer.brief-extraction.failed", error instanceof Error ? error.message : String(error))
-    return null
   }
 }
 
@@ -4370,6 +4244,70 @@ export function validateWriterSkillFirstTurnResult(params: {
   return binding
 }
 
+function buildWriterFixtureFirstTurnResult(params: {
+  query: string
+  platform: WriterPlatform
+  mode: WriterMode
+  preferredLanguage: WriterLanguage
+  writerContext?: WriterRuntimeContext | null
+  platformLabel: string
+  binding: ReturnType<typeof resolveWriterPlatformBinding>
+}) {
+  const priorUserTurns = params.writerContext?.recentTurns.filter((turn) => turn.role === "user").length || 0
+  const hasActiveDraft = Boolean(params.writerContext?.activeDraft)
+  const shouldClarify = !hasActiveDraft && priorUserTurns === 0
+  const contentType: WriterContentType = ["wechat", "xiaohongshu", "weibo", "douyin"].includes(params.platform)
+    ? "social_cn"
+    : "social_global"
+  const selectedSkillIds = resolveWriterOpenCodeSkillIds({
+    contentType,
+    targetPlatform: params.platformLabel,
+  })
+
+  if (shouldClarify) {
+    const chinese = params.preferredLanguage === "zh" || (params.preferredLanguage === "auto" && /[\u4e00-\u9fff]/u.test(params.query))
+    const result: WriterSubmitResult = {
+      schemaVersion: 1,
+      outcome: "needs_clarification",
+      operation: "create",
+      platform: params.platform,
+      userMessage: chinese
+        ? "我还需要确认一下受众、目标和语气，再开始生成完整稿件。"
+        : "Audience: please confirm the target audience, goal, and tone before I draft the full piece.",
+      draft: null,
+      research: { requested: false, completed: false, sourceUrls: [] },
+      assetIntents: [],
+    }
+    return { result, selectedSkillIds }
+  }
+
+  const content = safeBuildFixtureDraft(params.platform, params.mode, params.preferredLanguage)
+  const title = content.match(/^#\s+(.+)$/mu)?.[1]?.trim() || "Writer Fixture Draft"
+  const result: WriterSubmitResult = {
+    schemaVersion: 1,
+    outcome: "draft_ready",
+    operation: hasActiveDraft ? "revise" : "create",
+    platform: params.platform,
+    userMessage: params.preferredLanguage === "zh" ? "已完成文章草稿。" : "The article draft is ready.",
+    draft: {
+      title,
+      content,
+      baseRevision: params.writerContext?.activeDraft?.revision || 0,
+    },
+    research: { requested: false, completed: false, sourceUrls: [] },
+    assetIntents: params.binding.assets.cover
+      ? [{
+          id: "cover",
+          kind: "cover",
+          prompt: "editorial cover image",
+          placement: "after_title",
+          aspectRatio: params.binding.assets.aspectRatios[0] || "16:9",
+        }]
+      : [],
+  }
+  return { result, selectedSkillIds }
+}
+
 export async function runWriterSkillFirstTurn(params: {
   query: string
   platform: WriterPlatform
@@ -4418,6 +4356,53 @@ export async function runWriterSkillFirstTurn(params: {
     contentType,
     targetPlatform: platformLabel,
   })
+  if (shouldUseWriterE2EFixtures()) {
+    const fixture = buildWriterFixtureFirstTurnResult({
+      query: params.query,
+      platform: params.platform,
+      mode: params.mode,
+      preferredLanguage,
+      writerContext: params.writerContext,
+      platformLabel,
+      binding,
+    })
+    const writerResult = fixture.result
+    validateWriterSkillFirstTurnResult({
+      platform: params.platform,
+      mode: params.mode,
+      platformLabel,
+      activeRevision: params.writerContext?.activeDraft?.revision || 0,
+      activeTitle: params.writerContext?.activeDraft?.title,
+      allowTitleChange: isWriterTitleOnlyRevisionRequest(params.query),
+      result: writerResult,
+      activatedSkillIds: ["writer-orchestrator", ...fixture.selectedSkillIds.filter((id) => id !== "writer-orchestrator")],
+      resultToolCallCount: 1,
+    })
+    const diagnostics = buildWriterTurnDiagnostics({
+      retrievalStrategy: "no_retrieval",
+      enterpriseKnowledge: null,
+      enterpriseKnowledgeEnabled: Boolean(params.enterpriseId),
+      research: createEmptyResearchResult("skipped"),
+      routing,
+    })
+    return {
+      outcome: writerResult.outcome,
+      answer: writerResult.outcome === "draft_ready" ? writerResult.draft?.content || writerResult.userMessage : writerResult.userMessage,
+      diagnostics,
+      brief: createEmptyWriterBrief(),
+      routing,
+      missingFields: [],
+      turnCount: (params.writerContext?.recentTurns.filter((turn) => turn.role === "user").length || 0) + 1,
+      maxTurns: 1,
+      readyForGeneration: writerResult.outcome === "draft_ready",
+      assetIntents: writerResult.assetIntents,
+      selectedSkill: {
+        id: "writer-platform-generation",
+        label: platformLabel,
+        stage: "execution",
+      },
+    }
+  }
   const invoke = (writerContext: WriterRuntimeContext | null) => runWriterOpenCodeText({
     systemPrompt,
     userPrompt: params.query,
@@ -4492,7 +4477,7 @@ const defaultWriterSkillsRuntime: WriterSkillsRuntime = {
   getBriefingGuide: getWriterBriefingGuide,
   getContentGuide: getWriterContentGuide,
   getRuntimeGuide: getWriterRuntimeGuide,
-  extractBrief: extractWriterBriefWithModel,
+  extractBrief: extractWriterBriefWithFixture,
   generateDraft: generateWriterDraftWithSkills,
 }
 
@@ -4644,8 +4629,6 @@ export async function runWriterSkillsTurnWithRuntime(
     preferredLanguage,
     briefingGuide,
     conversationStatus,
-    selectedProviderId: params.selectedProviderId,
-    selectedModelId: params.selectedModelId,
   })
   const mergedBrief =
     structuredExtraction && structuredExtraction.confidence >= 0.45
