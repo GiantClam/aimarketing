@@ -1,4 +1,5 @@
 const REQUIRED_SMOKE_ENTRIES = ["llm", "image"];
+const CAPABILITY_DEFAULTS = new Set(["text", "image", "video", "audio"]);
 
 function isRecord(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -6,6 +7,24 @@ function isRecord(value) {
 
 function requiredString(value) {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function validateProviderProfile(profileId, profile) {
+  const errors = [];
+  const prefix = `provider_${profileId}`;
+  if (!isRecord(profile)) return [`${prefix}_entry_invalid`];
+  for (const field of ["id", "model", "baseUrl", "apiKey"]) {
+    if (!requiredString(profile[field])) errors.push(`${prefix}_${field}_missing`);
+  }
+  if (!requiredString(profile.source) && !requiredString(profile.provider)) errors.push(`${prefix}_source_missing`);
+  if (requiredString(profile.id) && profile.id.trim() !== profileId) errors.push(`${prefix}_id_mismatch`);
+  if (requiredString(profile.baseUrl)) {
+    try {
+      const url = new URL(profile.baseUrl);
+      if (url.protocol !== "https:" && url.protocol !== "http:") errors.push(`${prefix}_baseUrl_protocol_invalid`);
+    } catch { errors.push(`${prefix}_baseUrl_invalid`); }
+  }
+  return errors;
 }
 
 export function validateRealProviderConfig(value) {
@@ -25,6 +44,31 @@ export function validateRealProviderConfig(value) {
         const url = new URL(entry.baseUrl);
         if (url.protocol !== "https:" && url.protocol !== "http:") errors.push(`${label}_baseUrl_protocol_invalid`);
       } catch { errors.push(`${label}_baseUrl_invalid`); }
+    }
+  }
+  if (value.providers !== undefined) {
+    if (!isRecord(value.providers)) errors.push("providers_not_object");
+    else {
+      for (const [profileId, profile] of Object.entries(value.providers)) {
+        if (!requiredString(profileId)) errors.push("provider_id_missing");
+        else errors.push(...validateProviderProfile(profileId, profile));
+      }
+    }
+  }
+  if (value.defaults !== undefined) {
+    if (!isRecord(value.defaults)) errors.push("defaults_not_object");
+    else {
+      for (const [capability, profileId] of Object.entries(value.defaults)) {
+        if (!CAPABILITY_DEFAULTS.has(capability)) {
+          errors.push(`default_${capability}_unsupported`);
+          continue;
+        }
+        if (!requiredString(profileId)) {
+          errors.push(`default_${capability}_missing`);
+          continue;
+        }
+        if (!isRecord(value.providers) || !isRecord(value.providers[profileId])) errors.push(`default_${capability}_unknown_provider`);
+      }
     }
   }
   return errors;

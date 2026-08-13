@@ -18,6 +18,20 @@ test("real provider smoke config validates required LLM and image entries withou
   assert.throws(() => assertRealProviderConfig({ llm: {}, image: {} }), /real_provider_config_invalid/);
 });
 
+test("real provider profiles and capability defaults remain independently addressable", () => {
+  const configured = {
+    ...valid,
+    providers: {
+      "audio-primary": { id: "audio-primary", provider: "minimax", baseUrl: "https://example.test/v1", apiKey: audioCredentialFixture, model: "speech-primary" },
+      "audio-fallback": { id: "audio-fallback", provider: "minimax", baseUrl: "https://example.test/v1", apiKey: audioCredentialFixture, model: "speech-fallback" },
+    },
+    defaults: { audio: "audio-primary" },
+  };
+  assert.deepEqual(validateRealProviderConfig(configured), []);
+  assert.deepEqual(validateRealProviderConfig({ ...configured, defaults: { audio: "missing" } }), ["default_audio_unknown_provider"]);
+  assert.deepEqual(validateRealProviderConfig({ ...configured, providers: { broken: { id: "other", provider: "minimax", baseUrl: "https://example.test/v1", apiKey: audioCredentialFixture, model: "speech" } }, defaults: { audio: "broken" } }), ["provider_broken_id_mismatch"]);
+});
+
 test("real provider smoke response checks are capability-specific and exclude video", () => {
   assert.equal(hasExpectedSmokeResponse("llm", { model: "chat-model", choices: [{ message: { content: "ok" } }], usage: {} }), true);
   assert.equal(hasExpectedSmokeResponse("llm", { model: "chat-model", choices: [] }), false);
