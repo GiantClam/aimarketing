@@ -500,7 +500,9 @@ export async function downloadMediaOutputs(task: MediaTask, directory: string, o
         digest = hash.digest("hex");
         name = `${options.filenamePrefix ?? "media"}-${index + 1}-${digest.slice(0, 12)}${extension}`;
         const target = path.join(directory, name);
-        await fs.rename(temporary, target);
+        const targetExists = await fs.access(target).then(() => true).catch(() => false);
+        if (targetExists) await fs.rm(temporary, { force: true });
+        else await fs.rename(temporary, target);
       } catch (error) {
         if (handle) await handle.close().catch(() => undefined);
         await fs.rm(temporary, { force: true }).catch(() => undefined);

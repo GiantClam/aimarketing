@@ -49,6 +49,7 @@
 **Quality Gate:**
 - [x] 强制杀死并重启后只继续 poll、不重复 submit
   - [x] 2026-08-13 recovery allocates a fresh Rust-owned temp directory and resumes by provider task ID; the host never re-submits an existing task.
+  - [x] 2026-08-14 repeated successful downloads reuse an existing content-addressed target instead of failing on Windows rename semantics; media-runtime regression covers the same task downloaded twice.
 - [x] 大文件不以 base64 经过 UI/IPC
   - [x] 2026-08-13 desktop streams File chunks into Rust-owned attachment files; source regression rejects `readAsDataURL`/`btoa` and verifies bounded chunk RPC.
 - [x] API Key 不进入命令行、SQLite、日志或诊断包

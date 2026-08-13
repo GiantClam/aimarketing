@@ -90,6 +90,16 @@ test("downloads media output to an atomic local artifact", async () => {
   assert.equal(result[0].contentType, "video/mp4");
 });
 
+test("reuses an existing content-addressed media artifact on retry", async () => {
+  const root = await mkdtemp(join(tmpdir(), "aimarketing-media-retry-"));
+  const task = { providerTaskId: "task-retry", status: "succeeded" as const, outputs: [{ url: "https://files.invalid/clip.mp4" }] };
+  const fetchImpl: typeof fetch = async () => new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "video/mp4" } });
+  const first = await downloadMediaOutputs(task, root, { fetchImpl, filenamePrefix: "clip" });
+  const second = await downloadMediaOutputs(task, root, { fetchImpl, filenamePrefix: "clip" });
+  assert.equal(second[0]?.relativePath, first[0]?.relativePath);
+  assert.deepEqual(await readdir(root), [first[0]?.relativePath]);
+});
+
 test("rejects media output that exceeds the local artifact limit or MIME policy", async () => {
   const root = await mkdtemp(join(tmpdir(), "aimarketing-media-limit-"));
   await assert.rejects(
