@@ -14,7 +14,8 @@
 **Quality Gate:**
 - [x] 缺 WebView2 时仍能显示修复进度
   - [x] 2026-08-14 native pre-window bootstrap now opens a Win32 status window before downloading/installing WebView2, updates visible locale-selected Chinese/English stages for detection/download/install+reprobe, and destroys it before the main WebView is created; Rust regression locks both ordered language variants.
-- [ ] 不存在受限主界面或跳过必要 runtime 的路径
+- [x] 不存在受限主界面或跳过必要 runtime 的路径
+  - Evidence (2026-08-14): Desktop bundle-boundary scan reports zero restricted SaaS-only imports/affordances, while native startup ordering and bootstrap readiness tests require WebView2 plus every mandatory runtime component before the main WebView; the 108-test Desktop suite and 39-test Rust suite pass.
 - [x] 系统 PATH 在本次启动中变化不会改变已选 executable — 2026-08-14 persisted runtime-path and Windows command-shim regressions prove the canonical executable is selected and stored before host launch, independently of later PATH changes.
 
 ## 2. Signed multi-source distribution
