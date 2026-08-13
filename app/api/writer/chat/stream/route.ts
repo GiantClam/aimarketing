@@ -70,6 +70,24 @@ function estimateWriterTokens(text: string) {
   return Math.max(1, Math.ceil(text.length / 4))
 }
 
+function normalizeWriterIdempotencyKey(input: unknown) {
+  if (typeof input !== "string") return null
+  const value = input.trim()
+  if (!value || value.length > 128) return null
+  return /^[A-Za-z0-9._:-]+$/u.test(value) ? value : null
+}
+
+function resolveWriterRequestKey(req: NextRequest, body: Record<string, unknown>) {
+  const headerKey = req.headers?.get?.("Idempotency-Key")
+  return (
+    normalizeWriterIdempotencyKey(body.idempotencyKey) ||
+    normalizeWriterIdempotencyKey(body.request_id) ||
+    normalizeWriterIdempotencyKey(body.requestId) ||
+    normalizeWriterIdempotencyKey(headerKey) ||
+    `task-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`
+  )
+}
+
 function normalizeWriterPreloadedBrief(input: unknown): WriterPreloadedBrief | null {
   if (!input || typeof input !== "object") return null
 
@@ -109,6 +127,8 @@ export async function POST(req: NextRequest) {
         : typeof body?.selectedModelId === "string" && body.selectedModelId.trim()
           ? body.selectedModelId.trim()
           : null
+    const requestKey = resolveWriterRequestKey(req, body as Record<string, unknown>)
+    const billingOperationKey = `writer-copy:stream:${auth.user.id}:${requestKey}`
 
     const rateLimit = await checkRateLimit({
       key: `writer:chat:stream:${auth.user.id}:${getRequestIp(req)}:${platform}:${mode}`,
@@ -152,7 +172,7 @@ export async function POST(req: NextRequest) {
         enterpriseId: auth.user.enterpriseId,
         featureKey: reserveEstimate.featureKey,
         amount: reserveEstimate.credits,
-        idempotencyKey: `writer-copy:stream:reserve:${auth.user.id}:${Date.now()}`,
+        idempotencyKey: `${billingOperationKey}:reserve`,
         metadata: {
           route: "writer.chat.stream",
           platform,
@@ -374,7 +394,7 @@ export async function POST(req: NextRequest) {
             userId: auth.user.id,
             enterpriseId: auth.user.enterpriseId,
             actualAmount: actualCost.credits,
-            idempotencyKey: `writer-copy:stream:debit:${pending.conversationId}:${taskId}`,
+            idempotencyKey: `${billingOperationKey}:debit`,
             provider: actualCost.provider,
             model: actualCost.model,
             officialCostUsd: actualCost.officialCostUsd,
@@ -426,7 +446,7 @@ export async function POST(req: NextRequest) {
               reservation: writerCreditReservation,
               userId: auth.user.id,
               enterpriseId: auth.user.enterpriseId,
-              idempotencyKey: `writer-copy:stream:release:${pending.conversationId}:${taskId}`,
+              idempotencyKey: `${billingOperationKey}:release`,
               reason: error instanceof Error ? error.message : "writer_stream_failed",
             }).catch((billingError) => {
               console.warn("writer.chat.stream.billing.release_failed", {

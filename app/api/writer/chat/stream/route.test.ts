@@ -17,6 +17,9 @@ let writerRunnerShouldThrow = false
 let activeRevision = 0
 let persistedExpectedRevision: number | null = null
 let updatedAssistantStatuses: string[] = []
+let reserveIdempotencyKeys: string[] = []
+let finalizeIdempotencyKeys: string[] = []
+let releaseIdempotencyKeys: string[] = []
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -38,14 +41,17 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   }
   if (request === "@/lib/billing/runtime") {
     return {
-      reserveFeatureCredits: async () => {
+      reserveFeatureCredits: async (input: { idempotencyKey?: string }) => {
+        if (input.idempotencyKey) reserveIdempotencyKeys.push(input.idempotencyKey)
         if (reserveShouldThrow) throw new Error("insufficient_credits")
         return { creditAccountId: 1, reserveIdempotencyKey: "reserve-1", amount: 10 }
       },
-      finalizeReservedCredits: async () => {
+      finalizeReservedCredits: async (input: { idempotencyKey?: string }) => {
+        if (input.idempotencyKey) finalizeIdempotencyKeys.push(input.idempotencyKey)
         finalizeCalls += 1
       },
-      releaseReservedCredits: async () => {
+      releaseReservedCredits: async (input: { idempotencyKey?: string }) => {
+        if (input.idempotencyKey) releaseIdempotencyKeys.push(input.idempotencyKey)
         releaseCalls += 1
       },
     }
@@ -158,6 +164,9 @@ test.beforeEach(() => {
   activeRevision = 0
   persistedExpectedRevision = null
   updatedAssistantStatuses = []
+  reserveIdempotencyKeys = []
+  finalizeIdempotencyKeys = []
+  releaseIdempotencyKeys = []
 })
 
 test.after(() => {
@@ -193,6 +202,28 @@ test("writer chat stream route finalizes credits on success", async () => {
   assert.equal(typeof (lastWriterRunInput?.writerContext as { sessionKey?: unknown })?.sessionKey, "string")
   assert.equal(finalizeCalls, 1)
   assert.equal(releaseCalls, 0)
+})
+
+test("writer chat stream reuses a supplied idempotency key across billing phases and retries", async () => {
+  const requestBody = {
+    query: "write a launch post",
+    idempotencyKey: "writer-retry-42",
+  }
+
+  const first = await POST({ json: async () => requestBody } as any)
+  await new Response(first.body).text()
+  const second = await POST({ json: async () => requestBody } as any)
+  await new Response(second.body).text()
+
+  assert.deepEqual(reserveIdempotencyKeys, [
+    "writer-copy:stream:7:writer-retry-42:reserve",
+    "writer-copy:stream:7:writer-retry-42:reserve",
+  ])
+  assert.deepEqual(finalizeIdempotencyKeys, [
+    "writer-copy:stream:7:writer-retry-42:debit",
+    "writer-copy:stream:7:writer-retry-42:debit",
+  ])
+  assert.deepEqual(releaseIdempotencyKeys, [])
 })
 
 test("writer chat stream persists a revision against the active draft revision", async () => {

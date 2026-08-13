@@ -46,8 +46,8 @@
 - [x] 5.5 Implement the Writer turn service for context loading, billing reservation, one OpenCode invocation, result validation, atomic persistence, diagnostics, and billing finalization/release.
 - [x] 5.6 Make `app/api/writer/chat/route.ts` a thin authenticated enqueue boundary that does not construct or clip generation prompts.
 - [x] 5.7 Make `lib/assistant-async.ts` delegate Writer turns to the new service and preserve task idempotency/recovery events.
-- [ ] 5.8 Add tests for first draft, revision, failed generation, stale revision, retry idempotency, reserve/finalize/release, and existing-conversation backfill.
-- [ ] 5.9 Run route, service, repository, billing, migration, and recovery tests until they pass.
+- [x] 5.8 Add tests for first draft, revision, failed generation, stale revision, retry idempotency, reserve/finalize/release, and existing-conversation backfill.
+- [x] 5.9 Run route, service, repository, billing, migration, and recovery tests until they pass.
 
 ## 6. Migrate and Synchronize Every Platform Skill
 
