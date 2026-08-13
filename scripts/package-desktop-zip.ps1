@@ -26,6 +26,10 @@ function Assert-DesktopPackageArchive {
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $archive = [System.IO.Compression.ZipFile]::OpenRead($ArchivePath)
   try {
+    function Find-ArchiveEntry([System.IO.Compression.ZipArchive]$ZipArchive, [string]$EntryName) {
+      $normalized = $EntryName.Replace('\', '/')
+      return $ZipArchive.Entries | Where-Object { $_.FullName.Replace('\', '/') -eq $normalized } | Select-Object -First 1
+    }
     $requiredEntries = @(
       "$PackageName/AI Marketing.exe",
       "$PackageName/README.txt",
@@ -35,8 +39,9 @@ function Assert-DesktopPackageArchive {
     )
     if ($ExpectPortable) { $requiredEntries += "$PackageName/portable.flag" }
     foreach ($entryName in $requiredEntries) {
-      if ($null -eq $archive.GetEntry($entryName)) { throw "package archive missing required entry: $entryName" }
+      if ($null -eq (Find-ArchiveEntry $archive $entryName)) { throw "package archive missing required entry: $entryName" }
     }
+    if (-not $ExpectPortable -and $null -ne (Find-ArchiveEntry $archive "$PackageName/portable.flag")) { throw "normal package must not contain portable.flag" }
 
     $expectedLengths = @{
       "$PackageName/AI Marketing.exe" = (Get-Item -LiteralPath $ExecutablePath).Length
@@ -44,7 +49,7 @@ function Assert-DesktopPackageArchive {
       "$PackageName/_up_/dist-runtime/skill-catalog.json" = (Get-Item -LiteralPath (Join-Path $RuntimePath "skill-catalog.json")).Length
     }
     foreach ($entryName in $expectedLengths.Keys) {
-      $entry = $archive.GetEntry($entryName)
+      $entry = Find-ArchiveEntry $archive $entryName
       if ($entry.Length -ne $expectedLengths[$entryName]) {
         throw "package archive has stale content: $entryName expected $($expectedLengths[$entryName]) bytes, found $($entry.Length)"
       }
@@ -73,9 +78,11 @@ try {
 AI Marketing Windows green package
 
 Run AI Marketing.exe.
+Supported targets: Windows 10 22H2 and Windows 11, x64.
 Mode: $mode
 Normal mode stores application data in %LOCALAPPDATA%\AIMarketing.
 Portable mode stores application data in the data\ directory beside the executable.
+Upgrades are manual: close AI Marketing, back up the data directory in portable mode, then replace the ZIP contents. The app never downloads or replaces itself automatically.
 The portable package includes config.json and may include a plaintext API key; protect copied archives.
 External Obsidian Vault folders are not copied; the configured Vault path must remain available or be relocated after copying.
 The system WebView2 runtime is not copied; the first launch probes or repairs it on the target machine.

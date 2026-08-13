@@ -41,10 +41,11 @@
 
 ## 4. Normal and portable packages
 
-- [ ] 4.1 生成普通 ZIP，数据/runtime 默认位于 `%LOCALAPPDATA%\AIMarketing`
+- [x] 4.1 生成普通 ZIP，数据/runtime 默认位于 `%LOCALAPPDATA%\AIMarketing`
+  - [x] 2026-08-13 使用现有 Windows release 产物生成并读取校验 `AI-Marketing-Windows-x64-normal.zip`（268,943,017 bytes）；归档含 EXE、host、Skill catalog、runtime manifest，且不含 `portable.flag`。README 标注 `%LOCALAPPDATA%\AIMarketing`、Win10 22H2/Win11 x64 和人工升级方式。
 - [x] 4.2 生成含 `portable.flag` 的便携 ZIP，全部应用数据位于程序旁 `data/`
   - [x] 4.2a 打包脚本在压缩后检查 portable/runtime 必需条目，并核对可执行文件、host 和 Skill catalog 的归档字节长度。
-  - [x] 4.2b 2026-08-13 使用隔离的 release target 构建 Windows EXE 和 NSIS 包，并生成 268,060,981 字节的 `AI-Marketing-Windows-x64-portable.zip`；独立归档读取校验了 EXE、`portable.flag`、README、workflow host、Skill catalog 和 runtime manifest，以及 EXE、host、catalog 的字节长度。跨机器复制验证仍由 4.4 覆盖。
+  - [x] 4.2b 2026-08-13 使用隔离的 release target 构建 Windows EXE 和 NSIS 包，并生成 269,006,577 字节的 `AI-Marketing-Windows-x64-portable.zip`；独立归档读取校验了 EXE、`portable.flag`、README、workflow host、Skill catalog 和 runtime manifest，以及 EXE、host、catalog 的字节长度。跨机器复制验证仍由 4.4 覆盖。
 - [x] 4.3 实现普通/便携单实例锁和数据库/索引占用提示
   - [x] `InstanceLock` 按 normal/portable 数据根目录创建单实例锁；冲突错误包含 owner PID 和关闭现有实例的可操作提示，SQLite 连接设置 5 秒 `busy_timeout`。
   - [x] 2026-08-13 `cargo test ... instance_lock::tests` 通过 2/2，覆盖同一路径互斥和未知 owner 提示。
@@ -67,7 +68,8 @@
 - [ ] 5.4 执行主 ZIP、解压后、runtime 补齐后的组件级 size budget
 - [ ] 5.5 执行 Authenticode、manifest 签名、依赖漏洞和许可证审计
 - [ ] 5.6 执行 desktop 全量 E2E 与 SaaS lint/build/regression
-- [ ] 5.7 发布人工 ZIP 升级说明和已知限制，不启用应用内自动更新
+- [x] 5.7 发布人工 ZIP 升级说明和已知限制，不启用应用内自动更新
+  - [x] 普通/便携 ZIP README 均说明关闭应用后手动替换；便携模式先备份 `data/`；不自动下载或替换自身，并明确外部 Vault、系统 WebView2 和明文 API Key 边界。
 
 **Quality Gate:**
 - [ ] 全新 VM 可完成首个对话、PPT、媒体、工作流和 Vault 检索
