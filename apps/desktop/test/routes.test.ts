@@ -312,6 +312,7 @@ test("desktop media workspace keeps cloud upload, voice-library, and task action
 
 test("desktop keeps cloud writer preview geometry and workflow locale labels", () => {
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  const localeSource = readFileSync(resolve(process.cwd(), "src/i18n.ts"), "utf8");
   const styleSource = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
   assert.match(styleSource, /\.writer-preview-overlay \{ position: fixed; inset: 0; z-index: 100; display: flex; justify-content: flex-end/);
   assert.match(styleSource, /\.writer-preview-sheet \{ width: min\(920px, 100%\); height: 100%/);
@@ -319,6 +320,9 @@ test("desktop keeps cloud writer preview geometry and workflow locale labels", (
   assert.match(appSource, /\{actionLabel\(item\)\}/);
   assert.match(appSource, /const nodeTitle = \(node: WorkflowDefinitionNodeV2\)/);
   assert.match(appSource, /workflowActionEnglish\[node\.type\]/);
+  assert.match(appSource, /const writerCopy = desktopWriterCopy\[locale\]/);
+  assert.match(appSource, /<DesktopWriterCloudWorkspace locale=\{locale\}/);
+  assert.match(localeSource, /export const desktopWriterCopy/);
 });
 
 test("desktop asset and task routes mirror the cloud library interaction contract", () => {

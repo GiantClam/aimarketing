@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { WORKBENCH_MEDIA_FEATURES } from "@aimarketing/workbench-ui";
-import { desktopCopy, detectDesktopLocale, mediaPlaceholderEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale } from "../src/i18n";
+import { desktopCopy, desktopWriterCopy, detectDesktopLocale, mediaPlaceholderEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale } from "../src/i18n";
 import { localizeRuntimeStatus } from "../src/App";
 
 test("desktop locale follows Windows/WebView language by default", () => {
@@ -44,4 +44,14 @@ test("account-free home copy keeps the cloud fallback greeting", () => {
 test("runtime repair failures are fully localized in the English shell", () => {
   assert.equal(localizeRuntimeStatus("运行环境修复失败：runtime_install_incomplete", "en"), "Runtime repair failed: runtime_install_incomplete");
   assert.equal(localizeRuntimeStatus("运行环境修复失败：runtime_install_incomplete", "zh"), "运行环境修复失败：runtime_install_incomplete");
+});
+
+test("active Writer workspace has a complete bilingual copy contract", () => {
+  const keys = Object.keys(desktopWriterCopy.zh) as Array<keyof typeof desktopWriterCopy.zh>;
+  assert.deepEqual(Object.keys(desktopWriterCopy.en).sort(), keys.sort());
+  for (const key of keys) {
+    assert.ok(desktopWriterCopy.zh[key]);
+    assert.ok(desktopWriterCopy.en[key]);
+    assert.doesNotMatch(desktopWriterCopy.en[key], /[\u4e00-\u9fff]/u);
+  }
 });

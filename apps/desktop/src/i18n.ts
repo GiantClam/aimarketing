@@ -132,6 +132,25 @@ export const writerModeEnglish: Record<string, string> = { article: "Article", t
 
 export const writerLanguageEnglish: Record<string, string> = { auto: "Auto-detect", zh: "Chinese", en: "English", ja: "Japanese", ko: "Korean", fr: "French", de: "German", es: "Spanish" };
 
+export const desktopWriterCopy = {
+  zh: {
+    skill: "内容写作 Skill", quick: "快捷开始", quickStart: "快速开始", you: "你", assistant: "写作助手",
+    preview: "预览", generateImage: "生成图片", copied: "已复制", rich: "复制富文本", markdown: "复制 Markdown",
+    status: "支持文案预览与配图生成", new: "新建", close: "关闭", done: "完成", send: "发送", stop: "停止",
+    platform: "平台", content: "内容", mode: "模式", language: "语言", finalPreview: "最终预览",
+    previewHint: "可继续编辑、导出或复制。", generateImageWithCopy: "生成图片配图",
+    placeholder: "告诉我你的写作目标、受众和渠道。例如：写一篇面向品牌负责人的招商文章。",
+  },
+  en: {
+    skill: "Content Writing Skill", quick: "Quick start", quickStart: "Quick start", you: "You", assistant: "Writing assistant",
+    preview: "Preview", generateImage: "Generate image", copied: "Copied", rich: "Copy rich text", markdown: "Copy Markdown",
+    status: "Preview and image generation supported", new: "New", close: "Close", done: "Done", send: "Send", stop: "Stop",
+    platform: "Platform", content: "Content", mode: "Mode", language: "Language", finalPreview: "Final preview",
+    previewHint: "Continue editing, exporting, or copying.", generateImageWithCopy: "Generate image assets",
+    placeholder: "Tell me your writing goal, audience, and channel. For example: write a partner acquisition article for brand leaders.",
+  },
+} as const;
+
 export const capabilityEnglish: Record<string, { title: string; description: string }> = {
   writer: { title: "Content writing", description: "Generate, rewrite, and organize marketing content with the local OpenCode Writer Skill." },
   ppt_generate: { title: "AI PPT", description: "Generate editable PPTX files in the project directory with OpenCode + ppt-master." },
