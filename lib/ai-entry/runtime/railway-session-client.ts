@@ -10,11 +10,26 @@ export type RailwaySessionClientOptions = {
   timeoutMs?: number
 }
 
+export type RailwaySessionRunState = {
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "timed_out"
+  events?: unknown[]
+  artifacts?: unknown[]
+  error?: string | null
+}
+
 function endpoint(options: RailwaySessionClientOptions) {
   const runnerUrl = (options.runnerUrl || process.env.RAILWAY_OPENCODE_RUNTIME_URL || "").trim().replace(/\/+$/u, "")
   const secret = (options.secret || process.env.RAILWAY_OPENCODE_RUNTIME_TOKEN || "").trim()
   if (!runnerUrl || !secret) throw new Error("railway_opencode_runtime_not_configured")
   return { runnerUrl, secret, fetchImpl: options.fetchImpl || fetch }
+}
+
+function requestSignal(options: RailwaySessionClientOptions, timeoutMs = 10_000) {
+  const timeoutSignal = AbortSignal.timeout(Math.max(1_000, timeoutMs))
+  if (!options.signal) return timeoutSignal
+  return typeof AbortSignal.any === "function"
+    ? AbortSignal.any([options.signal, timeoutSignal])
+    : options.signal
 }
 
 function isRuntimeEvent(value: unknown): value is AgentRuntimeEvent {
@@ -52,7 +67,7 @@ export async function prepareRailwaySession(
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
     body: JSON.stringify(request),
-    signal: options.signal,
+    signal: requestSignal(options),
   })
   return parseJson<{ prepared: boolean; sessionReady: boolean; sessionKey: string; bundleVersion?: string; contextHash?: string; expiresAt?: string }>(response)
 }
@@ -66,9 +81,18 @@ export async function enqueueRailwaySessionRun(
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}`, Prefer: "respond-async", "X-Idempotency-Key": request.runId },
     body: JSON.stringify({ input: request.input, provider: request.provider }),
-    signal: options.signal,
+    signal: requestSignal(options),
   })
   return parseJson<{ runId: string; status: "queued" | "running" | "succeeded" | "failed" | "cancelled" }>(response)
+}
+
+export async function getRailwaySessionRun(runId: string, options: RailwaySessionClientOptions = {}) {
+  const { runnerUrl, secret, fetchImpl } = endpoint(options)
+  const response = await fetchImpl(`${runnerUrl}/runs/${encodeURIComponent(runId)}`, {
+    headers: { Authorization: `Bearer ${secret}` },
+    signal: requestSignal(options),
+  })
+  return parseJson<RailwaySessionRunState>(response)
 }
 
 async function* recoverRun(input: {

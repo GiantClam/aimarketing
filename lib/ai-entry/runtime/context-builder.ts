@@ -236,7 +236,12 @@ export function buildAgentRuntimeInput(input: {
   const contextHash = createHash("sha256").update(JSON.stringify({
     revision: input.conversationRevision ?? null,
     messages: finalMessages.slice(-20),
-    summary: input.conversationSummary || null,
+    // The Railway runtime validates the legacy-compatible outer envelope and
+    // does not receive conversationSummary as a top-level input field. The
+    // summary is already represented in finalMessages when it fits the
+    // context window, so hashing it separately makes app/runtime deployments
+    // disagree whenever a persisted summary exists.
+    summary: null,
     artifactRefs: artifacts,
   })).digest("hex")
 

@@ -40,6 +40,18 @@ test("missing runner URL cannot select a broken OpenCode path", () => {
   assert.equal(profile.backend, "native")
 })
 
+test("masked deployment placeholders cannot enable a broken OpenCode path", () => {
+  const profile = resolveEditablePptRailwayRuntimeProfile({
+    AI_ENTRY_SAAS_OPENCODE_ENABLED: "true",
+    AI_ENTRY_PPT_RAILWAY_ENABLED: "true",
+    RAILWAY_OPENCODE_RUNTIME_URL: "[SENSITIVE]",
+    RAILWAY_OPENCODE_RUNTIME_TOKEN: "[SENSITIVE]",
+  })
+  assert.equal(profile.enabled, false)
+  assert.equal(profile.runnerUrl, null)
+  assert.equal(profile.provider, "ai-sdk-native")
+})
+
 test("resolves the Railway OpenCode runtime without Cloudflare dependencies", () => {
   const profile = resolveDefaultAgentRuntimeProfile({
     AI_ENTRY_SAAS_OPENCODE_ENABLED: "true",

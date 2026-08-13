@@ -54,3 +54,23 @@ test("a synchronous OpenCode message response releases the persistent session lo
   assert.equal(second, true)
   assert.match(requestPath, /\/session\/native-session\/message\?directory=/u)
 })
+
+test("an ambiguous OpenCode response is not replayed as a second model turn", async () => {
+  const manager = new OpenCodeServeManager({ runtimeDir: "/tmp/opencode-runtime-test", bundleDir: "/tmp/runtime", bundleVersion: "test", requestTimeoutMs: 5_000 })
+  let requestCount = 0
+  const testHooks = manager as unknown as {
+    start: () => Promise<void>
+    request: (path: string, init?: RequestInit, timeoutMs?: number) => Promise<Response>
+  }
+  testHooks.start = async () => undefined
+  testHooks.request = async () => {
+    requestCount += 1
+    if (requestCount === 1) return new Response(JSON.stringify({ error: "fetch failed" }), { status: 502 })
+    return new Response(JSON.stringify({ info: { role: "assistant" }, parts: [] }), { status: 200 })
+  }
+
+  const completed = await manager.prompt(input("run-retry"), "native-session", "/tmp/session", provider, "system", "retry", () => undefined)
+
+  assert.equal(completed, false)
+  assert.equal(requestCount, 1)
+})

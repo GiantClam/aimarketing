@@ -27,6 +27,7 @@ export type AiEntryTaskRunEvent = {
 
 export type AiEntryTaskRunSummary = {
   task_id: string
+  task_source?: "legacy" | "runtime"
   status: AiEntryTaskRunStatus
   task_type: "preview_ppt_deck" | "opencode_agent_run"
   conversation_id: string | null
@@ -60,6 +61,7 @@ type TaskRunSource = {
   updatedAt?: Date | string | number | null
   startedAt?: Date | string | number | null
   finishedAt?: Date | string | number | null
+  taskSource?: "legacy" | "runtime"
 }
 
 function safeParseRecord(value: unknown) {
@@ -292,6 +294,7 @@ export function parseAiEntryOpenCodeTaskRunSummary(source: TaskRunSource): AiEnt
   const progress = resolveProgress({ status, stage, result })
   return {
     task_id: String(taskId),
+    task_source: "runtime",
     status,
     task_type: "opencode_agent_run",
     conversation_id: normalizeText(payload?.conversationId) || normalizeText(result?.conversation_id),
@@ -380,6 +383,7 @@ export function parseAiEntryTaskRunSummary(source: TaskRunSource): AiEntryTaskRu
 
   return {
     task_id: String(taskId),
+    task_source: "legacy",
     status,
     task_type: taskType,
     conversation_id: normalizeText(payload?.conversationId) || normalizeText(result?.conversation_id),

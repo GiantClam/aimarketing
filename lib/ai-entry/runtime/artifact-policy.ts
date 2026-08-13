@@ -22,8 +22,8 @@ export const DASHI_PPT_MAX_ARTIFACT_BYTES = 100 * 1024 * 1024
 export const DASHI_PPT_MAX_ARTIFACT_TOTAL_BYTES = 200 * 1024 * 1024
 
 export function isDashiPptRuntime(agentId: unknown, selectedSkillIds: unknown) {
-  return agentId === "executive-presentation-ppt" ||
-    (Array.isArray(selectedSkillIds) && selectedSkillIds.includes("dashiai-ppt"))
+  return agentId === "executive-presentation-ppt" || agentId === "executive-ppt" ||
+    (Array.isArray(selectedSkillIds) && (selectedSkillIds.includes("dashiai-ppt") || selectedSkillIds.includes("ppt-master")))
 }
 
 export function runtimeArtifactExtensions(agentId: unknown, selectedSkillIds: unknown) {

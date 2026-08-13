@@ -9,7 +9,7 @@ test.afterEach(() => {
   delete process.env.PPT_WORKER_INTERNAL_TOKEN
 })
 
-test("worker health route returns ok", async () => {
+test("worker health route returns ok without authentication", async () => {
   const response = await routeRequest(new Request("http://worker.local/health", { method: "GET" }))
   assert.equal(response.status, 200)
 
@@ -39,10 +39,10 @@ test("worker fonts route returns injected font status", async () => {
   })
 })
 
-test("worker rejects unauthorized requests when token is configured", async () => {
+test("worker rejects protected requests when token is configured", async () => {
   process.env.PPT_WORKER_INTERNAL_TOKEN = "secret-token"
 
-  const response = await routeRequest(new Request("http://worker.local/health", { method: "GET" }))
+  const response = await routeRequest(new Request("http://worker.local/fonts/check", { method: "GET" }))
   assert.equal(response.status, 401)
 
   const payload = await response.json()

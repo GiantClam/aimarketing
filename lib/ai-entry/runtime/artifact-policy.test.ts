@@ -20,6 +20,19 @@ test("allows native Dashi artifact files up to 100MB", () => {
   assert.equal(limits.maxArtifactTotalBytes, DASHI_PPT_MAX_ARTIFACT_TOTAL_BYTES)
 })
 
+test("applies the large artifact contract to the editable PPT runtime", () => {
+  const limits = resolveRuntimeArtifactLimits({
+    agentId: "executive-ppt",
+    selectedSkillIds: ["ppt-master"],
+    maxArtifacts: 24,
+    maxArtifactBytes: 2 * 1024 * 1024,
+    maxArtifactTotalBytes: 16 * 1024 * 1024,
+  })
+
+  assert.equal(limits.maxArtifactBytes, DASHI_PPT_MAX_ARTIFACT_BYTES)
+  assert.equal(limits.maxArtifactTotalBytes, DASHI_PPT_MAX_ARTIFACT_TOTAL_BYTES)
+})
+
 test("does not widen generic runtime artifact limits", () => {
   const limits = resolveRuntimeArtifactLimits({
     agentId: "general",

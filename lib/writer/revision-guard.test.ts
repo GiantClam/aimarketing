@@ -53,6 +53,18 @@ test("non-title revisions reject application-side placeholder content", () => {
   )
 })
 
+test("revisions align a provider's stale base revision to the active draft", () => {
+  const reconciled = reconcileWriterRevisionResult({
+    query: "请重新写一篇 AI 营销简介",
+    result: {
+      ...result,
+      draft: { ...result.draft!, content: "# 新标题\n\n完整的新正文。", baseRevision: 0 },
+    },
+    activeDraft,
+  })
+  assert.equal(reconciled.draft?.baseRevision, activeDraft.revision)
+})
+
 test("title-only revision does not silently accept an unchanged title", () => {
   assert.throws(
     () => reconcileWriterRevisionResult({

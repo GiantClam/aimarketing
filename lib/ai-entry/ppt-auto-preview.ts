@@ -6,7 +6,6 @@ import {
   buildPptToolResultMessage,
   stripPptTemplateRecommendationMessageBlocks,
 } from "@/lib/ai-entry/ppt-tool-result-message"
-import { isAiEntryPptAgentId } from "@/lib/ai-entry/model-policy"
 
 type PptPreviewToolLike = {
   execute?: (input: unknown, options?: unknown) => Promise<unknown> | unknown
@@ -17,9 +16,6 @@ type AutoPreviewResult = {
   autoPreviewExecuted: boolean
   previewResult: unknown | null
 }
-
-const PPT_AUTO_PREVIEW_INTENT_PATTERN =
-  /(?:生成|制作|输出|导出|预览|打开|继续|create|generate|build|export|preview|open)/iu
 
 function readOptionalText(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null
@@ -51,15 +47,10 @@ export function shouldAutoRunPptPreview(input: {
   previewAlreadyExecuted: boolean
   messageContents?: string[]
 }) {
-  if (!isAiEntryPptAgentId(input.agentId)) return false
-  if (input.executionContext === "workflow") return false
-  if (input.previewAlreadyExecuted) return false
-  if (!input.briefState?.readyForPreview) return false
-  if (input.agentId === "executive-ppt") {
-    // Editable PPT template choices must be resolved by the LLM tool call.
-    return false
-  }
-  return PPT_AUTO_PREVIEW_INTENT_PATTERN.test(input.latestUserPrompt.trim())
+  // PPT execution decisions belong to the OpenCode agent and its tools.
+  // Never infer preview/export intent from user wording in the application layer.
+  void input
+  return false
 }
 
 export async function maybeAutoRunPptPreview(input: {

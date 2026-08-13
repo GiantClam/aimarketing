@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { prepareRailwaySession, streamRailwaySessionRun } from "./railway-session-client"
+import { getRailwaySessionRun, prepareRailwaySession, streamRailwaySessionRun } from "./railway-session-client"
 
 const input = {
   runId: "11111111-1111-4111-8111-111111111111",
@@ -39,6 +39,21 @@ test("Railway session preparation returns an explicit session_ready marker", asy
     },
   })
   assert.equal(result.sessionReady, true)
+})
+
+test("Railway session client reads the authoritative detached run state", async () => {
+  const result = await getRailwaySessionRun(input.runId, {
+    runnerUrl: "https://railway.example.com/",
+    secret: "secret",
+    fetchImpl: async (url, options) => {
+      assert.equal(url, `https://railway.example.com/runs/${input.runId}`)
+      assert.equal((options?.headers as Record<string, string>).Authorization, "Bearer secret")
+      return new Response(JSON.stringify({ status: "succeeded", events: [{ event: "done", runId: input.runId }], artifacts: [] }), { status: 200 })
+    },
+  })
+
+  assert.equal(result.status, "succeeded")
+  assert.equal(result.events?.[0] && (result.events[0] as { event?: string }).event, "done")
 })
 
 test("Railway session client consumes the live SSE stream without async polling", async () => {

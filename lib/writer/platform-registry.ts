@@ -5,7 +5,7 @@ import path from "node:path"
 import { WRITER_PLATFORM_ORDER, type WriterPlatform } from "@/lib/writer/config"
 
 export const WRITER_PLATFORM_REGISTRY_SCHEMA_VERSION = 2 as const
-export const WRITER_REGISTRY_PLATFORMS = WRITER_PLATFORM_ORDER.filter((platform) => platform !== "generic") as WriterPlatform[]
+export const WRITER_REGISTRY_PLATFORMS = [...WRITER_PLATFORM_ORDER] as WriterPlatform[]
 
 export type WriterPrimarySkillBinding = {
   skillId: string

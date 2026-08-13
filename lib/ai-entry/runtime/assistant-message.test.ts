@@ -1,7 +1,28 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { buildRuntimeAssistantMessage } from "./assistant-message"
+import { buildRuntimeAssistantArtifactParts, buildRuntimeAssistantMessage } from "./assistant-message"
+
+test("runtime completion maps artifacts into parts of the same assistant turn", () => {
+  assert.deepEqual(buildRuntimeAssistantArtifactParts([{
+    artifactId: 7,
+    kind: "pptx",
+    title: "deck",
+    fileName: "deck.pptx",
+    publicUrl: "/download/deck",
+  }]), [{
+    type: "artifact",
+    id: "runtime-artifact:7",
+    artifactType: "pptx",
+    artifactId: 7,
+    title: "deck",
+    fileName: "deck.pptx",
+    previewUrl: null,
+    downloadUrl: "/download/deck",
+    workHref: null,
+    status: "created",
+  }])
+})
 
 test("runtime completion keeps model text when it is available", () => {
   assert.equal(

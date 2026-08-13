@@ -97,6 +97,14 @@ tests/screenshots/
 
 .playwright-cli/
 
+# Local AI/PPT validation output
+.cache/ppt-preview-sessions/
+.superpowers/
+Library/
+analysis/
+reports/
+output/
+
 docs/
 !docs/
 docs/*

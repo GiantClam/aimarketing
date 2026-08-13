@@ -11,3 +11,13 @@ export function platformTaskStatusFromRailway(status: RailwayRuntimeStatus): Pla
 export function isRailwayRuntimeTerminal(status: RailwayRuntimeStatus) {
   return status === "succeeded" || status === "failed" || status === "cancelled" || status === "timed_out"
 }
+
+/**
+ * A state read can race the write that carried the terminal event. Prefer the
+ * explicit terminal status from that event so the platform task cannot stay
+ * queued/running after the runtime has already completed.
+ */
+export function resolveRailwayRuntimeStatus(explicit: RailwayRuntimeStatus | undefined, current: RailwayRuntimeStatus | null | undefined) {
+  if (explicit && isRailwayRuntimeTerminal(explicit)) return explicit
+  return current || explicit || "running"
+}

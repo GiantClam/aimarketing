@@ -14,9 +14,14 @@ function readPositiveInt(value: string | undefined, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
+function isMaskedEnvValue(value: string | undefined) {
+  const normalized = value?.trim().toLowerCase() || ""
+  return !normalized || normalized === "[sensitive]" || normalized === "[redacted]" || normalized === "[masked]"
+}
+
 function normalizeUrl(value: string | undefined) {
   const normalized = value?.trim().replace(/\/+$/, "") || ""
-  return normalized || null
+  return isMaskedEnvValue(normalized) ? null : normalized
 }
 
 function buildProfile(input: {
@@ -71,7 +76,7 @@ export function resolveDefaultAgentRuntimeProfile(env: Readonly<Record<string, s
   const requestedBackend = env.AI_ENTRY_OPENCODE_BACKEND?.trim() || "railway-opencode"
   const railwayRuntime = requestedBackend === "railway-opencode"
   const runnerUrl = normalizeUrl(env.RAILWAY_OPENCODE_RUNTIME_URL)
-  const hasRunnerSecret = Boolean(env.RAILWAY_OPENCODE_RUNTIME_TOKEN?.trim())
+  const hasRunnerSecret = !isMaskedEnvValue(env.RAILWAY_OPENCODE_RUNTIME_TOKEN)
   const enabled =
     readBoolean(env.AI_ENTRY_SAAS_OPENCODE_ENABLED, false) &&
     (runtimeMode === "" || runtimeMode === "opencode-railway") &&
@@ -98,7 +103,7 @@ export function resolveWriterOpenCodeRuntimeProfile(
     readBoolean(env.AI_ENTRY_WRITER_OPENCODE_ENABLED, true) &&
     readBoolean(env.AI_ENTRY_SAAS_OPENCODE_ENABLED, false)
   const runnerUrl = normalizeUrl(env.RAILWAY_OPENCODE_RUNTIME_URL)
-  const hasRunnerSecret = Boolean(env.RAILWAY_OPENCODE_RUNTIME_TOKEN?.trim())
+  const hasRunnerSecret = !isMaskedEnvValue(env.RAILWAY_OPENCODE_RUNTIME_TOKEN)
   return buildProfile({
     env,
     backend: "railway-opencode",
@@ -115,7 +120,7 @@ export function resolveEditablePptRailwayRuntimeProfile(
 ): RuntimeProfile {
   const enabled = readBoolean(env.AI_ENTRY_PPT_RAILWAY_ENABLED, false) && readBoolean(env.AI_ENTRY_SAAS_OPENCODE_ENABLED, false)
   const runnerUrl = normalizeUrl(env.RAILWAY_OPENCODE_RUNTIME_URL)
-  const hasRunnerSecret = Boolean(env.RAILWAY_OPENCODE_RUNTIME_TOKEN?.trim())
+  const hasRunnerSecret = !isMaskedEnvValue(env.RAILWAY_OPENCODE_RUNTIME_TOKEN)
   const profile = buildProfile({
     env,
     backend: "railway-opencode",
@@ -142,7 +147,7 @@ export function resolveBusinessAgentRailwayRuntimeProfile(
     readBoolean(env.AI_ENTRY_BUSINESS_AGENT_RAILWAY_ENABLED, true) &&
     readBoolean(env.AI_ENTRY_SAAS_OPENCODE_ENABLED, false)
   const runnerUrl = normalizeUrl(env.RAILWAY_OPENCODE_RUNTIME_URL)
-  const hasRunnerSecret = Boolean(env.RAILWAY_OPENCODE_RUNTIME_TOKEN?.trim())
+  const hasRunnerSecret = !isMaskedEnvValue(env.RAILWAY_OPENCODE_RUNTIME_TOKEN)
   const profile = buildProfile({
     env,
     backend: "railway-opencode",
@@ -167,14 +172,14 @@ export function resolveDashiPptCloudflareRuntimeProfile(
   const enabled =
     readBoolean(env.AI_ENTRY_SAAS_OPENCODE_ENABLED, false) &&
     Boolean(runnerUrl) &&
-    Boolean(runnerSecret)
+    !isMaskedEnvValue(runnerSecret)
   const profile = buildProfile({
     env,
     backend: "cloudflare-opencode-session",
     deploymentMode: "saas-cloudflare-sandbox",
     enabled,
     runnerUrl,
-    hasRunnerSecret: Boolean(runnerSecret),
+    hasRunnerSecret: !isMaskedEnvValue(runnerSecret),
     timeoutEnvKey: "CLOUDFLARE_OPENCODE_V2_TIMEOUT_MS",
     maxArtifactsEnvKey: "CLOUDFLARE_OPENCODE_MAX_ARTIFACTS",
     maxArtifactBytesEnvKey: "CLOUDFLARE_OPENCODE_MAX_ARTIFACT_BYTES",

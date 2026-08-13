@@ -18,7 +18,10 @@ COPY package.json ./package.json
 COPY package-lock.json ./package-lock.json
 COPY tsconfig.json ./tsconfig.json
 
-RUN npm ci --legacy-peer-deps
+# package-lock.json is maintained by the pnpm application workflow and can
+# lag package.json after AI SDK upgrades. Reconcile it in the isolated worker
+# image instead of failing the Railway build at npm ci.
+RUN npm install --legacy-peer-deps --no-audit --no-fund
 
 COPY lib ./lib
 COPY infra/railway/ppt-master-worker ./infra/railway/ppt-master-worker

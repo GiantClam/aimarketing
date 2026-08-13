@@ -52,6 +52,10 @@ export function buildRuntimeConfig(input: AgentRuntimeInputV2, provider: OpenCod
           options: {
             baseURL: provider.baseUrl,
             apiKey: `{env:${runtime.envKey}}`,
+            // OpenCode's default provider timeout is five minutes. PPT
+            // rendering and quality checks can legitimately take longer;
+            // the surrounding runtime owns the turn deadline.
+            timeout: false,
           },
           models: {
             [provider.modelId]: buildOpenCodeModelConfig(

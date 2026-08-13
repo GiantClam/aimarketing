@@ -116,7 +116,7 @@ test("uses the signed provider key only for its matching OpenCode provider", asy
   assert.equal(config.provider.deepseek.options.baseURL, "https://deepseek.example/v1")
 })
 
-test("routes Grok through the signed PPToken provider", async () => {
+test("routes Grok through the signed PPToken provider without a five-minute timeout", async () => {
   const config = buildRuntimeConfig({
     agentId: "executive-ppt",
     policy: { allowNetwork: true },
@@ -126,9 +126,10 @@ test("routes Grok through the signed PPToken provider", async () => {
     modelId: "grok-4.5",
     baseUrl: "https://pptoken.example/api/v1",
     apiKey: "pptoken-test-key",
-  }) as { provider?: Record<string, { options?: { baseURL?: string; apiKey?: string }; models?: Record<string, unknown> }> }
+  }) as { provider?: Record<string, { options?: { baseURL?: string; apiKey?: string; timeout?: number | false }; models?: Record<string, unknown> }> }
   assert.equal(config.provider?.pptoken?.options?.baseURL, "https://pptoken.example/api/v1")
   assert.equal(config.provider?.pptoken?.options?.apiKey, "{env:PPTOKEN_API_KEY}")
+  assert.equal(config.provider?.pptoken?.options?.timeout, false)
   assert.ok(config.provider?.pptoken?.models?.["grok-4.5"])
 })
 

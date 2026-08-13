@@ -2317,6 +2317,11 @@ function launchClaimedTask(taskId: number, workerId: string) {
     })
     .catch(async (error) => {
       const primaryErrorMessage = error instanceof Error ? error.message : String(error)
+      console.error("assistant.task.run_failed", {
+        taskId,
+        message: primaryErrorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+      })
       let task: ParsedTaskRow | null = null
 
       try {

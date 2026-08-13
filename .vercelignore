@@ -13,7 +13,6 @@
 /.auto-coder
 /.ralph-tui
 /node_modules
-/infra
 /output
 /artifacts
 /deploy

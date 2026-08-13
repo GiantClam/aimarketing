@@ -50,8 +50,10 @@ type AiEntryMessageRow = {
   content: string
   parts?: unknown[] | null
   metadata?: Record<string, unknown> | null
+  idempotencyKey?: string | null
   knowledge_source?: string | null
   createdAt?: Date | string | number | null
+  createdAtEpoch?: number | string | null
 }
 
 export type AiEntryConversationSummary = {
@@ -83,6 +85,7 @@ export type AiEntryMessageRecord = {
   content: string
   parts: unknown[] | null
   metadata: Record<string, unknown> | null
+  idempotency_key: string | null
   knowledge_source: null
   created_at: number
 }
@@ -158,6 +161,15 @@ function toEpochSeconds(value: Date | string | number | null | undefined) {
     }
   }
   return Math.floor(Date.now() / 1000)
+}
+
+function toDatabaseEpochSeconds(
+  epochValue: number | string | null | undefined,
+  fallbackValue: Date | string | number | null | undefined,
+) {
+  const epoch = typeof epochValue === "number" ? epochValue : Number(epochValue)
+  if (Number.isFinite(epoch)) return Math.floor(epoch)
+  return toEpochSeconds(fallbackValue)
 }
 
 async function findAiEntryPendingTaskSummary(input: {
@@ -410,7 +422,6 @@ async function listAiEntryTaskRunSummaries(input: {
 
   let runtime: AiEntryTaskRunSummary[] = []
   try {
-    if (legacy.length === 0) {
     const runtimeResult = await withAiEntryDbRetry("list-ai-entry-opencode-task-run-summaries", () =>
       db.execute(sql`
         SELECT id, status, input_payload as "inputPayload", normalized_result as "normalizedResult",
@@ -435,7 +446,7 @@ async function listAiEntryTaskRunSummaries(input: {
         finishedAt: row.finishedAt as Date | string | number | null,
       }))
       .filter((item): item is AiEntryTaskRunSummary => Boolean(item))
-    }
+      .filter((item) => item.conversation_id === input.conversationId)
   } catch (error) {
     console.warn("ai-entry.opencode.task-runs.lookup.failed", { message: error instanceof Error ? error.message : String(error) })
   }
@@ -1071,7 +1082,8 @@ export async function appendAiEntryMessage(params: {
 
   const normalizedContent = params.content.trim()
   const partsJson = Array.isArray(params.parts) ? JSON.stringify(params.parts) : null
-  const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null
+  const metadata = { createdAt: Date.now(), ...(params.metadata || {}) }
+  const metadataJson = metadata ? JSON.stringify(metadata) : null
   const idempotencyKey = typeof params.idempotencyKey === "string" && params.idempotencyKey.trim()
     ? params.idempotencyKey.trim().slice(0, 255)
     : null
@@ -1162,6 +1174,7 @@ export async function updateLatestAiEntryMessageParts(params: {
   parts: unknown[]
   metadata?: Record<string, unknown> | null
   idempotencyKey?: string | null
+  mergeParts?: boolean
   scope?: AiEntryConversationScope
   agentId?: string | null
 }) {
@@ -1173,7 +1186,7 @@ export async function updateLatestAiEntryMessageParts(params: {
   )
   if (!conversation || !params.content.trim()) return false
 
-  const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null
+  const metadataJson = JSON.stringify({ createdAt: Date.now(), ...(params.metadata || {}) })
   const idempotencyKey = typeof params.idempotencyKey === "string" && params.idempotencyKey.trim()
     ? params.idempotencyKey.trim().slice(0, 255)
     : null
@@ -1181,11 +1194,16 @@ export async function updateLatestAiEntryMessageParts(params: {
     ? sql`AND idempotency_key = ${idempotencyKey}`
     : sql``
   const partsJson = JSON.stringify(params.parts)
+  const mergeParts = params.mergeParts === true
   const result = await withAiEntryDbRetry("update-ai-entry-message-parts", () =>
     db.execute(sql`
       UPDATE "AI_MARKETING_messages"
-      SET "parts" = ${partsJson}::jsonb,
-          "metadata" = ${metadataJson}::jsonb
+      SET "parts" = ${mergeParts
+        ? sql`coalesce("parts", '[]'::jsonb) || ${partsJson}::jsonb`
+        : sql`${partsJson}::jsonb`},
+          "metadata" = ${mergeParts
+            ? sql`coalesce("metadata", '{}'::jsonb) || ${metadataJson}::jsonb`
+            : sql`${metadataJson}::jsonb`}
       WHERE id = (
         SELECT id
         FROM "AI_MARKETING_messages"
@@ -1199,6 +1217,28 @@ export async function updateLatestAiEntryMessageParts(params: {
   )
 
   return Number(result.rowCount || 0) > 0
+}
+
+/** Update a queued assistant turn in place, with an insert fallback for legacy runs. */
+export async function upsertAiEntryMessageParts(params: {
+  userId: number
+  conversationId: string | number | null | undefined
+  role: "user" | "assistant"
+  content: string
+  parts: unknown[]
+  metadata?: Record<string, unknown> | null
+  idempotencyKey?: string | null
+  scope?: AiEntryConversationScope
+  agentId?: string | null
+}) {
+  // Runtime callbacks are replayable and terminal snapshots are authoritative.
+  // Replacing the queued parts keeps retries idempotent and prevents a second
+  // callback from appending duplicate text/artifact/task parts.
+  const updated = await updateLatestAiEntryMessageParts({ ...params, mergeParts: false })
+  if (updated) return true
+
+  await appendAiEntryMessage(params)
+  return false
 }
 
 export async function listAiEntryMessages(
@@ -1220,7 +1260,9 @@ export async function listAiEntryMessages(
         m.content,
         m.parts,
         m.metadata,
-        m.created_at as "createdAt"
+        m.idempotency_key as "idempotencyKey",
+        m.created_at as "createdAt",
+        extract(epoch from m.created_at) as "createdAtEpoch"
       FROM "AI_MARKETING_messages" m
       WHERE m.conversation_id = ${conversation.id}
       ORDER BY m.created_at ASC, m.id ASC
@@ -1237,8 +1279,9 @@ export async function listAiEntryMessages(
       content: row.content || "",
       parts: Array.isArray(row.parts) ? row.parts : null,
       metadata: row.metadata && typeof row.metadata === "object" ? row.metadata : null,
+      idempotency_key: row.idempotencyKey || null,
       knowledge_source: null,
-      created_at: toEpochSeconds(row.createdAt),
+      created_at: toDatabaseEpochSeconds(row.createdAtEpoch, row.createdAt),
     }))
   const conversationState = mergeAiEntryConversationState({
     storedState: normalizeConversationMetadata(conversation.metadata)?.aiEntryConversationState,

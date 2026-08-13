@@ -14,6 +14,8 @@ export async function createBackgroundOpenCodeRun(input: {
   selectedSkillIds?: string[]
   selectedMcpServerIds?: string[]
   traceId: string
+  turnId?: string | null
+  assistantMessageIdempotencyKey?: string | null
   billingReservation: BillingReservation | null
   provider: OpenCodeProviderConfig
   backend?: "cloudflare-opencode-session" | "railway-opencode"
@@ -47,6 +49,8 @@ export async function createBackgroundOpenCodeRun(input: {
       selectedSkillIds: v2Input.selectedSkillIds,
       artifactContract: v2Input.artifactContract,
       traceId: input.traceId,
+      turnId: input.turnId || null,
+      assistantMessageIdempotencyKey: input.assistantMessageIdempotencyKey || null,
       billingReservation: input.billingReservation,
     },
   })

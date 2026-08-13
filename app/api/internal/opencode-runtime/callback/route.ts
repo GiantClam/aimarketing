@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 
-import { appendAiEntryMessage, recordAiEntryRuntimeArtifactContext } from "@/lib/ai-entry/repository"
+import { appendAiEntryMessage, recordAiEntryRuntimeArtifactContext, upsertAiEntryMessageParts } from "@/lib/ai-entry/repository"
 import { runtimeArtifactExtensions } from "@/lib/ai-entry/runtime/artifact-policy"
-import { buildRuntimeAssistantMessage } from "@/lib/ai-entry/runtime/assistant-message"
+import { buildRuntimeAssistantMessage, buildRuntimeAssistantParts } from "@/lib/ai-entry/runtime/assistant-message"
 import {
   displayRuntimeArtifactFileName,
   validateRuntimeArtifactPayload,
@@ -20,6 +20,7 @@ import { isPlatformArtifactR2Available, uploadPlatformArtifactBufferToR2 } from 
 import { appendPlatformRunEvent, getPlatformTaskRun, savePlatformArtifact, updatePlatformTaskRun } from "@/lib/platform/task-run-store"
 import { getOpenCodeRuntimeRunByRuntimeId, updateOpenCodeRuntimeRun } from "@/lib/platform/opencode-runtime-store"
 import { selectFinalRuntimeArtifacts } from "@/lib/ai-entry/runtime/artifact-detector"
+import { resolveRuntimeArtifactLimits } from "@/lib/ai-entry/runtime/artifact-policy"
 import { filterTaskProgressEvents } from "@/lib/ai-entry/runtime/runtime-events"
 import type { HydratedPlatformTaskRun } from "@/lib/platform/task-run-store"
 
@@ -48,6 +49,9 @@ function artifactContractForRun(taskInput: Record<string, unknown>, agentId: str
     ? configured.allowedExtensions.filter((value): value is string => typeof value === "string")
     : runtimeArtifactExtensions(agentId, taskInput.selectedSkillIds)
   return {
+    ...resolveRuntimeArtifactLimits({
+      agentId,
+      selectedSkillIds: taskInput.selectedSkillIds,
     maxArtifacts:
       typeof configured?.maxArtifacts === "number"
         ? configured.maxArtifacts
@@ -66,6 +70,7 @@ function artifactContractForRun(taskInput: Record<string, unknown>, agentId: str
             process.env.RAILWAY_OPENCODE_MAX_ARTIFACT_TOTAL_BYTES || String(16 * 1024 * 1024),
             10,
           ),
+    }),
     allowedExtensions,
   }
 }
@@ -325,6 +330,10 @@ export async function POST(request: NextRequest) {
   const text = `${previousText}${textDelta}`.slice(-200_000)
   const taskInput = (platformRun.inputPayload || {}) as Record<string, unknown>
   const conversationId = typeof taskInput.conversationId === "string" ? taskInput.conversationId : null
+  const turnId = typeof taskInput.turnId === "string" ? taskInput.turnId : null
+  const assistantMessageIdempotencyKey = typeof taskInput.assistantMessageIdempotencyKey === "string"
+    ? taskInput.assistantMessageIdempotencyKey
+    : null
   const normalizedArtifactEvents: Array<Record<string, unknown>> = []
   let savedArtifactCount = 0
   const callbackArtifacts = selectFinalRuntimeArtifacts(newEvents
@@ -350,23 +359,45 @@ export async function POST(request: NextRequest) {
       .filter((artifact): artifact is Record<string, unknown> => Boolean(artifact)),
   )
   const assistantContent = buildRuntimeAssistantMessage(text, artifacts)
+  const assistantParts = buildRuntimeAssistantParts(text, artifacts)
   let assistantMessagePersisted = previous.assistantMessagePersisted === true
   if (payload.status === "succeeded" && assistantContent && conversationId && !assistantMessagePersisted) {
-    await appendAiEntryMessage({ userId: platformRun.userId, conversationId, role: "assistant", content: assistantContent, idempotencyKey: `opencode:${payload.runId}:assistant`, agentId: typeof taskInput.agentId === "string" ? taskInput.agentId : null })
+    const messageParams = {
+      userId: platformRun.userId,
+      conversationId,
+      role: "assistant" as const,
+      content: assistantContent,
+      parts: assistantParts,
+      metadata: turnId ? { turnId } : null,
+      idempotencyKey: assistantMessageIdempotencyKey || `opencode:${payload.runId}:assistant`,
+      agentId: typeof taskInput.agentId === "string" ? taskInput.agentId : null,
+    }
+    if (assistantMessageIdempotencyKey) {
+      await upsertAiEntryMessageParts(messageParams)
+    } else {
+      await appendAiEntryMessage(messageParams)
+    }
     assistantMessagePersisted = true
   }
   const reservation = taskInput.billingReservation && typeof taskInput.billingReservation === "object" ? taskInput.billingReservation as BillingReservation : null
   const terminal = ["succeeded", "failed", "cancelled", "timed_out"].includes(payload.status)
   let billingFinalized = previous.billingFinalized === true
+  let billingFinalizationError = typeof previous.billingFinalizationError === "string" ? previous.billingFinalizationError : null
   if (terminal && !billingFinalized) {
-    if (payload.status === "succeeded") {
-      const usage = events.map((item) => item.event).filter((event) => event.event === "usage").at(-1)
-      const actual = estimateTextCredits({ featureKey: "ai_entry_chat", inputTokens: typeof usage?.inputTokens === "number" ? usage.inputTokens : Math.max(1, Math.ceil(text.length / 4)), outputTokens: typeof usage?.outputTokens === "number" ? usage.outputTokens : Math.max(1, Math.ceil(text.length / 4)), provider: "opencode", model: "opencode" })
-      await finalizeReservedCredits({ reservation, userId: platformRun.userId, enterpriseId: platformRun.enterpriseId, actualAmount: actual.credits, idempotencyKey: `ai-entry:${payload.runId}:debit`, provider: "opencode", model: "opencode", officialCostUsd: actual.officialCostUsd, costBasisUsd: actual.costBasisUsd, usagePayload: actual.metadata, metadata: { runtimeRunId: payload.runId } }).catch(() => undefined)
-    } else {
-      await releaseReservedCredits({ reservation, userId: platformRun.userId, enterpriseId: platformRun.enterpriseId, idempotencyKey: `ai-entry:${payload.runId}:release`, reason: `opencode_v2_${payload.status}` }).catch(() => undefined)
+    try {
+      if (payload.status === "succeeded") {
+        const usage = events.map((item) => item.event).filter((event) => event.event === "usage").at(-1)
+        const actual = estimateTextCredits({ featureKey: "ai_entry_chat", inputTokens: typeof usage?.inputTokens === "number" ? usage.inputTokens : Math.max(1, Math.ceil(text.length / 4)), outputTokens: typeof usage?.outputTokens === "number" ? usage.outputTokens : Math.max(1, Math.ceil(text.length / 4)), provider: "opencode", model: "opencode" })
+        await finalizeReservedCredits({ reservation, userId: platformRun.userId, enterpriseId: platformRun.enterpriseId, actualAmount: actual.credits, idempotencyKey: `ai-entry:${payload.runId}:debit`, provider: "opencode", model: "opencode", officialCostUsd: actual.officialCostUsd, costBasisUsd: actual.costBasisUsd, usagePayload: actual.metadata, metadata: { runtimeRunId: payload.runId } })
+      } else {
+        await releaseReservedCredits({ reservation, userId: platformRun.userId, enterpriseId: platformRun.enterpriseId, idempotencyKey: `ai-entry:${payload.runId}:release`, reason: `opencode_v2_${payload.status}` })
+      }
+      billingFinalized = true
+      billingFinalizationError = null
+    } catch (error) {
+      billingFinalizationError = error instanceof Error ? error.message : String(error)
+      console.error("ai-entry.billing.finalize.failed", { runtimeRunId: payload.runId, message: billingFinalizationError })
     }
-    billingFinalized = true
   }
   const normalizedEvents = filterTaskProgressEvents([
     ...events
@@ -390,6 +421,7 @@ export async function POST(request: NextRequest) {
     assistantMessagePersisted,
     runtimeText: assistantMessagePersisted ? undefined : text,
     billingFinalized,
+    billingFinalizationError,
     artifacts: Math.max(Number(previous.artifacts) || 0, platformRun.artifacts.length + savedArtifactCount),
     events: normalizedEvents.slice(-100),
     stage: payload.status === "queued" ? "runtime_queued" : payload.status === "succeeded" ? "runtime_publishing" : "runtime_running",

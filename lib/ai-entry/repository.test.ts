@@ -273,7 +273,7 @@ test("AI entry message history returns latest pending PPT background task", asyn
       updatedAt: new Date("2024-01-02T03:05:19.000Z"),
       startedAt: new Date("2024-01-02T03:05:10.000Z"),
     },
-  ], [
+  ], [], [
     {
       id: 1074,
       status: "running",
@@ -302,6 +302,68 @@ test("AI entry message history returns latest pending PPT background task", asyn
   assert.equal(page.task_runs[0]?.stage, "variant_generating")
   assert.equal(page.pending_task?.task_id, "1074")
   assert.equal(page.pending_task?.status, "running")
+})
+
+test("AI entry message history includes OpenCode runtime tasks alongside legacy tasks", async () => {
+  const { listAiEntryMessages } = await import("./repository")
+
+  selectRowsQueue = [[
+    {
+      id: 42,
+      title: "[ai-entry] [agent:executive-ppt] PPT plan",
+      currentModelId: "gpt-5",
+      createdAt: new Date("2024-01-01T00:00:00.000Z"),
+    },
+  ]]
+  executeRowsQueue = [[
+    {
+      id: 101,
+      role: "assistant",
+      content: "任务已提交，关闭页面后仍会继续执行。",
+      parts: [{
+        type: "data-task-run",
+        id: "task-2049",
+        data: { taskRun: { task_id: "2049", status: "pending" } },
+      }],
+      createdAt: new Date("2024-01-02T03:04:09.000Z"),
+    },
+  ], [
+    {
+      id: 1074,
+      status: "running",
+      payload: JSON.stringify({
+        kind: "ai_entry_ppt_preview",
+        conversationId: "42",
+        agentId: "executive-ppt",
+      }),
+      result: JSON.stringify({ stage: "variant_generating", progressCurrent: 2, progressTotal: 5 }),
+      createdAt: new Date("2024-01-02T03:05:09.000Z"),
+      updatedAt: new Date("2024-01-02T03:05:19.000Z"),
+      startedAt: new Date("2024-01-02T03:05:10.000Z"),
+    },
+  ], [
+    {
+      id: 2049,
+      status: "failed",
+      inputPayload: {
+        conversationId: "42",
+        agentId: "executive-ppt",
+      },
+      normalizedResult: { error: "runtime_context_hash_mismatch" },
+      createdAt: new Date("2024-01-02T03:06:09.000Z"),
+      updatedAt: new Date("2024-01-02T03:06:19.000Z"),
+      startedAt: new Date("2024-01-02T03:06:10.000Z"),
+      finishedAt: new Date("2024-01-02T03:06:19.000Z"),
+    },
+  ], [], []]
+
+  const page = await listAiEntryMessages(7, "42", 200, "chat", "executive-ppt")
+
+  assert.ok(page)
+  assert.deepEqual(page.task_runs.map((task) => [task.task_id, task.status]), [
+    ["2049", "failed"],
+    ["1074", "running"],
+  ])
 })
 
 test("AI entry message history falls back to direct conversation lookup when agent prefix no longer matches", async () => {
@@ -426,7 +488,7 @@ test("AI entry message history recovers a finished preview task from persisted q
       updatedAt: new Date("2024-01-02T03:05:29.000Z"),
       startedAt: new Date("2024-01-02T03:05:10.000Z"),
     },
-  ], [], [], [
+  ], [], [], [], [
     {
       id: 901,
       status: "failed",

@@ -10,18 +10,23 @@ import {
   type AgentRuntimeInputV2,
   type OpenCodeProviderConfig,
   type RuntimeArtifactPayload,
-  type RuntimeProjectSnapshot,
 } from "../../../../lib/ai-runtime/contracts.js"
 import { buildOpenCodeSystemPrompt, buildOpenCodeUserPrompt } from "../../../../lib/ai-runtime/opencode-prompt.js"
 import { OpenCodeServeManager } from "./opencode-serve-manager.js"
-import { parseRuntimeProjectSnapshot } from "./project-snapshot.js"
+import { buildOpenCodeProviderOptions } from "./opencode-provider-config.js"
+import { readRuntimeProjectSnapshot } from "./project-snapshot.js"
 import { displayArtifactName, selectPublishableArtifactRecords } from "./artifact-utils.js"
+import { resolveOpenCodeRunTimeoutMs } from "./runtime-timeout.js"
 
 const port = Number.parseInt(process.env.PORT || "3000", 10) || 3000
 const runtimeDir = process.env.OPENCODE_RUNTIME_DIR || "/data/sessions"
 const bundleDir = process.env.OPENCODE_RUNTIME_BUNDLE_DIR || "/app/runtime"
-const requestTimeoutMs = Number.parseInt(process.env.OPENCODE_RUN_TIMEOUT_MS || "3600000", 10) || 3600000
+const requestTimeoutMs = resolveOpenCodeRunTimeoutMs(process.env.OPENCODE_RUN_TIMEOUT_MS)
 const internalToken = process.env.OPENCODE_WORKER_INTERNAL_TOKEN?.trim() || ""
+const requireInternalToken = process.env.NODE_ENV === "production" || process.env.OPENCODE_REQUIRE_INTERNAL_TOKEN === "true"
+if (requireInternalToken && !internalToken) {
+  throw new Error("OPENCODE_WORKER_INTERNAL_TOKEN is required in production")
+}
 const runtimeStateUrl = process.env.OPENCODE_RUNTIME_STATE_URL?.trim().replace(/\/+$/u, "") || ""
 const runtimeStateToken = process.env.RUNTIME_STATE_TOKEN?.trim() || process.env.OPENCODE_RUNTIME_STATE_TOKEN?.trim() || ""
 const bundleVersion = process.env.OPENCODE_RUNTIME_BUNDLE_VERSION?.trim() || "runtime-bundle-v1"
@@ -128,7 +133,7 @@ function json(response: ServerResponse, status: number, value: unknown) {
 }
 
 function authorized(request: IncomingMessage) {
-  if (!internalToken) return true
+  if (!internalToken) return !requireInternalToken
   return request.headers.authorization === `Bearer ${internalToken}`
 }
 
@@ -175,16 +180,6 @@ function validateWriterRuntimeInput(input: AgentRuntimeInput | AgentRuntimeInput
 
 function safeSkillId(value: string) {
   return /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$/.test(value)
-}
-
-async function readProjectSnapshot(runDir: string): Promise<RuntimeProjectSnapshot | null> {
-  const paths = [join(runDir, "project-state.json"), join(runDir, "workspace", "ppt-master", "project-state.json")]
-  for (const path of paths) {
-    const raw = await readFile(path, "utf8").catch(() => null)
-    if (raw === null) continue
-    return parseRuntimeProjectSnapshot(raw)
-  }
-  return null
 }
 
 function eventLine(response: ServerResponse, event: AgentRuntimeEvent) {
@@ -641,7 +636,7 @@ async function writeOpenCodeSessionConfig(runDir: string, provider: OpenCodeProv
       [provider.providerId]: {
         npm: "@ai-sdk/openai-compatible",
         name: provider.providerId,
-        options: { baseURL: provider.baseUrl, apiKey: provider.apiKey },
+        options: buildOpenCodeProviderOptions(provider),
         models: { [provider.modelId]: { name: provider.modelId } },
       },
     },
@@ -730,7 +725,7 @@ async function executeRun(
     }
     for (const artifact of discoveredArtifacts) emit({ event: "artifact_payload", artifact, runId: input.runId })
     if (isRailwayPptMasterInput(input)) {
-      const projectSnapshot = await readProjectSnapshot(completedRunDir)
+      const projectSnapshot = await readRuntimeProjectSnapshot(completedRunDir)
       if (projectSnapshot) {
         const previousSequence = "checkpoint" in input && input.checkpoint ? input.checkpoint.sequence : 0
         emit({
@@ -841,13 +836,16 @@ const server = createServer(async (request, response) => {
       requestRunId = payload.input.runId
       const existingRun = runRecords.get(payload.input.runId) || await fetchExternalRuntimeState(payload.input.runId)
       if (existingRun?.status === "running") return json(response, 409, { error: "run_already_running", runId: payload.input.runId })
+      if (request.headers.prefer?.includes("respond-async") && existingRun) {
+        // The run id is the idempotency key. Never restart a terminal run when
+        // the client retries after losing the original HTTP response.
+        return json(response, 202, { runId: existingRun.runId, status: existingRun.status })
+      }
       // Railway can terminate a long response even while the Node process and
       // OpenCode child remain healthy. For client requests that explicitly
       // opt in, detach execution from this SSE response and expose the
       // persisted run record for recovery polling instead.
       if (request.headers.prefer?.includes("respond-async")) {
-        const existing = runRecords.get(payload.input.runId)
-        if (existing) return json(response, 202, { runId: existing.runId, status: existing.status })
         const record = getRunRecord(payload.input.runId)
         record.status = "running"
         record.error = undefined
@@ -874,6 +872,15 @@ const server = createServer(async (request, response) => {
           }
         })()
         return json(response, 202, { runId: record.runId, status: record.status })
+      }
+      if (existingRun && ["succeeded", "failed", "cancelled"].includes(existingRun.status)) {
+        response.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache, no-transform", connection: "keep-alive" })
+        for (const event of existingRun.events) eventLine(response, event)
+        if (existingRun.error && existingRun.status === "failed") {
+          eventLine(response, { event: "runtime_error", code: "opencode_runtime_recovered_failure", message: existingRun.error, retryable: false, runId: payload.input.runId })
+        }
+        response.end()
+        return
       }
       const record = getRunRecord(payload.input.runId)
       if (record.status === "succeeded") {

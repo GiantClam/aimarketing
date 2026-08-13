@@ -165,6 +165,7 @@ test("Railway ppt-master prompt restores and writes only a lightweight project s
 
   assert.match(prompt, /temporary run directory/u)
   assert.match(prompt, /\.runtime\/project-snapshot\.json/u)
+  assert.match(prompt, /restore each state\.files entry/u)
   assert.match(prompt, /write \.\/project-state\.json/u)
   assert.match(prompt, /Never include SVG, PPTX, images, base64, logs, caches/u)
 })

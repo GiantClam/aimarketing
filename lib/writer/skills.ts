@@ -1,5 +1,5 @@
 import type { EnterpriseKnowledgeContext, EnterpriseKnowledgeScope } from "@/lib/knowledge/types"
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import type { AiEntryProviderId } from "@/lib/ai-entry/provider-routing"
 import { resolveAiEntryOpenCodeProvider } from "@/lib/ai-entry/provider-routing"
 import { buildAgentRuntimeInput } from "@/lib/ai-entry/runtime/context-builder"
@@ -518,6 +518,47 @@ function hasWriterResponse(answer: string, writerResult: WriterSubmitResult | nu
   return Boolean(answer.trim() || writerResult)
 }
 
+function resolveWriterOpenCodeProvider(params: {
+  selectedProviderId?: AiEntryProviderId | null
+  selectedModelId?: string | null
+}) {
+  const explicitProvider = params.selectedProviderId?.trim() || ""
+  const explicitModel = params.selectedModelId?.trim() || ""
+  if (explicitProvider || explicitModel) {
+    return resolveAiEntryOpenCodeProvider({
+      providerId: explicitProvider || undefined,
+      modelId: explicitModel || undefined,
+    })
+  }
+
+  // The general AI Chat route prefers DeepSeek, but the Writer OpenCode
+  // runtime needs a provider that reliably executes writer_submit_result.
+  // Keep this preference Writer-specific and allow deployments to override
+  // it without affecting the general AI model router.
+  const preferredProviderId = process.env.AI_ENTRY_WRITER_PROVIDER_ID?.trim() || "aiberm"
+  const preferredModelId = process.env.AI_ENTRY_WRITER_MODEL_ID?.trim() || undefined
+  return (
+    resolveAiEntryOpenCodeProvider({ providerId: preferredProviderId, modelId: preferredModelId }) ||
+    resolveAiEntryOpenCodeProvider({})
+  )
+}
+
+function buildWriterRuntimeSessionKey(baseSessionKey: string, providerId: string, modelId: string) {
+  return `sess-${createHash("sha1")
+    .update(`writer-runtime-v2\u001f${baseSessionKey}\u001f${providerId}\u001f${modelId}`)
+    .digest("hex")}`
+}
+
+function rekeyWriterRuntimeContext(context: WriterRuntimeContext | null, sessionKey: string) {
+  if (!context) return null
+  const next = { ...context, sessionKey }
+  const { contextHash: _contextHash, ...hashable } = next
+  return {
+    ...next,
+    contextHash: createHash("sha256").update(JSON.stringify(hashable)).digest("hex"),
+  }
+}
+
 async function runWriterOpenCodeText(params: {
   systemPrompt: string
   userPrompt: string
@@ -537,10 +578,7 @@ async function runWriterOpenCodeText(params: {
     throw new Error("writer_opencode_runtime_not_configured")
   }
 
-  const provider = resolveAiEntryOpenCodeProvider({
-    providerId: params.selectedProviderId,
-    modelId: params.selectedModelId,
-  })
+  const provider = resolveWriterOpenCodeProvider(params)
   if (!provider) throw new Error("writer_opencode_provider_not_configured")
 
   const historyMessages = (params.history || []).flatMap((entry) => {
@@ -552,13 +590,15 @@ async function runWriterOpenCodeText(params: {
       ...(entry.answer.trim() ? [{ role: "assistant" as const, content: entry.answer.trim() }] : []),
     ]
   }).filter((entry) => entry.content)
-  const sessionKey = params.writerContext?.sessionKey || `sess-${randomUUID().replaceAll("-", "").padEnd(40, "0").slice(0, 40)}`
+  const baseSessionKey = params.writerContext?.sessionKey || `sess-${randomUUID().replaceAll("-", "").padEnd(40, "0").slice(0, 40)}`
+  const sessionKey = buildWriterRuntimeSessionKey(baseSessionKey, provider.providerId, provider.modelId)
+  const runtimeWriterContext = rekeyWriterRuntimeContext(params.writerContext || null, sessionKey)
   const runtimeInput = buildAgentRuntimeInput({
     runId: randomUUID(),
     sessionKey,
     conversationId: params.conversationId || null,
     conversationRevision: params.writerContext?.activeDraft?.revision ?? null,
-    writerContext: params.writerContext,
+    writerContext: runtimeWriterContext,
     enterpriseId: params.enterpriseId || null,
     userId: params.userId || 0,
     agentId: "writer",
@@ -610,7 +650,7 @@ async function runWriterOpenCodeText(params: {
       if (Number.isFinite(event.outputTokens) && (event.outputTokens || 0) >= 0) usage.outputTokens += event.outputTokens || 0
       if (Number.isFinite(event.costUsd) && (event.costUsd || 0) >= 0) usage.costUsd += event.costUsd || 0
     }
-    if (event.event === "runtime_error") throw new Error(`writer_opencode_failed:${event.message}`)
+    if (event.event === "runtime_error") throw new Error(`writer_opencode_failed:${event.code}:${event.message}`)
   }
   if (!hasWriterResponse(answer, writerResult)) throw new Error("writer_opencode_empty_response")
   return { answer, usage, writerResult, activatedSkillIds, resultToolCallCount }
@@ -4391,9 +4431,11 @@ export async function runWriterSkillFirstTurn(params: {
   const preferredLanguage = params.preferredLanguage || "auto"
   const platformConfig = WRITER_PLATFORM_CONFIG[params.platform]
   const binding = resolveWriterPlatformBinding(params.platform)
-  const contentType: WriterContentType = ["wechat", "xiaohongshu", "weibo", "douyin"].includes(params.platform)
-    ? "social_cn"
-    : "social_global"
+  const contentType: WriterContentType = params.platform === "generic"
+    ? "longform"
+    : ["wechat", "xiaohongshu", "weibo", "douyin"].includes(params.platform)
+      ? "social_cn"
+      : "social_global"
   const platformLabel = platformConfig.shortLabel
   const routing: WriterRoutingDecision = {
     contentType,
@@ -4403,7 +4445,7 @@ export async function runWriterSkillFirstTurn(params: {
     renderPlatform: params.platform,
     renderMode: params.mode,
     selectedSkillId: contentType,
-    selectedSkillLabel: contentType === "social_cn" ? "中文社媒" : "海外社媒",
+    selectedSkillLabel: contentType === "longform" ? "长文内容" : contentType === "social_cn" ? "中文社媒" : "海外社媒",
     selectedPlatformSkillId: binding.primary.skillId,
     selectedPlatformSkillLabel: binding.primary.skillId,
     selectedStyleSkillId: null,
@@ -4456,7 +4498,7 @@ export async function runWriterSkillFirstTurn(params: {
     platformLabel,
     activeRevision: params.writerContext?.activeDraft?.revision || 0,
     activeTitle: params.writerContext?.activeDraft?.title,
-    allowTitleChange: isWriterTitleOnlyRevisionRequest(params.query),
+    allowTitleChange: isWriterTitleOnlyRevisionRequest(params.query) || writerResult.operation === "create",
     result: writerResult,
     activatedSkillIds: result.activatedSkillIds,
     resultToolCallCount: result.resultToolCallCount,

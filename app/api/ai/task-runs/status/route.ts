@@ -16,28 +16,44 @@ function normalizeTaskIds(value: unknown) {
   )].slice(0, 50)
 }
 
+function normalizeTaskSources(value: unknown, length: number) {
+  if (!Array.isArray(value)) return new Map<number, "legacy" | "runtime">()
+  return new Map(
+    value.slice(0, length).flatMap((item, index) =>
+      item === "legacy" || item === "runtime" ? [[index, item] as const] : [],
+    ),
+  )
+}
+
 export async function POST(request: NextRequest) {
   const auth = await requireSessionUser(request)
   if ("response" in auth) {
     return auth.response
   }
 
-  const body = (await request.json().catch(() => ({}))) as { taskRunIds?: unknown }
+  const body = (await request.json().catch(() => ({}))) as { taskRunIds?: unknown; taskRunSources?: unknown }
   const taskIds = normalizeTaskIds(body.taskRunIds)
   if (taskIds.length === 0) {
     return NextResponse.json({ data: [] })
   }
+  const sources = normalizeTaskSources(body.taskRunSources, taskIds.length)
+  const legacyIds = taskIds.filter((_, index) => sources.get(index) !== "runtime")
+  const runtimeIds = taskIds.filter((_, index) => sources.get(index) !== "legacy")
 
   try {
-    const tasks = await getTasksByIds(taskIds, auth.user.id)
+    const tasks = await getTasksByIds(legacyIds, auth.user.id)
     await Promise.all(
       tasks.slice(0, 6).map((task) => advanceDurableAssistantPptTask(task.id, auth.user.id).catch(() => false)),
     )
-    const refreshedTasks = await getTasksByIds(taskIds, auth.user.id)
-    const runtimeTasks = await getPlatformTaskRunsByIdsForUser(taskIds, auth.user.id)
+    const refreshedTasks = await getTasksByIds(legacyIds, auth.user.id)
+    const runtimeTasks = await getPlatformTaskRunsByIdsForUser(runtimeIds, auth.user.id)
     await Promise.all(
       runtimeTasks
-        .filter((task) => task.status === "queued" || task.status === "running")
+        .filter((task) => {
+          if (task.status === "queued" || task.status === "running") return true
+          const result = task.normalizedResult && typeof task.normalizedResult === "object" ? task.normalizedResult : null
+          return ["succeeded", "failed", "cancelled"].includes(task.status) && result?.billingFinalized !== true
+        })
         .map((task) => reconcileOpenCodeRuntimeTask(task.id, auth.user.id).catch((error) => {
           console.error("ai-entry.opencode.runtime.fallback_sync_failed", {
             taskRunId: task.id,
@@ -62,6 +78,7 @@ export async function POST(request: NextRequest) {
               finishedAt: ["success", "failed", "approved", "rejected"].includes(task.status || "")
                 ? task.updatedAt
                 : null,
+              taskSource: "legacy",
             })
           : null,
       )
@@ -81,6 +98,7 @@ export async function POST(request: NextRequest) {
         updatedAt: task.updatedAt,
         startedAt: task.startedAt,
         finishedAt: task.finishedAt,
+        taskSource: "runtime",
       }))
       .filter(Boolean)
 

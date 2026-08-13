@@ -15,16 +15,29 @@ RAILWAY_OPENCODE_URL="${RAILWAY_OPENCODE_RUNTIME_URL:-https://ppt-master-worker-
 
 load_env_file() {
   local file="$1"
-  if [[ -f "$file" ]]; then
-    local normalized
-    normalized="$(mktemp)"
-    sed 's/\r$//' "$file" > "$normalized"
-    set -a
-    # shellcheck disable=SC1090
-    source "$normalized"
-    set +a
-    rm -f "$normalized"
-  fi
+  [[ -f "$file" ]] || return 0
+
+  # Parse KEY=VALUE records without sourcing the file. Production env files
+  # commonly contain values with spaces, and sourcing them would both reject
+  # valid values and execute shell syntax from a configuration file.
+  local line key value
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ -z "${line//[[:space:]]/}" || "$line" == \#* || "$line" != *=* ]] && continue
+
+    key="${line%%=*}"
+    value="${line#*=}"
+    key="$(printf '%s' "$key" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+
+    if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+      value="${value:1:${#value}-2}"
+    elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+
+    export "$key=$value"
+  done < "$file"
 }
 
 load_env_file "$ROOT_DIR/.env"

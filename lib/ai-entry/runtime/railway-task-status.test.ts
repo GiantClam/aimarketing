@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { isRailwayRuntimeTerminal, platformTaskStatusFromRailway } from "./railway-task-status"
+import { isRailwayRuntimeTerminal, platformTaskStatusFromRailway, resolveRailwayRuntimeStatus } from "./railway-task-status"
 
 test("maps Railway runtime status to the platform task lifecycle", () => {
   assert.deepEqual([
@@ -22,4 +22,10 @@ test("recognizes every terminal Railway runtime state", () => {
   for (const status of ["succeeded", "failed", "cancelled", "timed_out"] as const) {
     assert.equal(isRailwayRuntimeTerminal(status), true)
   }
+})
+
+test("prefers an explicit terminal event over a stale persisted runtime state", () => {
+  assert.equal(resolveRailwayRuntimeStatus("succeeded", "queued"), "succeeded")
+  assert.equal(resolveRailwayRuntimeStatus("failed", "running"), "failed")
+  assert.equal(resolveRailwayRuntimeStatus("running", "queued"), "queued")
 })

@@ -169,7 +169,13 @@ export async function* runOpenCode(
           [runtime.configKey]: {
             npm: "@ai-sdk/openai-compatible",
             name: runtime.configKey,
-            options: { baseURL: provider.baseUrl, apiKey: `{env:${runtime.envKey}}` },
+            options: {
+              baseURL: provider.baseUrl,
+              apiKey: `{env:${runtime.envKey}}`,
+              // OpenCode defaults provider requests to five minutes. The
+              // runner's command timeout is the authoritative turn limit.
+              timeout: false,
+            },
             models: { [provider.modelId]: buildOpenCodeModelConfig(provider) },
           },
         }

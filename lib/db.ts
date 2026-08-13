@@ -56,7 +56,11 @@ function getConnectionCandidates(): string[] {
     .filter((value): value is string => typeof value === "string" && value.length > 0)
     .map((value) => isValidConnectionString(value))
 
-  return normalized.length > 0 ? [...new Set(normalized)] : [PLACEHOLDER_CONNECTION_STRING]
+  if (normalized.length > 0) return [...new Set(normalized)]
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("DATABASE_URL or AI_MARKETING_DB_POSTGRES_URL is required in production")
+  }
+  return [PLACEHOLDER_CONNECTION_STRING]
 }
 
 const shouldUseRelaxedSsl = (connectionString: string) => {

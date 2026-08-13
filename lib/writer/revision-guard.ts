@@ -55,5 +55,19 @@ export function reconcileWriterRevisionResult(input: {
     throw new Error("writer_result_incomplete_revision")
   }
 
+  // The active draft is the application's source of truth. Some providers
+  // still emit baseRevision: 0 when the durable draft is present in context;
+  // align the envelope before validation while persistWriterRevision keeps
+  // the database-level optimistic lock on the actual active revision.
+  if (result.draft.baseRevision !== activeDraft.revision) {
+    return {
+      ...result,
+      draft: {
+        ...result.draft,
+        baseRevision: activeDraft.revision,
+      },
+    }
+  }
+
   return result
 }

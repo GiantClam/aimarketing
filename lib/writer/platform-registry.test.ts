@@ -11,7 +11,7 @@ const primary = (skillId: string) => ({
   digest: `sha256:${"a".repeat(64)}`,
 })
 
-const platforms = ["wechat", "xiaohongshu", "weibo", "douyin", "x", "linkedin", "instagram", "tiktok", "facebook", "reddit"]
+const platforms = ["wechat", "xiaohongshu", "weibo", "douyin", "x", "linkedin", "instagram", "tiktok", "facebook", "reddit", "generic"]
 const registry = {
   schemaVersion: 2,
   platformBindings: platforms.map((platform) => ({
@@ -29,7 +29,7 @@ const registry = {
 
 test("registry requires exactly one primary binding for every supported platform", () => {
   const result = validateWriterPlatformRegistry(registry)
-  assert.equal(result.platformBindings.length, 10)
+  assert.equal(result.platformBindings.length, 11)
   assert.equal(result.platformBindings.find((entry) => entry.platformId === "wechat")?.primary.skillId, "khazix-writer")
 })
 

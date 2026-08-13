@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { test } from "node:test"
 
 import { AgentRuntimeInputTooLargeError, buildAgentRuntimeInput } from "./context-builder"
@@ -174,6 +175,29 @@ test("keeps the outer runtime hash compatible across Writer context revisions", 
     build({ contextHash: "writer-context-v1" }).contextHash,
     build({ contextHash: "writer-context-v2" }).contextHash,
   )
+})
+
+test("keeps the outer runtime hash compatible when a conversation summary exists", () => {
+  const input = buildAgentRuntimeInput({
+    runId: "run-conversation-summary-hash",
+    conversationId: "conversation-summary-hash",
+    conversationRevision: 4,
+    enterpriseId: null,
+    userId: 2,
+    agentId: "executive-ppt",
+    systemPrompt: "system",
+    messages: [{ role: "user", content: "继续生成" }],
+    conversationSummary: "previous task summary",
+  })
+
+  const runtimeHash = createHash("sha256").update(JSON.stringify({
+    revision: input.conversationRevision ?? null,
+    messages: input.messages.slice(-20),
+    summary: null,
+    artifactRefs: input.artifactContext,
+  })).digest("hex")
+
+  assert.equal(input.contextHash, runtimeHash)
 })
 
 test("bounds context and keeps the newest artifact summaries first", () => {

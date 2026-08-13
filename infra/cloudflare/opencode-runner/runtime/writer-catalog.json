@@ -435,6 +435,52 @@
         "preserveAuthoredTitle": true,
         "maxChars": 30000
       }
+    },
+    {
+      "platformId": "generic",
+      "aliases": [
+        "generic",
+        "longform",
+        "long-form publishing",
+        "通用文稿",
+        "文稿"
+      ],
+      "primary": {
+        "skillId": "longform-writing",
+        "dirName": "longform-writing",
+        "interfaceVersion": "writer-result-v1",
+        "release": "2026.08.06",
+        "digest": "sha256:c9d67d3c8db65547aa0da75163e8d15b8389b8a4db1638ed568adde2a82e1161"
+      },
+      "compatibleStyleSkillIds": [],
+      "operations": [
+        "create",
+        "revise",
+        "translate",
+        "shorten",
+        "expand",
+        "adapt_platform"
+      ],
+      "modes": [
+        "article"
+      ],
+      "research": {
+        "enabled": true
+      },
+      "assets": {
+        "cover": true,
+        "inline": true,
+        "maxCount": 6,
+        "aspectRatios": [
+          "16:9",
+          "2.35:1"
+        ]
+      },
+      "output": {
+        "titleRequired": true,
+        "preserveAuthoredTitle": true,
+        "maxChars": 50000
+      }
     }
   ],
   "orchestratorSkillDir": "writer-orchestrator",
@@ -660,6 +706,22 @@
       "aliases": [
         "reddit",
         "subreddit"
+      ]
+    },
+    {
+      "id": "generic",
+      "dirName": "longform-writing",
+      "label": "Long-form publishing",
+      "targetPlatform": "文稿",
+      "renderPlatform": "generic",
+      "supportsThread": false,
+      "listed": true,
+      "aliases": [
+        "generic",
+        "longform",
+        "long-form publishing",
+        "通用文稿",
+        "文稿"
       ]
     }
   ],

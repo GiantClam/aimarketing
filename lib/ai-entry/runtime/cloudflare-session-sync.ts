@@ -1,13 +1,17 @@
-import { appendAiEntryMessage, recordAiEntryRuntimeArtifactContext } from "@/lib/ai-entry/repository"
-import { buildRuntimeAssistantMessage } from "./assistant-message"
+import { createHash } from "node:crypto"
+
+import { appendAiEntryMessage, recordAiEntryRuntimeArtifactContext, upsertAiEntryMessageParts } from "@/lib/ai-entry/repository"
+import { buildRuntimeAssistantMessage, buildRuntimeAssistantParts } from "./assistant-message"
 import { getCloudflareSessionEventTicket, getCloudflareSessionRun, subscribeCloudflareSessionRun } from "./cloudflare-session-client"
-import { getOpenCodeRuntimeRunByTaskRunId, getRailwayOpenCodeRuntimeState, updateOpenCodeRuntimeRun } from "@/lib/platform/opencode-runtime-store"
+import { getRailwaySessionRun } from "./railway-session-client"
+import { getOpenCodeRuntimeRunByTaskRunId, updateOpenCodeRuntimeRun } from "@/lib/platform/opencode-runtime-store"
 import { appendPlatformRunEvent, getPlatformTaskRun, updatePlatformTaskRun } from "@/lib/platform/task-run-store"
 import { savePlatformArtifact } from "@/lib/platform/task-run-store"
 import { selectFinalRuntimeArtifacts, validateRuntimeArtifactPayload, validateRuntimeArtifactReference } from "./artifact-detector"
 import { filterTaskProgressEvents } from "./runtime-events"
 import { resolveRuntimeArtifactLimits, runtimeArtifactExtensions } from "./artifact-policy"
 import type { RuntimeArtifactPayload, RuntimeArtifactReference } from "@/lib/ai-runtime/contracts"
+import { releaseReservedCredits, type BillingReservation } from "@/lib/billing/runtime"
 
 type RuntimeEvent = { event?: string; delta?: string; message?: string; code?: string; artifact?: Record<string, unknown> }
 
@@ -15,9 +19,13 @@ function isTerminal(status: string) {
   return status === "succeeded" || status === "failed" || status === "cancelled" || status === "timed_out"
 }
 
-export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: number) {
+const reconciliationLocks = new Map<number, Promise<boolean>>()
+
+async function reconcileOpenCodeRuntimeTaskOnce(taskRunId: number, userId: number) {
   const platformRun = await getPlatformTaskRun(taskRunId)
   if (!platformRun || platformRun.userId !== userId || !platformRun.externalRunId) return false
+  const persistedResult = (platformRun.normalizedResult || {}) as Record<string, unknown>
+  if (isTerminal(platformRun.status) && persistedResult.billingFinalized === true) return false
 
   const runtimeRun = await getOpenCodeRuntimeRunByTaskRunId(taskRunId)
   if (!runtimeRun) return false
@@ -27,11 +35,59 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
   let remoteStatus: string
   let remoteError: string | null
   if (railway) {
-    const remote = await getRailwayOpenCodeRuntimeState(platformRun.externalRunId)
-    if (!remote || !isTerminal(remote.status)) return false
+    // Async Railway runs are intentionally detached from the POST response.
+    // Read the authoritative remote run record here instead of relying on an
+    // optional callback URL, which is not available in every local/dev setup.
+    const remote = await getRailwaySessionRun(platformRun.externalRunId)
+    if (!remote || !isTerminal(remote.status)) {
+      if (runtimeRun.deadlineAt > new Date()) return false
+      const taskInput = (platformRun.inputPayload || {}) as Record<string, unknown>
+      const reservation = taskInput.billingReservation && typeof taskInput.billingReservation === "object"
+        ? taskInput.billingReservation as BillingReservation
+        : null
+      let billingFinalized = false
+      let billingFinalizationError: string | null = null
+      try {
+        await releaseReservedCredits({
+          reservation,
+          userId: platformRun.userId,
+          enterpriseId: platformRun.enterpriseId,
+          idempotencyKey: `ai-entry:${platformRun.externalRunId}:release`,
+          reason: "opencode_runtime_deadline_exceeded",
+        })
+        billingFinalized = true
+      } catch (error) {
+        billingFinalizationError = error instanceof Error ? error.message : String(error)
+        console.error("ai-entry.billing.release.failed", { runtimeRunId: platformRun.externalRunId, message: billingFinalizationError })
+      }
+      const errorMessage = "opencode_runtime_deadline_exceeded"
+      await updateOpenCodeRuntimeRun(platformRun.externalRunId, {
+        status: "timed_out",
+        lastErrorCode: "opencode_runtime_deadline_exceeded",
+        lastErrorMessage: errorMessage,
+        clearLease: true,
+        finishedAt: new Date(),
+      })
+      await updatePlatformTaskRun(taskRunId, {
+        status: "failed",
+        normalizedResult: {
+          ...((platformRun.normalizedResult || {}) as Record<string, unknown>),
+          error: errorMessage,
+          errorCode: "opencode_runtime_deadline_exceeded",
+          errorMessage,
+          billingFinalized,
+          billingFinalizationError,
+          lastHeartbeatAt: Math.floor(Date.now() / 1000),
+        },
+        finishedAt: new Date(),
+      })
+      return true
+    }
     remoteStatus = remote.status
-    remoteError = remote.error
-    for (const item of remote.events) events.push(item.event as RuntimeEvent)
+    remoteError = remote.error || null
+    for (const event of Array.isArray(remote.events) ? remote.events : []) {
+      if (event && typeof event === "object") events.push(event as RuntimeEvent)
+    }
   } else {
     const remote = await getCloudflareSessionRun({ runId: platformRun.externalRunId })
     if (!isTerminal(remote.status)) return false
@@ -62,10 +118,15 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
   })
   const allowedArtifactExtensions = runtimeArtifactExtensions(taskInput.agentId, taskInput.selectedSkillIds)
   const conversationId = typeof taskInput.conversationId === "string" ? taskInput.conversationId : null
+  const turnId = typeof taskInput.turnId === "string" ? taskInput.turnId : null
+  const assistantMessageIdempotencyKey = typeof taskInput.assistantMessageIdempotencyKey === "string"
+    ? taskInput.assistantMessageIdempotencyKey
+    : null
   const artifacts = selectFinalRuntimeArtifacts(events
     .filter((event) => (event.event === "artifact_reference" || event.event === "artifact_payload") && event.artifact)
     .map((event) => event.artifact as Record<string, unknown>))
   const assistantContent = buildRuntimeAssistantMessage(text, artifacts)
+  const assistantParts = buildRuntimeAssistantParts(text, artifacts)
   let assistantMessagePersisted = previous.assistantMessagePersisted === true
 
   if (railway) {
@@ -87,9 +148,17 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
         mimeType: validated.mimeType,
         storageKey: null,
         externalUrl: null,
-        payload: { embeddedContentBase64: validated.contentBase64, fileName: validated.fileName, source: "opencode" },
-        source: "chat",
-      })
+      payload: {
+        embeddedContentBase64: validated.contentBase64,
+        fileName: validated.fileName,
+        runtimeRunId: platformRun.externalRunId,
+        runtimePath: validated.path,
+        runtimeSizeBytes: validated.sizeBytes,
+        checksumSha256: createHash("sha256").update(validated.contentBase64, "base64").digest("hex"),
+        source: "opencode",
+      },
+      source: "chat",
+    })
       seen.add(artifact.path)
       if (conversationId) {
         await recordAiEntryRuntimeArtifactContext({
@@ -137,14 +206,21 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
   }
 
   if (remoteStatus === "succeeded" && assistantContent && conversationId && !assistantMessagePersisted) {
-    await appendAiEntryMessage({
+    const messageParams = {
       userId,
       conversationId,
       role: "assistant",
       content: assistantContent,
-      idempotencyKey: `opencode:${platformRun.externalRunId}:assistant`,
+      parts: assistantParts,
+      metadata: turnId ? { turnId } : null,
+      idempotencyKey: assistantMessageIdempotencyKey || `opencode:${platformRun.externalRunId}:assistant`,
       agentId: typeof taskInput.agentId === "string" ? taskInput.agentId : null,
-    })
+    } as const
+    if (assistantMessageIdempotencyKey) {
+      await upsertAiEntryMessageParts(messageParams)
+    } else {
+      await appendAiEntryMessage(messageParams)
+    }
     assistantMessagePersisted = true
   }
 
@@ -186,4 +262,16 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
     finishedAt: new Date(),
   })
   return true
+}
+
+export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: number) {
+  const active = reconciliationLocks.get(taskRunId)
+  if (active) return active
+  const work = reconcileOpenCodeRuntimeTaskOnce(taskRunId, userId)
+  reconciliationLocks.set(taskRunId, work)
+  try {
+    return await work
+  } finally {
+    if (reconciliationLocks.get(taskRunId) === work) reconciliationLocks.delete(taskRunId)
+  }
 }

@@ -35,7 +35,7 @@ async function* streamCloudflareSession(
   const ticket = await getCloudflareSessionEventTicket({ runId: input.runId, sessionKey: input.sessionKey }, options)
   for await (const event of subscribeCloudflareSessionRun(ticket, options)) {
     if (event.event === "runtime_error") {
-      const error = new Error(event.message)
+      const error = new Error(`${event.code}:${event.message}`)
       ;(error as Error & { aiEntryRetryable?: boolean }).aiEntryRetryable = event.retryable
       throw error
     }
@@ -76,7 +76,7 @@ export async function* runOpenCodeAgent(input: AgentRuntimeInput, options: RunOp
     }
     for await (const event of events) {
       if (event.event === "runtime_error") {
-        const error = new Error(event.message)
+        const error = new Error(`${event.code}:${event.message}`)
         ;(error as Error & { aiEntryRetryable?: boolean }).aiEntryRetryable = event.retryable
         throw error
       }
@@ -90,7 +90,7 @@ export async function* runOpenCodeAgent(input: AgentRuntimeInput, options: RunOp
   for await (const event of streamRailwaySessionRun(input, runtimeProvider, options)) {
     yield event
     if (event.event === "runtime_error") {
-      const error = new Error(event.message)
+      const error = new Error(`${event.code}:${event.message}`)
       ;(error as Error & { aiEntryRetryable?: boolean }).aiEntryRetryable = event.retryable
       throw error
     }

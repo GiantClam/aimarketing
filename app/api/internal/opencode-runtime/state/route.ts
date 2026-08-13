@@ -2,11 +2,11 @@ import { createHash } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 
 import type { RuntimeArtifactPayload } from "@/lib/ai-runtime/contracts"
-import { runtimeArtifactExtensions } from "@/lib/ai-entry/runtime/artifact-policy"
+import { resolveRuntimeArtifactLimits, runtimeArtifactExtensions } from "@/lib/ai-entry/runtime/artifact-policy"
 import { selectFinalRuntimeArtifacts, validateRuntimeArtifactPayload } from "@/lib/ai-entry/runtime/artifact-detector"
-import { buildRuntimeAssistantMessage } from "@/lib/ai-entry/runtime/assistant-message"
-import { appendAiEntryMessage, recordAiEntryRuntimeArtifactContext, recordAiEntryRuntimeProjectSnapshot } from "@/lib/ai-entry/repository"
-import { isRailwayRuntimeTerminal, platformTaskStatusFromRailway } from "@/lib/ai-entry/runtime/railway-task-status"
+import { buildRuntimeAssistantMessage, buildRuntimeAssistantParts } from "@/lib/ai-entry/runtime/assistant-message"
+import { appendAiEntryMessage, recordAiEntryRuntimeArtifactContext, recordAiEntryRuntimeProjectSnapshot, upsertAiEntryMessageParts } from "@/lib/ai-entry/repository"
+import { isRailwayRuntimeTerminal, platformTaskStatusFromRailway, resolveRailwayRuntimeStatus } from "@/lib/ai-entry/runtime/railway-task-status"
 import { isValidRuntimeProjectSnapshot } from "@/lib/ai-runtime/contracts"
 import { estimateTextCredits } from "@/lib/billing/costing"
 import { finalizeReservedCredits, releaseReservedCredits, type BillingReservation } from "@/lib/billing/runtime"
@@ -51,9 +51,13 @@ function artifactContractForRun(inputPayload: Record<string, unknown>, agentId: 
     ? configured.allowedExtensions.filter((value): value is string => typeof value === "string")
     : runtimeArtifactExtensions(agentId, inputPayload.selectedSkillIds)
   return {
-    maxArtifacts: typeof configured?.maxArtifacts === "number" ? configured.maxArtifacts : Number.parseInt(process.env.RAILWAY_OPENCODE_MAX_ARTIFACTS || "24", 10),
-    maxArtifactBytes: typeof configured?.maxArtifactBytes === "number" ? configured.maxArtifactBytes : Number.parseInt(process.env.RAILWAY_OPENCODE_MAX_ARTIFACT_BYTES || String(2 * 1024 * 1024), 10),
-    maxArtifactTotalBytes: typeof configured?.maxArtifactTotalBytes === "number" ? configured.maxArtifactTotalBytes : Number.parseInt(process.env.RAILWAY_OPENCODE_MAX_ARTIFACT_TOTAL_BYTES || String(16 * 1024 * 1024), 10),
+    ...resolveRuntimeArtifactLimits({
+      agentId,
+      selectedSkillIds: inputPayload.selectedSkillIds,
+      maxArtifacts: typeof configured?.maxArtifacts === "number" ? configured.maxArtifacts : Number.parseInt(process.env.RAILWAY_OPENCODE_MAX_ARTIFACTS || "24", 10),
+      maxArtifactBytes: typeof configured?.maxArtifactBytes === "number" ? configured.maxArtifactBytes : Number.parseInt(process.env.RAILWAY_OPENCODE_MAX_ARTIFACT_BYTES || String(2 * 1024 * 1024), 10),
+      maxArtifactTotalBytes: typeof configured?.maxArtifactTotalBytes === "number" ? configured.maxArtifactTotalBytes : Number.parseInt(process.env.RAILWAY_OPENCODE_MAX_ARTIFACT_TOTAL_BYTES || String(16 * 1024 * 1024), 10),
+    }),
     allowedExtensions,
   }
 }
@@ -92,7 +96,10 @@ async function persistRailwayArtifact(input: {
   const existing = input.taskRun.artifacts.find((item) => {
     const payload = asRecord(item.payload)
     const existingName = typeof payload?.fileName === "string" ? payload.fileName : typeof payload?.runtimePath === "string" ? payload.runtimePath : ""
-    return payload?.runtimeRunId === input.runtimeRunId && (payload.runtimePath === input.artifact.path || displayRuntimeArtifactFileName(existingName).toLowerCase() === displayRuntimeArtifactFileName(incomingFileName).toLowerCase())
+    return (
+      payload?.runtimeRunId === input.runtimeRunId &&
+      (payload?.runtimePath === input.artifact.path || displayRuntimeArtifactFileName(existingName).toLowerCase() === displayRuntimeArtifactFileName(incomingFileName).toLowerCase())
+    )
   })
   if (existing) return artifactReferenceEvent(input.artifact as unknown as Record<string, unknown>, {
     provider: existing.storageKey ? "r2" : "platform",
@@ -308,26 +315,51 @@ async function syncRailwayTask(input: { runtimeRunId: string; status: OpenCodeRu
     .filter((artifact): artifact is Record<string, unknown> => Boolean(artifact)))
   const taskInput = asRecord(platformRun.inputPayload) || {}
   const conversationId = typeof taskInput.conversationId === "string" ? taskInput.conversationId : null
+  const turnId = typeof taskInput.turnId === "string" ? taskInput.turnId : null
+  const assistantMessageIdempotencyKey = typeof taskInput.assistantMessageIdempotencyKey === "string"
+    ? taskInput.assistantMessageIdempotencyKey
+    : null
   const terminalNow = isRailwayRuntimeTerminal(input.status)
   let assistantMessagePersisted = previous.assistantMessagePersisted === true
   if (input.status === "succeeded" && conversationId && !assistantMessagePersisted) {
     const assistantMessage = buildRuntimeAssistantMessage(text, persistedArtifacts)
     if (assistantMessage) {
-      await appendAiEntryMessage({ userId: platformRun.userId, conversationId, role: "assistant", content: assistantMessage, idempotencyKey: `opencode:${input.runtimeRunId}:assistant`, agentId: typeof taskInput.agentId === "string" ? taskInput.agentId : null })
+      const messageParams = {
+        userId: platformRun.userId,
+        conversationId,
+        role: "assistant" as const,
+        content: assistantMessage,
+        parts: buildRuntimeAssistantParts(text, persistedArtifacts),
+        metadata: turnId ? { turnId } : null,
+        idempotencyKey: assistantMessageIdempotencyKey || `opencode:${input.runtimeRunId}:assistant`,
+        agentId: typeof taskInput.agentId === "string" ? taskInput.agentId : null,
+      }
+      if (assistantMessageIdempotencyKey) {
+        await upsertAiEntryMessageParts(messageParams)
+      } else {
+        await appendAiEntryMessage(messageParams)
+      }
       assistantMessagePersisted = true
     }
   }
   const reservation = asRecord(taskInput.billingReservation) as BillingReservation | null
   let billingFinalized = previous.billingFinalized === true
+  let billingFinalizationError = typeof previous.billingFinalizationError === "string" ? previous.billingFinalizationError : null
   if (terminalNow && !billingFinalized) {
-    if (input.status === "succeeded") {
-      const usage = allEvents.filter((event) => event.event === "usage").at(-1)
-      const actual = estimateTextCredits({ featureKey: "ai_entry_chat", inputTokens: typeof usage?.inputTokens === "number" ? usage.inputTokens : Math.max(1, Math.ceil(text.length / 4)), outputTokens: typeof usage?.outputTokens === "number" ? usage.outputTokens : Math.max(1, Math.ceil(text.length / 4)), provider: "opencode", model: "opencode" })
-      await finalizeReservedCredits({ reservation, userId: platformRun.userId, enterpriseId: platformRun.enterpriseId, actualAmount: actual.credits, idempotencyKey: `ai-entry:${input.runtimeRunId}:debit`, provider: "opencode", model: "opencode", officialCostUsd: actual.officialCostUsd, costBasisUsd: actual.costBasisUsd, usagePayload: actual.metadata, metadata: { runtimeRunId: input.runtimeRunId } }).catch(() => undefined)
-    } else {
-      await releaseReservedCredits({ reservation, userId: platformRun.userId, enterpriseId: platformRun.enterpriseId, idempotencyKey: `ai-entry:${input.runtimeRunId}:release`, reason: `opencode_v2_${input.status}` }).catch(() => undefined)
+    try {
+      if (input.status === "succeeded") {
+        const usage = allEvents.filter((event) => event.event === "usage").at(-1)
+        const actual = estimateTextCredits({ featureKey: "ai_entry_chat", inputTokens: typeof usage?.inputTokens === "number" ? usage.inputTokens : Math.max(1, Math.ceil(text.length / 4)), outputTokens: typeof usage?.outputTokens === "number" ? usage.outputTokens : Math.max(1, Math.ceil(text.length / 4)), provider: "opencode", model: "opencode" })
+        await finalizeReservedCredits({ reservation, userId: platformRun.userId, enterpriseId: platformRun.enterpriseId, actualAmount: actual.credits, idempotencyKey: `ai-entry:${input.runtimeRunId}:debit`, provider: "opencode", model: "opencode", officialCostUsd: actual.officialCostUsd, costBasisUsd: actual.costBasisUsd, usagePayload: actual.metadata, metadata: { runtimeRunId: input.runtimeRunId } })
+      } else {
+        await releaseReservedCredits({ reservation, userId: platformRun.userId, enterpriseId: platformRun.enterpriseId, idempotencyKey: `ai-entry:${input.runtimeRunId}:release`, reason: `opencode_v2_${input.status}` })
+      }
+      billingFinalized = true
+      billingFinalizationError = null
+    } catch (error) {
+      billingFinalizationError = error instanceof Error ? error.message : String(error)
+      console.error("ai-entry.billing.finalize.failed", { runtimeRunId: input.runtimeRunId, message: billingFinalizationError })
     }
-    billingFinalized = true
   }
   const normalizedEvents = filterTaskProgressEvents(allEvents).slice(-100).map((event) => {
     const type = typeof event.event === "string" ? event.event : "runtime_event"
@@ -340,6 +372,7 @@ async function syncRailwayTask(input: { runtimeRunId: string; status: OpenCodeRu
     assistantMessagePersisted,
     runtimeText: assistantMessagePersisted ? undefined : text,
     billingFinalized,
+    billingFinalizationError,
     artifacts: persistedArtifacts.length,
     events: normalizedEvents,
     stage: input.status === "queued" ? "runtime_queued" : input.status === "succeeded" ? "runtime_publishing" : terminalNow ? "runtime_failed" : "runtime_running",
@@ -378,7 +411,7 @@ export async function POST(request: NextRequest) {
     if (!payload.event) {
       const state = await updateRailwayOpenCodeRuntimeState(payload.runId, { status, error: typeof payload.error === "string" ? payload.error : payload.error === null ? null : undefined })
       const currentState = await getRailwayOpenCodeRuntimeState(payload.runId, 0)
-      await syncRailwayTask({ runtimeRunId: payload.runId, status: currentState?.status || status || "running", state: currentState || state })
+      await syncRailwayTask({ runtimeRunId: payload.runId, status: resolveRailwayRuntimeStatus(status, currentState?.status), state: currentState || state })
       return NextResponse.json({ ok: true, state })
     }
     const state = await appendRailwayOpenCodeRuntimeEvent({
@@ -411,7 +444,7 @@ export async function POST(request: NextRequest) {
       }
     }
     const currentState = await getRailwayOpenCodeRuntimeState(payload.runId, 0)
-    await syncRailwayTask({ runtimeRunId: payload.runId, status: currentState?.status || status || "running", state: currentState || state })
+    await syncRailwayTask({ runtimeRunId: payload.runId, status: resolveRailwayRuntimeStatus(status, currentState?.status), state: currentState || state })
     return NextResponse.json({ ok: true, state })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "runtime_state_write_failed" }, { status: 500 })

@@ -1,11 +1,21 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { formatMessageTime, normalizeTimestampMs } from "@/lib/ai-entry/message-time"
+import { formatMessageTime, getRelativeMessageTime, normalizeTimestampMs } from "@/lib/ai-entry/message-time"
 
 test("normalizeTimestampMs preserves milliseconds and expands seconds", () => {
   assert.equal(normalizeTimestampMs(1_720_000_000), 1_720_000_000_000)
   assert.equal(normalizeTimestampMs(1_720_000_000_123), 1_720_000_000_123)
+})
+
+test("getRelativeMessageTime follows the message age", () => {
+  const now = Date.UTC(2026, 6, 6, 12, 0, 0)
+
+  assert.deepEqual(getRelativeMessageTime(now - 30_000, now), { kind: "just-now", timestampMs: now - 30_000 })
+  assert.deepEqual(getRelativeMessageTime(now - 5 * 60_000, now), { kind: "minutes", count: 5, timestampMs: now - 5 * 60_000 })
+  assert.deepEqual(getRelativeMessageTime(now - 2 * 3_600_000, now), { kind: "hours", count: 2, timestampMs: now - 2 * 3_600_000 })
+  assert.deepEqual(getRelativeMessageTime(now - 86_400_000, now), { kind: "yesterday", timestampMs: now - 86_400_000 })
+  assert.deepEqual(getRelativeMessageTime(now - 3 * 86_400_000, now), { kind: "days", count: 3, timestampMs: now - 3 * 86_400_000 })
 })
 
 test("formatMessageTime uses the provided timezone instead of server local time", () => {

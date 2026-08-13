@@ -56,14 +56,14 @@ function validateAuthorization(request: Request) {
 }
 
 export async function routeRequest(request: Request) {
-  if (!validateAuthorization(request)) {
-    return json({ message: "unauthorized" }, 401)
-  }
-
   const url = new URL(request.url)
 
   if (request.method === "GET" && url.pathname === "/health") {
     return json({ ok: true, service: "ppt-master-worker", readiness: await getRuntimeReadiness() })
+  }
+
+  if (!validateAuthorization(request)) {
+    return json({ message: "unauthorized" }, 401)
   }
 
   if (request.method === "GET" && url.pathname === "/fonts/check") {

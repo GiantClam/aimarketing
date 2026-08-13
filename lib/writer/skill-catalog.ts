@@ -79,7 +79,6 @@ function createDefaultCatalog(): WriterSkillCatalog {
       }),
     ),
     platformSkills: (Object.entries(WRITER_PLATFORM_CONFIG) as Array<[WriterPlatform, (typeof WRITER_PLATFORM_CONFIG)[WriterPlatform]]>)
-      .filter(([id]) => id !== "generic")
       .map(([id, value]) => ({
         id,
         dirName:

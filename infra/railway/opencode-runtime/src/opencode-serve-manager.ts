@@ -39,7 +39,7 @@ function stringValue(...values: unknown[]) {
 function diagnostic(value: unknown, fallback: string) {
   const record = asRecord(value)
   const data = asRecord(record?.data)
-  const message = stringValue(record?.message, data?.message, record?.name, value)
+  const message = stringValue(record?.message, record?.error, data?.message, data?.error, record?.name, value)
   return [...(message || fallback)].map((character) => {
     const code = character.charCodeAt(0)
     return code < 32 || code === 127 ? " " : character
@@ -220,40 +220,51 @@ export class OpenCodeServeManager {
         textLengths: new Map(),
       })
     })
+    const messagePath = `/session/${encodeURIComponent(sessionId)}/message${this.directoryQuery(sessionDir)}`
+    const requestInit = {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agent: "build",
+        model: { providerID: provider.providerId, modelID: provider.modelId },
+        system: systemPrompt,
+        parts: [{ type: "text", text: userPrompt }],
+      }),
+    } satisfies RequestInit
+
+    // This POST is not safely replayable: OpenCode may have accepted the turn
+    // before the transport failure becomes visible to us. Let the run's
+    // terminal/recovery path decide what happened instead of issuing a second
+    // model turn and charging twice.
     let response: Response
     try {
-      // Use the synchronous message endpoint as the run completion barrier.
-      // `prompt_async` returns before the turn finishes, so a missed
-      // session.idle event can leave the in-memory session lock held until
-      // the one-hour watchdog expires. The message endpoint keeps the HTTP
-      // request open until OpenCode has completed the turn, while the global
-      // event stream above continues forwarding progress events.
-      response = await this.request(`/session/${encodeURIComponent(sessionId)}/message${this.directoryQuery(sessionDir)}`, {
-        method: "POST",
-        headers: { Accept: "application/json", "Content-Type": "application/json" },
-        body: JSON.stringify({
-          agent: "build",
-          model: { providerID: provider.providerId, modelID: provider.modelId },
-          system: systemPrompt,
-          parts: [{ type: "text", text: userPrompt }],
-        }),
-      }, this.options.requestTimeoutMs)
+        // Use the synchronous message endpoint as the run completion barrier.
+        // `prompt_async` returns before the turn finishes, so a missed
+        // session.idle event can leave the in-memory session lock held until
+        // the one-hour watchdog expires. The message endpoint keeps the HTTP
+        // request open until OpenCode has completed the turn, while the global
+        // event stream above continues forwarding progress events.
+        response = await this.request(messagePath, requestInit, this.options.requestTimeoutMs)
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
       const run = this.pending.get(input.runId)
-      if (run) this.finishRun(run, false, { code: "opencode_prompt_request_failed", message: error instanceof Error ? error.message : String(error) })
+      if (run) this.finishRun(run, false, { code: "opencode_prompt_request_failed", message })
       return completed
     }
+
     if (!response.ok && response.status !== 204) {
       const payload = await this.readJson(response)
+      const message = diagnostic(payload, response.statusText)
       const run = this.pending.get(input.runId)
-      if (run) this.finishRun(run, false, { code: "opencode_prompt_failed", message: diagnostic(payload, response.statusText) })
-    } else {
-      // A successful synchronous response is authoritative. Do not wait for
-      // SSE idle: that event may be dropped, delayed, or represent the
-      // pre-prompt idle state of a persistent session.
-      const run = this.pending.get(input.runId)
-      if (run) this.finishRun(run, true)
+      if (run) this.finishRun(run, false, { code: "opencode_prompt_failed", message })
+      return completed
     }
+
+    // A successful synchronous response is authoritative. Do not wait for
+    // SSE idle: that event may be dropped, delayed, or represent the
+    // pre-prompt idle state of a persistent session.
+    const run = this.pending.get(input.runId)
+    if (run) this.finishRun(run, true)
     return completed
   }
 
