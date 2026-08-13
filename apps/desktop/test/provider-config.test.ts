@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { modelOptionsForProvider, providerForCapability, providerForId, type DesktopProviderConfig } from "../src/provider-config";
+import { configuredModelOptions, modelOptionsForProvider, preferredConfiguredModel, providerForCapability, providerForId, type DesktopProviderConfig } from "../src/provider-config";
 
 const text: DesktopProviderConfig = { id: "text", model: "text/model", baseUrl: "https://text.test/v1" };
 const image: DesktopProviderConfig = { id: "image", model: "image/model", baseUrl: "https://image.test/v1" };
@@ -34,4 +34,11 @@ test("profile model catalogs do not leak the legacy provider models", () => {
   const imageProvider = providerForCapability(config, "image");
   assert.equal(modelOptionsForProvider(config, imageProvider), undefined);
   assert.deepEqual(modelOptionsForProvider(config, config.provider), ["text/model-a", "text/model-b"]);
+});
+
+test("configured model lists are canonical and prefer the first configured model", () => {
+  const provider = { ...text, model: "missing", models: ["", " text/model-a ", "text/model-a", "text/model-b"] };
+  assert.deepEqual(configuredModelOptions(provider), ["text/model-a", "text/model-b"]);
+  assert.equal(preferredConfiguredModel(provider), "text/model-a");
+  assert.deepEqual(modelOptionsForProvider({ provider }, provider), ["text/model-a", "text/model-b"]);
 });

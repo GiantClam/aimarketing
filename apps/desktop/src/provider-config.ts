@@ -29,10 +29,12 @@ export function configuredModelOptions(provider: DesktopProviderConfig): string[
 }
 
 export function modelOptionsForProvider(config: ProviderConfigContainer, provider: DesktopProviderConfig): readonly string[] | undefined {
-  if (provider.models !== undefined) return provider.models;
+  if (provider.models !== undefined) return configuredModelOptions(provider);
   const providerId = provider.id?.trim();
   const fallbackId = config.provider.id?.trim();
-  return provider === config.provider || (providerId && fallbackId && providerId === fallbackId) ? config.provider.models : undefined;
+  return provider === config.provider || (providerId && fallbackId && providerId === fallbackId)
+    ? configuredModelOptions(config.provider)
+    : undefined;
 }
 
 export function preferredConfiguredModel(provider: DesktopProviderConfig): string {
