@@ -128,5 +128,5 @@
 - [ ] 所有阶段与质量门禁通过
 - [ ] 三个 capability specs 全部满足
 - [ ] 每类真实 Provider smoke 结果已记录
-  - 2026-08-13：`apps/desktop/real-providers.test.local.json` 的顺序 smoke 当前图片 Provider HTTP 200（响应含 `created`/`data`/`usage`），LLM 上游返回 HTTP 502（响应含 `error`）；脚本按顺序执行以排除 client-side concurrency，且按验收范围未执行视频生成。此前已有一次 LLM HTTP 200 记录，但需在 Provider 恢复后重跑当前配置确认。
+  - 2026-08-13：使用 `apps/desktop/real-providers.test.local.json` 顺序 smoke（LLM → image，未执行视频生成）；LLM 当前 HTTP 200，响应键为 `id/object/created/model/choices/usage`。图片请求在 3 秒和 10 秒单次超时下均未返回，诊断为 `AbortSignal.timeout`，未伪造成功结果；需在图片上游可用后重跑。
 - [ ] Ready for `openspec-archive add-desktop-media-and-workflows`
