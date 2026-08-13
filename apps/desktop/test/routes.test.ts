@@ -94,6 +94,37 @@ test("cloud and desktop home omit SaaS-only marketplace and platform settings en
   assert.match(cloudSource, /href="\/dashboard\/tasks" className="home-credits-link"/);
 });
 
+test("desktop bundle has no SaaS account, billing, publishing, or enterprise preset affordances", () => {
+  const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  const routeSource = readFileSync(resolve(process.cwd(), "../../packages/workbench-ui/src/routes.ts"), "utf8");
+  const source = `${appSource}\n${routeSource}`;
+  const forbiddenAffordances = [
+    "/dashboard/login",
+    "/dashboard/register",
+    "/dashboard/billing",
+    "/dashboard/subscription",
+    "/dashboard/agent-platform",
+    "/dashboard/marketplace",
+    "/dashboard/platform-settings",
+    "Publish as Agent",
+    "Agent marketplace",
+    "Enterprise preset",
+    "企业预设",
+  ];
+  for (const marker of forbiddenAffordances) assert.equal(source.includes(marker), false, marker);
+});
+
+test("desktop navigation preserves shared route placement and exact Agent highlighting", () => {
+  const shellSource = readFileSync(resolve(process.cwd(), "../../packages/workbench-ui/src/components.tsx"), "utf8");
+  const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  assert.match(appSource, /navItems=\{routes\.map\(/);
+  assert.match(appSource, /placement: route\.placement/);
+  assert.match(shellSource, /navItems\.filter\(\(item\) => item\.placement !== "hidden"\)/);
+  assert.match(shellSource, /hasExactActiveRoute/);
+  assert.equal(WORKBENCH_ROUTE_MANIFEST.filter((route) => route.placement !== "hidden").some((route) => route.path === "/dashboard/settings"), false);
+  assert.equal(WORKBENCH_ROUTE_MANIFEST.filter((route) => route.placement === "footer").map((route) => route.path).join(","), "/dashboard/video");
+});
+
 test("cloud static sidebar routes use the shared icon renderer", () => {
   const cloudLayout = readFileSync(resolve(process.cwd(), "../../components/dashboard-layout.tsx"), "utf8");
   assert.match(cloudLayout, /WorkbenchRouteIcon/);
