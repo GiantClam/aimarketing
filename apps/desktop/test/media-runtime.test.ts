@@ -59,3 +59,10 @@ test("desktop host emits terminal media attempt events for recovery idempotency"
   assert.match(app, /status: "queued", payloadJson/);
   assert.match(app, /payload\.providerTaskId && status !== "failed" && status !== "cancelled"/);
 });
+
+test("desktop image capabilities select direct OpenAI-compatible or Bailian adapters", () => {
+  const host = readFileSync(resolve(process.cwd(), "runtime/host.ts"), "utf8");
+  assert.match(host, /createBailianImageAdapter\(providerOptions\)/);
+  assert.match(host, /createOpenAICompatibleImageAdapter\(providerOptions\)/);
+  assert.match(host, /executorId === "image_generate"/);
+});

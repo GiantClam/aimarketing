@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { buildOpenCodeCommand, createOpenCodeEventParser, type OpenCodeRuntimeEvent } from "@aimarketing/runtime-contracts/opencode";
-import { createBailianVideoAdapter, createHttpMediaAdapter, createMiniMaxAudioAdapter, createMiniMaxVideoAdapter, createRunningHubAdapter, downloadMediaOutputs, runMediaJob, type MediaProviderId, type MediaProviderAdapter } from "@aimarketing/media-runtime";
+import { createBailianImageAdapter, createBailianVideoAdapter, createHttpMediaAdapter, createMiniMaxAudioAdapter, createMiniMaxVideoAdapter, createOpenAICompatibleImageAdapter, createRunningHubAdapter, downloadMediaOutputs, runMediaJob, type MediaProviderId, type MediaProviderAdapter } from "@aimarketing/media-runtime";
 import { executeWorkflow, migrateWorkflowDefinitionToCurrent, type WorkflowDefinitionEnvelope } from "@aimarketing/workflow-core";
 import { searchVaultIndex } from "./rag";
 import { activateIndexGeneration, createIndexGenerationPath, indexObsidianVault, ObsidianVaultWatcher, writeObsidianNote } from "./obsidian";
@@ -293,14 +293,18 @@ async function runMediaCapability(command: HostCommand, runId: string, nodeKey: 
   const apiKey = typeof config.apiKey === "string" ? config.apiKey : typeof configuredMedia?.apiKey === "string" ? configuredMedia.apiKey : typeof textProvider?.apiKey === "string" ? textProvider.apiKey : typeof command.payload?.apiKey === "string" ? command.payload.apiKey : undefined;
   const providerOptions = { provider: provider as MediaProviderId, baseUrl, apiKey: apiKey ?? "", fetchImpl: fetch };
   const providerLower = provider.toLowerCase();
-  const adapter: MediaProviderAdapter = providerLower.includes("bailian") && (executorId === "video_generate" || executorId === "digital_human")
-    ? createBailianVideoAdapter(providerOptions)
-    : providerLower.includes("minimax") && executorId === "video_generate"
+  const adapter: MediaProviderAdapter = providerLower.includes("bailian") && executorId === "image_generate"
+    ? createBailianImageAdapter(providerOptions)
+    : providerLower.includes("bailian") && (executorId === "video_generate" || executorId === "digital_human")
+      ? createBailianVideoAdapter(providerOptions)
+      : providerLower.includes("minimax") && executorId === "video_generate"
       ? createMiniMaxVideoAdapter(providerOptions)
       : providerLower.includes("minimax") && ["music_generate", "voice_synthesis", "audio_generate"].includes(executorId)
       ? createMiniMaxAudioAdapter(providerOptions)
       : providerLower.includes("runninghub")
         ? createRunningHubAdapter({ ...providerOptions, submitPath: endpoint, queryPath: typeof config.queryEndpoint === "string" ? config.queryEndpoint : "/openapi/v2/query" })
+      : executorId === "image_generate" && (providerLower.includes("openai") || providerLower.includes("pptoken") || endpoint === "/images/generations")
+        ? createOpenAICompatibleImageAdapter(providerOptions)
       : createHttpMediaAdapter({ provider: provider as MediaProviderId, baseUrl, apiKey, submitPath: endpoint, queryPath: typeof config.queryEndpoint === "string" ? (taskId) => `${config.queryEndpoint}/${encodeURIComponent(taskId)}` : undefined });
   if (resumeProviderTaskId && !adapter.query) throw new Error(`provider_resume_query_unsupported:${provider}`);
   const idempotencyKey = `${runId}:${nodeKey}:1`;

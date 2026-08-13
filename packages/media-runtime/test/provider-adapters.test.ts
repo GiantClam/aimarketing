@@ -1,8 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createBailianVideoAdapter, createMiniMaxAudioAdapter, createMiniMaxVideoAdapter, createRunningHubAdapter, type MediaProviderId } from "../src/index";
+import { createBailianImageAdapter, createBailianVideoAdapter, createMiniMaxAudioAdapter, createMiniMaxVideoAdapter, createOpenAICompatibleImageAdapter, createRunningHubAdapter, type MediaProviderId } from "../src/index";
 
 function cancellation() { return { throwIfCancelled() {} }; }
+
+test("OpenAI-compatible image adapter sends a local image generation request", async () => {
+  let request: { url: string; init?: RequestInit } | undefined;
+  const adapter = createOpenAICompatibleImageAdapter({ provider: "pptoken" as MediaProviderId, baseUrl: "https://api.example.test/v1", apiKey: "secret", fetchImpl: async (input, init) => {
+    request = { url: String(input), init };
+    return new Response(JSON.stringify({ data: [{ b64_json: "AQID" }] }), { status: 200 });
+  } });
+  const task = await adapter.execute({ provider: "pptoken" as MediaProviderId, modelId: "gpt-image-2", input: { prompt: "a paper airplane", size: "1024x1024" }, idempotencyKey: "run:image:1" }, cancellation());
+  assert.equal(task.status, "succeeded");
+  assert.equal(task.outputs[0]?.b64_json, "AQID");
+  assert.equal(request?.url, "https://api.example.test/v1/images/generations");
+  const body = JSON.parse(String(request?.init?.body)) as Record<string, unknown>;
+  assert.deepEqual(body, { model: "gpt-image-2", prompt: "a paper airplane", size: "1024x1024", n: 1, user: "run:image:1" });
+});
+
+test("Bailian image adapter submits and polls DashScope task results", async () => {
+  const calls: string[] = [];
+  const adapter = createBailianImageAdapter({ provider: "bailian" as MediaProviderId, baseUrl: "https://dashscope.aliyuncs.com", apiKey: "secret", fetchImpl: async (input, init) => {
+    calls.push(String(input));
+    return new Response(JSON.stringify(calls.length === 1 ? { output: { task_id: "image-task-1", task_status: "PENDING" } } : { output: { task_id: "image-task-1", task_status: "SUCCEEDED", results: [{ url: "https://files.invalid/image.png" }] } }), { status: 200 });
+  } });
+  const first = await adapter.execute({ provider: "bailian" as MediaProviderId, modelId: "wanx2.1-t2i-turbo", input: { prompt: "a blue kite", size: "1024*1024" }, idempotencyKey: "run:image:2" }, cancellation());
+  const second = await adapter.query!(first.providerTaskId, cancellation());
+  assert.equal(first.status, "queued");
+  assert.equal(second.status, "succeeded");
+  assert.equal(second.outputs[0]?.url, "https://files.invalid/image.png");
+  assert.match(calls[0], /text2image\/image-synthesis$/);
+});
 
 test("Bailian video adapter sends direct DashScope async request and polls task", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];

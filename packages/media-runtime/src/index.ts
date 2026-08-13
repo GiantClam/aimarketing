@@ -119,7 +119,11 @@ export interface DirectProviderOptions {
 }
 
 function providerUrl(baseUrl: string, path: string, query?: Record<string, string>) {
-  const url = new URL(path, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
+  // Treat provider paths as relative to the configured base path. A leading
+  // slash would make URL() discard a `/v1` prefix used by OpenAI-compatible
+  // gateways.
+  const relativePath = path.replace(/^\/+/u, "");
+  const url = new URL(relativePath, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
   for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, value);
   return url;
 }
@@ -141,7 +145,7 @@ function asTask(provider: MediaProviderId, payload: Record<string, unknown>, fal
   const providerTaskId = text(output.task_id) || text(output.taskId) || text(payload.task_id) || text(payload.id) || fallbackId || `sync-${Date.now()}`;
   const providerStatus = output.task_status ?? output.status ?? payload.status ?? payload.state;
   const values: unknown[] = [];
-  for (const value of [output.video_url, output.audio, output.url, output.file_url, payload.data, payload.output, payload.outputs]) {
+  for (const value of [output.video_url, output.audio, output.url, output.file_url, output.results, output.images, output.data, payload.data, payload.results, payload.output, payload.outputs]) {
     if (Array.isArray(value)) values.push(...value);
     else if (value !== undefined && value !== null) values.push(value);
   }
@@ -166,6 +170,72 @@ async function jsonRequest(options: DirectProviderOptions, path: string, init: R
   try { body = raw ? JSON.parse(raw) : null; } catch { body = { raw: raw.slice(0, 1000) }; }
   if (!response.ok) throw new Error(`media_provider_http_${response.status}`);
   return body && typeof body === "object" ? body as Record<string, unknown> : {};
+}
+
+/** Direct OpenAI-compatible image generation adapter. The provider response is
+ * kept as a local task so the host can download URLs or decode b64_json without
+ * involving a SaaS route.
+ */
+export function createOpenAICompatibleImageAdapter(options: DirectProviderOptions): MediaProviderAdapter {
+  return {
+    provider: options.provider,
+    execute: async (request, cancellation) => {
+      const input = request.input as Record<string, unknown>;
+      const prompt = text(input.prompt);
+      if (!prompt) throw new Error("image_prompt_required");
+      const count = Math.max(1, Math.min(4, Math.floor(numberValue(input.n, 1))));
+      const optional = (key: string) => {
+        const value = input[key];
+        return typeof value === "string" && value.trim() ? { [key]: value.trim() } : {};
+      };
+      const body = {
+        model: request.modelId,
+        prompt,
+        n: count,
+        ...optional("size"),
+        ...optional("quality"),
+        ...optional("background"),
+        ...optional("output_format"),
+        ...optional("response_format"),
+        ...(request.idempotencyKey ? { user: request.idempotencyKey } : {}),
+      };
+      const payload = await jsonRequest(options, "/images/generations", {
+        method: "POST",
+        body: JSON.stringify(body),
+        headers: request.idempotencyKey ? { "Idempotency-Key": request.idempotencyKey } : undefined,
+      }, cancellation);
+      return asTask(options.provider, payload);
+    },
+  };
+}
+
+/** Direct DashScope/Bailian text-to-image adapter with recoverable async tasks. */
+export function createBailianImageAdapter(options: DirectProviderOptions): MediaProviderAdapter {
+  return {
+    provider: options.provider,
+    execute: async (request, cancellation) => {
+      const input = request.input as Record<string, unknown>;
+      const prompt = text(input.prompt);
+      if (!prompt) throw new Error("image_prompt_required");
+      const parameters = {
+        size: text(input.size) || "1024*1024",
+        n: Math.max(1, Math.min(4, Math.floor(numberValue(input.n, 1)))),
+        ...(text(input.style) ? { style: text(input.style) } : {}),
+        ...(text(input.seed) ? { seed: numberValue(input.seed, 0) } : {}),
+      };
+      const payload = await jsonRequest(options, "/api/v1/services/aigc/text2image/image-synthesis", {
+        method: "POST",
+        body: JSON.stringify({
+          model: request.modelId,
+          input: { prompt, ...(text(input.negativePrompt) ? { negative_prompt: text(input.negativePrompt) } : {}) },
+          parameters,
+        }),
+        headers: { "X-DashScope-Async": "enable", ...(request.idempotencyKey ? { "X-Request-ID": request.idempotencyKey } : {}) },
+      }, cancellation);
+      return asTask(options.provider, payload);
+    },
+    query: async (providerTaskId, cancellation) => asTask(options.provider, await jsonRequest(options, `/api/v1/tasks/${encodeURIComponent(providerTaskId)}`, { method: "GET" }, cancellation), providerTaskId),
+  };
 }
 
 /** Direct DashScope/Bailian async video adapter. It intentionally contains no SaaS/database imports. */

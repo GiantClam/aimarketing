@@ -8,7 +8,8 @@
 
 - [ ] 1.1 迁移现有 success、429、invalid response、polling 和 timeout fixtures
 - [x] 1.2 定义统一 `submit/poll/cancel/download/usage` async media job contract。✓ 2026-08-13 — `media-runtime` 提供 host-neutral request/task/provider/cancellation ports、generic submit/poll/cancel runner、atomic downloader 与 idempotency/recovery contract tests。
-- [ ] 1.3 抽取 OpenAI-compatible/Bailian image clients
+- [x] 1.3 抽取 OpenAI-compatible/Bailian image clients
+  - [x] 2026-08-13 `media-runtime` now provides direct OpenAI-compatible `/images/generations` and DashScope text-to-image submit/poll adapters; desktop host selects them for configured image nodes. Fixture contract tests cover request shape, idempotency headers, `/v1` base-path preservation, async status normalization, and local URL/base64 outputs.
 - [ ] 1.4 抽取 MiniMax/Bailian/RunningHub video clients
 - [ ] 1.5 抽取 RunningHub digital human 和 MiniMax music/TTS/clone/audio clients
 - [ ] 1.6 为 SaaS/Desktop adapters 运行同一组 provider contract tests
