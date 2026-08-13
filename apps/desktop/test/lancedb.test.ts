@@ -1,10 +1,10 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildLanceIndex, searchLanceIndex } from "../runtime/lancedb";
-import type { VaultManifest } from "../runtime/obsidian";
+import { activateIndexGeneration, createIndexGenerationPath, resolveActiveIndexPath, type VaultManifest } from "../runtime/obsidian";
 
 test("LanceDB semantic index persists, reopens and isolates a Vault", async () => {
   const root = await mkdtemp(join(tmpdir(), "aimarketing-lancedb-"));
@@ -49,6 +49,31 @@ test("remote embedding is opt-in, HTTPS-only, and records its configured model",
     assert.equal(state.embeddingModel, "remote/text-embedding-test");
     assert.equal(state.embeddingDimension, 2);
     assert.deepEqual(requests, [{ url: "https://embeddings.example.test/v1/embeddings", authorization: "Bearer test-secret", input: ["\nremote embedding coverage"] }]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("embedding contract changes activate a complete new generation without mixing vectors", async () => {
+  const root = await mkdtemp(join(tmpdir(), "aimarketing-lancedb-generation-"));
+  try {
+    const indexPath = join(root, "index");
+    const firstGeneration = createIndexGenerationPath(indexPath);
+    const firstManifest: VaultManifest = { schemaVersion: 1, vaultPath: join(root, "Vault"), generation: 1, documents: [{ documentPath: "note.md", hash: "first" }], chunks: [{ id: "chunk", documentPath: "note.md", text: "first generation", hash: "first" }], updatedAt: new Date().toISOString() };
+    const firstState = await buildLanceIndex(firstGeneration, firstManifest, { fetchImpl: async () => { throw new Error("local_embedding_unavailable"); } });
+    await writeFile(join(firstGeneration, "manifest.json"), JSON.stringify(firstManifest), "utf8");
+    await activateIndexGeneration(indexPath, firstGeneration, firstManifest.generation);
+    const secondGeneration = createIndexGenerationPath(indexPath);
+    const secondManifest = { ...firstManifest, generation: 2, chunks: [{ ...firstManifest.chunks[0], text: "second generation" }] };
+    const secondState = await buildLanceIndex(secondGeneration, secondManifest, { mode: "remote", baseUrl: "https://embeddings.example.test/v1", model: "embedding-v2", apiKey: "test-secret", fetchImpl: async () => new Response(JSON.stringify({ data: [{ embedding: [0.5, 0.5] }] }), { status: 200, headers: { "content-type": "application/json" } }) });
+    await writeFile(join(secondGeneration, "manifest.json"), JSON.stringify(secondManifest), "utf8");
+    assert.equal(resolveActiveIndexPath(indexPath), firstGeneration);
+    assert.equal(firstState.embeddingDimension, 384);
+    assert.equal(secondState.embeddingDimension, 2);
+    await activateIndexGeneration(indexPath, secondGeneration, secondManifest.generation);
+    assert.equal(resolveActiveIndexPath(indexPath), secondGeneration);
+    assert.equal(JSON.parse(await readFile(join(secondGeneration, "index-state.json"), "utf8")).embeddingModel, "remote/embedding-v2");
+    assert.equal(JSON.parse(await readFile(join(firstGeneration, "index-state.json"), "utf8")).embeddingDimension, 384);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
