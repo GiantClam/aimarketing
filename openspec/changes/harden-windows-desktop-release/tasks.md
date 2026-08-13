@@ -12,7 +12,7 @@
 **Quality Gate:**
 - [ ] 缺 WebView2 时仍能显示修复进度
 - [ ] 不存在受限主界面或跳过必要 runtime 的路径
-- [ ] 系统 PATH 在本次启动中变化不会改变已选 executable
+- [x] 系统 PATH 在本次启动中变化不会改变已选 executable — 2026-08-14 persisted runtime-path and Windows command-shim regressions prove the canonical executable is selected and stored before host launch, independently of later PATH changes.
 
 ## 2. Signed multi-source distribution
 
