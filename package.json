@@ -79,6 +79,7 @@
     "test:upstream:credentials": "node scripts/verify_upstream_credentials.js",
     "test:writer:skills": "tsx --test lib/writer/skills.regression.test.ts lib/writer/skill-contract-fixtures.test.ts lib/writer/khazix-contract-fixtures.test.ts",
     "test:writer:assets": "tsx --test lib/writer/assets.regression.test.ts",
+    "test:writer:assets-runtime": "tsx --test lib/writer/assets-runtime.regression.test.ts",
     "test:writer:revisions": "tsx --test lib/writer/revision-history.test.ts",
     "test:writer:ui": "tsx --test components/writer/writer-workspace-state.test.ts",
     "test:billing": "tsx --test lib/billing/*.test.ts",

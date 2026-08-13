@@ -85,8 +85,8 @@
 - [x] 8.6 Remove any overall Writer asset timeout that is shorter than cumulative per-image execution while preserving an independent timeout for each image.
 - [x] 8.7 Persist asset progress serially after each image, retain ready images after later failure, support partial status, and skip ready images during recovery.
   - Evidence (2026-08-14): `partitionWriterAssetsForRecovery` rehydrates managed ready URLs, schedules only unfinished intents, the async runtime persists each image and releases a reservation when recovery returns only retained assets, and shared completion classification now reports `partial` while preserving ready URLs; `pnpm test:writer:assets` passes 20/20.
-- [ ] 8.8 Add tests for WeChat cover support, platform asset limits, multiple near-timeout images, partial success, worker restart, billing, and stored image URLs.
-- [ ] 8.9 Run research, assets runtime, assets route, billing, and recovery tests until they pass.
+- [x] 8.8 Add tests for WeChat cover support, platform asset limits, multiple near-timeout images, partial success, worker restart, billing, and stored image URLs. — 2026-08-14 `lib/writer/assets-runtime.regression.test.ts` covers governed WeChat cover output, registry limits, three sequential near-timeout requests, partial completion, persisted URL retention, worker restart recovery, and reserve/finalize billing assertions; 4/4 pass.
+- [x] 8.9 Run research, assets runtime, assets route, billing, and recovery tests until they pass. — 2026-08-14 combined Writer research/network, enterprise search, asset runtime, asset route, billing, and session recovery run passes 59/59.
 
 ## 9. Remove the Legacy Path and Verify Cutover
 
