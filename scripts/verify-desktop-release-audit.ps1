@@ -28,6 +28,26 @@ function Read-ZipText([IO.Compression.ZipArchiveEntry]$entry) {
   try { return $reader.ReadToEnd() } finally { $reader.Dispose() }
 }
 
+function Test-ManifestSignature([string]$manifestJson, [string]$source) {
+  $node = $env:AIMARKETING_NODE_PATH
+  if ([string]::IsNullOrWhiteSpace($node)) { $node = (Get-Command node -ErrorAction SilentlyContinue).Source }
+  $verifier = Join-Path $repoRoot "scripts/runtime-manifest-crypto.mjs"
+  if ([string]::IsNullOrWhiteSpace($node) -or -not (Test-Path -LiteralPath $node -PathType Leaf) -or -not (Test-Path -LiteralPath $verifier -PathType Leaf)) {
+    throw "desktop_release_audit_manifest_verifier_missing:$source"
+  }
+  $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) ("aimarketing-release-manifest-audit-" + [guid]::NewGuid().ToString("N"))
+  $manifestPath = Join-Path $temporaryRoot "runtime-manifest.json"
+  try {
+    New-Item -ItemType Directory -Force -Path $temporaryRoot | Out-Null
+    [IO.File]::WriteAllText($manifestPath, $manifestJson, [Text.UTF8Encoding]::new($false))
+    & $node $verifier verify $manifestPath *> $null
+    if ($LASTEXITCODE -ne 0) { throw "desktop_release_audit_manifest_signature_invalid:$source" }
+    return $true
+  } finally {
+    Remove-Item -LiteralPath $temporaryRoot -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
 function Get-LicenseEvidence([IO.Compression.ZipArchive]$archive, [IO.Compression.ZipArchiveEntry]$packageEntry) {
   $name = $packageEntry.FullName.Replace('\', '/')
   $separator = $name.LastIndexOf('/')
@@ -66,9 +86,11 @@ function Get-LicenseRecords([IO.Compression.ZipArchive]$archive, [string]$source
 function Get-ManifestAudit([IO.Compression.ZipArchive]$archive, [string]$source) {
   $entry = $archive.Entries | Where-Object { $_.Name -eq "runtime-manifest.json" } | Select-Object -First 1
   if ($null -eq $entry) { throw "desktop_release_audit_manifest_missing:$source" }
-  $manifest = Read-ZipText $entry | ConvertFrom-Json
+  $manifestJson = Read-ZipText $entry
+  $manifest = $manifestJson | ConvertFrom-Json
   $integrity = $manifest.integrity
   $signature = if ($integrity.signature -is [string]) { [string]$integrity.signature } else { "" }
+  $signatureVerified = if ([string]::IsNullOrWhiteSpace($signature)) { $false } else { Test-ManifestSignature $manifestJson $source }
   return [ordered]@{
     source = $source
     manifestId = [string]$manifest.manifestId
@@ -77,6 +99,7 @@ function Get-ManifestAudit([IO.Compression.ZipArchive]$archive, [string]$source)
     signatureAlgorithm = [string]$integrity.signatureAlgorithm
     signatureRequired = [bool]$integrity.required
     signaturePresent = -not [string]::IsNullOrWhiteSpace($signature)
+    signatureVerified = $signatureVerified
   }
 }
 
@@ -142,7 +165,7 @@ $audits = @(
 $authenticode = Audit-Authenticode $ReleaseDir
 $dependencies = Audit-Dependencies $PnpmAuditJson
 $missingLicense = @($audits | ForEach-Object { $_.licenseEvidenceMissing } | Where-Object { $_ })
-$unsignedManifest = @($audits | Where-Object { -not $_.manifest.signaturePresent -or -not $_.manifest.signatureRequired })
+$unsignedManifest = @($audits | Where-Object { -not $_.manifest.signaturePresent -or -not $_.manifest.signatureRequired -or -not $_.manifest.signatureVerified })
 
 if ($RequireSignedManifest -and $unsignedManifest.Count) { throw "desktop_release_audit_manifest_signature_required" }
 if ($RequireAuthenticode -and $authenticode.status -ne "pass") { throw "desktop_release_audit_authenticode_required" }

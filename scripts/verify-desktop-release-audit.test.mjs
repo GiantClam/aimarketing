@@ -11,7 +11,10 @@ test("desktop release audit is fail-closed for required release evidence", async
   assert.match(script, /RequireDependencyAudit/u);
   assert.match(script, /desktop_release_audit_license_evidence_missing/u);
   assert.match(script, /desktop_release_audit_manifest_signature_required/u);
+  assert.match(script, /desktop_release_audit_manifest_signature_invalid/u);
   assert.match(script, /desktop_release_audit_dependency_audit_required/u);
   assert.match(script, /Get-AuthenticodeSignature/u);
+  assert.match(script, /runtime-manifest-crypto\.mjs/u);
+  assert.match(script, /signatureVerified/u);
   assert.match(script, /status = if \(\$authenticode\.status -eq "pass"/u);
 });
