@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildOpenCodeCommand, createOpenCodeEventParser, createOpenCodeServeEventState, normalizeOpenCodeServeEvent } from "../src/opencode";
+import {
+  buildOpenCodeCommand,
+  createOpenCodeEventParser,
+  createOpenCodeServeEventState,
+  createOpenCodeServePromptPayload,
+  createOpenCodeServeSessionPayload,
+  normalizeOpenCodeServeEvent,
+  openCodeServeSessionPath,
+  readOpenCodeServeSessionId,
+} from "../src/opencode";
 
 test("builds an explicit OpenCode model command", () => {
   assert.deepEqual(buildOpenCodeCommand({ modelHint: "gpt-5.4" }), {
@@ -57,4 +66,32 @@ test("normalizes OpenCode serve SSE payloads once for desktop and Railway hosts"
   assert.deepEqual(tool.events, [{ event: "tool_event", tool: "shell", toolCallId: "tool-1", phase: "completed", message: "done", runId: "run-3" }]);
   assert.deepEqual(usage.events, [{ event: "usage", inputTokens: 3, outputTokens: 5, costUsd: 0.01, runId: "run-3" }]);
   assert.deepEqual(failure.terminalError, { code: "opencode_error", message: "broken", retryable: true });
+});
+
+test("builds identical OpenCode serve session and prompt requests for every host", () => {
+  assert.equal(openCodeServeSessionPath("session / 中文", "C:\\Vault 中文", "message"), "/session/session%20%2F%20%E4%B8%AD%E6%96%87/message?directory=C%3A%5CVault%20%E4%B8%AD%E6%96%87");
+  assert.deepEqual(createOpenCodeServeSessionPayload({
+    title: "AI Marketing Desktop",
+    providerId: "ollama",
+    modelId: "qwen3:8b",
+    metadata: { source: "desktop" },
+  }), {
+    title: "AI Marketing Desktop",
+    agent: "build",
+    model: { providerID: "ollama", modelID: "qwen3:8b" },
+    metadata: { source: "desktop" },
+  });
+  assert.deepEqual(createOpenCodeServePromptPayload({
+    providerId: "ollama",
+    modelId: "qwen3:8b",
+    prompt: "你好",
+    systemPrompt: "system",
+  }), {
+    agent: "build",
+    model: { providerID: "ollama", modelID: "qwen3:8b" },
+    system: "system",
+    parts: [{ type: "text", text: "你好" }],
+  });
+  assert.equal(readOpenCodeServeSessionId({ data: { id: "session-1" } }), "session-1");
+  assert.equal(readOpenCodeServeSessionId({ id: "" }), "");
 });

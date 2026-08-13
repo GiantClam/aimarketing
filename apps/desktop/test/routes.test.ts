@@ -298,14 +298,14 @@ test("ordinary chat, writer and PPT routes stay on the OpenCode session path", (
   assert.doesNotMatch(appSource, /ai-sdk-native/);
 });
 
-test("OpenCode serve errors terminate the active turn instead of polling for the full timeout", () => {
+test("OpenCode serve errors terminate the shared synchronous turn barrier", () => {
   const serveSource = readFileSync(resolve(process.cwd(), "runtime/opencode-serve.ts"), "utf8");
   assert.match(serveSource, /active\.failed =/);
   assert.match(serveSource, /if \(active\.failed\) throw new Error\(active\.failed\)/);
   assert.match(serveSource, /normalizeOpenCodeServeEvent/);
   assert.match(serveSource, /normalized\.terminalError/);
-  assert.match(serveSource, /baselineAssistantCount/);
-  assert.match(serveSource, /completedNewAssistant/);
+  assert.match(serveSource, /openCodeServeSessionPath\(sessionId, workspacePath, "message"\)/);
+  assert.doesNotMatch(serveSource, /prompt_async/);
 });
 
 test("local qualified models keep their OpenCode provider prefix", () => {

@@ -50,7 +50,26 @@ export interface UsageRecord {
   readonly estimatedCost?: number;
 }
 
-export type { OpenCodeRuntimeEvent, OpenCodeCommandInput } from "./opencode";
-export { buildOpenCodeCommand, createOpenCodeEventParser, opencodeRuntimeDefinition } from "./opencode";
+export type {
+  OpenCodeCommandInput,
+  OpenCodeRuntimeEvent,
+  OpenCodeServeEventResult,
+  OpenCodeServeEventState,
+  OpenCodeServeModel,
+  OpenCodeServePromptPayloadInput,
+  OpenCodeServeSessionPayloadInput,
+} from "./opencode";
+export {
+  buildOpenCodeCommand,
+  createOpenCodeEventParser,
+  createOpenCodeServeEventState,
+  createOpenCodeServePromptPayload,
+  createOpenCodeServeSessionPayload,
+  normalizeOpenCodeServeEvent,
+  openCodeServeSessionPath,
+  openCodeServeSessionsPath,
+  opencodeRuntimeDefinition,
+  readOpenCodeServeSessionId,
+} from "./opencode";
 export { OpenCodeSessionClient } from "./session";
 export type { OpenCodeSessionRef, OpenCodeSessionTransport } from "./session";

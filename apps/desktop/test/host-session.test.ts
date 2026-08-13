@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -130,4 +131,13 @@ test("workflow-host expands foreach items instead of passing one array to the bo
     child.kill();
     await rm(workspace, { recursive: true, force: true });
   }
+});
+
+test("workflow-host routes persisted provider tasks through workflow-core recovery", () => {
+  const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const source = readFileSync(join(desktopRoot, "runtime", "host.ts"), "utf8");
+  assert.match(source, /function readWorkflowRecovery/);
+  assert.match(source, /recovering: readWorkflowRecovery\(command\.payload\?\.recovering\)/);
+  assert.match(source, /resume: async \(\{ executorId, nodeKey, config, inputs, providerTaskId \}, signal\)/);
+  assert.match(source, /runMediaCapability\(command, runId, nodeKey, executorId, config, inputs, workspacePath, signal, providerTaskId\)/);
 });

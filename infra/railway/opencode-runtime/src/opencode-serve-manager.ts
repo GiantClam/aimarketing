@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process"
 import { mkdir } from "node:fs/promises"
 
 import type { AgentRuntimeEvent, AgentRuntimeInput, AgentRuntimeInputV2, OpenCodeProviderConfig } from "../../../../lib/ai-runtime/contracts.js"
-import { createOpenCodeServeEventState, normalizeOpenCodeServeEvent, type OpenCodeServeEventState } from "@aimarketing/runtime-contracts/opencode"
+import { createOpenCodeServeEventState, createOpenCodeServePromptPayload, createOpenCodeServeSessionPayload, normalizeOpenCodeServeEvent, openCodeServeSessionPath, openCodeServeSessionsPath, readOpenCodeServeSessionId, type OpenCodeServeEventState } from "@aimarketing/runtime-contracts/opencode"
 
 type JsonRecord = Record<string, unknown>
 
@@ -70,10 +70,6 @@ export class OpenCodeServeManager {
     return `http://${this.options.hostname}:${this.options.port}`
   }
 
-  private directoryQuery(directory: string) {
-    return `?directory=${encodeURIComponent(directory)}`
-  }
-
   async start() {
     if (this.started) return
     this.started = true
@@ -130,13 +126,11 @@ export class OpenCodeServeManager {
    */
   async createTransientSession(input: AgentRuntimeInput | AgentRuntimeInputV2, sessionDir: string, provider: OpenCodeProviderConfig) {
     await this.start()
-    const response = await this.request(`/session${this.directoryQuery(sessionDir)}`, {
+    const response = await this.request(openCodeServeSessionsPath(sessionDir), {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({
+      body: JSON.stringify(createOpenCodeServeSessionPayload({
         title: `AI Marketing ${input.agentId || "agent"} ${input.runId}`,
-        agent: "build",
-        model: { id: provider.modelId, providerID: provider.providerId },
         metadata: {
           aiMarketingRunId: input.runId,
           bundleVersion: this.options.bundleVersion,
@@ -144,11 +138,14 @@ export class OpenCodeServeManager {
           bundleKey: input.sharedSkillSetSelection?.bundleKey || null,
           transient: true,
         },
-      }),
+        providerId: provider.providerId,
+        modelId: provider.modelId,
+      })),
     })
     const payload = await this.readJson(response)
-    if (!response.ok || !asRecord(payload)?.id) throw new Error(`opencode_session_create_failed:${diagnostic(payload, response.statusText)}`)
-    return String(asRecord(payload)?.id)
+    const sessionId = readOpenCodeServeSessionId(payload)
+    if (!response.ok || !sessionId) throw new Error(`opencode_session_create_failed:${diagnostic(payload, response.statusText)}`)
+    return sessionId
   }
 
   async createPersistentSession(input: AgentRuntimeInput | AgentRuntimeInputV2, sessionDir: string, provider: OpenCodeProviderConfig) {
@@ -158,7 +155,7 @@ export class OpenCodeServeManager {
     const cached = this.persistentSessions.get(sessionKey)
     if (cached) return cached
 
-    const listed = await this.request(`/session${this.directoryQuery(sessionDir)}`, {
+    const listed = await this.request(openCodeServeSessionsPath(sessionDir), {
       method: "GET",
       headers: { Accept: "application/json" },
     }).then((response) => this.readJson(response).catch(() => null)).catch(() => null)
@@ -176,13 +173,11 @@ export class OpenCodeServeManager {
       }
     }
 
-    const response = await this.request(`/session${this.directoryQuery(sessionDir)}`, {
+    const response = await this.request(openCodeServeSessionsPath(sessionDir), {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({
+      body: JSON.stringify(createOpenCodeServeSessionPayload({
         title: `AI Marketing Writer ${sessionKey}`,
-        agent: "build",
-        model: { id: provider.modelId, providerID: provider.providerId },
         metadata: {
           aiMarketingSessionKey: sessionKey,
           aiMarketingRunId: input.runId,
@@ -191,11 +186,13 @@ export class OpenCodeServeManager {
           bundleKey: input.sharedSkillSetSelection?.bundleKey || null,
           transient: false,
         },
-      }),
+        providerId: provider.providerId,
+        modelId: provider.modelId,
+      })),
     })
     const payload = await this.readJson(response)
-    if (!response.ok || !asRecord(payload)?.id) throw new Error(`opencode_session_create_failed:${diagnostic(payload, response.statusText)}`)
-    const sessionId = String(asRecord(payload)?.id)
+    const sessionId = readOpenCodeServeSessionId(payload)
+    if (!response.ok || !sessionId) throw new Error(`opencode_session_create_failed:${diagnostic(payload, response.statusText)}`)
     this.persistentSessions.set(sessionKey, sessionId)
     return sessionId
   }
@@ -227,15 +224,10 @@ export class OpenCodeServeManager {
       // the one-hour watchdog expires. The message endpoint keeps the HTTP
       // request open until OpenCode has completed the turn, while the global
       // event stream above continues forwarding progress events.
-      response = await this.request(`/session/${encodeURIComponent(sessionId)}/message${this.directoryQuery(sessionDir)}`, {
+      response = await this.request(openCodeServeSessionPath(sessionId, sessionDir, "message"), {
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/json" },
-        body: JSON.stringify({
-          agent: "build",
-          model: { providerID: provider.providerId, modelID: provider.modelId },
-          system: systemPrompt,
-          parts: [{ type: "text", text: userPrompt }],
-        }),
+        body: JSON.stringify(createOpenCodeServePromptPayload({ providerId: provider.providerId, modelId: provider.modelId, systemPrompt, prompt: userPrompt })),
       }, this.options.requestTimeoutMs)
     } catch (error) {
       const run = this.pending.get(input.runId)
@@ -257,7 +249,7 @@ export class OpenCodeServeManager {
   }
 
   async abort(sessionId: string) {
-    const response = await this.request(`/session/${encodeURIComponent(sessionId)}/abort`, { method: "POST", headers: { Accept: "application/json" } })
+    const response = await this.request(openCodeServeSessionPath(sessionId, undefined, "abort"), { method: "POST", headers: { Accept: "application/json" } })
     return response.ok || response.status === 404
   }
 
@@ -265,7 +257,7 @@ export class OpenCodeServeManager {
     // OpenCode versions that support DELETE release native session state. A
     // missing endpoint is harmless: the session is still never referenced by
     // the platform after run completion.
-    await this.request(`/session/${encodeURIComponent(sessionId)}${this.directoryQuery(sessionDir)}`, { method: "DELETE", headers: { Accept: "application/json" } }).catch(() => undefined)
+    await this.request(openCodeServeSessionPath(sessionId, sessionDir), { method: "DELETE", headers: { Accept: "application/json" } }).catch(() => undefined)
   }
 
   private async request(path: string, init: RequestInit = {}, timeoutMs = Math.min(this.options.requestTimeoutMs, 30_000)) {

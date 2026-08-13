@@ -9,6 +9,7 @@ export interface WorkflowExecutionOptions {
   readonly signal?: AbortSignal;
   readonly retryLimit?: number;
   readonly completed?: Readonly<Record<string, Record<string, unknown>>>;
+  readonly recovering?: Readonly<Record<string, { readonly providerTaskId: string; readonly metadata?: Readonly<Record<string, unknown>> }>>;
 }
 
 export interface WorkflowExecutionResult {
@@ -44,9 +45,11 @@ export async function executeWorkflow(definition: WorkflowDefinitionEnvelope, op
         const executorId = workflowNodeRegistry.require(node.type).executorId;
         const inputs = collectInputs(definition, node.nodeKey, outputs);
         try {
+          const recovery = options.recovering?.[node.nodeKey];
+          if (recovery) await appendEvent(options, sequence, "node_resumed", { nodeKey: node.nodeKey, executorId, providerTaskId: recovery.providerTaskId });
           const execution = executorId === "foreach"
-            ? await executeForeach(definition, plan, node.nodeKey, node.config, inputs, outputs, options, sequence)
-            : { output: await executeWithRetry(executorId, node.nodeKey, node.config, inputs, options), consumedNodeKeys: [] as const };
+            ? await executeForeach(definition, plan, node.nodeKey, node.config, inputs, outputs, options, sequence, recovery)
+            : { output: await executeWithRetry(executorId, node.nodeKey, node.config, inputs, options, undefined, recovery), consumedNodeKeys: [] as const };
           return { step, executorId, ...execution } as const;
         } catch (error) {
           await appendEvent(options, sequence, "node_failed", { nodeKey: node.nodeKey, executorId, message: error instanceof Error ? error.message : String(error) });
@@ -72,12 +75,21 @@ export async function executeWorkflow(definition: WorkflowDefinitionEnvelope, op
   }
 }
 
-async function executeWithRetry(executorId: string, nodeKey: string, config: Record<string, unknown>, inputs: Record<string, unknown>, options: WorkflowExecutionOptions, iteration?: { readonly key: string; readonly index: number; readonly item: unknown }) {
+type WorkflowRecoveryAttempt = NonNullable<WorkflowExecutionOptions["recovering"]>[string];
+
+async function executeWithRetry(executorId: string, nodeKey: string, config: Record<string, unknown>, inputs: Record<string, unknown>, options: WorkflowExecutionOptions, iteration?: { readonly key: string; readonly index: number; readonly item: unknown }, recovery?: WorkflowRecoveryAttempt) {
   const limit = Math.max(0, Math.min(5, options.retryLimit ?? 0));
   let attempt = 0;
   while (true) {
     throwIfCancelled(options.signal);
-    try { return await options.ports.capability.execute({ executorId, nodeKey, config, inputs, ...(iteration ? { iteration } : {}) }, options.signal ?? new AbortController().signal); }
+    try {
+      const signal = options.signal ?? new AbortController().signal;
+      if (recovery) {
+        if (!options.ports.capability.resume) throw new Error("workflow_recovery_unsupported");
+        return await options.ports.capability.resume({ executorId, nodeKey, config, inputs, providerTaskId: recovery.providerTaskId, ...(recovery.metadata ? { metadata: recovery.metadata } : {}) }, signal);
+      }
+      return await options.ports.capability.execute({ executorId, nodeKey, config, inputs, ...(iteration ? { iteration } : {}) }, signal);
+    }
     catch (error) { if (attempt >= limit) throw error; attempt += 1; }
   }
 }
@@ -93,9 +105,10 @@ async function executeForeach(
   completed: Record<string, Record<string, unknown>>,
   options: WorkflowExecutionOptions,
   sequence: { value: number },
+  recovery?: WorkflowRecoveryAttempt,
 ): Promise<ForeachExecution> {
   const inputKind = String(config.inputPortId ?? "image").includes("asset") ? "asset" : "image";
-  const resolved = await executeWithRetry("foreach", foreachNodeKey, config, inputs, options);
+  const resolved = await executeWithRetry("foreach", foreachNodeKey, config, inputs, options, undefined, recovery);
   const items = extractIterationItems(resolved, inputs, inputKind);
   const collectNode = findCollectNode(definition, foreachNodeKey, typeof config.collectNodeKey === "string" ? config.collectNodeKey : "");
   if (!collectNode) throw new Error("workflow_foreach_collect_required");

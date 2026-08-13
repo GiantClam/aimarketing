@@ -1,7 +1,7 @@
 import { randomBytes, randomInt } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir } from "node:fs/promises";
-import { createOpenCodeServeEventState, normalizeOpenCodeServeEvent, type OpenCodeRuntimeEvent, type OpenCodeServeEventState } from "@aimarketing/runtime-contracts/opencode";
+import { createOpenCodeServeEventState, createOpenCodeServePromptPayload, createOpenCodeServeSessionPayload, normalizeOpenCodeServeEvent, openCodeServeSessionPath, openCodeServeSessionsPath, readOpenCodeServeSessionId, type OpenCodeRuntimeEvent, type OpenCodeServeEventState } from "@aimarketing/runtime-contracts/opencode";
 
 type Provider = { readonly id?: string; readonly model?: string; readonly apiKey?: string };
 type EventSink = (event: OpenCodeRuntimeEvent) => void;
@@ -11,19 +11,6 @@ function record(value: unknown): Record<string, unknown> | null { return value &
 function stringValue(...values: unknown[]) { return values.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim() ?? ""; }
 function safe(value: unknown) { return stringValue(value).replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 1024); }
 function modelParts(model: string | undefined) { const separator = model?.indexOf("/") ?? -1; return separator > 0 ? { providerID: model!.slice(0, separator), modelID: model!.slice(separator + 1) } : undefined; }
-function phase(value: unknown): "started" | "completed" | "failed" { const normalized = stringValue(value).toLowerCase(); return normalized.includes("fail") || normalized.includes("error") ? "failed" : normalized === "completed" || normalized === "success" ? "completed" : "started"; }
-
-export function completedNewAssistant(messages: unknown[], baselineAssistantCount: number) {
-  const assistants = messages.filter((item) => record(record(item)?.info)?.role === "assistant");
-  if (assistants.length <= baselineAssistantCount) return { completed: false, error: "" };
-  const latest = record(assistants.at(-1));
-  const info = record(latest?.info);
-  const time = record(info?.time);
-  return {
-    completed: typeof time?.completed === "number",
-    error: info?.error ? `opencode_error:${safe(record(info.error)?.message ?? info.error)}` : "",
-  };
-}
 
 export class OpenCodeServeClient {
   private child: ChildProcess | undefined;
@@ -78,13 +65,14 @@ export class OpenCodeServeClient {
   async createOrResumeSession(workspacePath: string, requestedId: string | undefined, provider: Provider, environment: NodeJS.ProcessEnv) {
     await this.ensureStarted(workspacePath, environment);
     if (requestedId) {
-      const existing = await this.request(`/session/${encodeURIComponent(requestedId)}/message?directory=${encodeURIComponent(workspacePath)}`).catch(() => undefined);
+      const existing = await this.request(openCodeServeSessionPath(requestedId, workspacePath, "message")).catch(() => undefined);
       if (existing?.ok) return requestedId;
     }
-    const body = { title: "AI Marketing Desktop", agent: "build", ...(modelParts(provider.model) ? { model: modelParts(provider.model) } : {}) };
-    const response = await this.request(`/session?directory=${encodeURIComponent(workspacePath)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }, 30_000);
-    const payload = record(await response.json().catch(() => null));
-    const id = stringValue(payload?.id, record(payload?.data)?.id);
+    const model = modelParts(provider.model);
+    const body = createOpenCodeServeSessionPayload({ title: "AI Marketing Desktop", ...(model ? { providerId: model.providerID, modelId: model.modelID } : {}) });
+    const response = await this.request(openCodeServeSessionsPath(workspacePath), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }, 30_000);
+    const payload = await response.json().catch(() => null);
+    const id = readOpenCodeServeSessionId(payload);
     if (!response.ok || !id) throw new Error(`opencode_session_create_failed:${safe(payload?.message) || response.statusText}`);
     return id;
   }
@@ -96,31 +84,22 @@ export class OpenCodeServeClient {
     const abort = () => { void this.abort(sessionId); };
     signal?.addEventListener("abort", abort, { once: true });
     try {
-      const beforePrompt = await this.request(`/session/${encodeURIComponent(sessionId)}/message?directory=${encodeURIComponent(workspacePath)}`, {}, 10_000).then((value) => value.json().catch(() => []));
-      const baselineAssistantCount = Array.isArray(beforePrompt) ? beforePrompt.filter((item) => record(record(item)?.info)?.role === "assistant").length : 0;
-      const response = await this.request(`/session/${encodeURIComponent(sessionId)}/prompt_async?directory=${encodeURIComponent(workspacePath)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agent: "build", ...(modelParts(provider.model) ? { model: modelParts(provider.model) } : {}), parts: [{ type: "text", text: prompt }] }) }, 30_000);
+      const model = modelParts(provider.model);
+      const response = await this.request(openCodeServeSessionPath(sessionId, workspacePath, "message"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(createOpenCodeServePromptPayload({ prompt, ...(model ? { providerId: model.providerID, modelId: model.modelID } : {}) })),
+      }, 30 * 60 * 1000);
       if (!response.ok && response.status !== 204) throw new Error(`opencode_prompt_failed_${response.status}`);
-      const deadline = Date.now() + 30 * 60 * 1000;
-      while (Date.now() < deadline) {
-        if (signal?.aborted) throw new Error("opencode_aborted");
-        if (active.failed) throw new Error(active.failed);
-        const messages = await this.request(`/session/${encodeURIComponent(sessionId)}/message?directory=${encodeURIComponent(workspacePath)}`, {}, 10_000).then((value) => value.json().catch(() => []));
-        const list = Array.isArray(messages) ? messages : [];
-        const turn = completedNewAssistant(list, baselineAssistantCount);
-        if (turn.completed || turn.error) {
-          if (turn.error) throw new Error(turn.error);
-          sink({ event: "done", runId });
-          return;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 250));
-      }
-      throw new Error("opencode_prompt_timeout");
+      if (signal?.aborted) throw new Error("opencode_aborted");
+      if (active.failed) throw new Error(active.failed);
+      sink({ event: "done", runId });
     } catch (error) {
       sink({ event: "runtime_error", code: signal?.aborted ? "opencode_aborted" : "opencode_prompt_failed", message: safe(error instanceof Error ? error.message : error), retryable: !signal?.aborted, runId });
     } finally { signal?.removeEventListener("abort", abort); this.active.delete(runId); }
   }
 
-  async abort(sessionId: string) { await this.request(`/session/${encodeURIComponent(sessionId)}/abort`, { method: "POST" }).catch(() => undefined); }
+  async abort(sessionId: string) { await this.request(openCodeServeSessionPath(sessionId, this.runtimeWorkspace, "abort"), { method: "POST" }).catch(() => undefined); }
 
   async cancelRun(runId: string) {
     const active = this.active.get(runId);

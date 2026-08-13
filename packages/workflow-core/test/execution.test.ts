@@ -71,3 +71,86 @@ test("workflow foreach executes its body with bounded concurrency and collects i
   assert.equal(peak, 2);
   assert.deepEqual(result.outputs.collect?.text, ["done-a", "done-b", "done-c"]);
 });
+
+test("workflow retries a failed node through the capability port", async () => {
+  let writerAttempts = 0;
+  const result = await executeWorkflow(definition, { runId: "retry-run", retryLimit: 1, ports: { capability: { execute: async ({ executorId }) => {
+    if (executorId === "text_input") return { text: "hello" };
+    writerAttempts += 1;
+    if (writerAttempts === 1) throw new Error("temporary_provider_failure");
+    return { text: "done" };
+  } } } });
+  assert.equal(result.status, "succeeded");
+  assert.equal(writerAttempts, 2);
+  assert.equal(result.outputs.writer?.text, "done");
+});
+
+test("workflow resumes completed outputs without re-executing those nodes", async () => {
+  const calls: string[] = [];
+  const result = await executeWorkflow(definition, { runId: "resume-run", completed: { input: { text: "persisted" } }, ports: { capability: { execute: async ({ executorId, inputs }) => {
+    calls.push(executorId);
+    return { text: `writer:${String(inputs.text)}` };
+  } } } });
+  assert.equal(result.status, "succeeded");
+  assert.deepEqual(calls, ["writer"]);
+  assert.equal(result.outputs.writer?.text, "writer:persisted");
+});
+
+test("workflow cancellation signals parallel capabilities and prevents dependent nodes", async () => {
+  const controller = new AbortController();
+  const started: string[] = [];
+  let receivedAbort = 0;
+  const cancellationDefinition: WorkflowDefinitionEnvelope = { schemaVersion: 2, revision: 1, definitionHash: "", nodes: [
+    { nodeKey: "input", type: "text_input", nodeVersion: 1, title: "Text", positionX: 0, positionY: 0, config: {} },
+    { nodeKey: "writer-a", type: "writer", nodeVersion: 1, title: "Writer A", positionX: 1, positionY: 0, config: {} },
+    { nodeKey: "writer-b", type: "writer", nodeVersion: 1, title: "Writer B", positionX: 1, positionY: 1, config: {} },
+    { nodeKey: "output", type: "output", nodeVersion: 1, title: "Output", positionX: 2, positionY: 0, config: {} },
+  ], edges: [
+    { edgeKey: "a", sourceNodeKey: "input", sourcePortId: "text", targetNodeKey: "writer-a", targetPortId: "text" },
+    { edgeKey: "b", sourceNodeKey: "input", sourcePortId: "text", targetNodeKey: "writer-b", targetPortId: "text" },
+    { edgeKey: "output", sourceNodeKey: "writer-a", sourcePortId: "text", targetNodeKey: "output", targetPortId: "text" },
+  ] };
+  const result = await executeWorkflow(cancellationDefinition, { runId: "cancel-parallel", signal: controller.signal, ports: { capability: { execute: async ({ executorId, nodeKey }, signal) => {
+    started.push(nodeKey);
+    if (executorId === "text_input") return { text: "hello" };
+    if (executorId === "output") return { text: "must-not-run" };
+    return await new Promise<Record<string, unknown>>((_, reject) => {
+      signal.addEventListener("abort", () => { receivedAbort += 1; const error = new Error("workflow_cancelled"); error.name = "AbortError"; reject(error); }, { once: true });
+      if (started.filter((value) => value.startsWith("writer-")).length === 2) controller.abort();
+    });
+  } } } });
+  assert.equal(result.status, "cancelled");
+  assert.equal(receivedAbort, 2);
+  assert.equal(started.includes("output"), false);
+});
+
+test("workflow resumes an asynchronous node through the host port without resubmitting", async () => {
+  let executeCalls = 0;
+  let resumedTaskId = "";
+  const result = await executeWorkflow(definition, { runId: "recover-run", recovering: { writer: { providerTaskId: "provider-task-42" } }, ports: { capability: {
+    execute: async ({ executorId }) => {
+      executeCalls += 1;
+      if (executorId === "text_input") return { text: "hello" };
+      throw new Error("must_not_resubmit_provider_task");
+    },
+    resume: async ({ providerTaskId, executorId, inputs }) => {
+      resumedTaskId = `${executorId}:${providerTaskId}:${String(inputs.text)}`;
+      return { text: "recovered" };
+    },
+  } } });
+  assert.equal(result.status, "succeeded");
+  assert.equal(executeCalls, 1);
+  assert.equal(resumedTaskId, "writer:provider-task-42:hello");
+  assert.equal(result.outputs.writer?.text, "recovered");
+});
+
+test("workflow rejects an unavailable recovery port instead of submitting the provider task again", async () => {
+  const calls: string[] = [];
+  const result = await executeWorkflow(definition, { runId: "recover-unsupported", recovering: { writer: { providerTaskId: "provider-task-43" } }, ports: { capability: { execute: async ({ executorId }) => {
+    calls.push(executorId);
+    return { text: "hello" };
+  } } } });
+  assert.equal(result.status, "failed");
+  assert.equal(result.error, "workflow_recovery_unsupported");
+  assert.deepEqual(calls, ["text_input"]);
+});

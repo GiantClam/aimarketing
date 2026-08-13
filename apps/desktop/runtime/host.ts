@@ -83,6 +83,21 @@ function readProvider(value: unknown): ProviderConfig | undefined {
   };
 }
 
+function readWorkflowRecovery(value: unknown) {
+  if (!value || typeof value !== "object") return undefined;
+  const recovering: Record<string, { providerTaskId: string; metadata?: Record<string, unknown> }> = {};
+  for (const [nodeKey, attempt] of Object.entries(value as Record<string, unknown>)) {
+    if (!attempt || typeof attempt !== "object") continue;
+    const record = attempt as Record<string, unknown>;
+    if (typeof record.providerTaskId !== "string" || !record.providerTaskId.trim()) continue;
+    recovering[nodeKey] = {
+      providerTaskId: record.providerTaskId.trim(),
+      ...(record.metadata && typeof record.metadata === "object" ? { metadata: record.metadata as Record<string, unknown> } : {}),
+    };
+  }
+  return Object.keys(recovering).length ? recovering : undefined;
+}
+
 function providerKey(providerId: string) {
   return providerId.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "local";
 }
@@ -178,7 +193,7 @@ async function runWorkflow(command: HostCommand) {
   const workflowStartedAt = Date.now();
   const controller = new AbortController(); workflowControllers.set(runId, controller);
   let result: Awaited<ReturnType<typeof executeWorkflow>>;
-  try { result = await executeWorkflow(normalizedDefinition, { runId, signal: controller.signal, ports: {
+  try { result = await executeWorkflow(normalizedDefinition, { runId, signal: controller.signal, recovering: readWorkflowRecovery(command.payload?.recovering), ports: {
     capability: { execute: async ({ executorId, nodeKey, config, inputs }, signal) => {
       if (executorId === "text_input") return { text: typeof config.text === "string" ? config.text : "" };
       if (executorId === "upload") {
@@ -219,6 +234,11 @@ async function runWorkflow(command: HostCommand) {
       const text = (events ?? []).filter((event): event is Extract<OpenCodeRuntimeEvent, { event: "text_delta" }> => event.event === "text_delta").map((event) => event.delta).join("");
       const artifacts = executorId === "ppt_generate" ? await detectPresentationArtifacts(workspacePath, workflowStartedAt) : [];
       return { text, ...(artifacts.length ? { artifacts } : {}) };
+    }, resume: async ({ executorId, nodeKey, config, inputs, providerTaskId }, signal) => {
+      if (["image_generate", "video_generate", "digital_human", "music_generate", "voice_synthesis", "audio_generate"].includes(executorId)) {
+        return runMediaCapability(command, runId, nodeKey, executorId, config, inputs, workspacePath, signal, providerTaskId);
+      }
+      throw new Error(`workflow_recovery_unsupported:${executorId}`);
     } },
     events: { append: async (event) => {
       const phase = event.type === "node_started" ? "started" : event.type === "node_failed" ? "failed" : "completed";

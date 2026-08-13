@@ -40,6 +40,71 @@ function sanitizeToolName(value: unknown) {
   return name.replace(/[^a-zA-Z0-9._:-]/g, "_").slice(0, MAX_TOOL_NAME_LENGTH) || "tool";
 }
 
+export interface OpenCodeServeModel {
+  readonly providerID: string;
+  readonly modelID: string;
+}
+
+export interface OpenCodeServeSessionPayloadInput {
+  readonly title: string;
+  readonly providerId?: string;
+  readonly modelId?: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+  readonly agent?: string;
+}
+
+export interface OpenCodeServePromptPayloadInput {
+  readonly prompt: string;
+  readonly providerId?: string;
+  readonly modelId?: string;
+  readonly systemPrompt?: string;
+  readonly agent?: string;
+}
+
+function openCodeServeModel(input: { readonly providerId?: string; readonly modelId?: string }): OpenCodeServeModel | undefined {
+  const providerID = readString(input.providerId);
+  const modelID = readString(input.modelId);
+  return providerID && modelID ? { providerID, modelID } : undefined;
+}
+
+/** Build a directory-scoped OpenCode Serve session path without host URLs. */
+export function openCodeServeSessionPath(sessionId: string, directory?: string, operation?: string) {
+  const suffix = operation ? `/${encodeURIComponent(operation)}` : "";
+  const query = directory === undefined ? "" : `?directory=${encodeURIComponent(directory)}`;
+  return `/session/${encodeURIComponent(sessionId)}${suffix}${query}`;
+}
+
+/** Build the OpenCode Serve collection path for session creation/listing. */
+export function openCodeServeSessionsPath(directory: string) {
+  return `/session?directory=${encodeURIComponent(directory)}`;
+}
+
+export function createOpenCodeServeSessionPayload(input: OpenCodeServeSessionPayloadInput) {
+  const model = openCodeServeModel(input);
+  return {
+    title: input.title,
+    agent: input.agent || "build",
+    ...(model ? { model } : {}),
+    ...(input.metadata ? { metadata: input.metadata } : {}),
+  };
+}
+
+export function createOpenCodeServePromptPayload(input: OpenCodeServePromptPayloadInput) {
+  const model = openCodeServeModel(input);
+  return {
+    agent: input.agent || "build",
+    ...(model ? { model } : {}),
+    ...(input.systemPrompt === undefined ? {} : { system: input.systemPrompt }),
+    parts: [{ type: "text" as const, text: input.prompt }],
+  };
+}
+
+/** Read OpenCode's current and older `{ id }` / `{ data: { id } }` responses. */
+export function readOpenCodeServeSessionId(payload: unknown) {
+  const record = readRecord(payload);
+  return readString(record?.id, readRecord(record?.data)?.id) ?? "";
+}
+
 export function buildOpenCodeCommand(input: OpenCodeCommandInput): { command: "opencode"; args: string[] } {
   const args = ["run", "--format", "json"];
   const modelHint = typeof input.modelHint === "string" ? input.modelHint.trim() : "";
