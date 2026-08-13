@@ -82,7 +82,7 @@
 ## 6. End-to-end verification
 
 - [ ] 6.1 运行 fake OpenCode E2E：首聊、多轮、tool、cancel、crash、artifact、usage
-- [ ] 6.2 用一个真实配置 Provider 运行普通对话 smoke
+- [x] 6.2 用一个真实配置 Provider 运行普通对话 smoke。✓ 2026-08-13 — `apps/desktop/real-providers.test.local.json` 驱动的 `test:real-providers` 返回 LLM `/chat/completions` HTTP 200（choices/usage）及图片 HTTP 200；视频按 v1 验证范围明确未执行。
 - [ ] 6.3 捕获证据证明所有普通 desktop chat 选择 OpenCode
 - [ ] 6.4 扫描 bundle 和网络日志，确认无排除的 SaaS 模块/端点
 - [ ] 6.5 运行共享 tests、desktop TS/Rust tests/build、root lint、Next build 和 SaaS regressions
