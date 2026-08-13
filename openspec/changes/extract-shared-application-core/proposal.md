@@ -1,3 +1,6 @@
+**Status:** Implementation Complete
+**Completed:** 2026-08-13
+
 ## Why
 
 当前 AIMarketing 的可复用业务逻辑分散在 `lib/ai-runtime`、`lib/ai-entry`、`lib/workflows`、`lib/writer`、`lib/image-assistant` 和大型 React workspace 中，并与 Next.js route、Postgres、企业身份、计费、R2、Railway、Cloudflare 及 `next/navigation` 直接耦合。若桌面端直接复制这些实现，SaaS 后续升级无法同步，工作流和 Provider 行为也会形成两个需要重复调试的分支。
