@@ -107,10 +107,14 @@ function Audit-Authenticode([string]$path) {
     (Join-Path $full "_up\dist-runtime\runtime\node\node.exe"),
     (Join-Path $full "_up\dist-runtime\runtime\opencode\opencode.exe")
   ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -Unique
-  $files = @($candidates | ForEach-Object {
-    $signature = Get-AuthenticodeSignature -LiteralPath $_
-    [ordered]@{ path = $_; status = [string]$signature.Status; signer = if ($signature.SignerCertificate) { [string]$signature.SignerCertificate.Subject } else { $null } }
-  })
+  try {
+    $files = @($candidates | ForEach-Object {
+      $signature = Get-AuthenticodeSignature -LiteralPath $_
+      [ordered]@{ path = $_; status = [string]$signature.Status; signer = if ($signature.SignerCertificate) { [string]$signature.SignerCertificate.Subject } else { $null } }
+    })
+  } catch {
+    return [ordered]@{ status = "not_available"; path = $full; files = @(); reason = "authenticode_unavailable:$($_.Exception.Message)" }
+  }
   return [ordered]@{ status = if ($files.Count -gt 0 -and @($files | Where-Object { $_.status -eq "Valid" }).Count -eq $files.Count) { "pass" } else { "incomplete" }; path = $full; files = $files }
 }
 

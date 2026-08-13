@@ -93,6 +93,7 @@
 - [x] 5.4 执行主 ZIP、解压后、runtime 补齐后的组件级 size budget
   - [x] 2026-08-13 `scripts/verify-desktop-size-budget.ps1` reports compressed main normal/portable ZIPs, uncompressed extracted program contents, runtime ZIP size, and application/Node/OpenCode/Python/fonts/embedding/Skills ownership; configured budget overflow fails closed. Current normal/portable/runtime archives pass with 268,943,017 / 269,006,577 / 411,848,658 compressed bytes and 689,076,629 / 689,076,636 / 991,112,444 uncompressed bytes.
 - [ ] 5.5 执行 Authenticode、manifest 签名、依赖漏洞和许可证审计
+  - [x] 2026-08-14 `desktop:release-audit` now completes fail-closed when the local PowerShell security module is unavailable: normal/portable/runtime archives pass license evidence, while Authenticode is explicitly `not_available` and manifests remain `development_unsigned`.
   - [x] 2026-08-13 `desktop:release-audit` records current evidence without suppressing failures: license audit passes (28/28 packages per archive), Authenticode is incomplete for the unsigned development EXE/DLL, manifests are `development_unsigned`, and the approved npm registry audit reports 3 critical, 32 high, 29 moderate and 3 low vulnerabilities. `-RequireAuthenticode`, `-RequireSignedManifest` and `-RequireDependencyAudit` fail closed for release CI.
 - [ ] 5.6 执行 desktop 全量 E2E 与 SaaS lint/build/regression
 - [x] 5.7 发布人工 ZIP 升级说明和已知限制，不启用应用内自动更新
