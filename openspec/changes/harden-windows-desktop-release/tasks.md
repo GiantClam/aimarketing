@@ -13,7 +13,9 @@
 
 ## 2. Signed multi-source distribution
 
-- [ ] 2.1 定义 component/source/compatibility/hash/size/signature manifest schema
+- [x] 2.1 定义 component/source/compatibility/hash/size/signature manifest schema
+  - [x] `stage-desktop-runtime.ps1` 生成 Windows x64 manifest 元数据（manifestId、platform、architecture、compatibility、sha256/size、mirror sources、Ed25519 signature algorithm slot）；`install-desktop-runtime.ps1` 在任何下载、解压或替换前 fail-closed 校验 schema、目标架构、hash、size、来源和安全相对路径。
+  - [x] 2026-08-13 `node --test scripts/install-desktop-runtime.test.mjs` 通过 6/6（含 `-ValidateOnly` 不触碰 install root 的真实 PowerShell 调用）；PowerShell parser 检查 installer/stager 通过；真实生成 manifest 验证 `aimarketing-runtime-windows-x64-v1`、Windows/x64、sha256 和 ed25519 元数据。
 - [ ] 2.2 实现阿里云 → 腾讯云 → 清华适用源 → 官方源路由
 - [ ] 2.3 实现断点续传、代理、磁盘检查、临时目录和原子安装
 - [ ] 2.4 使用离线私钥签署 manifest，客户端内置公钥验证

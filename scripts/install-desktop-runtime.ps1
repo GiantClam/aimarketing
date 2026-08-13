@@ -1,7 +1,8 @@
 param(
   [Parameter(Mandatory = $true)][string]$ManifestPath,
   [Parameter(Mandatory = $true)][string]$InstallRoot,
-  [string]$OfflineZip
+  [string]$OfflineZip,
+  [switch]$ValidateOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,6 +11,39 @@ $manifest = Get-Content -Raw -Encoding UTF8 $ManifestPath | ConvertFrom-Json
 $installRootResolved = [IO.Path]::GetFullPath($InstallRoot)
 $stageRoot = Join-Path ([IO.Path]::GetTempPath()) ("aimarketing-runtime-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
+
+function Assert-SafeRelativePath([string]$value, [string]$label) {
+  if ([string]::IsNullOrWhiteSpace($value)) { throw "runtime_manifest_${label}_missing" }
+  $normalized = $value.Replace('\', '/')
+  if ([IO.Path]::IsPathRooted($value) -or $normalized.StartsWith('/') -or ($normalized -split '/') -contains '..') {
+    throw "runtime_manifest_${label}_unsafe"
+  }
+}
+
+function Assert-RuntimeManifestSchema() {
+  if ($null -eq $manifest -or [int]$manifest.schemaVersion -ne 1) { throw "runtime_manifest_schema_unsupported" }
+  if ([string]$manifest.platform -ne 'windows' -or [string]$manifest.architecture -ne 'x64') { throw "runtime_manifest_target_unsupported" }
+  if ($null -eq $manifest.compatibility -or [string]$manifest.compatibility.architecture -ne 'x64') { throw "runtime_manifest_compatibility_missing" }
+  if ($null -eq $manifest.integrity -or [string]$manifest.integrity.hashAlgorithm -ne 'sha256') { throw "runtime_manifest_integrity_schema_missing" }
+  $assets = @($manifest.assets)
+  if ($assets.Count -eq 0) { throw "runtime_manifest_assets_missing" }
+  foreach ($asset in $assets) {
+    if ([string]::IsNullOrWhiteSpace([string]$asset.id)) { throw "runtime_manifest_asset_id_missing" }
+    if ([string]$asset.kind -notin @('archive', 'file')) { throw "runtime_manifest_asset_kind_invalid:$($asset.id)" }
+    Assert-SafeRelativePath ([string]$asset.relativePath) "asset_path"
+    if ($asset.kind -eq 'archive') { Assert-SafeRelativePath ([string]$asset.extractPath) "extract_path" }
+    if ([string]$asset.sha256 -notmatch '^[a-fA-F0-9]{64}$') { throw "runtime_manifest_asset_hash_invalid:$($asset.id)" }
+    if ($null -ne $asset.bytes -and ([int64]$asset.bytes -le 0)) { throw "runtime_manifest_asset_size_invalid:$($asset.id)" }
+    if ($null -eq $asset.urls) { throw "runtime_manifest_asset_sources_missing:$($asset.id)" }
+  }
+}
+
+Assert-RuntimeManifestSchema
+if ($ValidateOnly) {
+  Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
+  Write-Output (ConvertTo-Json @{ status = "valid"; manifestId = $manifest.manifestId; platform = $manifest.platform; architecture = $manifest.architecture } -Compress)
+  return
+}
 
 function Seed-BundledRuntime() {
   $bundledRuntimeRoot = Split-Path -Parent ([IO.Path]::GetFullPath($ManifestPath))

@@ -34,6 +34,11 @@ $fontStaged = Copy-IfFile (Join-Path $env:WINDIR "Fonts/msyh.ttc") (Join-Path $d
 
 @{
   schemaVersion = 1
+  manifestId = "aimarketing-runtime-windows-x64-v1"
+  platform = "windows"
+  architecture = "x64"
+  compatibility = @{ architecture = "x64"; windows = @("10-22H2", "11") }
+  integrity = @{ hashAlgorithm = "sha256"; signatureAlgorithm = "ed25519"; signature = $null }
   stagedAt = [DateTime]::UtcNow.ToString("o")
   node = @{ staged = $nodeStaged; path = if ($nodeStaged) { "runtime/node/node.exe" } else { $null } }
   opencode = @{ staged = $opencodeStaged; path = if ($opencodeStaged) { "runtime/opencode/opencode.exe" } else { $null } }
