@@ -74,7 +74,8 @@
 
 ## 8. Align Governed Research and Resumable Assets
 
-- [ ] 8.1 Remove application-level Writer URL intent extraction and pass the raw current request into OpenCode context.
+- [x] 8.1 Remove application-level Writer URL intent extraction and pass the raw current request into OpenCode context.
+  - Evidence (2026-08-14): buildResearchContext now accepts only explicitly governed sourceUrls; it no longer scans raw Writer requests. The regression test proves a URL in the raw request remains untouched when research is skipped, while the OpenCode route tests continue to assert the complete raw request is forwarded.
 - [x] 8.2 Harden `writer_webfetch` tests for HTTP/HTTPS-only access, DNS/IP SSRF protection, redirects, response size/type, timeout, final URL, and bounded failure.
   - [x] 2026-08-14 `content/opencode-tools/writer_webfetch.test.ts` uses injected local HTTP fixtures to cover protocol/credentials/private DNS rejection, redirect final URL/limit, content type and HTTP error handling, response-size bounds, timeout, and bounded readable output without contacting public providers.
 - [ ] 8.3 Add tenant-bound read-only enterprise search that ignores model-supplied enterprise identifiers and never exposes credentials.

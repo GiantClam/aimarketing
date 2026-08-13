@@ -754,7 +754,7 @@ function detectExplicitEnterpriseKnowledgeRequestNormalized(text: string) {
 
 function detectFreshResearchNeedConservative(query: string, brief: WriterConversationBrief) {
   const haystack = [query, brief.topic, brief.objective].filter(Boolean).join("\n")
-  return WRITER_FRESH_RESEARCH_SIGNAL_RE.test(haystack) || WRITER_SOURCE_REFERENCE_SIGNAL_RE.test(haystack)
+  return WRITER_FRESH_RESEARCH_SIGNAL_RE.test(haystack)
 }
 
 function inferWriterRetrievalHintsFromSignals(query: string, brief: WriterConversationBrief): WriterRetrievalHints {
@@ -1998,11 +1998,7 @@ const WRITER_AUDIENCE_SIGNAL_RE =
 const WRITER_FRESH_RESEARCH_SIGNAL_RE =
   /(?:最新|趋势|报告|调研|数据|统计|行业洞察|市场规模|竞品|新闻|今年|明年|202[4-9]|\b(?:latest|trend(?:s)?|report(?:s)?|research|benchmark|news|forecast|survey)\b|\bmarket(?:\s+(?:size|trend|report|share|analysis|outlook))?\b)/iu
 
-const WRITER_SOURCE_URL_RE = /https?:\/\/[^\s<>"'`)\]，。；！？、：）】》」』]+/giu
 const WRITER_SOURCE_URL_BREAK_RE = /[，。；！？、：）】》」』]/u
-const WRITER_ADJACENT_URL_JOINER_RE = /(?:和|以及|与|及)(?=https?:\/\/)/giu
-const WRITER_SOURCE_REFERENCE_SIGNAL_RE =
-  /(?:参考|參考|引用|链接|連結|网址|網址|基于链接|根據連結|read the link|read this url|based on (?:the )?(?:link|url|source)|according to (?:the )?(?:link|url|source)|crawl|scrape)/iu
 
 function normalizeResearchUrl(raw: string) {
   let candidate = raw.trim()
@@ -2020,22 +2016,6 @@ function normalizeResearchUrl(raw: string) {
   } catch {
     return ""
   }
-}
-
-function extractUrlsFromText(text: string) {
-  if (!text) return []
-
-  const urls = new Set<string>()
-  for (const match of text.matchAll(WRITER_SOURCE_URL_RE)) {
-    const candidates = (match[0] || "").split(WRITER_ADJACENT_URL_JOINER_RE)
-    for (const candidate of candidates) {
-      const normalized = normalizeResearchUrl(candidate)
-      if (!normalized) continue
-      urls.add(normalized)
-    }
-  }
-
-  return [...urls].slice(0, 5)
 }
 
 function inferWriterBriefFromPromptedReply(
@@ -3814,9 +3794,10 @@ async function buildResearchContext(
   query: string,
   options?: { skip?: boolean; sourceUrls?: string[] },
 ): Promise<WriterResearchResult> {
-  const sourceUrls = [
-    ...new Set((options?.sourceUrls?.length ? options.sourceUrls : extractUrlsFromText(query)).map(normalizeResearchUrl).filter(Boolean)),
-  ].slice(0, 5)
+  // URL selection is owned by the active Writer Skill/OpenCode turn. The
+  // application may only execute URLs that the governed tool call explicitly
+  // supplies; never infer sources by scanning the user's request here.
+  const sourceUrls = [...new Set((options?.sourceUrls || []).map(normalizeResearchUrl).filter(Boolean))].slice(0, 5)
 
   if (options?.skip && sourceUrls.length === 0) {
     return createEmptyResearchResult("skipped")

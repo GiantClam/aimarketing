@@ -1443,6 +1443,17 @@ test("source URL research falls back to direct fetch and avoids search-config ha
   }
 })
 
+test("application research does not infer a URL from the raw Writer request", async () => {
+  const research = await writerTestHooks.buildResearchContext(
+    "Read http://127.0.0.1:9/private-source and write from it",
+    { skip: true },
+  )
+
+  assert.equal(research.status, "skipped")
+  assert.deepEqual(research.items, [])
+  assert.deepEqual(research.extracts, [])
+})
+
 test("html normalization strips script/style and preserves readable body text", () => {
   const normalized = writerTestHooks.normalizeReadableWebContent(`<!doctype html>
 <html>

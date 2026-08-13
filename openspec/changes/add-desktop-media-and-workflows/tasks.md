@@ -24,7 +24,8 @@
   - [x] 2026-08-13 shared-boundaries and shared-provenance checks pass; the package depends only on injected provider/fetch, filesystem and workspace ports.
 - [x] Provider fixtures 全部通过
   - [x] 2026-08-13 non-video provider fixtures and generic HTTP fixtures pass; video generation is excluded from the real-provider smoke scope by acceptance requirement.
-- [ ] SaaS 现有媒体回归无行为漂移
+- [x] SaaS 现有媒体回归无行为漂移
+  - Evidence (2026-08-14): shared media-runtime jobs/http/polling/provider-adapter suites, SaaS media run/task route regressions, and SaaS/Desktop provider parity all pass together (37/37); video contract fixtures remain non-real-provider tests per scope.
 
 ## 2. Desktop media jobs and artifacts
 
@@ -136,4 +137,5 @@
 - [x] 每类真实 Provider smoke 结果已记录
   - 2026-08-13：使用 `apps/desktop/real-providers.test.local.json` 顺序 smoke（LLM → image → audio，未执行 video/seedance）；LLM HTTP 200 且 schema 通过，音频 profile `audio-minimax/speech-2.8-turbo` 提交 HTTP 200 并在第 8 次查询返回 `Success`，图片请求连续 3 次 HTTP 502（上游 `upstream_error`，非本地适配器失败）。脱敏输出明确记录 `scope.executed=[llm,image,audio]` 与 `scope.excluded=[video,seedance]`，API key 不进入结果。
   - 2026-08-14 rerun: LLM HTTP 200/schema 通过；图片直连 `/v1/images/generations` 连续 3 次 HTTP 502，备用工具代理返回 HTTP 401 `Invalid token`；音频提交 HTTP 200 但 24 次轮询仍未达最终状态。结果继续归类为上游 Provider 可用性阻塞，未把它误报为桌面适配器成功；video/seedance 仍未执行。
+  - 2026-08-14 current rerun: using `apps/desktop/real-providers.test.local.json`, LLM HTTP 200/schema passed, OpenAI-compatible image HTTP 200/schema passed after one bounded retry, and MiniMax audio HTTP 200/schema passed after bounded polling; video/seedance remained explicitly excluded.
 - [ ] Ready for `openspec-archive add-desktop-media-and-workflows`
