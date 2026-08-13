@@ -5,7 +5,7 @@ import type { WorkbenchArtifact, WorkbenchKnowledgeResult, WorkbenchRun, Workben
 import { tauriBridge } from "./tauri";
 import { createDesktopWorkbenchClient } from "./workbench-client";
 import { capabilityEnglish, desktopCopy, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaPlaceholderEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale, workflowActionEnglish, writerContentTypeEnglish, writerLanguageEnglish, writerModeEnglish, writerPlatformEnglish, type DesktopLocalePreference } from "./i18n";
-import { capabilityForWorkflowAction, configuredModelOptions, isMediaProviderConfigured, preferredConfiguredModel, providerForCapability, providerForId, requiresConfiguredProviderForWorkflowAction, type DesktopProviderConfig, type DesktopProviderDefaults, type DesktopProviderProfiles } from "./provider-config";
+import { capabilityForWorkflowAction, configuredModelOptions, isMediaProviderConfigured, modelOptionsForProvider, preferredConfiguredModel, providerForCapability, providerForId, requiresConfiguredProviderForWorkflowAction, type DesktopProviderConfig, type DesktopProviderDefaults, type DesktopProviderProfiles } from "./provider-config";
 import { createSessionRecoverySnapshot } from "./session-recovery";
 import { sanitizeWorkflowDefinitionForStorage } from "./workflow-storage";
 import { parseWorkflowImportText, serializeWorkflowExport } from "./workflow-portability";
@@ -1084,7 +1084,7 @@ export function App() {
   const activeCapability = capabilityForWorkflowAction(selected.path === "/dashboard/video" ? workflowAction : routeAction ?? "llm_generate");
   const activeProvider = providerForCapability(config, activeCapability);
   const activeModel = activeProvider.model;
-  const activeModels = activeProvider.models ?? config.provider.models;
+  const activeModels = modelOptionsForProvider(config, activeProvider);
   const reasoningEffort = activeProvider.reasoningEffort ?? "auto";
   const effectiveSkillId: SkillId = selected.path.includes("executive-ppt") ? "ppt-master" : (config.provider.skillId ?? skillId);
 

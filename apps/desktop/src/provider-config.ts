@@ -28,6 +28,13 @@ export function configuredModelOptions(provider: DesktopProviderConfig): string[
   return [...new Set((provider.models ?? []).map((model) => model.trim()).filter(Boolean))];
 }
 
+export function modelOptionsForProvider(config: ProviderConfigContainer, provider: DesktopProviderConfig): readonly string[] | undefined {
+  if (provider.models !== undefined) return provider.models;
+  const providerId = provider.id?.trim();
+  const fallbackId = config.provider.id?.trim();
+  return provider === config.provider || (providerId && fallbackId && providerId === fallbackId) ? config.provider.models : undefined;
+}
+
 export function preferredConfiguredModel(provider: DesktopProviderConfig): string {
   const models = configuredModelOptions(provider);
   const selected = provider.model?.trim() ?? "";
