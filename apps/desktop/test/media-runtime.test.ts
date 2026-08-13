@@ -95,6 +95,15 @@ test("desktop image capabilities select direct OpenAI-compatible or Bailian adap
   assert.match(host, /executorId === "image_generate"/);
 });
 
+test("desktop video capabilities select shared MiniMax, Bailian and RunningHub clients", () => {
+  const host = readFileSync(resolve(process.cwd(), "runtime/host.ts"), "utf8");
+  assert.match(host, /createBailianVideoAdapter\(providerOptions\)/);
+  assert.match(host, /createMiniMaxVideoAdapter\(providerOptions\)/);
+  assert.match(host, /createRunningHubAdapter\(/);
+  assert.match(host, /executorId === "video_generate"/);
+  assert.match(host, /executorId === "digital_human"/);
+});
+
 test("desktop host keeps voice cloning on the MiniMax media path", () => {
   const host = readFileSync(resolve(process.cwd(), "runtime/host.ts"), "utf8");
   assert.match(host, /voice_clone/);

@@ -11,7 +11,8 @@
 - [x] 1.2 定义统一 `submit/poll/cancel/download/usage` async media job contract。✓ 2026-08-13 — `media-runtime` 提供 host-neutral request/task/provider/cancellation ports、generic submit/poll/cancel runner、atomic downloader 与 idempotency/recovery contract tests。
 - [x] 1.3 抽取 OpenAI-compatible/Bailian image clients
   - [x] 2026-08-13 `media-runtime` now provides direct OpenAI-compatible `/images/generations` and DashScope text-to-image submit/poll adapters; desktop host selects them for configured image nodes. Fixture contract tests cover request shape, idempotency headers, `/v1` base-path preservation, async status normalization, and local URL/base64 outputs.
-- [ ] 1.4 抽取 MiniMax/Bailian/RunningHub video clients
+- [x] 1.4 抽取 MiniMax/Bailian/RunningHub video clients
+  - [x] 2026-08-13 `packages/media-runtime` exposes direct MiniMax, Bailian and RunningHub async video adapters; `apps/desktop/test/media-runtime.test.ts` verifies host routing for `video_generate`/`digital_human` without issuing a video-generation request. Existing provider fixtures cover submit/poll normalization; real video smoke remains excluded by acceptance scope.
 - [x] 1.5 抽取 RunningHub digital human 和 MiniMax music/TTS/clone/audio clients
   - [x] 2026-08-13 shared adapters cover RunningHub task capabilities plus MiniMax music, async voice synthesis, voice cloning and general audio; fixture coverage verifies synchronous base64, async file retrieval, clone preview output, workspace-local multipart reference upload and strict path/source-file validation. Desktop voice-clone UI metadata is carried as `featureId=voice-clone` into the local host without base64 IPC.
 - [ ] 1.6 为 SaaS/Desktop adapters 运行同一组 provider contract tests
