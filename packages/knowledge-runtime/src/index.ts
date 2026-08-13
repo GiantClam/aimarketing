@@ -1,4 +1,4 @@
-export interface KnowledgeChunk { readonly id: string; readonly documentPath: string; readonly heading?: string; readonly text: string; readonly hash: string; readonly lineStart?: number; readonly lineEnd?: number; }
+export interface KnowledgeChunk { readonly id: string; readonly documentPath: string; readonly heading?: string; readonly text: string; readonly hash: string; readonly lineStart?: number; readonly lineEnd?: number; readonly tags?: readonly string[]; readonly links?: readonly string[]; }
 export interface KnowledgeCitation { readonly chunkId: string; readonly documentPath: string; readonly heading?: string; readonly excerpt: string; readonly score: number; readonly lineStart?: number; readonly lineEnd?: number; }
 export interface EmbeddingPort { readonly dimensions: number; embed(text: string, signal?: AbortSignal): Promise<readonly number[]>; }
 export interface VectorStorePort { upsert(chunks: readonly KnowledgeChunk[], vectors: readonly (readonly number[])[]): Promise<void>; search(vector: readonly number[], limit: number): Promise<readonly { chunkId: string; score: number }[]>; }
@@ -21,7 +21,10 @@ export class HybridKnowledgeRetriever {
 
 function lexicalSearch(chunks: readonly KnowledgeChunk[], query: string, limit: number) {
   const terms = query.toLocaleLowerCase().split(/\s+/u).filter(Boolean);
-  return chunks.map((chunk) => ({ chunk, score: terms.reduce((score, term) => score + (chunk.text.toLocaleLowerCase().includes(term) ? 1 : 0), 0) })).filter((item) => item.score > 0).sort((a, b) => b.score - a.score || a.chunk.id.localeCompare(b.chunk.id)).slice(0, limit);
+  return chunks.map((chunk) => {
+    const searchable = [chunk.documentPath, chunk.heading, ...(chunk.tags ?? []), ...(chunk.links ?? []), chunk.text].filter((value): value is string => typeof value === "string" && value.length > 0).join("\n").toLocaleLowerCase();
+    return { chunk, score: terms.reduce((score, term) => score + (searchable.includes(term) ? 1 : 0), 0) };
+  }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score || a.chunk.id.localeCompare(b.chunk.id)).slice(0, limit);
 }
 
 function toCitation(item: { chunk: KnowledgeChunk; score: number }): KnowledgeCitation {
