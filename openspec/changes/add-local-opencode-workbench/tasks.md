@@ -67,7 +67,7 @@
 - [ ] 4.1 组合共享 message parts、prompt input、conversation sidebar 和 stream UI
 - [ ] 4.2 添加模型/Skill selector、artifact view、usage、settings 和 diagnostics routes
 - [ ] 4.3 删除 desktop bundle 中 login、registration、tenant、role、balance、subscription、Agent publishing、market 和 enterprise preset affordances
-- [ ] 4.4 展示 Full Access 风险，但不展示权限模式选择或逐命令确认
+- [x] 4.4 展示 Full Access 风险，但不展示权限模式选择或逐命令确认
 - [x] 4.4a UI displays Full Access and plaintext config risk without exposing a permission-mode selector.
 - [x] 4.2a Desktop home/chat inputs expose model, reasoning and local Skill selectors; task center exposes persisted usage/run state.
 - [x] 4.2b Desktop chat uses the shared cloud-compatible AI/user message cards, timestamps, live event panel, active route highlighting and quick prompt chips.
@@ -77,7 +77,8 @@
 **Quality Gate:**
 - [ ] Workbench UI 只使用 Desktop WorkbenchClient
 - [ ] 桌面导航与确认范围一致
-- [ ] Full Access 和明文 API Key 风险文案可见
+- [x] Full Access 和明文 API Key 风险文案可见
+  - [x] 2026-08-13 `apps/desktop/test/routes.test.ts` asserts bilingual settings warnings, workflow Full Access copy, persistence boundaries, and the absence of permission-mode/command-confirmation selectors.
 
 ## 5. Persist conversations, artifacts, usage and logs
 

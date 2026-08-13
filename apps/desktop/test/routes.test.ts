@@ -355,6 +355,16 @@ test("desktop conversation history and retry flow consume the injected Workbench
   assert.match(appSource, /completed, recoveryDefinitionHash/);
 });
 
+test("desktop exposes Full Access and plaintext API-key risks without a permission-mode selector", () => {
+  const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  assert.match(appSource, /Full Access OpenCode file tools/);
+  assert.match(appSource, /Full Access/);
+  assert.match(appSource, /API Key[^\n]*config\.json/);
+  assert.match(appSource, /不会写入 SQLite、日志或诊断包/);
+  assert.match(appSource, /it is not written to SQLite, logs, or diagnostics/);
+  assert.doesNotMatch(appSource, /permissionMode|permission mode|逐命令确认/iu);
+});
+
 test("task center exposes persisted node, event and usage evidence", () => {
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
   const storageSource = readFileSync(resolve(process.cwd(), "src-tauri/src/storage.rs"), "utf8");

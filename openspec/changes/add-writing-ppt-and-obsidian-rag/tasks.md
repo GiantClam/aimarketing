@@ -85,12 +85,14 @@
 ## 5. Governed Vault writes and UI
 
 - [x] 5.1-5.3 Host 内置 Obsidian 写入端口默认写入 `AI Marketing/`，支持 target/baseHash 并在冲突时拒绝覆盖；UI/E2E 展示仍待完成。
-- [ ] 5.4 UI 明示 Full Access 文件工具可绕过内置写入端口
+- [x] 5.4 UI 明示 Full Access 文件工具可绕过内置写入端口
+  - [x] 2026-08-13 desktop route regression asserts the bilingual Full Access warning, plaintext API-key boundary, and no permission-mode selector.
 - [ ] 5.5 添加写作、PPT、索引状态、引用和冲突 E2E
 
 **Quality Gate:**
 - [ ] 内置写入端口的并发冲突测试通过
-- [ ] Full Access 风险文案与实时工具事件均可见
+- [x] Full Access 风险文案与实时工具事件均可见
+  - [x] 2026-08-13 route regression covers the warning copy; existing host-session fixtures cover streamed tool events and emergency stop evidence.
 - [ ] 全部新增测试、SaaS build 和 desktop build 通过
 
 ## Completion Checklist
