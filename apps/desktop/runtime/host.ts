@@ -317,8 +317,8 @@ async function runMediaCapability(command: HostCommand, runId: string, nodeKey: 
       pollIntervalMs: 1000,
       timeoutMs: 30 * 60 * 1000,
       ...(resumeProviderTaskId ? { initialTask: { providerTaskId: resumeProviderTaskId, status: "queued", outputs: [] } } : {}),
-      onSubmitted: async (submitted) => emit(command, { event: "tool_event", tool: `media:${executorId}`, phase: "started", message: JSON.stringify({ provider, model: modelId, executorId, nodeKey, providerTaskId: submitted.providerTaskId, idempotencyKey, status: submitted.status }), runId }),
-      onUpdate: async (updated) => emit(command, { event: "tool_event", tool: `media:${executorId}`, phase: "progress", message: JSON.stringify({ provider, model: modelId, executorId, nodeKey, providerTaskId: updated.providerTaskId, idempotencyKey, status: updated.status, providerStatus: updated.providerStatus }), runId }),
+      onSubmitted: async (submitted) => emit(command, { event: "tool_event", tool: `media:${executorId}`, phase: "started", message: JSON.stringify({ provider, model: modelId, executorId, nodeKey, providerTaskId: submitted.providerTaskId, idempotencyKey, status: submitted.status === "succeeded" ? "submitted" : submitted.status }), runId }),
+      onUpdate: async (updated) => emit(command, { event: "tool_event", tool: `media:${executorId}`, phase: "progress", message: JSON.stringify({ provider, model: modelId, executorId, nodeKey, providerTaskId: updated.providerTaskId, idempotencyKey, status: updated.status === "succeeded" ? "submitted" : updated.status, providerStatus: updated.providerStatus }), runId }),
     });
   } catch (error) {
     const status = signal?.aborted || (error instanceof Error && error.message === "media_cancelled") ? "cancelled" : "failed";
@@ -338,7 +338,7 @@ async function runMediaCapability(command: HostCommand, runId: string, nodeKey: 
     emit(command, { event: "tool_event", tool: `media:${executorId}`, phase: "failed", message: JSON.stringify({ provider, model: modelId, executorId, nodeKey, providerTaskId: task.providerTaskId, idempotencyKey, status: "failed", error: error instanceof Error ? error.message.slice(0, 180) : String(error).slice(0, 180) }), runId });
     throw error;
   }
-  emit(command, { event: "tool_event", tool: `media:${executorId}`, phase: "completed", message: JSON.stringify({ provider, model: modelId, executorId, nodeKey, providerTaskId: task.providerTaskId, idempotencyKey, status: "succeeded" }), runId });
+  emit(command, { event: "tool_event", tool: `media:${executorId}`, phase: "completed", message: JSON.stringify({ provider, model: modelId, executorId, nodeKey, providerTaskId: task.providerTaskId, idempotencyKey, status: "succeeded", ...(task.usage ? { usage: task.usage } : {}) }), runId });
   return { artifacts, providerTaskId: task.providerTaskId, status: task.status };
 }
 

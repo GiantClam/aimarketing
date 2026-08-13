@@ -23,12 +23,13 @@ test("media runtime preserves idempotency, polls and normalizes provider tasks",
       requests.push({ url: String(input), method: init?.method ?? "GET", body: typeof init?.body === "string" ? init.body : undefined });
       if (String(input).endsWith("/submit")) return new Response(JSON.stringify({ id: "task-1", status: "queued" }), { status: 200 });
       pollCount += 1;
-      return new Response(JSON.stringify(pollCount === 1 ? { id: "task-1", status: "running" } : { id: "task-1", status: "succeeded", output: [{ url: "https://provider.test/result.png" }] }), { status: 200 });
+      return new Response(JSON.stringify(pollCount === 1 ? { id: "task-1", status: "running" } : { id: "task-1", status: "succeeded", output: [{ url: "https://provider.test/result.png" }], usage: { input_tokens: 1, output_tokens: 2, estimated_cost: 0.03 } }), { status: 200 });
     },
   });
   const updates: string[] = [];
   const task = await runMediaJob(adapter, { provider, modelId: "fixture-model", input: { prompt: "hello" }, idempotencyKey: createMediaIdempotencyKey("run-1", "node-1", 1) }, activeCancellation, { pollIntervalMs: 1, timeoutMs: 1000, onUpdate: (value) => { updates.push(value.status); } });
   assert.equal(task.status, "succeeded");
+  assert.deepEqual(task.usage, { inputTokens: 1, outputTokens: 2, estimatedCost: 0.03 });
   assert.deepEqual(updates, ["queued", "running", "succeeded"]);
   assert.equal(requests.length, 3);
   assert.equal(JSON.parse(requests[0].body ?? "{}").idempotency_key, "run-1:node-1:1");
@@ -55,9 +56,11 @@ test("desktop host emits terminal media attempt events for recovery idempotency"
   assert.match(host, /phase: "completed"[\s\S]*status: "succeeded"/);
   assert.match(host, /const status = signal\?\.aborted/);
   assert.match(host, /task\.status !== "succeeded"[\s\S]*status: task\.status/);
+  assert.match(host, /updated\.status === "succeeded" \? "submitted"/);
   assert.match(app, /mediaNodes = workflowDefinition\.nodes\.filter/);
   assert.match(app, /status: "queued", payloadJson/);
-  assert.match(app, /payload\.providerTaskId && status !== "failed" && status !== "cancelled"/);
+  assert.match(app, /status === "succeeded"[\s\S]*record_usage/);
+  assert.match(host, /task\.usage/);
 });
 
 test("desktop image capabilities select direct OpenAI-compatible or Bailian adapters", () => {

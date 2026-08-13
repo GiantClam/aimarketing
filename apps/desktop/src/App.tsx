@@ -1337,7 +1337,25 @@ export function App() {
             } catch { /* event remains in run_events */ }
           }
           if (tool.startsWith("media:")) {
-            try { const payload = JSON.parse((event as { message?: string }).message ?? "{}"); const executorId = typeof payload.executorId === "string" ? payload.executorId : tool.slice("media:".length); const nodeKey = typeof payload.nodeKey === "string" ? payload.nodeKey : executorId; const idempotencyKey = typeof payload.idempotencyKey === "string" ? payload.idempotencyKey : `${event.runId}:${nodeKey}:1`; const status = payload.status === "succeeded" || payload.status === "failed" || payload.status === "cancelled" ? payload.status : payload.providerTaskId ? "submitted" : "running"; void tauriBridge.invoke("record_run_attempt", { idempotencyKey, runId: event.runId, nodeKey, provider: payload.provider ?? null, providerTaskId: payload.providerTaskId ?? null, status, payloadJson: JSON.stringify({ ...payload, executorId, nodeKey }) }); if (payload.providerTaskId && status !== "failed" && status !== "cancelled") void tauriBridge.invoke("record_usage", { runId: event.runId, provider: payload.provider ?? null, model: `${payload.provider ?? "media"}/${payload.model ?? "unknown"}`, inputTokens: null, outputTokens: null, providerCost: typeof payload.providerCost === "number" ? payload.providerCost : null, estimatedCost: null, idempotencyKey: `${event.runId}:${nodeKey}:media-usage` }); } catch { /* event remains in run_events */ }
+            try {
+              const payload = JSON.parse((event as { message?: string }).message ?? "{}");
+              const executorId = typeof payload.executorId === "string" ? payload.executorId : tool.slice("media:".length);
+              const nodeKey = typeof payload.nodeKey === "string" ? payload.nodeKey : executorId;
+              const idempotencyKey = typeof payload.idempotencyKey === "string" ? payload.idempotencyKey : `${event.runId}:${nodeKey}:1`;
+              const status = payload.status === "succeeded" || payload.status === "failed" || payload.status === "cancelled" ? payload.status : payload.providerTaskId ? "submitted" : "running";
+              void tauriBridge.invoke("record_run_attempt", { idempotencyKey, runId: event.runId, nodeKey, provider: payload.provider ?? null, providerTaskId: payload.providerTaskId ?? null, status, payloadJson: JSON.stringify({ ...payload, executorId, nodeKey }) });
+              const usage = payload.usage && typeof payload.usage === "object" ? payload.usage as Record<string, unknown> : {};
+              if (status === "succeeded") void tauriBridge.invoke("record_usage", {
+                runId: event.runId,
+                provider: payload.provider ?? null,
+                model: `${payload.provider ?? "media"}/${payload.model ?? "unknown"}`,
+                inputTokens: typeof usage.inputTokens === "number" ? usage.inputTokens : null,
+                outputTokens: typeof usage.outputTokens === "number" ? usage.outputTokens : null,
+                providerCost: typeof usage.providerCost === "number" ? usage.providerCost : null,
+                estimatedCost: typeof usage.estimatedCost === "number" ? usage.estimatedCost : null,
+                idempotencyKey: `${event.runId}:${nodeKey}:media-usage`,
+              });
+            } catch { /* event remains in run_events */ }
           }
           if (eventType === "done") { setActiveRunId(null); setTaskCount((current) => current + 1); setRuns((current) => current.map((run) => run.id === event.runId ? { ...run, status: "succeeded", finished_at: new Date().toISOString() } : run)); const assistant = assistantBuffers.get(event.runId ?? "") ?? ""; const conversationId = activeConversationRef.current; if (assistant && conversationId) { const createdAt = new Date().toISOString(); setConversationMessages((current) => [...current, { id: `assistant-${event.runId}`, role: "assistant", content: assistant, created_at: createdAt }]); void tauriBridge.invoke("append_message", { input: { id: `assistant-${event.runId}`, conversation_id: conversationId, role: "assistant", content: assistant, created_at: createdAt } }); } void tauriBridge.invoke("finish_run", { runId: event.runId, status: "succeeded" }); }
           if (eventType === "runtime_error") { setActiveRunId(null); const code = (event as { code?: string }).code; const status = code === "opencode_aborted" || code === "workflow_cancelled" || code === "media_cancelled" ? "cancelled" : "failed"; setRuns((current) => current.map((run) => run.id === event.runId ? { ...run, status, finished_at: new Date().toISOString() } : run)); void tauriBridge.invoke("finish_run", { runId: event.runId, status }); }

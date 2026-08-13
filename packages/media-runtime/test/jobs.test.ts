@@ -9,6 +9,6 @@ test("media recovery polls persisted provider tasks and never resubmits", () => 
 });
 
 test("media task normalization bounds provider diagnostics", () => {
-  const task = normalizeMediaTask({ providerTaskId: " task ", status: "succeeded", providerStatus: "x".repeat(500), outputs: [{ path: "a" }] });
-  assert.equal(task.providerTaskId, "task"); assert.equal(task.providerStatus?.length, 160); assert.deepEqual(task.outputs, [{ path: "a" }]);
+  const task = normalizeMediaTask({ providerTaskId: " task ", status: "succeeded", providerStatus: "x".repeat(500), outputs: [{ path: "a" }], usage: { inputTokens: 3, outputTokens: 5, providerCost: 0.2 } });
+  assert.equal(task.providerTaskId, "task"); assert.equal(task.providerStatus?.length, 160); assert.deepEqual(task.outputs, [{ path: "a" }]); assert.deepEqual(task.usage, { inputTokens: 3, outputTokens: 5, providerCost: 0.2 });
 });

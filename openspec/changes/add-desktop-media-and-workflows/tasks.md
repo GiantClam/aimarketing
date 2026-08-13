@@ -35,7 +35,8 @@
 - [x] 2.3 实现可恢复 poll 和 provider 支持时的 cancel（`runMediaJob` 使用持久化 task ID 续 poll，并通过未 aborted 的控制端口发送 provider cancel）
 - [ ] 2.4 从 Rust 请求 canonical temp path，流式下载并原子移动到项目目录
 - [ ] 2.5 验证 MIME、大小、hash 和路径归属后登记 artifact
-- [ ] 2.6 记录 token/请求/媒体任务和预估成本，不执行扣费
+- [x] 2.6 记录 token/请求/媒体任务和预估成本，不执行扣费
+  - [x] 2026-08-13 media-runtime now normalizes provider usage (tokens, duration, request count, provider/estimated cost) into terminal media events; desktop persists one idempotent usage row per media node and does not record the pre-download submitted event as complete.
 
 **Quality Gate:**
 - [ ] 强制杀死并重启后只继续 poll、不重复 submit

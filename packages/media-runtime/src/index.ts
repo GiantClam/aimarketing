@@ -27,6 +27,16 @@ export interface MediaTask {
   readonly status: MediaTaskStatus;
   readonly providerStatus?: string;
   readonly outputs: readonly Record<string, unknown>[];
+  readonly usage?: MediaUsage;
+}
+
+export interface MediaUsage {
+  readonly inputTokens?: number;
+  readonly outputTokens?: number;
+  readonly requestCount?: number;
+  readonly durationSeconds?: number;
+  readonly providerCost?: number;
+  readonly estimatedCost?: number;
 }
 
 export interface CancellationPort {
@@ -101,7 +111,9 @@ export function createHttpMediaAdapter(options: MediaHttpAdapterOptions): MediaP
     const status: MediaTaskStatus = statusText.includes("fail") || statusText.includes("error") ? "failed" : statusText.includes("queue") ? "queued" : statusText.includes("run") || statusText.includes("process") ? "running" : "succeeded";
     const outputValues = Array.isArray(value.data) ? value.data : Array.isArray(value.output) ? value.output : Array.isArray(value.outputs) ? value.outputs : [];
     const outputs = outputValues.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")).map((item) => ({ ...item }));
-    return { providerTaskId, status, ...(typeof value.status === "string" ? { providerStatus: value.status } : {}), outputs };
+    const nestedOutput = value.output && typeof value.output === "object" ? value.output as Record<string, unknown> : undefined;
+    const usage = normalizeUsage(value.usage ?? value.usage_info ?? nestedOutput?.usage);
+    return { providerTaskId, status, ...(typeof value.status === "string" ? { providerStatus: value.status } : {}), outputs, ...(usage ? { usage } : {}) };
   };
   return {
     provider: options.provider,
@@ -132,6 +144,24 @@ function providerUrl(baseUrl: string, path: string, query?: Record<string, strin
 
 function text(value: unknown) { return typeof value === "string" ? value.trim() : ""; }
 function numberValue(value: unknown, fallback: number) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : fallback; }
+function finiteNumber(value: unknown) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizeUsage(value: unknown): MediaUsage | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const usage = value as Record<string, unknown>;
+  const inputTokens = finiteNumber(usage.input_tokens ?? usage.inputTokens ?? usage.prompt_tokens ?? usage.promptTokens);
+  const outputTokens = finiteNumber(usage.output_tokens ?? usage.outputTokens ?? usage.completion_tokens ?? usage.completionTokens);
+  const requestCount = finiteNumber(usage.request_count ?? usage.requestCount ?? usage.requests);
+  const durationSeconds = finiteNumber(usage.duration_seconds ?? usage.durationSeconds ?? (finiteNumber(usage.duration_ms) !== undefined ? Number(usage.duration_ms) / 1000 : undefined));
+  const providerCost = finiteNumber(usage.provider_cost ?? usage.providerCost ?? usage.cost_usd ?? usage.costUsd ?? usage.cost);
+  const estimatedCost = finiteNumber(usage.estimated_cost ?? usage.estimatedCost);
+  const normalized = { inputTokens, outputTokens, requestCount, durationSeconds, providerCost, estimatedCost };
+  return Object.values(normalized).some((entry) => entry !== undefined) ? Object.fromEntries(Object.entries(normalized).filter(([, entry]) => entry !== undefined)) as MediaUsage : undefined;
+}
 
 function mapProviderStatus(value: unknown): MediaTaskStatus {
   const status = text(value).toLowerCase();
@@ -156,7 +186,8 @@ function asTask(provider: MediaProviderId, payload: Record<string, unknown>, fal
     if (!value || typeof value !== "object") return [];
     return [{ ...(value as Record<string, unknown>) }];
   });
-  return { providerTaskId, status: mapProviderStatus(providerStatus), ...(providerStatus ? { providerStatus: String(providerStatus) } : {}), outputs };
+  const usage = normalizeUsage(output.usage ?? output.usage_info ?? payload.usage ?? payload.usage_info);
+  return { providerTaskId, status: mapProviderStatus(providerStatus), ...(providerStatus ? { providerStatus: String(providerStatus) } : {}), outputs, ...(usage ? { usage } : {}) };
 }
 
 async function jsonRequest(options: DirectProviderOptions, path: string, init: RequestInit, cancellation: CancellationPort, query?: Record<string, string>) {
@@ -522,5 +553,5 @@ export function recoverMediaJob(record: MediaJobRecord): "poll" | "submit" | "do
 
 export function normalizeMediaTask(task: MediaTask): MediaTask {
   const status: MediaTaskStatus = ["queued", "running", "succeeded", "failed", "cancelled"].includes(task.status) ? task.status : "failed";
-  return { providerTaskId: task.providerTaskId.trim(), status, ...(task.providerStatus ? { providerStatus: task.providerStatus.slice(0, 160) } : {}), outputs: task.outputs.map((output) => ({ ...output })) };
+  return { providerTaskId: task.providerTaskId.trim(), status, ...(task.providerStatus ? { providerStatus: task.providerStatus.slice(0, 160) } : {}), outputs: task.outputs.map((output) => ({ ...output })), ...(task.usage ? { usage: normalizeUsage(task.usage) } : {}) };
 }

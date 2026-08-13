@@ -11,11 +11,12 @@ test("OpenAI-compatible image adapter sends a local image generation request", a
   let request: { url: string; init?: RequestInit } | undefined;
   const adapter = createOpenAICompatibleImageAdapter({ provider: "pptoken" as MediaProviderId, baseUrl: "https://api.example.test/v1", apiKey: "secret", fetchImpl: async (input, init) => {
     request = { url: String(input), init };
-    return new Response(JSON.stringify({ data: [{ b64_json: "AQID" }] }), { status: 200 });
+    return new Response(JSON.stringify({ data: [{ b64_json: "AQID" }], usage: { input_tokens: 4, output_tokens: 6, cost_usd: 0.12 } }), { status: 200 });
   } });
   const task = await adapter.execute({ provider: "pptoken" as MediaProviderId, modelId: "gpt-image-2", input: { prompt: "a paper airplane", size: "1024x1024" }, idempotencyKey: "run:image:1" }, cancellation());
   assert.equal(task.status, "succeeded");
   assert.equal(task.outputs[0]?.b64_json, "AQID");
+  assert.deepEqual(task.usage, { inputTokens: 4, outputTokens: 6, providerCost: 0.12 });
   assert.equal(request?.url, "https://api.example.test/v1/images/generations");
   const body = JSON.parse(String(request?.init?.body)) as Record<string, unknown>;
   assert.deepEqual(body, { model: "gpt-image-2", prompt: "a paper airplane", size: "1024x1024", n: 1, user: "run:image:1" });
