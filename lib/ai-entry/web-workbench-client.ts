@@ -8,6 +8,8 @@ import type {
   WorkbenchRunEvent,
   WorkbenchRunRequest,
   WorkbenchUsage,
+  WorkbenchWorkflow,
+  WorkbenchWorkflowDefinition,
 } from "../../packages/workbench-client/src/index"
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
@@ -16,6 +18,7 @@ type WebWorkbenchClientOptions = {
   navigation: NavigationAdapter
   fetch?: FetchLike
   apiBase?: string
+  workflowsApiBase?: string
   createId?: (prefix: string) => string
   fileUrl?: (relativePath: string) => string
 }
@@ -86,6 +89,28 @@ function eventArtifact(value: Record<string, unknown> | undefined): WorkbenchArt
   }
 }
 
+function workflowDefinition(value: unknown): WorkbenchWorkflowDefinition {
+  const record = value && typeof value === "object" ? value as Record<string, unknown> : {}
+  return {
+    nodes: Array.isArray(record.nodes) ? record.nodes : [],
+    edges: Array.isArray(record.edges) ? record.edges : [],
+  }
+}
+
+function webWorkflow(value: unknown): WorkbenchWorkflow {
+  const record = value && typeof value === "object" ? value as Record<string, unknown> : {}
+  return {
+    id: String(record.id ?? ""),
+    title: String(record.title ?? "Untitled workflow"),
+    definition: workflowDefinition(record),
+    updatedAt: record.updatedAt instanceof Date
+      ? record.updatedAt.toISOString()
+      : typeof record.updatedAt === "string"
+        ? record.updatedAt
+        : toIso(record.updated_at),
+  }
+}
+
 /**
  * SaaS composition adapter. It deliberately owns `/api` knowledge and is
  * kept outside `workbench-client`, whose types remain host-neutral.
@@ -93,6 +118,7 @@ function eventArtifact(value: Record<string, unknown> | undefined): WorkbenchArt
 export function createWebWorkbenchClient(options: WebWorkbenchClientOptions): WorkbenchClient {
   const fetchImpl = options.fetch ?? globalThis.fetch
   const apiBase = options.apiBase ?? "/api/ai"
+  const workflowsApiBase = options.workflowsApiBase ?? "/api/workflows"
   const makeId = options.createId ?? createId
   const pendingRuns = new Map<string, PendingRun>()
   const controllers = new Map<string, AbortController>()
@@ -127,6 +153,22 @@ export function createWebWorkbenchClient(options: WebWorkbenchClientOptions): Wo
           const value = row as Record<string, unknown>
           return { id: String(value.id), conversationId: String(value.conversation_id ?? conversationId), role: messageRole(value.role), content: String(value.content ?? ""), createdAt: toIso(value.created_at) }
         })
+      },
+    },
+    workflows: {
+      async list() {
+        const payload = await jsonOrError(await fetchImpl(workflowsApiBase, { credentials: "same-origin" }))
+        const data = Array.isArray(payload?.data) ? payload.data : []
+        return data.map(webWorkflow)
+      },
+      async save(input) {
+        const payload = await jsonOrError(await fetchImpl(workflowsApiBase, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ title: input.title, nodes: input.definition.nodes, edges: input.definition.edges }),
+        }))
+        return webWorkflow(payload?.data ?? payload)
       },
     },
     runs: {

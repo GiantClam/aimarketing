@@ -47,6 +47,24 @@ export interface WorkbenchUsage {
   readonly estimatedCost?: number;
 }
 
+export interface WorkbenchWorkflowDefinition {
+  readonly nodes: readonly unknown[];
+  readonly edges: readonly unknown[];
+}
+
+export interface WorkbenchWorkflow {
+  readonly id: string;
+  readonly title: string;
+  readonly definition: WorkbenchWorkflowDefinition;
+  readonly updatedAt: string;
+}
+
+export interface WorkbenchWorkflowInput {
+  readonly id?: string;
+  readonly title: string;
+  readonly definition: WorkbenchWorkflowDefinition;
+}
+
 export type WorkbenchRunEvent =
   | { readonly type: "text"; readonly delta: string }
   | { readonly type: "tool"; readonly tool: string; readonly phase: "started" | "completed" | "failed"; readonly message?: string }
@@ -74,6 +92,10 @@ export interface WorkbenchClient {
     readonly list: () => Promise<readonly WorkbenchConversation[]>;
     readonly create: (title?: string) => Promise<WorkbenchConversation>;
     readonly messages: (conversationId: string) => Promise<readonly WorkbenchMessage[]>;
+  };
+  readonly workflows: {
+    readonly list: () => Promise<readonly WorkbenchWorkflow[]>;
+    readonly save: (input: WorkbenchWorkflowInput) => Promise<WorkbenchWorkflow>;
   };
   readonly runs: {
     readonly start: (request: WorkbenchRunRequest) => Promise<WorkbenchRun>;

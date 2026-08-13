@@ -316,6 +316,8 @@ test("desktop conversation history and retry flow consume the injected Workbench
   assert.match(appSource, /workbenchClient\.conversations\.list\(\)/);
   assert.match(appSource, /workbenchClient\.conversations\.messages\(conversationId\)/);
   assert.match(appSource, /workbenchClient\.conversations\.messages\(run\.conversation_id\)/);
+  assert.match(appSource, /workbenchClient\.workflows\.list\(\)/);
+  assert.match(appSource, /workbenchClient\.workflows\.save\(/);
 });
 
 test("OpenCode serve errors terminate the shared synchronous turn barrier", () => {

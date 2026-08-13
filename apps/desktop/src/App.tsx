@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { formatWorkbenchModelLabel, WORKBENCH_HOME_COPY, WORKBENCH_HOME_GROUPS, WORKBENCH_MEDIA_FEATURES, WORKBENCH_MESSAGE_FRAME, WORKBENCH_ROUTE_MANIFEST, WORKBENCH_THEME, WORKBENCH_WRITER_CONTENT_TYPES, WORKBENCH_WRITER_LANGUAGES, WORKBENCH_WRITER_MODES, WORKBENCH_WRITER_PLATFORMS, WORKBENCH_WRITER_QUICK_PROMPTS, WorkbenchChatMessage, WorkbenchRouteIcon, WorkbenchShell, WorkbenchWriterMessage, type WorkbenchMediaFeatureId } from "@aimarketing/workbench-ui";
 import { migrateWorkflowDefinitionToCurrent, validateWorkflowDefinition, workflowNodeRegistry, type WorkflowDefinitionEnvelope, type WorkflowDefinitionNodeV2 } from "@aimarketing/workflow-core";
+import type { WorkbenchWorkflow } from "@aimarketing/workbench-client";
 import { tauriBridge } from "./tauri";
 import { createDesktopWorkbenchClient } from "./workbench-client";
 import { capabilityEnglish, desktopCopy, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale, workflowActionEnglish, writerContentTypeEnglish, writerLanguageEnglish, writerModeEnglish, writerPlatformEnglish, type DesktopLocalePreference } from "./i18n";
@@ -22,6 +23,10 @@ type DesktopConversationMessage = { id: string; role: "user" | "assistant"; cont
 type LocalAttachment = { id: string; name: string; size: number; mediaType: string; relativePath?: string };
 
 type DesktopRoute = { path: string; label: string; description: string; mode: WorkspaceMode; section?: string; glyph?: string; iconKey?: string; placement?: "main" | "footer" | "hidden" };
+
+function toSavedWorkflow(workflow: WorkbenchWorkflow): SavedWorkflow {
+  return { id: workflow.id, name: workflow.title, definition_json: JSON.stringify(workflow.definition), updated_at: workflow.updatedAt };
+}
 
 const mediaFeatureCatalog = WORKBENCH_MEDIA_FEATURES;
 
@@ -1156,7 +1161,7 @@ export function App() {
     void (async () => {
       try {
         const health = await tauriBridge.invoke<{ status: string }>("health");
-        const [state, stored, runtime, recent, summary, artifacts, workflows, runRows] = await Promise.all([tauriBridge.invoke<{ integrity: boolean; interruptedRuns?: number }>("initialize_local_state"), tauriBridge.invoke<DesktopConfig>("read_config"), tauriBridge.invoke<{ ready: boolean; paths?: { opencode?: string; python?: string } }>("runtime_probe"), workbenchClient.conversations.list(), tauriBridge.invoke<{ runs: number; input_tokens: number; output_tokens: number; estimated_cost?: number; artifacts: number }>("usage_summary"), tauriBridge.invoke<unknown[]>("list_artifacts"), tauriBridge.invoke<SavedWorkflow[]>("list_workflows"), tauriBridge.invoke<RunRow[]>("list_runs")]);
+        const [state, stored, runtime, recent, summary, artifacts, workflows, runRows] = await Promise.all([tauriBridge.invoke<{ integrity: boolean; interruptedRuns?: number }>("initialize_local_state"), tauriBridge.invoke<DesktopConfig>("read_config"), tauriBridge.invoke<{ ready: boolean; paths?: { opencode?: string; python?: string } }>("runtime_probe"), workbenchClient.conversations.list(), tauriBridge.invoke<{ runs: number; input_tokens: number; output_tokens: number; estimated_cost?: number; artifacts: number }>("usage_summary"), tauriBridge.invoke<unknown[]>("list_artifacts"), workbenchClient.workflows.list(), tauriBridge.invoke<RunRow[]>("list_runs")]);
         let activeConfig = stored;
         if (stored) {
           const selectedRuntime = { ...stored.runtime, ...(runtime.paths?.opencode ? { opencodePath: runtime.paths.opencode } : {}), ...(runtime.paths?.python ? { pythonPath: runtime.paths.python } : {}) };
@@ -1174,7 +1179,7 @@ export function App() {
         setEstimatedCost(summary.estimated_cost ?? 0);
         setArtifactCount(Math.max(summary.artifacts, artifacts.length));
         setArtifactRows(artifacts as ArtifactRow[]);
-        setSavedWorkflows(workflows);
+        setSavedWorkflows(workflows.map(toSavedWorkflow));
         setRuns(state.interruptedRuns ? await tauriBridge.invoke<RunRow[]>("list_runs") : runRows);
         const latestConversation = recent[0];
         if (latestConversation) {
@@ -1407,9 +1412,10 @@ export function App() {
     const definition = sanitizeWorkflowDefinitionForStorage(currentWorkflowDefinition());
     const action = workflowActions.find((item) => item.id === definition.nodes.find((node) => node.nodeKey !== "input" && node.nodeKey !== "output")?.type) ?? workflowActions[0];
     const workflowId = globalThis.crypto?.randomUUID?.() ?? `workflow-${Date.now()}`;
+    const title = `${locale === "en" ? workflowActionEnglish[action.id] ?? action.label : action.label} · ${prompt.trim().slice(0, 24) || (locale === "en" ? "Untitled" : "未命名")}`;
     try {
-      await tauriBridge.invoke("save_workflow", { input: { id: workflowId, name: `${locale === "en" ? workflowActionEnglish[action.id] ?? action.label : action.label} · ${prompt.trim().slice(0, 24) || (locale === "en" ? "Untitled" : "未命名")}`, project_id: null, definition_json: JSON.stringify(definition) } });
-      setSavedWorkflows((current) => [{ id: workflowId, name: `${locale === "en" ? workflowActionEnglish[action.id] ?? action.label : action.label} · ${prompt.trim().slice(0, 24) || (locale === "en" ? "Untitled" : "未命名")}`, definition_json: JSON.stringify(definition), updated_at: new Date().toISOString() }, ...current]);
+      const saved = toSavedWorkflow(await workbenchClient.workflows.save({ id: workflowId, title, definition }));
+      setSavedWorkflows((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
       setRunStatus(locale === "zh" ? "工作流已保存到本机" : "Workflow saved locally");
     } catch (error) { setRunStatus(error instanceof Error ? error.message : (locale === "zh" ? "工作流保存失败" : "Workflow save failed")); }
   }
@@ -1443,7 +1449,7 @@ export function App() {
       if (importedPrompt) setPrompt(importedPrompt);
       const id = globalThis.crypto?.randomUUID?.() ?? `workflow-${Date.now()}`;
       const name = locale === "zh" ? `导入 · ${importedAction?.label ?? "工作流"}` : `Imported · ${workflowActionEnglish[importedAction?.id ?? ""] ?? "Workflow"}`;
-      const saved = await tauriBridge.invoke<SavedWorkflow>("save_workflow", { input: { id, name, project_id: null, definition_json: JSON.stringify(migrated) } });
+      const saved = toSavedWorkflow(await workbenchClient.workflows.save({ id, title: name, definition: migrated }));
       setSavedWorkflows((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
       setRunStatus(locale === "zh" ? "工作流已迁移并保存到本机，Provider/路径将使用当前配置" : "Workflow migrated and saved locally; the current Provider and paths will be used");
     } catch (error) { setRunStatus(locale === "zh" ? `工作流导入失败：${error instanceof Error ? error.message : String(error)}` : `Workflow import failed: ${error instanceof Error ? error.message : String(error)}`); }
@@ -1524,8 +1530,8 @@ export function App() {
         const workflowId = `workflow-${actionId}`;
         const actionName = locale === "en" ? workflowActionEnglish[action.id] ?? action.label : action.label;
         const workflowName = locale === "en" ? `${actionName} workflow` : `${actionName}工作流`;
-        await tauriBridge.invoke<SavedWorkflow>("save_workflow", { input: { id: workflowId, name: workflowName, project_id: null, definition_json: JSON.stringify(workflowDefinition) } });
-        setSavedWorkflows((current) => [{ id: workflowId, name: workflowName, definition_json: JSON.stringify(workflowDefinition), updated_at: new Date().toISOString() }, ...current.filter((item) => item.id !== workflowId)]);
+        const saved = toSavedWorkflow(await workbenchClient.workflows.save({ id: workflowId, title: workflowName, definition: workflowDefinition }));
+        setSavedWorkflows((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
         await sendHostMessage({ version: 1, requestId: runId, runId, type: "workflow.run", payload: { workspacePath: config.workspacePath, provider: config.provider, media: config.provider, vaultPath: config.obsidianVaultPath, indexPath: config.obsidianIndexPath, executable: config.runtime.opencodePath, definition: workflowDefinition } });
       }
       setPrompt(""); setRunStatus(locale === "zh" ? "已发送，等待本地 Agent 事件…" : "Sent; waiting for local Agent events…");

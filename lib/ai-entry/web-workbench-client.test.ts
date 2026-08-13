@@ -14,6 +14,8 @@ test("web WorkbenchClient adapts SaaS conversations, messages and chat SSE", asy
     if (url.includes("/conversations?")) return jsonResponse({ data: [{ id: "42", name: "Plan", updated_at: 1_700_000_000 }] })
     if (url.endsWith("/conversations")) return jsonResponse({ data: { id: "43", name: "New plan", updated_at: 1_700_000_001 } })
     if (url.includes("/messages?")) return jsonResponse({ data: [{ id: "m1", conversation_id: "42", role: "assistant", content: "Ready", created_at: 1_700_000_002 }] })
+    if (url.endsWith("/workflows") && init?.method === "POST") return jsonResponse({ data: { id: 7, title: "Workflow", nodes: [{ nodeKey: "input" }], edges: [], updatedAt: "2026-08-13T00:00:00Z" } })
+    if (url.endsWith("/workflows")) return jsonResponse({ data: [{ id: 6, title: "Existing workflow", nodes: [], edges: [], updatedAt: "2026-08-12T00:00:00Z" }] })
     return new Response([
       'data: {"event":"message","answer":"Hello"}\n\n',
       'data: {"event":"tool_call","data":{"toolName":"web_search"}}\n\n',
@@ -28,6 +30,8 @@ test("web WorkbenchClient adapts SaaS conversations, messages and chat SSE", asy
   assert.equal((await client.conversations.list())[0]?.title, "Plan")
   assert.equal((await client.conversations.create("New plan")).id, "43")
   assert.equal((await client.conversations.messages("42"))[0]?.content, "Ready")
+  assert.equal((await client.workflows.list())[0]?.title, "Existing workflow")
+  assert.equal((await client.workflows.save({ title: "Workflow", definition: { nodes: [{ nodeKey: "input" }], edges: [] } })).id, "7")
 
   const run = await client.runs.start({ conversationId: "42", prompt: "Research", model: "provider/fast", reasoningEffort: "high", skillId: "research" })
   const events: string[] = []
