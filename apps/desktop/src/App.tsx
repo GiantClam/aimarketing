@@ -5,7 +5,7 @@ import type { WorkbenchWorkflow } from "@aimarketing/workbench-client";
 import { tauriBridge } from "./tauri";
 import { createDesktopWorkbenchClient } from "./workbench-client";
 import { capabilityEnglish, desktopCopy, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale, workflowActionEnglish, writerContentTypeEnglish, writerLanguageEnglish, writerModeEnglish, writerPlatformEnglish, type DesktopLocalePreference } from "./i18n";
-import { configuredModelOptions, isMediaProviderConfigured, preferredConfiguredModel } from "./provider-config";
+import { configuredModelOptions, isMediaProviderConfigured, preferredConfiguredModel, requiresConfiguredProviderForWorkflowAction } from "./provider-config";
 import { sanitizeWorkflowDefinitionForStorage } from "./workflow-storage";
 
 type WorkspaceMode = "chat" | "writer" | "workflow" | "library";
@@ -14,6 +14,8 @@ type WorkflowAction = "upload" | "text_input" | "file_create" | "writer" | "llm_
 type MediaFeatureId = WorkbenchMediaFeatureId;
 type DesktopConfig = { schemaVersion: 1; locale?: DesktopLocalePreference; workspacePath: string; obsidianVaultPath?: string; obsidianIndexPath?: string; provider: { id: string; source?: string; model: string; models?: string[]; baseUrl?: string; apiKey?: string; reasoningEffort?: string; skillId?: SkillId; endpoint?: string; queryEndpoint?: string }; runtime: { source: "system" | "private"; opencodePath?: string; pythonPath?: string }; offlineRuntimeZipPath?: string };
 let activeProviderModels: readonly string[] = [];
+let activeMediaProviderConfigured = false;
+let openWorkflowProviderSettings = () => undefined;
 type SavedWorkflow = { id: string; name: string; definition_json: string; updated_at: string };
 type ArtifactRow = { id: string; relative_path: string; mime_type: string; byte_length: number; sha256: string; created_at: string; available?: boolean };
 type RunRow = { id: string; conversation_id?: string | null; status: string; model?: string | null; started_at: string; finished_at?: string | null };
@@ -543,6 +545,7 @@ function DesktopWorkflowCanvas({
   selectedNodeKey,
   onSelectNode,
   onMoveNode,
+  providerConfigured = activeMediaProviderConfigured,
   locale,
 }: {
   nodes: WorkflowDefinitionNodeV2[];
@@ -550,6 +553,7 @@ function DesktopWorkflowCanvas({
   selectedNodeKey: string | null;
   onSelectNode: (nodeKey: string) => void;
   onMoveNode: (nodeKey: string, position: { x: number; y: number }) => void;
+  providerConfigured?: boolean;
   locale: "zh" | "en";
 }) {
   const [viewport, setViewport] = useState({ x: 24, y: 24, scale: 1 });
@@ -617,9 +621,10 @@ function DesktopWorkflowCanvas({
         {edges.map((edge) => { const source = nodeByKey.get(edge.sourceNodeKey); const target = nodeByKey.get(edge.targetNodeKey); if (!source || !target) return null; const x1 = source.positionX + nodeWidth; const y1 = source.positionY + nodeHeight / 2; const x2 = target.positionX; const y2 = target.positionY + nodeHeight / 2; const bend = Math.max(42, Math.abs(x2 - x1) / 2); return <path key={`${edge.sourceNodeKey}-${edge.targetNodeKey}`} d={`M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`} />; })}
       </svg>
       {nodes.map((node, index) => <button key={node.nodeKey} type="button" className={`workflow-node workflow-canvas-node ${selectedNodeKey === node.nodeKey ? "workflow-node-active" : ""}`} style={{ left: node.positionX, top: node.positionY }} onPointerDown={(event) => startNodeDrag(event, node)} onClick={() => onSelectNode(node.nodeKey)}>
-        <span>{index + 1}</span><strong>{nodeTitle(node)}</strong><small>{node.type}</small><i aria-hidden="true" />
+        <span>{index + 1}</span><strong>{nodeTitle(node)}</strong><small>{node.type}</small>{!providerConfigured && requiresConfiguredProviderForWorkflowAction(node.type) ? <em>{locale === "en" ? "Configuration required" : "需要配置"}</em> : null}<i aria-hidden="true" />
       </button>)}
     </div>
+    {!providerConfigured && nodes.some((node) => requiresConfiguredProviderForWorkflowAction(node.type)) ? <div className="workflow-provider-warning"><strong>{locale === "en" ? "Configuration required" : "需要配置 Provider"}</strong><span>{locale === "en" ? "A media node is visible but cannot run until its Provider and configured model are set." : "媒体节点仍可编辑，但需先配置 Provider 和已配置模型才可运行。"}</span><button type="button" className="link-button" onClick={openWorkflowProviderSettings}>{locale === "en" ? "Open model settings" : "打开模型配置"}</button></div> : null}
   </div>;
 }
 
@@ -682,7 +687,7 @@ function DesktopWorkflowWorkspace({ route, prompt, onPromptChange, runStatus, ac
   const upstreamEdge = selectedNode ? localDefinition.edges.find((edge) => edge.targetNodeKey === selectedNode.nodeKey) : undefined;
   const upstreamOptions = selectedNode && selectedNode.nodeKey !== "input" && selectedNode.nodeKey !== "output" ? localDefinition.nodes.filter((node) => node.nodeKey !== selectedNode.nodeKey && (workflowNodeRegistry.get(node.type)?.outputs.some((port) => port.valueKind === workflowNodeRegistry.get(selectedNode.type)?.inputs[0]?.valueKind))) : [];
   const actionLabel = (item: { id: string; label: string }) => locale === "en" ? workflowActionEnglish[item.id] ?? item.label : item.label;
-  const ui = locale === "zh" ? { save: "保存流程", export: "导出 JSON", import: "导入 JSON", host: "本地 OpenCode Host", abilities: "工作流能力", nodes: "节点", canvas: "本地工作流画布", edges: "条连线", runnable: "可运行", input: "输入节点", output: "输出节点", capability: "能力节点", delete: "删除节点", editable: "可编辑配置", task: "任务内容", artifact: "产物策略", localOutput: "写入当前项目目录", artifactHint: "登记到本地 artifacts，不上传云端", ability: "能力", upstream: "上游节点", none: "不连接", runtime: "运行时", run: "运行工作流", placeholder: "描述这条工作流需要完成的任务……" } : { save: "Save workflow", export: "Export JSON", import: "Import JSON", host: "Local OpenCode Host", abilities: "Workflow abilities", nodes: "nodes", canvas: "Local workflow canvas", edges: "edges", runnable: "ready", input: "Input node", output: "Output node", capability: "Capability node", delete: "Delete node", editable: "Editable config", task: "Task", artifact: "Artifact policy", localOutput: "Write to current project", artifactHint: "Registered in local artifacts; never uploaded", ability: "Capability", upstream: "Upstream node", none: "No connection", runtime: "Runtime", run: "Run workflow", placeholder: "Describe the task this workflow should complete…" };
+  const ui = locale === "zh" ? { save: "保存流程", export: "导出 JSON", import: "导入 JSON", host: "本地 OpenCode Host", abilities: "工作流能力", nodes: "节点", canvas: "本地工作流画布", edges: "条连线", runnable: "可运行", input: "输入节点", output: "输出节点", capability: "能力节点", delete: "删除节点", editable: "可编辑配置", task: "任务内容", artifact: "产物策略", localOutput: "写入当前项目目录", artifactHint: "登记到本地 artifacts，不上传云端", ability: "能力", upstream: "上游节点", none: "不连接", runtime: "运行时", run: "运行工作流", placeholder: "描述这条工作流需要完成的任务……", providerRequired: "该媒体节点需要配置 Provider", providerHint: "请在模型配置中选择已配置模型并填写对应 Provider。", openSettings: "打开模型配置" } : { save: "Save workflow", export: "Export JSON", import: "Import JSON", host: "Local OpenCode Host", abilities: "Workflow abilities", nodes: "nodes", canvas: "Local workflow canvas", edges: "edges", runnable: "ready", input: "Input node", output: "Output node", capability: "Capability node", delete: "Delete node", editable: "Editable config", task: "Task", artifact: "Artifact policy", localOutput: "Write to current project", artifactHint: "Registered in local artifacts; never uploaded", ability: "Capability", upstream: "Upstream node", none: "No connection", runtime: "Runtime", run: "Run workflow", placeholder: "Describe the task this workflow should complete…", providerRequired: "This media node requires a configured Provider", providerHint: "Choose a configured model and enter its Provider settings in Model settings.", openSettings: "Open model settings" };
   const localizedRunStatus = localizeDesktopStatus(runStatus, locale);
   const localizedNodeTitle = (node: WorkflowDefinitionNodeV2) => node.nodeKey === "input" ? ui.input : node.nodeKey === "output" ? ui.output : actionLabel({ id: node.type, label: node.title });
   const canvasNodes = localDefinition.nodes.map((node) => ({ ...node, title: localizedNodeTitle(node) }));
@@ -1016,7 +1021,7 @@ export function App() {
   // Legacy/retained surfaces consume ModelControls indirectly. Refresh once
   // after a configured list changes so they all observe the same catalog.
   const [, setModelCatalogRevision] = useState(0);
-  useEffect(() => { activeProviderModels = config.provider.models ?? []; setModelCatalogRevision((revision) => revision + 1); }, [config.provider.models]);
+  useEffect(() => { activeProviderModels = config.provider.models ?? []; activeMediaProviderConfigured = isMediaProviderConfigured(config.provider); setModelCatalogRevision((revision) => revision + 1); }, [config.provider]);
   useEffect(() => { activeRunRef.current = activeRunId; }, [activeRunId]);
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
 
@@ -1036,6 +1041,7 @@ export function App() {
     replace: navigate,
     current: () => activePathRef.current,
   }), [navigate]);
+  openWorkflowProviderSettings = () => { setSettingsOpen(true); workbenchClient.navigation.go("/dashboard/settings"); };
 
   function toggleLocale() {
     setLocalePreference(locale === "zh" ? "en" : "zh");

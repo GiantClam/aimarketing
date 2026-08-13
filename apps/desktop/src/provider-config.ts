@@ -28,3 +28,16 @@ export function isMediaProviderConfigured(provider: DesktopProviderConfig) {
   const source = (provider.source ?? provider.id ?? "").trim().toLowerCase();
   return source !== "" && source !== "local";
 }
+
+const mediaWorkflowActions = new Set([
+  "image_generate",
+  "video_generate",
+  "digital_human",
+  "music_generate",
+  "voice_synthesis",
+  "audio_generate",
+]);
+
+export function requiresConfiguredProviderForWorkflowAction(action: string): boolean {
+  return mediaWorkflowActions.has(action);
+}

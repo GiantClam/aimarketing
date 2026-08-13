@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { formatWorkbenchModelLabel, WORKBENCH_CHAT_QUICK_PROMPTS, WORKBENCH_HOME_COPY, WORKBENCH_HOME_GROUPS, WORKBENCH_ROUTE_MANIFEST, WORKBENCH_WRITER_QUICK_PROMPTS } from "@aimarketing/workbench-ui";
-import { configuredModelOptions, isMediaProviderConfigured, preferredConfiguredModel } from "../src/provider-config";
+import { configuredModelOptions, isMediaProviderConfigured, preferredConfiguredModel, requiresConfiguredProviderForWorkflowAction } from "../src/provider-config";
 
 test("desktop routes consume the retained online dashboard manifest", () => {
   const paths = WORKBENCH_ROUTE_MANIFEST.map((route) => route.path);
@@ -261,6 +261,18 @@ test("media readiness follows Provider source instead of the default local id", 
   assert.equal(isMediaProviderConfigured({ id: "local", source: "local", baseUrl: "http://127.0.0.1:11434/v1" }), false);
   assert.equal(isMediaProviderConfigured({ id: "local", source: "openai-compatible", baseUrl: "https://api.example.test/v1" }), true);
   assert.equal(isMediaProviderConfigured({ id: "openai-compatible", baseUrl: "https://api.example.test/v1" }), true);
+});
+
+test("media workflow nodes remain visible with a localized configuration-required state", () => {
+  const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  assert.equal(requiresConfiguredProviderForWorkflowAction("image_generate"), true);
+  assert.equal(requiresConfiguredProviderForWorkflowAction("video_generate"), true);
+  assert.equal(requiresConfiguredProviderForWorkflowAction("voice_synthesis"), true);
+  assert.equal(requiresConfiguredProviderForWorkflowAction("writer"), false);
+  assert.match(appSource, /requiresConfiguredProviderForWorkflowAction\(node\.type\)/);
+  assert.match(appSource, /Configuration required/);
+  assert.match(appSource, /需要配置 Provider/);
+  assert.match(appSource, /openWorkflowProviderSettings/);
 });
 
 test("desktop media workspace keeps cloud upload, voice-library, and task actions", () => {
