@@ -21,12 +21,12 @@ impl InstanceLock {
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 let owner = read_owner(&path);
                 if owner.is_some_and(|pid| !process_alive(pid)) {
-                    remove_file(&path).map_err(|remove_error| format!("desktop_instance_already_running: {} ({remove_error})", path.display()))?;
-                    let mut file = OpenOptions::new().write(true).create_new(true).open(&path).map_err(|retry_error| format!("desktop_instance_already_running: {} ({retry_error})", path.display()))?;
+                    remove_file(&path).map_err(|remove_error| lock_conflict(&path, owner, &remove_error))?;
+                    let mut file = OpenOptions::new().write(true).create_new(true).open(&path).map_err(|retry_error| lock_conflict(&path, owner, &retry_error))?;
                     writeln!(file, "{}", std::process::id()).map_err(|write_error| format!("desktop_lock_write_failed: {write_error}"))?;
                     Ok(Self { path, file })
                 } else {
-                    Err(format!("desktop_instance_already_running: {}", path.display()))
+                    Err(lock_conflict(&path, owner, "close the existing AI Marketing instance first"))
                 }
             }
             Err(error) => Err(format!("desktop_lock_open_failed: {error}")),
@@ -37,6 +37,14 @@ impl InstanceLock {
         let _ = self.file.sync_all();
         let _ = remove_file(&self.path);
     }
+}
+
+fn lock_conflict(path: &Path, owner: Option<u32>, detail: impl std::fmt::Display) -> String {
+    let owner = owner.map_or_else(|| "unknown".to_string(), |pid| pid.to_string());
+    format!(
+        "desktop_instance_already_running: {} (owner_pid={owner}; {detail})",
+        path.display()
+    )
 }
 
 fn read_owner(path: &Path) -> Option<u32> {
@@ -68,10 +76,23 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("instance.lock");
         let first = InstanceLock::acquire(path.clone()).expect("first lock");
-        assert!(InstanceLock::acquire(path.clone()).is_err());
+        let error = match InstanceLock::acquire(path.clone()) {
+            Ok(_) => panic!("second lock must fail"),
+            Err(error) => error,
+        };
+        assert!(error.contains("desktop_instance_already_running:"));
+        assert!(error.contains(&format!("owner_pid={}", std::process::id())));
+        assert!(error.contains("close the existing AI Marketing instance first"));
         first.release();
         let second = InstanceLock::acquire(path.clone()).expect("released lock can be reused");
         second.release();
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn lock_conflict_explains_unknown_owner() {
+        let message = lock_conflict(Path::new("C:/AIMarketing/data/instance.lock"), None, "repair the lock file");
+        assert!(message.contains("owner_pid=unknown"));
+        assert!(message.contains("repair the lock file"));
     }
 }

@@ -43,10 +43,14 @@
 - [x] 4.2 生成含 `portable.flag` 的便携 ZIP，全部应用数据位于程序旁 `data/`
   - [x] 4.2a 打包脚本在压缩后检查 portable/runtime 必需条目，并核对可执行文件、host 和 Skill catalog 的归档字节长度。
   - [x] 4.2b 2026-08-13 使用隔离的 release target 构建 Windows EXE 和 NSIS 包，并生成 268,060,981 字节的 `AI-Marketing-Windows-x64-portable.zip`；独立归档读取校验了 EXE、`portable.flag`、README、workflow host、Skill catalog 和 runtime manifest，以及 EXE、host、catalog 的字节长度。跨机器复制验证仍由 4.4 覆盖。
-- [ ] 4.3 实现普通/便携单实例锁和数据库/索引占用提示
+- [x] 4.3 实现普通/便携单实例锁和数据库/索引占用提示
+  - [x] `InstanceLock` 按 normal/portable 数据根目录创建单实例锁；冲突错误包含 owner PID 和关闭现有实例的可操作提示，SQLite 连接设置 5 秒 `busy_timeout`。
+  - [x] 2026-08-13 `cargo test ... instance_lock::tests` 通过 2/2，覆盖同一路径互斥和未知 owner 提示。
 - [ ] 4.4 验证便携目录复制到另一台兼容电脑后只重新 probe，不重复下载合格 runtime
-- [ ] 4.5 明示外部 Obsidian Vault、系统 WebView2 不随便携目录复制
-- [ ] 4.6 明示便携复制同时复制明文 API Key
+- [x] 4.5 明示外部 Obsidian Vault、系统 WebView2 不随便携目录复制
+  - [x] 便携 ZIP README 明确提示外部 Vault 路径需在目标机保持可用或重定位，系统 WebView2 在目标机重新 probe/repair。
+- [x] 4.6 明示便携复制同时复制明文 API Key
+  - [x] 便携 ZIP README 明确提示 `config.json` 可能含明文 API Key，复制归档需妥善保护。
 
 **Quality Gate:**
 - [ ] 两种模式路径、升级、备份和复制 E2E 通过

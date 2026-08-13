@@ -77,6 +77,8 @@ Mode: $mode
 Normal mode stores application data in %LOCALAPPDATA%\AIMarketing.
 Portable mode stores application data in the data\ directory beside the executable.
 The portable package includes config.json and may include a plaintext API key; protect copied archives.
+External Obsidian Vault folders are not copied; the configured Vault path must remain available or be relocated after copying.
+The system WebView2 runtime is not copied; the first launch probes or repairs it on the target machine.
 "@
 
 if (Test-Path -LiteralPath $zip -PathType Leaf) { Remove-Item -LiteralPath $zip -Force }
