@@ -63,8 +63,10 @@ test("desktop host emits terminal media attempt events for recovery idempotency"
   assert.match(app, /status: "queued", payloadJson/);
   assert.match(app, /status === "succeeded"[\s\S]*record_usage/);
   assert.match(host, /task\.usage/);
+  assert.match(host, /status: "download_failed"/);
   assert.match(host, /tempDirectory/);
   assert.match(app, /allocate_media_temp/);
+  assert.match(app, /payload\.status === "download_failed"/);
   assert.match(host, /slice\(0, 64 \* 1024\)/);
   assert.match(app, /record_run_checkpoint/);
 });

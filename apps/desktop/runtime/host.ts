@@ -342,7 +342,7 @@ async function runMediaCapability(command: HostCommand, runId: string, nodeKey: 
     artifacts = await downloadMediaOutputs(task, outputDirectory, { filenamePrefix: executorId, ...(tempDirectory ? { tempDirectory } : {}) });
     if (!artifacts.length && task.outputs.length) throw new Error("media_outputs_not_downloadable");
   } catch (error) {
-    emit(command, { event: "tool_event", tool: `media:${executorId}`, phase: "failed", message: JSON.stringify({ provider, model: modelId, executorId, nodeKey, providerTaskId: task.providerTaskId, idempotencyKey, status: "failed", error: error instanceof Error ? error.message.slice(0, 180) : String(error).slice(0, 180) }), runId });
+    emit(command, { event: "tool_event", tool: `media:${executorId}`, phase: "failed", message: JSON.stringify({ provider, model: modelId, executorId, nodeKey, providerTaskId: task.providerTaskId, idempotencyKey, status: "download_failed", error: error instanceof Error ? error.message.slice(0, 180) : String(error).slice(0, 180) }), runId });
     throw error;
   }
   emit(command, { event: "tool_event", tool: `media:${executorId}`, phase: "completed", message: JSON.stringify({ provider, model: modelId, executorId, nodeKey, providerTaskId: task.providerTaskId, idempotencyKey, status: "succeeded", ...(task.usage ? { usage: task.usage } : {}) }), runId });

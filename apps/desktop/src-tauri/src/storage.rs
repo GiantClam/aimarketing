@@ -333,7 +333,7 @@ pub fn list_runs(path: &Path) -> Result<Vec<RunRow>> {
 pub fn list_recoverable_attempts(path: &Path) -> Result<Vec<RunAttemptRow>> {
     initialize(path)?;
     let connection = open(path)?;
-    let mut statement = connection.prepare("SELECT idempotency_key, run_id, node_key, provider, provider_task_id, status, payload_json, updated_at FROM run_attempts WHERE status IN ('queued', 'running', 'submitted') AND provider_task_id IS NOT NULL ORDER BY updated_at ASC")?;
+    let mut statement = connection.prepare("SELECT idempotency_key, run_id, node_key, provider, provider_task_id, status, payload_json, updated_at FROM run_attempts WHERE status IN ('queued', 'running', 'submitted', 'download_failed') AND provider_task_id IS NOT NULL ORDER BY updated_at ASC")?;
     let rows = statement.query_map([], |row| Ok(RunAttemptRow {
         idempotency_key: row.get(0)?,
         run_id: row.get(1)?,
@@ -395,7 +395,8 @@ mod tests {
         record_run_node(&path, "run-1", "writer", "succeeded", Some(r#"{"text":"完成"}"#)).unwrap();
         record_run_checkpoint(&path, "run-1", "writer", 2, r#"{"text":"完成"}"#).unwrap();
         record_run_checkpoint(&path, "run-1", "writer", 3, r#"{"text":"最终"}"#).unwrap();
-        record_run_attempt(&path, "run-1:media:1", "run-1", "media", Some("openai"), Some("provider-task-1"), "submitted", Some(r#"{"provider":"openai"}"#)).unwrap();
+        record_run_attempt(&path, "run-1:media:1", "run-1", "media", Some("openai"), Some("provider-task-1"), "download_failed", Some(r#"{"provider":"openai","status":"download_failed"}"#)).unwrap();
+        record_run_attempt(&path, "run-1:terminal:1", "run-1", "terminal", Some("openai"), Some("provider-task-terminal"), "failed", Some(r#"{"provider":"openai","status":"failed"}"#)).unwrap();
         assert_eq!(list_recoverable_attempts(&path).unwrap().len(), 1);
         finish_run(&path, "run-1", "succeeded").unwrap();
         assert_eq!(list_conversations(&path).unwrap().len(), 1);

@@ -1348,7 +1348,7 @@ export function App() {
               const executorId = typeof payload.executorId === "string" ? payload.executorId : tool.slice("media:".length);
               const nodeKey = typeof payload.nodeKey === "string" ? payload.nodeKey : executorId;
               const idempotencyKey = typeof payload.idempotencyKey === "string" ? payload.idempotencyKey : `${event.runId}:${nodeKey}:1`;
-              const status = payload.status === "succeeded" || payload.status === "failed" || payload.status === "cancelled" ? payload.status : payload.providerTaskId ? "submitted" : "running";
+              const status = payload.status === "succeeded" || payload.status === "failed" || payload.status === "cancelled" || payload.status === "download_failed" ? payload.status : payload.providerTaskId ? "submitted" : "running";
               void tauriBridge.invoke("record_run_attempt", { idempotencyKey, runId: event.runId, nodeKey, provider: payload.provider ?? null, providerTaskId: payload.providerTaskId ?? null, status, payloadJson: JSON.stringify({ ...payload, executorId, nodeKey }) });
               const usage = payload.usage && typeof payload.usage === "object" ? payload.usage as Record<string, unknown> : {};
               if (status === "succeeded") void tauriBridge.invoke("record_usage", {

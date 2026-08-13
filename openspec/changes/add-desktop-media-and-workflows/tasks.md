@@ -78,6 +78,7 @@
 - [ ] 4.5 实现异常退出、临时 URL 到期和部分产物测试
 - [x] 4.3a `media.resume` seeds `runMediaJob` with the persisted task ID, polls/downloads without submit, and emits terminal artifact metadata.
 - [x] 4.4a media progress/status events update the idempotent attempt record; resumed artifacts use the same deterministic registration path.
+- [x] 4.5a Media download/verification failures retain the provider task ID as recoverable `download_failed` attempts; startup recovery resumes poll/download while terminal provider failures remain excluded.
 
 **Quality Gate:**
 - [ ] 关闭应用后恢复长媒体工作流
