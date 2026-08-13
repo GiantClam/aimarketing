@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 function sourceFiles(directory: string): string[] {
@@ -12,7 +13,8 @@ function sourceFiles(directory: string): string[] {
 }
 
 test("writer-core stays pure and host-neutral", () => {
-  const root = join(process.cwd(), "src");
+  const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const root = join(packageRoot, "src");
   const forbidden = /(?:next\/|@\/lib\/(?:db|auth|billing|enterprise|r2|railway|cloudflare)|firebase|supabase|fetch\s*\(|process\.env)/iu;
   const violations = sourceFiles(root).flatMap((file) => forbidden.test(readFileSync(file, "utf8")) ? [file] : []);
   assert.deepEqual(violations, []);

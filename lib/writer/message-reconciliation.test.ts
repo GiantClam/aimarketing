@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 
-import { reconcilePendingWriterMessages } from "./message-reconciliation"
+import { hasCompletedPendingWriterResponse, reconcilePendingWriterMessages } from "./message-reconciliation"
 
 const message = (id: string, role: "user" | "assistant", content: string) => ({ id, role, content })
 const pending = {
@@ -69,5 +69,44 @@ test("infers the pending prompt before the task store entry exists", () => {
       message("user_540", "user", pending.prompt),
       message("writer_assistant_new", "assistant", pending.generatingContent),
     ],
+  )
+})
+
+test("recognizes a completed server response persisted before task status recovery", () => {
+  assert.equal(
+    hasCompletedPendingWriterResponse(
+      [
+        {
+          role: "assistant",
+          query: pending.prompt,
+          answer: "这是一篇已经落库的完整草稿，应该解除本地生成中状态。",
+          created_at: 1_000,
+        },
+      ],
+      {
+        prompt: pending.prompt,
+        generatingContent: pending.generatingContent,
+        taskCreatedAt: 1_000_000,
+      },
+    ),
+    true,
+  )
+  assert.equal(
+    hasCompletedPendingWriterResponse(
+      [
+        {
+          role: "assistant",
+          query: pending.prompt,
+          answer: "Request failed: transient database error",
+          created_at: 1_000,
+        },
+      ],
+      {
+        prompt: pending.prompt,
+        generatingContent: pending.generatingContent,
+        taskCreatedAt: 1_000_000,
+      },
+    ),
+    false,
   )
 })

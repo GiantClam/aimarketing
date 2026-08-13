@@ -104,6 +104,49 @@ export function reconcileWriterRevisionResult<T extends WriterDraftResult>(input
 export type PendingWriterMessageLike = { id: string; role: "user" | "assistant"; content: string };
 export type PendingWriterMessageReconciliation = { prompt: string; generatingContent: string; optimisticUserMessageId?: string | null; optimisticAssistantMessageId?: string | null };
 
+export type PendingWriterHistoryEntryLike = {
+  role?: "user" | "assistant";
+  query?: string | null;
+  answer?: string | null;
+  content?: string | null;
+  created_at?: number | null;
+};
+
+export type PendingWriterTaskLike = {
+  prompt?: string | null;
+  taskCreatedAt?: number | null;
+  generatingContent: string;
+};
+
+export function hasCompletedPendingWriterResponse(
+  entries: PendingWriterHistoryEntryLike[],
+  pending: PendingWriterTaskLike,
+) {
+  const prompt = String(pending.prompt || "").trim();
+  if (!prompt) return false;
+
+  const taskCreatedAt = Number(pending.taskCreatedAt);
+  const earliestAcceptedAt = Number.isFinite(taskCreatedAt) ? taskCreatedAt - 2_000 : null;
+  const generatingContent = String(pending.generatingContent || "").trim();
+
+  return entries.some((entry) => {
+    if (entry.role !== "assistant" || String(entry.query || "").trim() !== prompt) return false;
+
+    const answer = String(entry.answer ?? entry.content ?? "").trim();
+    if (
+      answer.length < 20 ||
+      answer === generatingContent ||
+      /^(?:request failed|请求失败)\s*:/iu.test(answer)
+    ) {
+      return false;
+    }
+
+    if (earliestAcceptedAt === null) return true;
+    const createdAt = Number(entry.created_at);
+    return !Number.isFinite(createdAt) || createdAt * 1_000 >= earliestAcceptedAt;
+  });
+}
+
 export function reconcilePendingWriterMessages<T extends PendingWriterMessageLike>(serverMessages: T[], currentMessages: T[], pending: PendingWriterMessageReconciliation) {
   const normalize = (content: string) => content.trim();
   const findLast = (items: T[], predicate: (item: T) => boolean) => { for (let index = items.length - 1; index >= 0; index -= 1) if (predicate(items[index])) return index; return -1; };

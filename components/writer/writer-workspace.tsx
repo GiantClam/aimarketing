@@ -88,7 +88,7 @@ import {
   resolveWriterProgressLocale,
   type WriterProgressLocale,
 } from "@/lib/writer/progress-events"
-import { reconcilePendingWriterMessages } from "@/lib/writer/message-reconciliation"
+import { hasCompletedPendingWriterResponse, reconcilePendingWriterMessages } from "@/lib/writer/message-reconciliation"
 import {
   emitWriterRefresh,
   getWriterConversationCache,
@@ -125,6 +125,8 @@ type WriterMessage = {
 }
 
 type WriterCopy = AppMessages["writer"]
+
+const WRITER_TASK_POLL_TIMEOUT_MS = 8_000
 
 type WriterVersionAssetState = {
   assets: WriterAsset[]
@@ -1914,6 +1916,7 @@ export function WriterWorkspace({
     }
 
     let cancelled = false
+    let pollCount = 0
     setIsLoading(true)
 
     const refreshConversation = async (options?: { preservePending?: boolean }) => {
@@ -1987,7 +1990,15 @@ export function WriterWorkspace({
     const poll = async () => {
       while (!cancelled) {
         try {
-          const response = await fetch(`/api/tasks/${pendingTask.taskId}`)
+          pollCount += 1
+          const controller = new AbortController()
+          const timeoutId = window.setTimeout(() => controller.abort(), WRITER_TASK_POLL_TIMEOUT_MS)
+          let response: Response
+          try {
+            response = await fetch(`/api/tasks/${pendingTask.taskId}`, { signal: controller.signal })
+          } finally {
+            window.clearTimeout(timeoutId)
+          }
           const payload = (await response.json().catch(() => null)) as {
             data?: {
               status?: string
@@ -2114,6 +2125,35 @@ export function WriterWorkspace({
             }
             setPendingTaskEvents([])
             return
+          }
+
+          // A completed Writer message can be durable before the task row's
+          // terminal status is visible (for example after a transient DB
+          // connection reset). Reconcile the conversation periodically so a
+          // stale local pending task cannot lock the composer forever.
+          if (pollCount % 5 === 0) {
+            const hasCompletedResponse = () =>
+              hasCompletedPendingWriterResponse(historyEntriesRef.current, {
+                prompt: pendingTask.prompt,
+                taskCreatedAt: pendingTask.createdAt,
+                generatingContent: writerCopy.generatingDraft,
+              })
+
+            if (!hasCompletedResponse()) {
+              const refreshPromise = refreshConversation({ preservePending: false }).catch(() => null)
+              await Promise.race([
+                refreshPromise,
+                new Promise((resolve) => window.setTimeout(resolve, WRITER_TASK_POLL_TIMEOUT_MS)),
+              ])
+            }
+
+            if (hasCompletedResponse()) {
+              removePendingAssistantTask(pendingTask.taskId)
+              setPendingTaskEvents([])
+              setIsLoading(false)
+              writerRequestInFlightRef.current = false
+              return
+            }
           }
         } catch (error) {
           console.error("writer.pending-task.poll-failed", error)

@@ -128,7 +128,8 @@
 
 - [x] 7.1 运行 desktop unit/typecheck/build、Rust tests 和 bootstrap integration
   - Evidence (2026-08-14): current Windows verification passed Desktop 108/108, desktop typecheck, desktop build, bootstrap integration 4/4, runtime installer/manifest 17/17, and Rust cargo tests 39/39. Clean Win10/Win11 VM coverage remains explicitly scoped to release hardening rather than this developer-machine gate.
-- [ ] 7.2 运行共享 contract tests、Next lint/build 和 SaaS parity regression
+- [x] 7.2 运行共享 contract tests、Next lint/build 和 SaaS parity regression
+  - [x] 2026-08-14 shared package contracts, boundary/provenance checks, root lint, Rust cargo check, Desktop build/typecheck, media Provider parity and Next production build (425/425 routes) all pass on Windows; SaaS behavior remains covered by the shared adapter and parity suites.
   - [x] 2026-08-13 shared boundary/provenance tests, workbench-client/SaaS adapter tests, media-runtime tests, root lint, root `tsc --noEmit` and Next production build passed; full SaaS parity and browser E2E remain open.
   - [x] 2026-08-14 rerun: shared boundary 4/4, provenance 4/4, SaaS/Desktop media parity 2/2, AI-entry provider routing 23/23, model catalog 21/21, agent router 4/4, and Next production build (425/425 generated routes) passed; browser E2E and full live SaaS regression remain open.
 - [x] 7.3 在当前 Windows 开发/CI 环境验证 normal/portable 空壳、修复、锁和进程生命周期；干净 Win10/Win11 全矩阵由 hardening 执行

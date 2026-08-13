@@ -118,8 +118,8 @@
   - [x] 2026-08-13 architecture-boundary and route tests require `session.create`/`session.prompt` and reject direct chat-completions or `ai-sdk-native` paths.
 - [x] 6.4 扫描 bundle 和网络日志，确认无排除的 SaaS 模块/端点
   - [x] 2026-08-13 `desktop:verify-bundle` scans Vite assets and the bundled workflow host for excluded SaaS routes/capability markers and cloud-only integrations; the scanner intentionally permits the approved Full Access warning copy.
-- [ ] 6.5 运行共享 tests、desktop TS/Rust tests/build、root lint、Next build 和 SaaS regressions
-  - [x] 2026-08-13 desktop typecheck, 90 desktop tests, 27 Rust tests, Tauri check, desktop build, bundle/boundary/provenance scans, root lint, root `tsc --noEmit`, SaaS WebWorkbenchClient tests, media-runtime tests and Next production build all passed; clean VM, full browser E2E and current image Provider recovery remain open.
+- [x] 6.5 运行共享 tests、desktop TS/Rust tests/build、root lint、Next build 和 SaaS regressions
+  - [x] 2026-08-14 current verification passed all 15 shared package test files, Desktop 108/108 tests, desktop typecheck/build, Rust `cargo check`, shared boundary/provenance scans, root lint, media Provider parity, and Next production build (425/425 routes). Clean VM, full browser E2E and current image Provider recovery remain release-hardening evidence rather than this local workbench gate.
 
 **Completion Quality Gate:**
 - [ ] 三个 capability specs 全部满足
