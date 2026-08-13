@@ -103,6 +103,7 @@
   - [x] 2026-08-14 `pnpm --filter @aimarketing/desktop tauri:build` completed on Windows and generated the optimized `ai-marketing.exe` release binary plus the x64 NSIS installer; the follow-up audit now sees the release output, while Authenticode remains explicitly `not_available` because `Microsoft.PowerShell.Security` cannot load in this host.
   - [x] 2026-08-13 `desktop:release-audit` records current evidence without suppressing failures: license audit passes (28/28 packages per archive), Authenticode is incomplete for the unsigned development EXE/DLL, manifests are `development_unsigned`, and the approved npm registry audit reports 3 critical, 32 high, 29 moderate and 3 low vulnerabilities. `-RequireAuthenticode`, `-RequireSignedManifest` and `-RequireDependencyAudit` fail closed for release CI.
 - [ ] 5.6 执行 desktop 全量 E2E 与 SaaS lint/build/regression
+  - [x] 2026-08-14 current Windows rerun passed Desktop tests 104/104, root `pnpm lint`, shared boundary/provenance, Provider parity, AI-entry regressions, and Next production build (425/425 routes); full browser E2E and live SaaS regression remain open.
 - [x] 5.7 发布人工 ZIP 升级说明和已知限制，不启用应用内自动更新
   - [x] 普通/便携 ZIP README 均说明关闭应用后手动替换；便携模式先备份 `data/`；不自动下载或替换自身，并明确外部 Vault、系统 WebView2 和明文 API Key 边界。
 
