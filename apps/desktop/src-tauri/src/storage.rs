@@ -374,6 +374,8 @@ mod tests {
         assert_eq!(row.title, "本地会话");
         append_message(&path, "message-1", "conversation-1", "user", "你好").unwrap();
         append_message(&path, "message-1", "conversation-1", "user", "重复不会覆盖").unwrap();
+        set_session_id(&path, "conversation-1", "lost-session").unwrap();
+        set_session_id(&path, "conversation-1", "recovered-session").unwrap();
         create_run(&path, "run-1", Some("conversation-1"), Some("local-model")).unwrap();
         append_run_event(&path, "run-1", 1, "text_delta", r#"{"text":"你好"}"#).unwrap();
         record_run_node(&path, "run-1", "writer", "succeeded", Some(r#"{"text":"完成"}"#)).unwrap();
@@ -381,6 +383,8 @@ mod tests {
         assert_eq!(list_recoverable_attempts(&path).unwrap().len(), 1);
         finish_run(&path, "run-1", "succeeded").unwrap();
         assert_eq!(list_conversations(&path).unwrap().len(), 1);
+        assert_eq!(list_conversations(&path).unwrap()[0].opencode_session_id.as_deref(), Some("recovered-session"));
+        assert_eq!(list_messages(&path, "conversation-1").unwrap()[0].content, "你好");
         assert_eq!(list_runs(&path).unwrap().len(), 1);
         let connection = open(&path).unwrap();
         assert_eq!(connection.query_row("SELECT status FROM run_nodes WHERE run_id='run-1' AND node_key='writer'", [], |row| row.get::<_, String>(0)).unwrap(), "succeeded");

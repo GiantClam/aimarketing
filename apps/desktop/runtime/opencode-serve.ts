@@ -24,7 +24,8 @@ export class OpenCodeServeClient {
   private runtimeWorkspace = "";
   private readonly active = new Map<string, ActiveRun>();
 
-  constructor(private readonly executable: string, private readonly runtimeDirectory: string) {}
+  /** Extra arguments make the supervised executable testable without changing production invocation. */
+  constructor(private readonly executable: string, private readonly runtimeDirectory: string, private readonly executableArgs: readonly string[] = []) {}
 
   private auth() { return `Basic ${Buffer.from(`${this.username}:${this.password}`, "utf8").toString("base64")}`; }
 
@@ -46,7 +47,7 @@ export class OpenCodeServeClient {
     this.runtimeEnvironment = { ...environment };
     this.runtimeWorkspace = workspacePath;
     this.stopping = false;
-    this.child = spawn(this.executable, ["serve", "--hostname", "127.0.0.1", "--port", String(this.port), "--print-logs", "--log-level", "INFO"], {
+    this.child = spawn(this.executable, [...this.executableArgs, "serve", "--hostname", "127.0.0.1", "--port", String(this.port), "--print-logs", "--log-level", "INFO"], {
       cwd: workspacePath,
       env: { ...environment, OPENCODE_SERVER_USERNAME: this.username, OPENCODE_SERVER_PASSWORD: this.password, OPENCODE_DISABLE_AUTOUPDATE: "true", OPENCODE_DISABLE_MODELS_FETCH: "true" },
       stdio: ["ignore", "pipe", "pipe"],
@@ -95,6 +96,7 @@ export class OpenCodeServeClient {
       if (active.failed) throw new Error(active.failed);
       sink({ event: "done", runId });
     } catch (error) {
+      if (active.failed) return;
       sink({ event: "runtime_error", code: signal?.aborted ? "opencode_aborted" : "opencode_prompt_failed", message: safe(error instanceof Error ? error.message : error), retryable: !signal?.aborted, runId });
     } finally { signal?.removeEventListener("abort", abort); this.active.delete(runId); }
   }
@@ -113,8 +115,15 @@ export class OpenCodeServeClient {
     this.streamAbort?.abort();
     for (const active of this.active.values()) active.sink({ event: "runtime_error", code: "opencode_serve_stopped", message: "OpenCode serve stopped.", retryable: true, runId: active.runId });
     this.active.clear();
-    if (this.child && this.child.exitCode === null) this.child.kill();
+    const child = this.child;
     this.child = undefined;
+    if (child && child.exitCode === null) {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 5_000);
+        child.once("close", () => { clearTimeout(timer); resolve(); });
+        child.kill();
+      });
+    }
   }
 
   private async findFreePort() {
