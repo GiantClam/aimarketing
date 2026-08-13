@@ -2,19 +2,54 @@ import { workflowNodeRegistry } from "./node-definitions/registry";
 import { CURRENT_WORKFLOW_SCHEMA_VERSION, LEGACY_WORKFLOW_SCHEMA_VERSION, canonicalizeWorkflowDefinition, hashWorkflowDefinition, parseWorkflowDefinitionEnvelope, type WorkflowDefinitionEdgeV2, type WorkflowDefinitionEnvelope, type WorkflowDefinitionNodeV2 } from "./definition";
 
 export type LegacyWorkflowDefinition = { schemaVersion?: number | null; revision?: number | null; nodes: Array<{ nodeKey: string; type: string; title?: string | null; positionX?: number | null; positionY?: number | null; config?: Record<string, unknown> | null; nodeVersion?: number | null }>; edges: Array<{ id?: number | string | null; sourceNodeKey: string; targetNodeKey: string; inputName?: string | null }> };
+export type WorkflowDefinitionMigrationOptions = { revision?: number; edgeIds?: Array<number | string | null | undefined> };
+
 const inputPort = (name: string | null | undefined) => ({ text: "text", assets: "assets", asset: "assets", images: "images", image: "images", videos: "videos", video: "videos", audios: "audios", audio: "audios", presentations: "presentations", presentation: "presentations", ppt: "presentations" })[name ?? ""] ?? name ?? "input";
 const outputPort = (name: string | null | undefined) => ({ text: "text", assets: "asset", asset: "asset", images: "image", image: "image", videos: "video", video: "video", audios: "audio", audio: "audio", presentations: "ppt", presentation: "ppt", ppt: "ppt" })[name ?? ""] ?? name ?? "output";
 
-export function migrateWorkflowDefinitionToCurrent(input: LegacyWorkflowDefinition | WorkflowDefinitionEnvelope, revision = 1): WorkflowDefinitionEnvelope {
+function compareStrings(left: string, right: string) { return left < right ? -1 : left > right ? 1 : 0; }
+function compareLegacyIds(left: number | string | null | undefined, right: number | string | null | undefined) {
+  if (typeof left === "number" && typeof right === "number") return left - right;
+  if (left == null && right != null) return 1;
+  if (left != null && right == null) return -1;
+  return String(left ?? "").localeCompare(String(right ?? ""));
+}
+function normalizeOptions(value?: number | WorkflowDefinitionMigrationOptions): WorkflowDefinitionMigrationOptions { return typeof value === "number" ? { revision: value } : value ?? {}; }
+function registeredPort(node: WorkflowDefinitionNodeV2 | undefined, inputName: string | null | undefined, direction: "inputs" | "outputs") {
+  const fallback = direction === "inputs" ? inputPort(inputName) : outputPort(inputName);
+  const definition = node ? workflowNodeRegistry.get(node.type) : null;
+  if (!definition) return fallback;
+  return definition[direction].some((port) => port.id === fallback) ? fallback : definition[direction][0]?.id ?? fallback;
+}
+function semanticTuple(value: { sourceNodeKey: string; sourcePortId: string; targetNodeKey: string; targetPortId: string; inputName: string | null }) {
+  return [value.sourceNodeKey, value.sourcePortId, value.targetNodeKey, value.targetPortId, value.inputName ?? ""].map((entry) => `${entry.length}:${entry}`).join("|");
+}
+
+export function migrateWorkflowDefinitionToCurrent(input: LegacyWorkflowDefinition | WorkflowDefinitionEnvelope, options?: number | WorkflowDefinitionMigrationOptions): WorkflowDefinitionEnvelope {
   if ((input as WorkflowDefinitionEnvelope).schemaVersion === CURRENT_WORKFLOW_SCHEMA_VERSION) return parseWorkflowDefinitionEnvelope(input);
   const legacy = input as LegacyWorkflowDefinition;
+  const resolvedOptions = normalizeOptions(options);
   const nodes: WorkflowDefinitionNodeV2[] = legacy.nodes.map((node) => {
     const definition = workflowNodeRegistry.get(node.type);
     return { nodeKey: node.nodeKey, type: node.type, nodeVersion: node.nodeVersion && node.nodeVersion > 0 ? node.nodeVersion : definition?.version ?? 1, title: node.title ?? definition?.title.en ?? node.type, positionX: Number.isFinite(node.positionX) ? Number(node.positionX) : 0, positionY: Number.isFinite(node.positionY) ? Number(node.positionY) : 0, config: node.config ? JSON.parse(JSON.stringify(node.config)) : {} };
   });
-  const edges: WorkflowDefinitionEdgeV2[] = legacy.edges.map((edge, index) => ({ edgeKey: `legacy:${index}:${edge.sourceNodeKey}:${edge.targetNodeKey}`, sourceNodeKey: edge.sourceNodeKey, sourcePortId: outputPort(edge.inputName), targetNodeKey: edge.targetNodeKey, targetPortId: inputPort(edge.inputName), inputName: edge.inputName ?? null }));
-  const canonical = canonicalizeWorkflowDefinition({ schemaVersion: CURRENT_WORKFLOW_SCHEMA_VERSION, revision: Number.isInteger(legacy.revision) && Number(legacy.revision) > 0 ? Number(legacy.revision) : revision, definitionHash: "", nodes, edges });
+  const nodesByKey = new Map(nodes.map((node) => [node.nodeKey, node]));
+  const indexed = legacy.edges.map((edge, index) => {
+    const inputName = edge.inputName ?? null;
+    const sourcePortId = registeredPort(nodesByKey.get(edge.sourceNodeKey), inputName, "outputs");
+    const targetPortId = registeredPort(nodesByKey.get(edge.targetNodeKey), inputName, "inputs");
+    const id = edge.id ?? resolvedOptions.edgeIds?.[index] ?? null;
+    return { edge, index, id, inputName, sourcePortId, targetPortId, tuple: semanticTuple({ sourceNodeKey: edge.sourceNodeKey, sourcePortId, targetNodeKey: edge.targetNodeKey, targetPortId, inputName }) };
+  });
+  const hasDatabaseIds = indexed.some((item) => item.id != null);
+  indexed.sort((left, right) => hasDatabaseIds ? compareLegacyIds(left.id, right.id) || compareStrings(left.tuple, right.tuple) || left.index - right.index : compareStrings(left.tuple, right.tuple) || left.index - right.index);
+  const ordinals = new Map<string, number>();
+  const edges: WorkflowDefinitionEdgeV2[] = indexed.map(({ edge, inputName, sourcePortId, targetPortId, tuple }) => {
+    const ordinal = ordinals.get(tuple) ?? 0; ordinals.set(tuple, ordinal + 1);
+    return { edgeKey: `legacy:${edge.sourceNodeKey}:${edge.targetNodeKey}:${inputName ?? "input"}:${ordinal}`, sourceNodeKey: edge.sourceNodeKey, sourcePortId, targetNodeKey: edge.targetNodeKey, targetPortId, inputName };
+  });
+  const canonical = canonicalizeWorkflowDefinition({ schemaVersion: CURRENT_WORKFLOW_SCHEMA_VERSION, revision: Number.isInteger(legacy.revision) && Number(legacy.revision) > 0 ? Number(legacy.revision) : resolvedOptions.revision ?? 1, definitionHash: "", nodes, edges });
   return { ...canonical, definitionHash: hashWorkflowDefinition(canonical) };
 }
 
-export function migrateLegacyWorkflowDefinition(input: LegacyWorkflowDefinition, revision?: number) { return migrateWorkflowDefinitionToCurrent({ ...input, schemaVersion: input.schemaVersion ?? LEGACY_WORKFLOW_SCHEMA_VERSION }, revision); }
+export function migrateLegacyWorkflowDefinition(input: LegacyWorkflowDefinition, options?: number | WorkflowDefinitionMigrationOptions) { return migrateWorkflowDefinitionToCurrent({ ...input, schemaVersion: input.schemaVersion ?? LEGACY_WORKFLOW_SCHEMA_VERSION }, options); }
