@@ -39,6 +39,7 @@
 ## 3. Build the mandatory runtime bootstrap
 
 - [ ] 3.1 实现 WebView2、Node/workflow-host、OpenCode、Python/PPT、字体、embedding、Skills 和 migrations probes
+  - [x] 2026-08-14 TypeScript bootstrap now probes the concrete `host.mjs`, LanceDB `dist/index.js`, `msyh.ttc`, and `local-hash-384-v1.json` assets, honoring persisted private runtime paths; readiness requires all nine components.
 - [ ] 3.2 在创建主 WebView 前运行原生 bootstrap 状态机
   - [x] 2026-08-13 Rust regression `startup_gates_run_before_tauri_builder` locks WebView2 and green-runtime gate ordering before `tauri::Builder`, including lock release on gate failure.
 - [ ] 3.3 复用通过 probe 的系统组件并固定 canonical absolute path
@@ -106,7 +107,7 @@
 - [x] 7.3a normal/portable 路径、配置恢复、单实例锁和已打包 EXE 启动 smoke 已在当前 Windows 环境验证。
 
 - [ ] 7.1 运行 desktop unit/typecheck/build、Rust tests 和 bootstrap integration
-  - [x] 2026-08-13 desktop typecheck, 93 desktop tests, desktop build, Tauri cargo check and 28 Rust tests passed; clean Windows bootstrap integration remains part of release hardening.
+  - [x] 2026-08-14 desktop typecheck, 94 desktop tests, and desktop build passed; Tauri cargo check and 28 Rust tests remain passing from the native startup-gate verification, while clean Windows bootstrap integration remains part of release hardening.
 - [ ] 7.2 运行共享 contract tests、Next lint/build 和 SaaS parity regression
   - [x] 2026-08-13 shared boundary/provenance tests, workbench-client/SaaS adapter tests, media-runtime tests, root lint, root `tsc --noEmit` and Next production build passed; full SaaS parity and browser E2E remain open.
 - [ ] 7.3 在当前 Windows 开发/CI 环境验证 normal/portable 空壳、修复、锁和进程生命周期；干净 Win10/Win11 全矩阵由 hardening 执行

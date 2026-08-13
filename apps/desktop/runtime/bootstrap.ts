@@ -8,7 +8,7 @@ import type { DesktopPaths } from "./paths";
 
 const execFileAsync = promisify(execFile);
 export type RuntimeSource = "system" | "private";
-export type RuntimeComponent = "node" | "opencode" | "python" | "fonts" | "skills" | "embedding" | "migrations";
+export type RuntimeComponent = "node" | "opencode" | "python" | "host" | "fonts" | "skills" | "lancedb" | "embedding" | "migrations";
 
 export interface RuntimeProbe {
   readonly component: RuntimeComponent;
@@ -28,24 +28,42 @@ export interface BootstrapManifest {
 
 export async function probeRuntime(paths: DesktopPaths, config: DesktopConfig): Promise<BootstrapManifest> {
   const probes: RuntimeProbe[] = [];
-  probes.push(await probeExecutable("node", config.runtime.source === "private" ? join(paths.runtime, "node", "node.exe") : "node"));
+  probes.push(await probeExecutable("node", config.runtime.nodePath ?? (config.runtime.source === "private" ? join(paths.runtime, "node", "node.exe") : "node")));
   probes.push(await probeExecutable("opencode", config.runtime.opencodePath ?? (config.runtime.source === "private" ? join(paths.runtime, "opencode", "opencode.exe") : "opencode")));
   probes.push(await probePython(config.runtime.pythonPath ?? (config.runtime.source === "private" ? join(paths.runtime, "python", "python.exe") : "python")));
-  probes.push(await probePath("fonts", join(paths.runtime, "fonts")));
-  probes.push(await probeSkills(join(paths.runtime, "skills")));
-  probes.push(await probePath("embedding", join(paths.runtime, "embedding")));
+  probes.push(await probePath("host", config.runtime.hostPath ?? join(paths.runtime, "host.mjs")));
+  probes.push(await probeFonts(config.runtime.fontsPath ?? join(paths.runtime, "fonts")));
+  probes.push(await probeSkills(config.runtime.skillsPath ?? join(paths.runtime, "skills")));
+  probes.push(await probeLanceDb(config.runtime.lancedbPath ?? join(paths.runtime, "lancedb")));
+  probes.push(await probeEmbedding(config.runtime.embeddingPath ?? join(paths.runtime, "embedding")));
   probes.push(await probePath("migrations", paths.databaseFile));
   return { schemaVersion: 1, source: config.runtime.source, probes, checkedAt: new Date().toISOString() };
 }
 
 export function isRuntimeReady(manifest: BootstrapManifest) {
-  const mandatory = new Set<RuntimeComponent>(["node", "opencode", "python", "fonts", "skills", "embedding", "migrations"]);
+  const mandatory = new Set<RuntimeComponent>(["node", "opencode", "python", "host", "fonts", "skills", "lancedb", "embedding", "migrations"]);
   return manifest.probes.filter((probe) => mandatory.has(probe.component)).every((probe) => probe.ok);
 }
 
 async function probePath(component: RuntimeComponent, path: string): Promise<RuntimeProbe> {
   try { await access(path, constants.F_OK); return { component, ok: true, source: "private", detail: basename(path) }; }
   catch { return { component, ok: false, source: "private", detail: `Missing ${resolve(path)}` }; }
+}
+
+async function probeFonts(path: string): Promise<RuntimeProbe> {
+  return probePath("fonts", fontsAssetPath(path));
+}
+
+async function probeEmbedding(path: string): Promise<RuntimeProbe> {
+  return probePath("embedding", embeddingDescriptorPath(path));
+}
+
+export function fontsAssetPath(path: string): string {
+  return path.toLowerCase().endsWith(".ttc") || path.toLowerCase().endsWith(".ttf") ? path : join(path, "msyh.ttc");
+}
+
+export function embeddingDescriptorPath(path: string): string {
+  return path.toLowerCase().endsWith(".json") ? path : join(path, "local-hash-384-v1.json");
 }
 
 async function probeSkills(path: string): Promise<RuntimeProbe> {
@@ -56,6 +74,11 @@ async function probeSkills(path: string): Promise<RuntimeProbe> {
   } catch (error) {
     return { component: "skills", ok: false, source: "private", detail: `Missing canonical Skill manifest: ${error instanceof Error ? error.message.slice(0, 120) : "probe failed"}` };
   }
+}
+
+async function probeLanceDb(path: string): Promise<RuntimeProbe> {
+  const candidate = path.endsWith("index.js") ? path : join(path, "node_modules", "@lancedb", "lancedb", "dist", "index.js");
+  return probePath("lancedb", candidate);
 }
 
 async function probeExecutable(component: RuntimeComponent, candidate: string): Promise<RuntimeProbe> {
