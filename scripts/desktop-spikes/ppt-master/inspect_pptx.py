@@ -23,6 +23,14 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def iter_shapes(shapes):
+    """Yield top-level and grouped shapes without losing nested pictures."""
+    for shape in shapes:
+        yield shape
+        if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+            yield from iter_shapes(shape.shapes)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("pptx", type=Path)
@@ -46,7 +54,7 @@ def main() -> None:
     texts: list[str] = []
     fonts: Counter[str] = Counter()
     for slide in deck.slides:
-        for shape in slide.shapes:
+        for shape in iter_shapes(slide.shapes):
             if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
                 picture_shapes += 1
             if not getattr(shape, "has_text_frame", False):
@@ -97,4 +105,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

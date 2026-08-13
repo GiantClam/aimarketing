@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "run_id": "20260813235355-bf0ebb03",
+  "project_name": "windows-feasibility-20260813235355-bf0ebb03",
+  "started_utc": "2026-08-13T15:53:55.9840407+00:00",
+  "finished_utc": "2026-08-13T16:02:33.0866072+00:00",
+  "duration_ms": 517103.0,
+  "exit_code": 0,
+  "timeout_seconds": 600,
+  "timed_out": false,
+  "process_tree_terminated": false,
+  "svg_count_at_finish": 6,
+  "pptx_count_at_finish": 1,
+  "gate_pass": true,
+  "model": "pptoken/gpt-5.4",
+  "opencode_version": "1.17.15",
+  "upstream_commit": "4e6ecbcb0dc079efebd3c79b775c0f02581509fe",
+  "railway_worker_used": false
+}

@@ -27,6 +27,7 @@
 - [x] 2.1 将实际 `ppt-master` Skill、references 和脚本纳入 desktop runtime manifest
   - [x] 2026-08-13 bundler pins upstream commit `4e6ecbcb0dc079efebd3c79b775c0f02581509fe`, copies the complete Skill tree and writes `ppt-master.manifest.json` with digest.
 - [x] 2.2 为 Python、必要 imports、字体目录和 `ppt-master` 输出建立 capability probe（运行时现在会校验依赖导入、字体门禁，并生成带中英文字段的 16:9 可编辑 PPTX 后再选择 Python 路径）
+  - [x] 2026-08-14 real OpenCode run `20260813235355-bf0ebb03` used the configured `pptoken/gpt-5.4` OpenAI-compatible provider and pinned Skill commit `4e6ecbcb0dc079efebd3c79b775c0f02581509fe`; six SVGs and one PPTX were produced without Railway.
 - [x] 2.3 实现本地 PPT service，仅通过 OpenCode session 调用 Skill
   - [x] 2026-08-13 desktop PPT route uses the same `session.create`/`session.prompt` OpenCode path as ordinary chat; no second text runtime is registered.
 - [x] 2.4 发现并登记项目目录中的 PPTX、SVG、preview 和诊断产物
@@ -35,7 +36,8 @@
   - [x] 2026-08-13 desktop architecture scan and runtime source contain no Railway worker import or network route.
 
 **Quality Gate:**
-- [ ] 中文、图片、16:9、可编辑文本 PPT smoke 通过
+- [x] 中文、图片、16:9、可编辑文本 PPT smoke 通过
+  - [x] 2026-08-14 Skill checker/export passed; independent `pptx-structure.json` passed with 3 slides, 56 editable text shapes, 435 editable CJK characters, one grouped picture, embedded media and Microsoft YaHei; PowerPoint 16.0 opened the deck and rendered 3 previews.
 - [ ] 连续两轮修改保持同一项目/session 上下文
 - [ ] Python 或字体损坏时启动门禁可自动修复
 

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "artifact": "ppt-master-windows-feasibility.pptx",
+  "sha256": "711c1c6a1d6cde2f7b15db46fe3f5e4c2daa8ad469167fd09aee72126f944c3f",
+  "bytes": 62154,
+  "slide_count": 3,
+  "slide_size_emu": [
+    12192000,
+    6858000
+  ],
+  "aspect_ratio": 1.7777777777777777,
+  "text_shape_count": 56,
+  "editable_cjk_character_count": 435,
+  "picture_shape_count": 1,
+  "embedded_media_count": 1,
+  "declared_run_fonts": {
+    "Microsoft YaHei": 41
+  },
+  "checks": {
+    "zip_crc_clean": true,
+    "python_pptx_open": true,
+    "slide_count_at_least_3": true,
+    "aspect_ratio_16_9": true,
+    "editable_text_shapes_present": true,
+    "editable_cjk_present": true,
+    "picture_shape_present": true,
+    "embedded_media_present": true,
+    "expected_font_declared": true
+  },
+  "pass": true
+}
