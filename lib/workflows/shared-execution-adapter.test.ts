@@ -37,6 +37,38 @@ test("shared core and SaaS adapter produce equivalent ordinary-DAG outputs", asy
   assert.deepEqual(saas.nodeStates.writer?.output, core.outputs.writer)
 })
 
+test("shared core and SaaS adapter preserve equivalent completed-output retry inputs", async () => {
+  const nodes = [
+    { nodeKey: "input", type: "text_input", title: "Input", positionX: 0, positionY: 0, config: {} },
+    { nodeKey: "writer", type: "writer", title: "Writer", positionX: 1, positionY: 0, config: {} },
+  ] as const
+  const edges = [{ sourceNodeKey: "input", targetNodeKey: "writer", inputName: "text" }] as const
+  const definition = migrateWorkflowDefinitionToCurrent({ nodes: [...nodes], edges: [...edges] })
+  const core = await executeWorkflow(definition, {
+    runId: "shared-retry-fixture",
+    completed: { input: { text: ["Persisted brief"] } },
+    ports: { capability: { execute: async ({ inputs }) => ({ text: [`Recovered: ${(inputs.text as string[]).join(" ")}`] }) } },
+  })
+  const previousTime = new Date(0)
+  const saas = await runSaasWorkflowWithSharedCore({
+    enterpriseId: 1,
+    ownerUserId: 2,
+    nodes: [...nodes],
+    edges: [...edges],
+    initialNodeStates: {
+      input: { nodeKey: "input", status: "succeeded", attemptCount: 1, output: { text: ["Persisted brief"] }, startedAt: previousTime, finishedAt: previousTime, creditsConsumed: 0 },
+      writer: { nodeKey: "writer", status: "failed", attemptCount: 1, output: {}, startedAt: previousTime, finishedAt: previousTime, creditsConsumed: 0 },
+    },
+    rerunNodeKeys: ["writer"],
+    executorContext: { capabilityInvoker: async ({ input }) => ({ output: { text: [`Recovered: ${input.text.join(" ")}`] } }) },
+  })
+
+  assert.equal(core.status, "succeeded")
+  assert.equal(saas.status, "succeeded")
+  assert.deepEqual(saas.nodeStates.writer?.output, core.outputs.writer)
+  assert.equal(saas.nodeStates.writer?.attemptCount, 2)
+})
+
 test("SaaS adapter runs an ordinary workflow through shared scheduling while retaining host capability execution", async () => {
   const updates: string[] = []
   const invoked: string[] = []
