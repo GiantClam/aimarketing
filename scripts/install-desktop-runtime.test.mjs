@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { generateKeyPairSync } from "node:crypto";
 
 const execFileAsync = promisify(execFile);
 
@@ -18,6 +19,70 @@ test("runtime installer keeps the approved mirror order", async () => {
   assert.ok(source.includes(mirrorOrder[0]));
   assert.match(source, /Install-OpenCodePackage\s+-Offline:\(\[bool\]\$OfflineZip\)/u);
   assert.match(source, /offline_opencode_missing/u);
+});
+
+test("installer falls back through every mirror after bounded HTTP failures", async (t) => {
+  if (process.platform !== "win32") { t.skip("PowerShell mirror fallback is Windows-only"); return; }
+  const labels = ["aliyun", "tencent", "tsinghua", "official"];
+  const payload = Buffer.from("mirror-fallback-fixture\n", "utf8");
+  const sha256 = createHash("sha256").update(payload).digest("hex");
+  const source = await readFile(scriptPath, "utf8");
+  const functionStart = source.indexOf("function Invoke-ResumableDownload");
+  const installStart = source.indexOf("function Install-VerifiedAsset");
+  const downloadEnd = source.indexOf("\n}\n", functionStart) + 3;
+  const installEnd = source.indexOf("\n}\n", installStart) + 3;
+  assert.ok(functionStart >= 0 && installStart > functionStart && downloadEnd > functionStart && installEnd > installStart);
+  const functionSource = `${source.slice(functionStart, downloadEnd)}\n${source.slice(installStart, installEnd)}`.replace(
+    "$hash = (Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash.ToLowerInvariant()",
+    "$hash = ([BitConverter]::ToString(([Security.Cryptography.SHA256]::Create()).ComputeHash([IO.File]::ReadAllBytes($tmp))).Replace('-', '')).ToLowerInvariant()",
+  );
+  const quote = (value) => `'${String(value).replaceAll("'", "''")}'`;
+  const requests = [];
+  let activeSuccessIndex = 0;
+  const server = createServer((request, response) => {
+    const label = String(request.url ?? "").replace(/^\//u, "");
+    const index = labels.indexOf(label);
+    requests.push(label);
+    if (index === activeSuccessIndex) { response.writeHead(200, { "content-length": payload.length }); response.end(payload); return; }
+    response.writeHead(503); response.end("unavailable");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  try {
+    for (let successIndex = 0; successIndex < labels.length; successIndex += 1) {
+      activeSuccessIndex = successIndex;
+      requests.length = 0;
+      const root = await mkdtemp(join(tmpdir(), `aimarketing-mirror-fallback-${successIndex}-`));
+      const stageRoot = join(root, "stage");
+      const target = join(stageRoot, "runtime", "fixture.bin");
+      const urls = Object.fromEntries(labels.map((label) => [label, `http://localhost:${address.port}/${label}`]));
+      const assetJson = JSON.stringify({ id: "fixture", relativePath: "runtime/fixture.bin", sha256, urls });
+      const command = [
+        "$ErrorActionPreference='Stop'",
+        "$mirrors=@('aliyun','tencent','tsinghua','official')",
+        "$Proxy=''",
+        `$stageRoot=${quote(stageRoot)}`,
+        `$asset=ConvertFrom-Json ${quote(assetJson)}`,
+        functionSource,
+        "New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null",
+        "Install-VerifiedAsset $asset",
+      ].join("\n");
+      try {
+        try {
+          await execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], { windowsHide: true });
+        } catch (error) {
+          throw new Error(`${error instanceof Error ? error.message : String(error)}; requests=${requests.join(",")}; successIndex=${successIndex}`);
+        }
+        assert.deepEqual(requests, labels.slice(0, successIndex + 1));
+        assert.deepEqual(await readFile(target), payload);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
 
 test("OpenCode npm fallback includes the Qinghua registry before official npm", async () => {

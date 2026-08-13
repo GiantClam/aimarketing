@@ -31,7 +31,8 @@
 **Quality Gate:**
 - [x] 损坏签名、hash、size 或组件身份均 fail closed
   - [x] 2026-08-13 manifest schema, target, safe-path, SHA-256 and size checks run before installation; installer tests pass 6/6 and package tests pass 3/3.
-- [ ] 镜像回退测试覆盖每一级来源
+- [x] 镜像回退测试覆盖每一级来源
+  - [x] 2026-08-13 `install-desktop-runtime.test.mjs` uses a local HTTP fixture that returns bounded 503 failures before each approved source; every success position (阿里云、腾讯云、清华适用源、官方源) verifies the exact request prefix and hash-verified payload without external network access.
 - [x] API Key、签名私钥不进入发布包或日志
   - [x] 2026-08-13 signing consumes only an external private-key path, copies only the public verifier/helper into runtime packages, and never serializes private-key bytes; existing credential redaction tests remain green.
 
