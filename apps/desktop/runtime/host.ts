@@ -291,7 +291,7 @@ async function runMediaCapability(command: HostCommand, runId: string, nodeKey: 
   const endpoint = typeof config.endpoint === "string" ? config.endpoint : defaultEndpoints[executorId] ?? "";
   if (!endpoint) throw new Error(`provider_endpoint_required:${executorId}`);
   const apiKey = typeof config.apiKey === "string" ? config.apiKey : typeof configuredMedia?.apiKey === "string" ? configuredMedia.apiKey : typeof textProvider?.apiKey === "string" ? textProvider.apiKey : typeof command.payload?.apiKey === "string" ? command.payload.apiKey : undefined;
-  const providerOptions = { provider: provider as MediaProviderId, baseUrl, apiKey: apiKey ?? "", fetchImpl: fetch };
+  const providerOptions = { provider: provider as MediaProviderId, baseUrl, apiKey: apiKey ?? "", fetchImpl: fetch, workspacePath };
   const providerLower = provider.toLowerCase();
   const adapter: MediaProviderAdapter = providerLower.includes("bailian") && executorId === "image_generate"
     ? createBailianImageAdapter(providerOptions)

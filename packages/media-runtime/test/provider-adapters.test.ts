@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { createBailianImageAdapter, createBailianVideoAdapter, createMiniMaxAudioAdapter, createMiniMaxVideoAdapter, createOpenAICompatibleImageAdapter, createRunningHubAdapter, type MediaProviderId } from "../src/index";
 
 function cancellation() { return { throwIfCancelled() {} }; }
@@ -88,6 +91,37 @@ test("MiniMax voice-synthesis capability creates and polls an async speech task"
   assert.equal(first.status, "queued");
   assert.equal(second.status, "succeeded");
   assert.match(String(second.outputs[0]?.url), /files\/retrieve_content\?file_id=99/);
+});
+
+test("MiniMax voice clone uploads an in-workspace reference without base64 IPC", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "aimarketing-voice-clone-"));
+  try {
+    await writeFile(join(workspace, "reference.wav"), Buffer.from("RIFF-fixture"));
+    const urls: string[] = [];
+    const adapter = createMiniMaxAudioAdapter({ provider: "minimax" as MediaProviderId, baseUrl: "https://api.minimax.io/v1", apiKey: "secret", workspacePath: workspace, fetchImpl: async (input, init) => {
+      urls.push(String(input));
+      if (urls.length === 1) {
+        assert.equal(init?.body instanceof FormData, true);
+        const form = init?.body as FormData;
+        assert.equal(form.get("purpose"), "voice_clone");
+        const file = form.get("file");
+        assert.equal(file instanceof Blob, true);
+        assert.equal((file as File).name, "reference.wav");
+        return new Response(JSON.stringify({ file: { file_id: 77 } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ demo_audio: "https://files.invalid/preview.mp3" }), { status: 200 });
+    } });
+    const task = await adapter.execute({ provider: "minimax" as MediaProviderId, modelId: "speech-2.8-turbo", input: { featureId: "voice-clone", localAttachments: ["reference.wav"], previewText: "Hello" } }, cancellation());
+    assert.equal(task.status, "succeeded");
+    assert.equal(task.outputs[0]?.url, "https://files.invalid/preview.mp3");
+    assert.deepEqual(urls, ["https://api.minimax.io/v1/files/upload", "https://api.minimax.io/v1/voice_clone"]);
+    await assert.rejects(
+      adapter.execute({ provider: "minimax" as MediaProviderId, modelId: "speech-2.8-turbo", input: { featureId: "voice-clone", localAttachments: ["../outside.wav"] } }, cancellation()),
+      /voice_clone_source_file_unsafe/,
+    );
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
+  }
 });
 
 test("RunningHub adapter submits and queries task results without SaaS transport", async () => {

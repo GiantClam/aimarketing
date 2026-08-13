@@ -116,6 +116,8 @@ export interface DirectProviderOptions {
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly fetchImpl?: typeof fetch;
+  /** Workspace root used for provider-side uploads initiated by local adapters. */
+  readonly workspacePath?: string;
 }
 
 function providerUrl(baseUrl: string, path: string, query?: Record<string, string>) {
@@ -170,6 +172,40 @@ async function jsonRequest(options: DirectProviderOptions, path: string, init: R
   try { body = raw ? JSON.parse(raw) : null; } catch { body = { raw: raw.slice(0, 1000) }; }
   if (!response.ok) throw new Error(`media_provider_http_${response.status}`);
   return body && typeof body === "object" ? body as Record<string, unknown> : {};
+}
+
+async function uploadMiniMaxFile(options: DirectProviderOptions, sourcePath: string, cancellation: CancellationPort): Promise<string> {
+  requireInjectedProviderConfig(options, "voice-clone");
+  cancellation.throwIfCancelled();
+  const workspacePath = text(options.workspacePath);
+  if (!workspacePath) throw new Error("voice_clone_workspace_required");
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  if (path.isAbsolute(sourcePath)) throw new Error("voice_clone_source_file_unsafe");
+  const root = path.resolve(workspacePath);
+  const candidate = path.resolve(root, sourcePath);
+  if (candidate === root || !candidate.startsWith(`${root}${path.sep}`)) throw new Error("voice_clone_source_file_unsafe");
+  const metadata = await fs.stat(candidate).catch(() => undefined);
+  if (!metadata?.isFile()) throw new Error("voice_clone_source_file_missing");
+  const bytes = await fs.readFile(candidate);
+  const form = new FormData();
+  form.set("purpose", "voice_clone");
+  form.set("file", new Blob([bytes as unknown as BlobPart]), path.basename(candidate));
+  const response = await (options.fetchImpl ?? fetch)(providerUrl(options.baseUrl, "/files/upload"), {
+    method: "POST",
+    headers: { accept: "application/json", authorization: `Bearer ${options.apiKey}` },
+    body: form,
+    signal: cancellation.signal,
+  });
+  const raw = await response.text();
+  let body: unknown = null;
+  try { body = raw ? JSON.parse(raw) : null; } catch { body = null; }
+  if (!response.ok) throw new Error(`voice_clone_upload_failed:${response.status}`);
+  const file = body && typeof body === "object" && "file" in body && body.file && typeof body.file === "object" ? body.file as Record<string, unknown> : undefined;
+  const rawFileId = file?.file_id ?? file?.fileId;
+  const fileId = typeof rawFileId === "number" && Number.isSafeInteger(rawFileId) && rawFileId > 0 ? String(rawFileId) : text(rawFileId);
+  if (!fileId) throw new Error("voice_clone_upload_missing_file_id");
+  return fileId;
 }
 
 /** Direct OpenAI-compatible image generation adapter. The provider response is
@@ -281,7 +317,13 @@ export function createMiniMaxAudioAdapter(options: DirectProviderOptions): Media
       const input = request.input as Record<string, unknown>;
       const featureId = text(input.featureId);
       if (featureId === "voice-clone" || text(input.kind) === "voice_clone") {
-        const sourceFileId = text(input.sourceFileId);
+        let sourceFileId = text(input.sourceFileId);
+        if (!sourceFileId) {
+          const attachments = Array.isArray(input.localAttachments) ? input.localAttachments.filter((value): value is string => typeof value === "string" && Boolean(value.trim())) : [];
+          const sourceFilePath = text(input.sourceFilePath) || attachments[0] || "";
+          if (!sourceFilePath) throw new Error("voice_clone_source_file_required");
+          sourceFileId = await uploadMiniMaxFile(options, sourceFilePath, cancellation);
+        }
         if (!sourceFileId) throw new Error("voice_clone_source_file_required");
         const numericSourceFileId = Number(sourceFileId);
         if (!Number.isSafeInteger(numericSourceFileId) || numericSourceFileId <= 0) throw new Error("voice_clone_source_file_invalid");
