@@ -9,6 +9,9 @@ on:
       - "components/**"
       - "lib/**"
       - "scripts/**"
+      - "content/skills/**"
+      - "content/opencode-tools/**"
+      - "infra/cloudflare/opencode-runner/runtime/**"
       - "package.json"
       - "pnpm-lock.yaml"
       - "tsconfig.json"
@@ -23,6 +26,9 @@ on:
       - "components/**"
       - "lib/**"
       - "scripts/**"
+      - "content/skills/**"
+      - "content/opencode-tools/**"
+      - "infra/cloudflare/opencode-runner/runtime/**"
       - "package.json"
       - "pnpm-lock.yaml"
       - "tsconfig.json"
@@ -30,6 +36,21 @@ on:
       - ".env.example"
 
 jobs:
+  writer-runtime-drift:
+    name: Verify canonical Writer runtime
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check OpenCode runtime drift
+        run: node scripts/sync-opencode-runtime.js --check
+
   writer-new-features:
     runs-on: ubuntu-latest
     timeout-minutes: 30

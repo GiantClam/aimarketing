@@ -56,7 +56,7 @@
 - [ ] 6.3 Add per-platform fixtures for create, clarify, revise, translate, cross-platform adapt, URL research success/failure, and image policy.
 - [ ] 6.4 Add Khazix-specific fixtures for complete article revision, unchanged authored title, no fabricated personal experience/data/cases, cover generation, inline images, and workflow activation.
 - [x] 6.5 Implement a canonical-source synchronization command that generates Railway runtime Skills, references, catalog, and digests from `content/skills/`.
-- [ ] 6.6 Add CI drift detection that regenerates Writer runtime Skills and fails when the working tree differs or a digest is invalid.
+- [x] 6.6 Add CI drift detection that regenerates Writer runtime Skills and fails when the working tree differs or a digest is invalid. — 2026-08-14 `scripts/sync-opencode-runtime.js --check` passes after synchronizing the canonical Writer Skills/tools; `.github/workflows/writer-new-features-e2e.yml` now runs this check in an independent job on every relevant change.
 - [ ] 6.7 Remove hand-maintained Writer Skill runtime copies after generated output is authoritative.
 - [ ] 6.8 Run all platform fixtures and Skill validation until they pass.
 

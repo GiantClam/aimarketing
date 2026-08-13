@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-08T04:43:04.650Z",
+  "generatedAt": "2026-08-13T19:35:55.726Z",
   "skills": [
     "ads-writing",
     "canvas-design-execution",
@@ -46,6 +46,7 @@
   ],
   "tools": [
     "writer_submit_result.ts",
+    "writer_webfetch.test.ts",
     "writer_webfetch.ts"
   ]
 }
