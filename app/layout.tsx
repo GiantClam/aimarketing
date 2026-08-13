@@ -1,7 +1,6 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Analytics } from "@vercel/analytics/react"
-import { Barlow_Condensed, IBM_Plex_Sans } from "next/font/google"
 
 import { AuthProvider } from "@/components/auth-provider"
 import { AppToaster } from "@/components/app-toaster"
@@ -11,18 +10,6 @@ import { QueryProvider } from "@/components/query-provider"
 import { getAppBaseUrl } from "@/lib/app-url"
 import { getRequestLocale } from "@/lib/i18n/request-locale"
 import "./globals.css"
-
-const displayFont = Barlow_Condensed({
-  subsets: ["latin"],
-  weight: ["600", "700", "800"],
-  variable: "--font-display",
-})
-
-const bodyFont = IBM_Plex_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-body",
-})
 
 export const metadata: Metadata = {
   metadataBase: new URL(getAppBaseUrl()),
@@ -57,7 +44,7 @@ export default async function RootLayout({
   return (
     <html
       lang={locale === "zh" ? "zh-CN" : "en"}
-      className={`${displayFont.variable} ${bodyFont.variable} antialiased`}
+      className="antialiased"
     >
       <body suppressHydrationWarning>
         <LocaleProvider initialLocale={locale}>

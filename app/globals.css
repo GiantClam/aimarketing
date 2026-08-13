@@ -12,6 +12,11 @@
 :root {
   /* Radix ScrollArea overflow fix */
   --radix-scroll-area-viewport-overflow: scroll;
+  /* Keep the production build and offline desktop shell independent of
+     next/font/google downloads. The fallback stacks below still provide the
+     intended typography when a matching system font is installed. */
+  --font-display: "Barlow Condensed";
+  --font-body: "IBM Plex Sans";
   --font-display-fallback:
     "Barlow Condensed",
     "Arial Narrow",
