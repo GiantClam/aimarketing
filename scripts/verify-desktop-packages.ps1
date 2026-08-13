@@ -1,6 +1,6 @@
 param(
   [string]$ReleaseDir = "apps/desktop/src-tauri/target/release",
-  [string]$PackageDir = ".artifacts/desktop-release"
+  [string]$PackageDir = ".artifacts"
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,7 +21,12 @@ function Find-Entry {
 function Verify-Package {
   param([string]$Mode, [bool]$ExpectPortable)
   $packageName = "AI-Marketing-Windows-x64-$Mode"
-  $zipPath = Join-Path $packageRoot "$packageName.zip"
+  $zipCandidates = @(
+    (Join-Path $packageRoot "$packageName.zip"),
+    (Join-Path (Join-Path $packageRoot "desktop-release-$Mode") "$packageName.zip")
+  )
+  $zipPath = $zipCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+  if ([string]::IsNullOrWhiteSpace($zipPath)) { $zipPath = $zipCandidates[0] }
   if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) { throw "desktop_package_missing: $zipPath" }
 
   $archive = [IO.Compression.ZipFile]::OpenRead($zipPath)

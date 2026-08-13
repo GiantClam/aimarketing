@@ -13,6 +13,8 @@ test("desktop package verifier checks normal and portable archive contracts", as
   assert.match(script, /runtime\/python\//u);
   assert.match(script, /AIMarketing-Runtime-x64\.zip/u);
   assert.match(script, /desktop_package_stale_entry/u);
+  assert.match(script, /PackageDir = "\.artifacts"/u);
+  assert.match(script, /desktop-release-\$Mode/u);
   assert.match(script, /Verify-Package -Mode "normal"/u);
   assert.match(script, /Verify-Package -Mode "portable"/u);
 });
