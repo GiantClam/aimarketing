@@ -71,7 +71,7 @@
 - [x] 5.1b Usage events are recorded as model/token/cost metadata without billing or balance enforcement.
 - [x] 5.2a Tauri host writes redacted per-run JSONL from framed stdout and stderr with bounded rolling cleanup.
 - [ ] 5.2 完整 OpenCode NDJSON 和工具 stdio 写 `logs/runs/<run-id>.jsonl` 并脱敏
-- [ ] 5.3 执行 30 天或 1GB 原始日志策略，不删除用户会话/产物/项目/usage
+- [x] 5.3 运行日志执行 30 天或 1GB 保留策略，只清理最早的 `logs/runs/*.jsonl`，不删除用户会话/产物/项目/usage；Rust 回归测试覆盖过期与超容量清理。 ✓ 2026-08-13
 - [ ] 5.4 价格可得时估算成本，不可得时显示“成本未知”
 - [ ] 5.5 支持应用内、Explorer 和默认本地程序打开 artifact
 
