@@ -44,11 +44,11 @@
 - [x] 4.2 Extract schema, node definitions, connection validation, definition migrations, and plan compilation. ✓ 2026-08-13 — the host-neutral package owns normalized definition envelopes, v1→v2 migration, validation and deterministic compilation.
 - [x] 4.3 Introduce capability, repository, artifact, event, clock, and cancellation ports. ✓ 2026-08-13 — a recovery-only capability port prevents an interrupted provider task from falling back to submission.
 - [x] 4.4 Extract execution and iteration behavior without enterprise IDs, credit fields, Next responses, or database record types. ✓ 2026-08-13 — shared execution owns deterministic DAG/foreach lifecycle while desktop supplies local capability and provider-task recovery adapters.
-- [ ] 4.5 Implement a SaaS adapter that preserves existing store, task, billing, artifact, and route behavior.
+- [x] 4.5 Implement a SaaS adapter that preserves existing store, task, billing, artifact, and route behavior. ✓ 2026-08-13 — all ordinary, iteration, retry and workflow-backed Agent DAG paths delegate scheduling to the shared adapter; SaaS keeps host capability execution, task persistence, billing, artifacts and route behavior.
   - [x] 4.5a Ordinary non-iteration SaaS DAG runs now use the shared workflow scheduler through a host adapter; existing node executors, capability invoker, task persistence, billing and artifact finalization remain SaaS-owned.
   - [x] 4.5b Foreach/collect pre-scope, isolated iteration body and post-scope DAGs now also use the shared SaaS scheduler; persisted iteration attempts, idempotency keys, credit reservation/finalization and recovery continue to be host-owned.
   - [x] 4.5c SaaS retry jobs now resume completed node outputs through the shared scheduler and increment only selected retry attempts; legacy retry-key selection and run persistence remain host-owned.
-- [ ] 4.6 Keep original `lib/workflows/*` paths as thin re-exports or SaaS composition modules.
+- [x] 4.6 Keep original `lib/workflows/*` paths as thin re-exports or SaaS composition modules. ✓ 2026-08-13 — schema/definition/compiler paths remain compatibility re-exports and the legacy execution API is now a host-composition wrapper over the shared adapter.
   - [x] 4.6a `lib/workflows/node-definitions/*` now re-export the same `workflow-core` node types, built-ins, registry and port compatibility instances; SaaS-specific node execution remains host composition.
   - [x] 4.6b `lib/workflows/schema.ts` now re-exports the shared schema types and helpers; the shared core owns generic asset-to-media connection compatibility.
   - [x] 4.6c `lib/workflows/connect.ts` now re-exports shared edge input mapping and port resolution; SaaS retains only canvas feature gating and localized labels.
@@ -78,7 +78,8 @@
 
 - [ ] 6.1 Run existing AI runtime, Writer, workflow, media adapter, route, cancellation, retry, and recovery tests.
 - [ ] 6.2 Add contract tests that run equivalent fixtures through the shared core and SaaS adapters.
+  - [x] 6.2a Equivalent ordinary-DAG fixture asserts the shared core and the SaaS adapter finish with the same typed output bundle. ✓ 2026-08-13
 - [x] 6.3 Run root TypeScript validation, ESLint, and Next production build. ✓ 2026-08-13 — root `tsc --noEmit`, ESLint and production `next build` now pass against current source rather than stale per-probe `.next-*` validator outputs.
-- [ ] 6.4 Search production imports to prove there is one shared implementation rather than a copied desktop fork.
+- [x] 6.4 Search production imports to prove there is one shared implementation rather than a copied desktop fork. ✓ 2026-08-13 — `check:shared-provenance` verifies compatibility surfaces name their shared owners, execution delegates to the shared adapter, and desktop source does not import legacy shared surfaces.
 - [ ] 6.5 Record any intentionally SaaS-only behavior and ensure it remains outside shared package exports.
 - [ ] 6.6 Mark this change ready only when all parity gates pass and downstream desktop changes can consume stable exports.

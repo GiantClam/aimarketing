@@ -1,7 +1,41 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { executeWorkflow, migrateWorkflowDefinitionToCurrent } from "@aimarketing/workflow-core"
 import { runSaasWorkflowWithSharedCore } from "@/lib/workflows/shared-execution-adapter"
+
+test("shared core and SaaS adapter produce equivalent ordinary-DAG outputs", async () => {
+  const nodes = [
+    { nodeKey: "input", type: "text_input", title: "Input", positionX: 0, positionY: 0, config: {} },
+    { nodeKey: "writer", type: "writer", title: "Writer", positionX: 1, positionY: 0, config: {} },
+  ] as const
+  const edges = [{ sourceNodeKey: "input", targetNodeKey: "writer", inputName: "text" }] as const
+  const definition = migrateWorkflowDefinitionToCurrent({ nodes: [...nodes], edges: [...edges] })
+  const core = await executeWorkflow(definition, {
+    runId: "shared-fixture",
+    ports: {
+      capability: {
+        execute: async ({ nodeKey, inputs }) => nodeKey === "input"
+          ? { text: ["Launch brief"] }
+          : { text: [`Draft: ${(inputs.text as string[]).join(" ")}`] },
+      },
+    },
+  })
+  const saas = await runSaasWorkflowWithSharedCore({
+    enterpriseId: 1,
+    ownerUserId: 2,
+    nodes: [...nodes],
+    edges: [...edges],
+    seedInput: { text: ["Launch brief"] },
+    executorContext: {
+      capabilityInvoker: async ({ input }) => ({ output: { text: [`Draft: ${input.text.join(" ")}`] } }),
+    },
+  })
+
+  assert.equal(core.status, "succeeded")
+  assert.equal(saas.status, "succeeded")
+  assert.deepEqual(saas.nodeStates.writer?.output, core.outputs.writer)
+})
 
 test("SaaS adapter runs an ordinary workflow through shared scheduling while retaining host capability execution", async () => {
   const updates: string[] = []

@@ -12,6 +12,8 @@
     "lint:skills": "node scripts/validate-skill-files.js",
     "check:shared-boundaries": "node scripts/validate-shared-package-boundaries.mjs",
     "test:shared-boundaries": "node --test scripts/validate-shared-package-boundaries.test.mjs",
+    "check:shared-provenance": "node scripts/validate-shared-implementation-provenance.mjs",
+    "test:shared-provenance": "node --test scripts/validate-shared-implementation-provenance.test.mjs",
     "desktop:typecheck": "pnpm --filter @aimarketing/desktop typecheck",
     "desktop:test": "pnpm --filter @aimarketing/desktop test",
     "desktop:build": "pnpm --filter @aimarketing/desktop build",
