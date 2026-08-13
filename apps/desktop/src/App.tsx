@@ -1581,7 +1581,7 @@ export function App() {
       const priorConversationHistory = await workbenchClient.conversations.messages(conversationId);
       await tauriBridge.invoke("append_message", { input: { id: `message-${runId}`, conversation_id: conversationId, role: "user", content: userPrompt, created_at: userMessageCreatedAt } });
       setAttachments([]);
-      await tauriBridge.invoke("create_run", { runId, conversationId, model: config.provider.model || null });
+      await workbenchClient.runs.start({ id: runId, conversationId, prompt: userPrompt, model: config.provider.model || undefined, skillId: effectiveSkillId, reasoningEffort });
       persistedRun = true;
       setRuns((current) => [{ id: runId, conversation_id: conversationId, status: "running", model: config.provider.model || null, started_at: new Date().toISOString(), finished_at: null }, ...current].slice(0, 100));
       const action = workflowActions.find((item) => item.id === actionId) ?? workflowActions[0];
@@ -1644,7 +1644,7 @@ export function App() {
 
   async function cancelActiveRun() {
     if (!activeRunId) return;
-    try { const runId = activeRunId; await sendHostMessage({ version: 1, requestId: `cancel-${runId}`, runId, type: "run.cancel", payload: { runId, emergency: true } }); setRunStatus(locale === "zh" ? "已紧急停止本地 Agent" : "Local Agent emergency-stopped"); setActiveRunId(null); setRuns((current) => current.map((run) => run.id === runId ? { ...run, status: "cancelled", finished_at: new Date().toISOString() } : run)); await tauriBridge.invoke("finish_run", { runId, status: "cancelled" }); }
+    try { const runId = activeRunId; await workbenchClient.runs.emergencyStop(runId); setRunStatus(locale === "zh" ? "已紧急停止本地 Agent" : "Local Agent emergency-stopped"); setActiveRunId(null); setRuns((current) => current.map((run) => run.id === runId ? { ...run, status: "cancelled", finished_at: new Date().toISOString() } : run)); await tauriBridge.invoke("finish_run", { runId, status: "cancelled" }); }
     catch (error) { setRunStatus(error instanceof Error ? error.message : (locale === "zh" ? "停止任务失败" : "Failed to stop the run")); }
   }
 

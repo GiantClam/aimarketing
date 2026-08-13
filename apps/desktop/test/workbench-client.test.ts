@@ -31,4 +31,11 @@ test("desktop WorkbenchClient adapts conversations, workflows and file actions t
   await client.files.reveal("output/report.md", "text/markdown");
   assert.equal(calls.at(-1)?.command, "open_artifact");
   assert.equal(calls.at(-1)?.args?.mimeType, "text/markdown");
+  const started = await client.runs.start({ id: "run-1", conversationId: "c1", prompt: "生成内容", model: "provider/model" });
+  assert.equal(started.id, "run-1");
+  assert.equal(calls.at(-1)?.command, "create_run");
+  await client.runs.cancel("run-1");
+  assert.equal((calls.at(-1)?.args?.message as { type?: string } | undefined)?.type, "run.cancel");
+  await client.runs.emergencyStop("run-1");
+  assert.equal((calls.at(-1)?.args?.message as { type?: string } | undefined)?.type, "run.emergency_stop");
 });

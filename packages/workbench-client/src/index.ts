@@ -78,6 +78,7 @@ export type WorkbenchRunEvent =
   | { readonly type: "status"; readonly status: WorkbenchRunStatus };
 
 export interface WorkbenchRunRequest {
+  readonly id?: string;
   readonly conversationId: string;
   readonly prompt: string;
   readonly model?: string;
@@ -105,6 +106,7 @@ export interface WorkbenchClient {
   readonly runs: {
     readonly start: (request: WorkbenchRunRequest) => Promise<WorkbenchRun>;
     readonly cancel: (runId: string) => Promise<void>;
+    readonly emergencyStop: (runId: string) => Promise<void>;
     readonly subscribe: (runId: string, onEvent: (event: WorkbenchRunEvent) => void) => () => void;
   };
   readonly usage: {

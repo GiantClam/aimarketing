@@ -71,6 +71,23 @@ test("desktop host emits terminal media attempt events for recovery idempotency"
   assert.match(app, /record_run_checkpoint/);
 });
 
+test("desktop keeps large files and Provider credentials out of UI payload persistence", () => {
+  const app = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  const host = readFileSync(resolve(process.cwd(), "runtime/host.ts"), "utf8");
+  const tauriHost = readFileSync(resolve(process.cwd(), "src-tauri/src/host.rs"), "utf8");
+  const logs = readFileSync(resolve(process.cwd(), "src-tauri/src/logs.rs"), "utf8");
+  const lib = readFileSync(resolve(process.cwd(), "src-tauri/src/lib.rs"), "utf8");
+  assert.match(app, /file\.stream\(\)\.getReader\(\)/);
+  assert.match(app, /append_local_attachment_chunk/);
+  assert.match(app, /bytes = Array\.from\(chunk\.value\)/);
+  assert.doesNotMatch(app, /readAsDataURL|btoa\(/);
+  assert.match(tauriHost, /MAX_RUNTIME_MESSAGE_BYTES/);
+  assert.doesNotMatch(host, /spawn\([^\n]*apiKey/);
+  assert.match(logs, /api[_-]?key/iu);
+  assert.match(lib, /config\.redacted\.json/);
+  assert.match(lib, /\[REDACTED\]/);
+});
+
 test("desktop image capabilities select direct OpenAI-compatible or Bailian adapters", () => {
   const host = readFileSync(resolve(process.cwd(), "runtime/host.ts"), "utf8");
   assert.match(host, /createBailianImageAdapter\(providerOptions\)/);

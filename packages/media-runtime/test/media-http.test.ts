@@ -26,6 +26,34 @@ test("http media adapter submits and polls without cloud business services", asy
   assert.deepEqual(calls.map((value) => value.split(" ")[0]), ["POST", "GET"]);
 });
 
+test("http media adapter preserves provider rate-limit status", async () => {
+  const adapter = createHttpMediaAdapter({
+    provider: "test" as MediaProviderId,
+    baseUrl: "https://provider.invalid",
+    apiKey: "secret",
+    submitPath: "/images",
+    fetchImpl: async () => new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 }),
+  });
+  await assert.rejects(
+    adapter.execute({ provider: "test" as MediaProviderId, modelId: "image-model", input: { prompt: "hello" } }, { throwIfCancelled() {} }),
+    /media_provider_http_429/,
+  );
+});
+
+test("http media adapter rejects invalid provider JSON responses", async () => {
+  const adapter = createHttpMediaAdapter({
+    provider: "test" as MediaProviderId,
+    baseUrl: "https://provider.invalid",
+    apiKey: "secret",
+    submitPath: "/images",
+    fetchImpl: async () => new Response("not-json", { status: 200 }),
+  });
+  await assert.rejects(
+    adapter.execute({ provider: "test" as MediaProviderId, modelId: "image-model", input: { prompt: "hello" } }, { throwIfCancelled() {} }),
+    /media_provider_invalid_response/,
+  );
+});
+
 test("shared media adapters reject missing injected provider configuration before fetching", async () => {
   let requests = 0;
   const adapter = createHttpMediaAdapter({

@@ -71,12 +71,15 @@ export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: Wo
 
   const runs = {
     async start(request: WorkbenchRunRequest): Promise<WorkbenchRun> {
-      const run = { id: makeId("run"), conversationId: request.conversationId, status: "queued" as const, startedAt: new Date().toISOString() };
+      const run = { id: request.id ?? makeId("run"), conversationId: request.conversationId, status: "queued" as const, startedAt: new Date().toISOString() };
       await bridge.invoke("create_run", { runId: run.id, conversationId: run.conversationId, model: request.model ?? null });
       return run;
     },
     async cancel(runId: string) {
       await bridge.invoke("host_send", { message: { version: 1, requestId: makeId("cancel"), runId, type: "run.cancel", payload: { runId } } });
+    },
+    async emergencyStop(runId: string) {
+      await bridge.invoke("host_send", { message: { version: 1, requestId: makeId("emergency-stop"), runId, type: "run.emergency_stop", payload: { runId, emergency: true } } });
     },
     subscribe(runId: string, onEvent: (event: WorkbenchRunEvent) => void) {
       let dispose: (() => void) | undefined;

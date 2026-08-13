@@ -6,7 +6,8 @@
 - [x] 1.2c Add direct JSON Provider adapter and atomic URL/base64 output downloader; provider-specific endpoint clients remain follow-up adapters.
 - [x] 1.6b Harden media runner cancellation so provider cancel requests are sent with a non-aborted control port; add size/MIME rejection coverage for local downloads.
 
-- [ ] 1.1 迁移现有 success、429、invalid response、polling 和 timeout fixtures
+- [x] 1.1 迁移现有 success、429、invalid response、polling 和 timeout fixtures
+  - [x] 2026-08-13 `media-runtime` now has non-video fixture coverage for successful submit/poll, HTTP 429 propagation, invalid JSON rejection, polling timeout, cancellation and persisted-task resume; video generation tests are intentionally excluded from the real-provider verification scope.
 - [x] 1.2 定义统一 `submit/poll/cancel/download/usage` async media job contract。✓ 2026-08-13 — `media-runtime` 提供 host-neutral request/task/provider/cancellation ports、generic submit/poll/cancel runner、atomic downloader 与 idempotency/recovery contract tests。
 - [x] 1.3 抽取 OpenAI-compatible/Bailian image clients
   - [x] 2026-08-13 `media-runtime` now provides direct OpenAI-compatible `/images/generations` and DashScope text-to-image submit/poll adapters; desktop host selects them for configured image nodes. Fixture contract tests cover request shape, idempotency headers, `/v1` base-path preservation, async status normalization, and local URL/base64 outputs.
@@ -16,8 +17,10 @@
 - [ ] 1.6 为 SaaS/Desktop adapters 运行同一组 provider contract tests
 
 **Quality Gate:**
-- [ ] `media-runtime` 无 Next、DB、billing、enterprise、R2 或环境全局读取
-- [ ] Provider fixtures 全部通过
+- [x] `media-runtime` 无 Next、DB、billing、enterprise、R2 或环境全局读取
+  - [x] 2026-08-13 shared-boundaries and shared-provenance checks pass; the package depends only on injected provider/fetch, filesystem and workspace ports.
+- [x] Provider fixtures 全部通过
+  - [x] 2026-08-13 non-video provider fixtures and generic HTTP fixtures pass; video generation is excluded from the real-provider smoke scope by acceptance requirement.
 - [ ] SaaS 现有媒体回归无行为漂移
 
 ## 2. Desktop media jobs and artifacts
@@ -43,8 +46,10 @@
 **Quality Gate:**
 - [x] 强制杀死并重启后只继续 poll、不重复 submit
   - [x] 2026-08-13 recovery allocates a fresh Rust-owned temp directory and resumes by provider task ID; the host never re-submits an existing task.
-- [ ] 大文件不以 base64 经过 UI/IPC
-- [ ] API Key 不进入命令行、SQLite、日志或诊断包
+- [x] 大文件不以 base64 经过 UI/IPC
+  - [x] 2026-08-13 desktop streams File chunks into Rust-owned attachment files; source regression rejects `readAsDataURL`/`btoa` and verifies bounded chunk RPC.
+- [x] API Key 不进入命令行、SQLite、日志或诊断包
+  - [x] 2026-08-13 source and Rust redaction regressions verify env-only host transport, credential-free persisted workflow/run payloads, and `[REDACTED]` diagnostics/log output.
 
 ## 3. Desktop workflow composition
 
@@ -93,7 +98,8 @@
 
 ## 5. Workflow UI and portability
 
-- [ ] 5.1 使用共享 workflow builder 和 desktop WorkbenchClient
+- [x] 5.1 使用共享 workflow builder 和 desktop WorkbenchClient
+  - [x] 2026-08-13 desktop run start/emergency-stop lifecycle now goes through the shared WorkbenchClient runs port; workflow definitions preserve schema/revision/hash metadata and use the shared builder/compiler.
 - [x] 5.2 未配置 Provider 的媒体节点保持可见，画布显示双语“需要配置 / Configuration required”状态并提供模型配置入口；运行时仍保留结构化 configuration-required 错误。 ✓ 2026-08-13
 - [x] 5.3 运行页展示文本、工具、媒体进度、产物、错误和用量
   - [x] 2026-08-13 Task Center can inspect any persisted run and displays node statuses/outputs, ordered tool/media/error events, local artifacts referenced by events, retry entry points, and per-run usage totals from SQLite.

@@ -42,3 +42,16 @@ test("media runner resumes a persisted provider task without submitting again", 
   assert.equal(submits, 0);
   assert.equal(polls, 1);
 });
+
+test("media runner surfaces a bounded polling timeout", async () => {
+  const adapter: MediaProviderAdapter = {
+    provider: "fake" as never,
+    execute: async () => ({ providerTaskId: "task-timeout", status: "running", outputs: [] }),
+    query: async () => ({ providerTaskId: "task-timeout", status: "running", outputs: [] }),
+  };
+  const cancellation: CancellationPort = { throwIfCancelled: () => undefined };
+  await assert.rejects(
+    runMediaJob(adapter, { provider: "fake" as never, modelId: "image", input: {} }, cancellation, { pollIntervalMs: 10, timeoutMs: 1000 }),
+    /media_poll_timeout/,
+  );
+});

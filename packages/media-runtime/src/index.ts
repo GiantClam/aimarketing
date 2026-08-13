@@ -101,9 +101,10 @@ export function createHttpMediaAdapter(options: MediaHttpAdapterOptions): MediaP
     });
     const body = await response.text();
     let parsed: unknown = null;
-    try { parsed = body ? JSON.parse(body) : null; } catch { parsed = { raw: body.slice(0, 1000) }; }
+    try { parsed = body ? JSON.parse(body) : null; } catch { throw new Error("media_provider_invalid_response"); }
     if (!response.ok) throw new Error(`media_provider_http_${response.status}`);
-    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("media_provider_invalid_response");
+    return parsed as Record<string, unknown>;
   };
   const toTask = (value: Record<string, unknown>): MediaTask => {
     const providerTaskId = String(value.id ?? value.task_id ?? value.taskId ?? `sync-${Date.now()}`);
