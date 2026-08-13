@@ -36,7 +36,7 @@
 
 - [x] 3.1 设置页支持用户显式选择、重新定位及解除当前 Vault 绑定；解除仅清除待保存的本地配置与索引路径，不删除用户 Vault 或索引文件。 ✓ 2026-08-13
 - [x] 3.2 实现 `.obsidian`、trash、隐藏路径、用户 ignore 和 symlink loop 规则。✓ 2026-08-13 — 扫描和 watcher 统一排除 `.obsidian`、`.trash`、隐藏路径、symbolic link，以及 Vault `.gitignore` / `.aimarketingignore` 规则；回归测试覆盖两类用户 ignore。
-- [ ] 3.3 解析 Markdown、frontmatter、wikilink、标准链接、标签和附件
+- [x] 3.3 解析 Markdown、frontmatter、wikilink、标准链接、标签和附件。✓ 2026-08-13 — UTF-8 Markdown 按 heading 分块，保留相对路径、行范围、frontmatter/inline tags、Wiki/Markdown links 及本地附件引用；中英文与附件 fixture 覆盖解析结果。
 - [ ] 3.4 建立每 Vault manifest/hash 清单和启动/唤醒 reconciliation
 - [ ] 3.5 实现 watcher 增量事件与 rename/delete 恢复
 

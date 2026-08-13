@@ -10,12 +10,12 @@ test("indexes Obsidian markdown with Chinese and spaces, then searches locally",
   const vault = join(root, "我的 Vault"); const index = join(root, "indexes", "vault-a");
   try {
     await mkdir(join(vault, "项目"), { recursive: true });
-    await writeFile(join(vault, "项目", "活动.md"), "---\ntags: [营销, 品牌]\n---\n# 春季活动\n#营销 本地营销工作台内容 [[策略笔记]] [官网](https://example.com)", "utf8");
+    await writeFile(join(vault, "项目", "活动.md"), "---\ntags: [营销, 品牌]\n---\n# 春季活动\n#营销 本地营销工作台内容 [[策略笔记]] [官网](https://example.com) ![[素材/主图.png]] [素材说明](附件/brief.pdf)", "utf8");
     const manifest = await indexObsidianVault(vault, index);
     assert.equal(manifest.generation, 1); assert.equal(manifest.chunks.length, 1);
     assert.equal(searchVault(manifest, "营销")[0]?.chunk.documentPath, "项目/活动.md");
     assert.deepEqual(manifest.chunks[0].tags, ["#营销", "#品牌"]);
-    assert.deepEqual(manifest.chunks[0].links, ["策略笔记", "https://example.com"]);
+    assert.deepEqual(manifest.chunks[0].links, ["策略笔记", "https://example.com", "素材/主图.png", "附件/brief.pdf"]);
     assert.deepEqual([manifest.chunks[0].lineStart, manifest.chunks[0].lineEnd], [4, 5]);
     assert.equal(JSON.parse(await readFile(join(index, "manifest.json"), "utf8")).vaultPath, vault);
     assert.equal(JSON.parse(await readFile(join(index, "index-state.json"), "utf8")).status, "lexical_ready");
