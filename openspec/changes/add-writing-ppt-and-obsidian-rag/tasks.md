@@ -54,7 +54,7 @@
 - [x] 3.4b Indexing recovers the previous manifest generation when the caller omits it, so restart/rebuild generations remain monotonic.
 
 - [x] 4.1 在语义索引未就绪时提供标题/tag/link/关键词扫描检索。✓ 2026-08-13 — shared lexical retriever 统一检索路径、heading、tags、links 与正文，仍返回原始笔记 excerpt；Desktop fallback 回归覆盖元数据命中且不依赖 SQLite/远程调用。
-- [ ] 4.2 实现本地 embedding 默认路径和每 Vault LanceDB 目录
+- [x] 4.2 实现本地 embedding 默认路径和每 Vault LanceDB 目录。✓ 2026-08-13 — 默认 loopback local embedding（不可用时 deterministic local hash fallback）写入每 Vault 独立 `indexPath/lancedb`；双 Vault 中文路径回归证明状态与检索结果不会交叉污染。
 - [ ] 4.3 写入 `index-state.json` 并在不兼容时建立新 generation 后原子切换
 - [ ] 4.4 实现 lexical + vector hybrid retrieval 和 top-k 限制
 - [ ] 4.5 返回 Vault 相对路径、标题、段落、行范围和可点击引用

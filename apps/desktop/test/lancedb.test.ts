@@ -19,6 +19,12 @@ test("LanceDB semantic index persists, reopens and isolates a Vault", async () =
     assert.equal(hits[0]?.documentPath, "营销/方案.md");
     const reopenedState = JSON.parse(await readFile(join(indexPath, "index-state.json"), "utf8")) as { generation: number };
     assert.equal(reopenedState.generation, 3);
+    const otherIndexPath = join(root, "另一 Vault", "index");
+    const otherManifest: VaultManifest = { schemaVersion: 1, vaultPath: join(root, "另一 Vault"), generation: 1, documents: [{ documentPath: "产品/发布.md", hash: "other-hash" }], chunks: [{ id: "other-chunk", documentPath: "产品/发布.md", heading: "发布", text: "产品发布计划", hash: "other-hash" }], updatedAt: new Date().toISOString() };
+    await buildLanceIndex(otherIndexPath, otherManifest);
+    const otherHits = await searchLanceIndex(otherIndexPath, "产品发布", 3);
+    assert.deepEqual(otherHits.map((hit) => hit.documentPath), ["产品/发布.md"]);
+    assert.equal((await readFile(join(otherIndexPath, "index-state.json"), "utf8")).includes("营销/方案.md"), false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
