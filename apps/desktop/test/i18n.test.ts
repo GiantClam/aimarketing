@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { WORKBENCH_MEDIA_FEATURES } from "@aimarketing/workbench-ui";
 import { desktopCopy, desktopWriterCopy, detectDesktopLocale, mediaPlaceholderEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale } from "../src/i18n";
 import { localizeRuntimeStatus } from "../src/App";
@@ -54,4 +56,15 @@ test("active Writer workspace has a complete bilingual copy contract", () => {
     assert.ok(desktopWriterCopy.en[key]);
     assert.doesNotMatch(desktopWriterCopy.en[key], /[\u4e00-\u9fff]/u);
   }
+});
+
+test("active Writer preview uses the bilingual copy contract", () => {
+  const source = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  const start = source.indexOf("function DesktopWriterCloudWorkspace(");
+  const end = source.indexOf("type DesktopWorkflowWorkspaceProps", start);
+  assert.ok(start >= 0 && end > start, "active Writer workspace source must be present");
+  const activeWriter = source.slice(start, end);
+  assert.match(activeWriter, /label=\{writerCopy\.assistant\}/u);
+  assert.match(activeWriter, /writerCopy\.edit/u);
+  assert.doesNotMatch(activeWriter, /label="AI RESPONSE"/u);
 });

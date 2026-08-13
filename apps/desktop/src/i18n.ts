@@ -135,7 +135,7 @@ export const writerLanguageEnglish: Record<string, string> = { auto: "Auto-detec
 export const desktopWriterCopy = {
   zh: {
     skill: "内容写作 Skill", quick: "快捷开始", quickStart: "快速开始", you: "你", assistant: "写作助手",
-    preview: "预览", generateImage: "生成图片", copied: "已复制", rich: "复制富文本", markdown: "复制 Markdown",
+    preview: "预览", edit: "编辑内容", generateImage: "生成图片", copied: "已复制", rich: "复制富文本", markdown: "复制 Markdown",
     status: "支持文案预览与配图生成", new: "新建", close: "关闭", done: "完成", send: "发送", stop: "停止",
     platform: "平台", content: "内容", mode: "模式", language: "语言", finalPreview: "最终预览",
     previewHint: "可继续编辑、导出或复制。", generateImageWithCopy: "生成图片配图",
@@ -143,7 +143,7 @@ export const desktopWriterCopy = {
   },
   en: {
     skill: "Content Writing Skill", quick: "Quick start", quickStart: "Quick start", you: "You", assistant: "Writing assistant",
-    preview: "Preview", generateImage: "Generate image", copied: "Copied", rich: "Copy rich text", markdown: "Copy Markdown",
+    preview: "Preview", edit: "Edit content", generateImage: "Generate image", copied: "Copied", rich: "Copy rich text", markdown: "Copy Markdown",
     status: "Preview and image generation supported", new: "New", close: "Close", done: "Done", send: "Send", stop: "Stop",
     platform: "Platform", content: "Content", mode: "Mode", language: "Language", finalPreview: "Final preview",
     previewHint: "Continue editing, exporting, or copying.", generateImageWithCopy: "Generate image assets",
