@@ -76,10 +76,10 @@
 
 ## 6. Prove SaaS Parity and Complete Cutover
 
-- [ ] 6.1 Run existing AI runtime, Writer, workflow, media adapter, route, cancellation, retry, and recovery tests.
+- [x] 6.1 Run existing AI runtime, Writer, workflow, media adapter, route, cancellation, retry, and recovery tests. ✓ 2026-08-13 — runtime (46), Writer (101), image/media (58), SaaS AI/Writer/workflow/media routes (80), and shared workflow/iteration/cancellation/retry/recovery (68) regressions pass. Writer tests use the repository `server-only` shim.
 - [ ] 6.2 Add contract tests that run equivalent fixtures through the shared core and SaaS adapters.
   - [x] 6.2a Equivalent ordinary-DAG fixture asserts the shared core and the SaaS adapter finish with the same typed output bundle. ✓ 2026-08-13
 - [x] 6.3 Run root TypeScript validation, ESLint, and Next production build. ✓ 2026-08-13 — root `tsc --noEmit`, ESLint and production `next build` now pass against current source rather than stale per-probe `.next-*` validator outputs.
 - [x] 6.4 Search production imports to prove there is one shared implementation rather than a copied desktop fork. ✓ 2026-08-13 — `check:shared-provenance` verifies compatibility surfaces name their shared owners, execution delegates to the shared adapter, and desktop source does not import legacy shared surfaces.
-- [ ] 6.5 Record any intentionally SaaS-only behavior and ensure it remains outside shared package exports.
+- [x] 6.5 Record any intentionally SaaS-only behavior and ensure it remains outside shared package exports. ✓ 2026-08-13 — Postgres stores/repositories, Next route responses and navigation, enterprise identity/governance, credit reservation/finalization, R2/cloud artifact persistence, Railway/Cloudflare process and HTTP supervision, and SaaS provider credentials remain host composition under `app/` and `lib/`; shared package exports contain contracts, deterministic domain logic and injected ports only. Boundary and provenance checks reject host imports and desktop legacy-surface imports.
 - [ ] 6.6 Mark this change ready only when all parity gates pass and downstream desktop changes can consume stable exports.
