@@ -1,7 +1,9 @@
 import { workflowNodeRegistry } from "./node-definitions/registry";
 import { CURRENT_WORKFLOW_SCHEMA_VERSION, LEGACY_WORKFLOW_SCHEMA_VERSION, canonicalizeWorkflowDefinition, hashWorkflowDefinition, parseWorkflowDefinitionEnvelope, type WorkflowDefinitionEdgeV2, type WorkflowDefinitionEnvelope, type WorkflowDefinitionNodeV2 } from "./definition";
 
-export type LegacyWorkflowDefinition = { schemaVersion?: number | null; revision?: number | null; nodes: Array<{ nodeKey: string; type: string; title?: string | null; positionX?: number | null; positionY?: number | null; config?: Record<string, unknown> | null; nodeVersion?: number | null }>; edges: Array<{ id?: number | string | null; sourceNodeKey: string; targetNodeKey: string; inputName?: string | null }> };
+export type LegacyWorkflowDefinitionNode = { nodeKey: string; type: string; title?: string | null; positionX?: number | null; positionY?: number | null; config?: Record<string, unknown> | null; nodeVersion?: number | null; [key: string]: unknown };
+export type LegacyWorkflowDefinitionEdge = { id?: number | string | null; sourceNodeKey: string; targetNodeKey: string; inputName?: string | null; [key: string]: unknown };
+export type LegacyWorkflowDefinition = { schemaVersion?: number | null; revision?: number | null; definitionHash?: string | null; nodes: LegacyWorkflowDefinitionNode[]; edges: LegacyWorkflowDefinitionEdge[]; [key: string]: unknown };
 export type WorkflowDefinitionMigrationOptions = { revision?: number; edgeIds?: Array<number | string | null | undefined> };
 
 const inputPort = (name: string | null | undefined) => ({ text: "text", assets: "assets", asset: "assets", images: "images", image: "images", videos: "videos", video: "videos", audios: "audios", audio: "audios", presentations: "presentations", presentation: "presentations", ppt: "presentations" })[name ?? ""] ?? name ?? "input";
@@ -26,7 +28,12 @@ function semanticTuple(value: { sourceNodeKey: string; sourcePortId: string; tar
 }
 
 export function migrateWorkflowDefinitionToCurrent(input: LegacyWorkflowDefinition | WorkflowDefinitionEnvelope, options?: number | WorkflowDefinitionMigrationOptions): WorkflowDefinitionEnvelope {
-  if ((input as WorkflowDefinitionEnvelope).schemaVersion === CURRENT_WORKFLOW_SCHEMA_VERSION) return parseWorkflowDefinitionEnvelope(input);
+  if ((input as WorkflowDefinitionEnvelope).schemaVersion === CURRENT_WORKFLOW_SCHEMA_VERSION) {
+    const current = input as WorkflowDefinitionEnvelope;
+    const resolvedOptions = normalizeOptions(options);
+    const canonical = canonicalizeWorkflowDefinition({ ...current, schemaVersion: CURRENT_WORKFLOW_SCHEMA_VERSION, revision: Number.isInteger(current.revision) && current.revision > 0 ? current.revision : resolvedOptions.revision ?? 1, nodes: current.nodes.map((node) => ({ ...node, config: node.config ? JSON.parse(JSON.stringify(node.config)) : {} })), edges: current.edges.map((edge) => ({ ...edge })) });
+    return { ...canonical, definitionHash: hashWorkflowDefinition(canonical) };
+  }
   const legacy = input as LegacyWorkflowDefinition;
   const resolvedOptions = normalizeOptions(options);
   const nodes: WorkflowDefinitionNodeV2[] = legacy.nodes.map((node) => {
@@ -48,8 +55,16 @@ export function migrateWorkflowDefinitionToCurrent(input: LegacyWorkflowDefiniti
     const ordinal = ordinals.get(tuple) ?? 0; ordinals.set(tuple, ordinal + 1);
     return { edgeKey: `legacy:${edge.sourceNodeKey}:${edge.targetNodeKey}:${inputName ?? "input"}:${ordinal}`, sourceNodeKey: edge.sourceNodeKey, sourcePortId, targetNodeKey: edge.targetNodeKey, targetPortId, inputName };
   });
-  const canonical = canonicalizeWorkflowDefinition({ schemaVersion: CURRENT_WORKFLOW_SCHEMA_VERSION, revision: Number.isInteger(legacy.revision) && Number(legacy.revision) > 0 ? Number(legacy.revision) : resolvedOptions.revision ?? 1, definitionHash: "", nodes, edges });
+  const revision = Number.isInteger(resolvedOptions.revision) && Number(resolvedOptions.revision) > 0
+    ? Number(resolvedOptions.revision)
+    : Number.isInteger(legacy.revision) && Number(legacy.revision) > 0 ? Number(legacy.revision) : 1;
+  const canonical = canonicalizeWorkflowDefinition({ schemaVersion: CURRENT_WORKFLOW_SCHEMA_VERSION, revision, definitionHash: "", nodes, edges });
   return { ...canonical, definitionHash: hashWorkflowDefinition(canonical) };
 }
 
 export function migrateLegacyWorkflowDefinition(input: LegacyWorkflowDefinition, options?: number | WorkflowDefinitionMigrationOptions) { return migrateWorkflowDefinitionToCurrent({ ...input, schemaVersion: input.schemaVersion ?? LEGACY_WORKFLOW_SCHEMA_VERSION }, options); }
+
+/** Parse v2 or migrate v1, then validate the resulting envelope. */
+export function parseAndMigrateWorkflowDefinition(input: LegacyWorkflowDefinition | WorkflowDefinitionEnvelope, options?: number | WorkflowDefinitionMigrationOptions) {
+  return parseWorkflowDefinitionEnvelope(migrateWorkflowDefinitionToCurrent(input, options));
+}
