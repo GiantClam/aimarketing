@@ -102,7 +102,7 @@ fn opencode_executable(app: &AppHandle) -> Result<Option<String>, String> {
     let data = crate::data_dir(app)?;
     let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
     let configured = configured_runtime_path(app, "opencodePath");
-    if let Some(path) = configured.filter(|path| path.is_file() && executable_works(path, &["--version"])) { return Ok(Some(path.to_string_lossy().into_owned())); }
+    if let Some(path) = configured.and_then(|path| crate::resolve_windows_command_shim(path).into_iter().find(|candidate| candidate.is_file() && executable_works(candidate, &["--version"]))) { return Ok(Some(path.to_string_lossy().into_owned())); }
     let candidates = [
         data.join("runtime").join("opencode").join("opencode.exe"),
         resource.join("dist-runtime").join("runtime").join("opencode").join("opencode.exe"),
@@ -115,7 +115,7 @@ fn opencode_executable(app: &AppHandle) -> Result<Option<String>, String> {
 fn system_executable(command: &str) -> Option<PathBuf> {
     let output = Command::new("where.exe").arg(command).output().ok()?;
     if !output.status.success() { return None; }
-    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).filter(|path| path.is_file()).find_map(|path| std::fs::canonicalize(path).ok())
+    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).flat_map(crate::resolve_windows_command_shim).filter(|path| path.is_file() && executable_works(path, &["--version"])).find_map(|path| std::fs::canonicalize(path).ok())
 }
 
 fn executable_works(path: &std::path::Path, args: &[&str]) -> bool {

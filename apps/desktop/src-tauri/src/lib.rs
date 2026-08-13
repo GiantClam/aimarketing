@@ -41,6 +41,28 @@ finally:
     if os.path.exists(output): os.remove(output)
 "#;
 
+/// Resolve Windows command shims to the executable they dispatch before a
+/// path is persisted or passed to a child process. `where.exe` commonly
+/// returns both `opencode` and `opencode.cmd`; neither shim is safe to pass
+/// directly to `CreateProcess`.
+pub(crate) fn resolve_windows_command_shim(path: PathBuf) -> Vec<PathBuf> {
+    let extension = path.extension().and_then(|value| value.to_str()).map(|value| value.to_ascii_lowercase());
+    if matches!(extension.as_deref(), Some("exe")) { return vec![path]; }
+    let mut candidates = Vec::new();
+    if let Some(parent) = path.parent() {
+        if let Some(stem) = path.file_stem().and_then(|value| value.to_str()) {
+            candidates.push(parent.join(format!("{stem}.exe")));
+            if stem.eq_ignore_ascii_case("opencode") {
+                candidates.push(parent.join("node_modules").join("opencode-ai").join("bin").join("opencode.exe"));
+            }
+        }
+    }
+    candidates.push(path.clone());
+    candidates.sort_by_key(|candidate| if candidate.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("exe")) { 0 } else { 1 });
+    candidates.dedup();
+    candidates
+}
+
 #[derive(Debug, Serialize)]
 pub struct Health {
     pub status: &'static str,
@@ -112,7 +134,7 @@ fn configured_runtime_path(data: &std::path::Path, key: &str) -> Option<PathBuf>
 }
 
 fn configured_runtime_executable(data: &std::path::Path, key: &str) -> Option<PathBuf> {
-    configured_runtime_path(data, key).filter(|path| path.is_file())
+    configured_runtime_path(data, key).and_then(|path| resolve_windows_command_shim(path).into_iter().find(|candidate| candidate.is_file()))
 }
 
 fn persist_runtime_paths(data: &std::path::Path, updates: &[(&str, Option<&PathBuf>)]) -> Result<(), String> {
@@ -139,13 +161,13 @@ fn python_capable(path: &std::path::Path) -> bool {
 fn system_python() -> Option<PathBuf> {
     let output = Command::new("where.exe").arg("python").output().ok()?;
     if !output.status.success() { return None; }
-    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).filter(|path| path.exists()).find_map(|path| std::fs::canonicalize(path).ok())
+    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).flat_map(resolve_windows_command_shim).filter(|path| path.exists() && executable_works(path, &["--version"])).find_map(|path| std::fs::canonicalize(path).ok())
 }
 
 fn system_executable(command: &str) -> Option<PathBuf> {
     let output = Command::new("where.exe").arg(command).output().ok()?;
     if !output.status.success() { return None; }
-    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).filter(|path| path.exists()).find_map(|path| std::fs::canonicalize(path).ok())
+    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).flat_map(resolve_windows_command_shim).filter(|path| path.exists() && executable_works(path, &["--version"])).find_map(|path| std::fs::canonicalize(path).ok())
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -659,7 +681,7 @@ fn lock_path() -> Result<std::path::PathBuf, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{archive_diagnostics, config, configured_runtime_executable, persist_runtime_paths, powershell_quote, redact_diagnostic_value, safe_media_component};
+    use super::{archive_diagnostics, config, configured_runtime_executable, persist_runtime_paths, powershell_quote, redact_diagnostic_value, resolve_windows_command_shim, safe_media_component};
     use std::fs;
 
     #[test]
@@ -686,6 +708,20 @@ mod tests {
         let canonical_text = canonical.to_string_lossy().into_owned();
         assert_eq!(saved["runtime"]["nodePath"].as_str(), Some(canonical_text.as_str()));
         assert_eq!(configured_runtime_executable(&root, "nodePath"), Some(canonical));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn windows_command_shims_resolve_to_real_opencode_executable() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-command-shim-{}", std::process::id()));
+        let bin = root.join("node_modules").join("opencode-ai").join("bin");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&bin).unwrap();
+        let executable = bin.join("opencode.exe");
+        fs::write(&executable, b"fixture").unwrap();
+        let candidates = resolve_windows_command_shim(root.join("opencode.cmd"));
+        assert!(candidates.iter().any(|candidate| candidate == &executable));
+        assert_eq!(candidates.iter().find(|candidate| candidate.is_file()), Some(&executable));
         let _ = fs::remove_dir_all(root);
     }
 

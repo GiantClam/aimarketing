@@ -43,6 +43,7 @@
 - [ ] 3.2 在创建主 WebView 前运行原生 bootstrap 状态机
   - [x] 2026-08-13 Rust regression `startup_gates_run_before_tauri_builder` locks WebView2 and green-runtime gate ordering before `tauri::Builder`, including lock release on gate failure.
 - [ ] 3.3 复用通过 probe 的系统组件并固定 canonical absolute path
+  - [x] 2026-08-14 native Windows command discovery resolves `opencode`/`opencode.cmd` shims to the real dispatched executable before saving the canonical runtime path or starting workflow-host.
 - [ ] 3.4 缺失/损坏时自动调用 UTF-8 安装脚本安装私有 runtime
 - [ ] 3.5 实现签名 manifest、SHA-256、临时下载、原子激活和 last-known-good 基础
 - [ ] 3.6 支持在线源链和离线 runtime ZIP 导入的 integration seam

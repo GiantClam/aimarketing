@@ -64,12 +64,14 @@ pub fn ensure_runtime_before_window() -> Result<(), String> {
 fn runtime_ready(resource_roots: &[PathBuf], install_root: &Path) -> bool {
     let node = configured_runtime_path(install_root, "nodePath")
         .into_iter()
+        .flat_map(crate::resolve_windows_command_shim)
         .chain([install_root.join("runtime").join("node").join("node.exe"), install_root.join("node").join("node.exe")])
         .find(|path| path.is_file() && executable_works(path, &["--version"]))
         .or_else(|| system_executable("node"))
         .is_some();
     let opencode = configured_runtime_path(install_root, "opencodePath")
         .into_iter()
+        .flat_map(crate::resolve_windows_command_shim)
         .chain([install_root.join("runtime").join("opencode").join("opencode.exe"), install_root.join("opencode").join("opencode.exe")])
         .find(|path| path.is_file() && executable_works(path, &["--version"]))
         .or_else(|| system_executable("opencode"))
@@ -121,7 +123,7 @@ fn python_works(path: &Path) -> bool {
 fn system_executable(command: &str) -> Option<PathBuf> {
     let output = Command::new("where.exe").arg(command).creation_flags(CREATE_NO_WINDOW).output().ok()?;
     if !output.status.success() { return None; }
-    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).find(|path| path.is_file())
+    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).flat_map(crate::resolve_windows_command_shim).find(|path| path.is_file() && executable_works(path, &["--version"]))
 }
 
 pub fn show_startup_error(error: &str) {

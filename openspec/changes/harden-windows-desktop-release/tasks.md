@@ -4,6 +4,7 @@
 - [x] 1.2 在 Tauri WebView 创建前执行原生 bootstrap 状态机（`run()` 先获取单实例锁，再完成 WebView2、运行时组件和 SQLite migrations 门禁；任一失败均不创建 Tauri WebView）
 - [x] 1.3 复用通过 probe 的系统组件并记录 canonical absolute path（runtime probe 将 Node、OpenCode、Python、host、Skills、字体、LanceDB 和 embedding 路径写回 `config.json`；host 启动优先使用这些路径）
   - [x] 2026-08-13 native `runtime_probe` now prefers every persisted runtime path (not only OpenCode), canonicalizes the selected executable/directories, and atomically persists the selection before returning; the Rust regression proves a saved Node path is reused ahead of system fallback.
+  - [x] 2026-08-14 Windows `where.exe` command shims (`opencode`, `opencode.cmd`) are resolved to the dispatched `node_modules/opencode-ai/bin/opencode.exe` before persistence or `CreateProcess`; Rust regression covers the shim path.
 - [x] 1.4 对缺失/损坏组件自动调用 UTF-8 安装脚本（pre-window gate 失败时调用 `install-desktop-runtime.ps1`；manifest、配置和 Python probe 均按 UTF-8 读取/写入，并支持离线 ZIP）
 - [x] 1.5 安装结束后完整重复 probe，任一失败则阻止主界面（安装命令成功后再次执行 Node、OpenCode、真实 PPTX/Python、host、Skills、字体、LanceDB、embedding 和 migrations gate）
   - [x] 2026-08-13 pre-window `runtime_ready` now applies the same persisted-path-first rule as `runtime_probe` for every required component, so a valid configured runtime is reused before any system PATH fallback.
@@ -87,11 +88,12 @@
 
 - [ ] 5.1 在 Win10 22H2/Win11 x64 运行中文用户名、空格、长路径和 OneDrive 测试
 - [x] 5.2 运行 OpenCode/workflow-host 强杀、恢复和 Windows Job Object 测试
-  - [x] 2026-08-13 desktop fake OpenCode E2E covers crash/restart and retryable interruption; `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml` passes 27/27 including a Windows-only Job Object child-tree termination test.
+  - [x] 2026-08-14 desktop fake OpenCode E2E remains green; `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml` passes 29/29, including Windows command-shim resolution and Job Object child-tree termination.
 - [x] 5.3 执行日志 30 天/1GB 清理和诊断包脱敏测试
   - [x] 2026-08-13 Rust tests verify 30-day expiry, oldest-first 1GB retention, recursive API-key/token/password/authorization redaction, and a real PowerShell diagnostic ZIP extraction containing only `[REDACTED]` secrets. The same pass also fixed `Compress-Archive -LiteralPath 'staging\\*'` so diagnostics are actually produced.
 - [x] 5.4 执行主 ZIP、解压后、runtime 补齐后的组件级 size budget
   - [x] 2026-08-13 `scripts/verify-desktop-size-budget.ps1` reports compressed main normal/portable ZIPs, uncompressed extracted program contents, runtime ZIP size, and application/Node/OpenCode/Python/fonts/embedding/Skills ownership; configured budget overflow fails closed. Current normal/portable/runtime archives pass with 268,943,017 / 269,006,577 / 411,848,658 compressed bytes and 689,076,629 / 689,076,636 / 991,112,444 uncompressed bytes.
+  - [x] 2026-08-14 bundle boundaries, package contracts, size budget, and portable-copy verification all passed; normal/portable compressed sizes remain 268,943,017 / 269,006,577 bytes and runtime remains 411,848,658 bytes.
 - [ ] 5.5 执行 Authenticode、manifest 签名、依赖漏洞和许可证审计
   - [x] 2026-08-14 `desktop:release-audit` now completes fail-closed when the local PowerShell security module is unavailable: normal/portable/runtime archives pass license evidence, while Authenticode is explicitly `not_available` and manifests remain `development_unsigned`.
   - [x] 2026-08-13 `desktop:release-audit` records current evidence without suppressing failures: license audit passes (28/28 packages per archive), Authenticode is incomplete for the unsigned development EXE/DLL, manifests are `development_unsigned`, and the approved npm registry audit reports 3 critical, 32 high, 29 moderate and 3 low vulnerabilities. `-RequireAuthenticode`, `-RequireSignedManifest` and `-RequireDependencyAudit` fail closed for release CI.
