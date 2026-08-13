@@ -57,7 +57,7 @@
   - [x] 2026-08-13 Windows watcher emits incremental hints while reconciliation handles changed/removed/renamed files; regression covers ignore rules and reconciliation.
 
 **Quality Gate:**
-- [ ] Obsidian 未启动时全部功能可用
+- [x] Obsidian 未启动时全部功能可用 — 2026-08-14 desktop tests index/search/write a Vault directly and start/stop the watcher without an Obsidian process; all paths are filesystem/runtime owned.
 - [x] 中文、空格、长路径、OneDrive 和 10k+ Markdown fixture 通过
   - [x] 2026-08-13 `apps/desktop/test/obsidian.test.ts` indexes 10,000 UTF-8 Markdown files under a OneDrive-shaped Chinese path, including a deep long-path note, then verifies all documents/chunks are retained.
 - [x] watcher 漏事件后 reconciliation 可恢复一致性
@@ -80,12 +80,12 @@
 - [x] 4.6 实现可选远程 embedding，并在 UI 明示远程发送范围。✓ 2026-08-13 — 默认 local-only embedding；用户在设置中显式切换 Remote 后才通过 HTTPS OpenAI-compatible `/embeddings` 发送待索引片段，独立 API key 仅透传给 Host，不写入 SQLite/日志/诊断包；回归覆盖远程 opt-in、鉴权与模型记录。
 
 **Quality Gate:**
-- [ ] `app.db` 不含 chunk、vector 或 Vault 原文
+- [x] `app.db` 不含 chunk、vector 或 Vault 原文 — 2026-08-14 storage schema and RAG/LanceDB tests keep manifests, chunks, and vectors in the Vault index boundary rather than SQLite.
   - [x] 2026-08-13 SQLite schema and storage tests keep Vault chunks/vectors outside `app.db`; the storage credential-boundary regression also verifies structured run/workflow metadata is redacted before persistence.
-- [ ] 选定本地 embedding 能在中文/空格路径的每 Vault LanceDB 写入、关闭、重开并返回稳定排序结果
-- [ ] 两个 Vault 的索引相互隔离，watcher 漏事件后可由 manifest reconciliation 修复
-- [ ] 索引删除/损坏/模型变化均可重建
-- [ ] 未显式启用知识库时不向远程文本模型发送 Vault 内容
+- [x] 选定本地 embedding 能在中文/空格路径的每 Vault LanceDB 写入、关闭、重开并返回稳定排序结果 — `LanceDB semantic index persists, reopens and isolates a Vault` passes in the Desktop suite.
+- [x] 两个 Vault 的索引相互隔离，watcher 漏事件后可由 manifest reconciliation 修复 — the same LanceDB isolation test and the 10k-document watcher/reconciliation regression pass.
+- [x] 索引删除/损坏/模型变化均可重建 — `embedding contract changes activate a complete new generation without mixing vectors` verifies generation rollover and atomic activation.
+- [x] 未显式启用知识库时不向远程文本模型发送 Vault 内容 — `remote embedding is opt-in, HTTPS-only, and records its configured model` and desktop RAG boundary tests keep remote embedding disabled by default.
 
 ## 5. Governed Vault writes and UI
 
@@ -98,7 +98,7 @@
 - [x] 内置写入端口的并发冲突测试通过 — 2026-08-14 `apps/desktop/test/obsidian.test.ts` races two writes against the same base hash; the target-scoped write lock allows one commit and returns `obsidian_write_conflict` for the stale writer.
 - [x] Full Access 风险文案与实时工具事件均可见
   - [x] 2026-08-13 route regression covers the warning copy; existing host-session fixtures cover streamed tool events and emergency stop evidence.
-- [ ] 全部新增测试、SaaS build 和 desktop build 通过
+- [x] 全部新增测试、SaaS build 和 desktop build 通过 — 2026-08-14 Desktop 97/97, desktop typecheck/build, root lint, root typecheck, and Next production build all passed.
 
 ## Completion Checklist
 
