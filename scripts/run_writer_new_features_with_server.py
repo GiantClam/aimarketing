@@ -160,6 +160,13 @@ def main():
             {
                 "AIBERM_API_KEY": "e2e-fixture-key",
                 "WRITER_AIBERM_API_KEY": "e2e-fixture-key",
+                # Writer availability is now gated by the shared OpenCode
+                # runtime profile even when deterministic draft fixtures
+                # short-circuit the actual model call.
+                "AI_ENTRY_SAAS_OPENCODE_ENABLED": "true",
+                "AI_ENTRY_WRITER_OPENCODE_ENABLED": "true",
+                "RAILWAY_OPENCODE_RUNTIME_URL": "http://127.0.0.1:9",
+                "RAILWAY_OPENCODE_RUNTIME_TOKEN": "e2e-fixture-runtime-token",
                 "WRITER_E2E_FIXTURES": "true",
                 "WRITER_ENABLE_WEB_RESEARCH": "false",
                 "WRITER_REQUIRE_WEB_RESEARCH": "false",

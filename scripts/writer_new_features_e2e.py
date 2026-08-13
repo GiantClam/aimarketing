@@ -303,6 +303,12 @@ def wait_for_button_enabled(locator, timeout_ms: int = 10000):
 
 
 def wait_for_non_empty_last_assistant(page, timeout_ms: int = 60000):
+    pending_markers = {
+        "Generating the article draft...",
+        "正在生成文章草稿...",
+        "Generating the draft...",
+        "正在生成草稿...",
+    }
     deadline = time() + (timeout_ms / 1000)
     while time() < deadline:
         match = re.search(r"/dashboard/writer/(\d+)", page.url)
@@ -313,6 +319,11 @@ def wait_for_non_empty_last_assistant(page, timeout_ms: int = 60000):
                 history = (messages_payload.get("data") or {}).get("data") or []
                 for item in reversed(history):
                     answer = str(item.get("answer") or "").strip() if isinstance(item, dict) else ""
+                    status = str(item.get("status") or "").strip().lower() if isinstance(item, dict) else ""
+                    if answer in pending_markers or status in {"pending", "generating", "streaming"}:
+                        # Do not fall back to an older completed turn while
+                        # the newest assistant message is still in flight.
+                        break
                     if len(answer) >= 20:
                         return answer
         page.wait_for_timeout(1000)
@@ -709,8 +720,12 @@ def run_provider_missing(page):
         save_debug(page, "00-dashboard-provider-missing-skipped")
         return result
 
-    expect(availability.get("reason") == "aiberm_api_key_missing", f"unexpected unavailable reason: {availability}")
-    expect(page.locator('a[href="/dashboard/writer"]').count() == 0, "dashboard should hide writer quick link")
+    # The Writer surface now reports the shared LLM availability contract;
+    # the old AIBERM-specific reason is no longer emitted by the route.
+    expect(availability.get("reason") == "llm_api_key_missing", f"unexpected unavailable reason: {availability}")
+    # The dashboard home catalog intentionally keeps the Writer card visible;
+    # only the capability-gated sidebar entry should disappear.
+    expect(page.locator("aside").locator('a[href="/dashboard/writer"]').count() == 0, "dashboard sidebar should hide writer quick link")
     save_debug(page, "00-dashboard-provider-missing")
     return result
 
