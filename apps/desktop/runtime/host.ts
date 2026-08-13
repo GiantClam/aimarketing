@@ -44,12 +44,12 @@ function fail(command: HostCommand, code: string, message: string) { writeRpcRes
 
 function requestService(method: "knowledge.index" | "knowledge.search" | "knowledge.write", payload: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
   const requestId = randomUUID();
-  writeRpcServiceRequest(process.stdout, { version: 1, requestId, type: "service_request", method, payload });
   const response = new Promise<Record<string, unknown>>((resolve, reject) => {
     const timer = setTimeout(() => { serviceRequests.delete(requestId); reject(new Error("service_request_timeout")); }, 120_000);
     serviceRequests.set(requestId, { resolve, reject, timer });
     signal?.addEventListener("abort", () => { clearTimeout(timer); serviceRequests.delete(requestId); reject(new Error("service_request_cancelled")); }, { once: true });
   });
+  writeRpcServiceRequest(process.stdout, { version: 1, requestId, type: "service_request", method, payload });
   return response;
 }
 
