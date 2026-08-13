@@ -1349,7 +1349,7 @@ export function WriterWorkspace({
   const [assetProgressNow, setAssetProgressNow] = useState(() => Date.now())
   const [copyFeedback, setCopyFeedback] = useState<"rich" | "markdown" | null>(null)
   const [conversationStatus, setConversationStatus] = useState<
-    "drafting" | "text_ready" | "image_generating" | "ready" | "failed"
+    "drafting" | "text_ready" | "image_generating" | "ready" | "partial" | "failed"
   >("drafting")
   const [activeRevision, setActiveRevision] = useState(0)
 
@@ -1995,6 +1995,7 @@ export function WriterWorkspace({
                 events?: unknown
                 assets?: WriterAsset[]
                 ok?: boolean
+                status?: "ready" | "partial" | "failed"
                 error?: string
                 asset_task_id?: number | string | null
                 asset_markdown?: string | null
@@ -2020,6 +2021,11 @@ export function WriterWorkspace({
                 : []
               const successCount = taskAssets.filter((asset) => asset.status === "ready" && Boolean(asset.url)).length
               const taskSucceeded = status === "success" && Boolean(payload?.data?.result?.ok) && successCount > 0
+              const taskAssetStatus = payload?.data?.result?.status === "partial" || taskAssets.some((asset) => asset.status === "failed")
+                ? "partial"
+                : taskSucceeded
+                  ? "ready"
+                  : "failed"
               const taskPlatform = normalizeWriterPlatform(platform)
               const taskMode = normalizeWriterMode(taskPlatform, mode)
               const sourceMarkdown = pendingTask.prompt || ""
@@ -2027,9 +2033,9 @@ export function WriterWorkspace({
               setAssets(taskAssets)
               setAssetsLoading(false)
               setAssetsLoadingStartedAt(null)
-              setAssetsError(taskSucceeded ? null : payload?.data?.result?.error || writerCopy.imageGenerationFailed)
+              setAssetsError(taskSucceeded ? (taskAssetStatus === "partial" ? writerCopy.imageGenerationPartial : null) : payload?.data?.result?.error || writerCopy.imageGenerationFailed)
               setImagesRequested(true)
-              setConversationStatus(taskSucceeded ? "ready" : "failed")
+              setConversationStatus(taskAssetStatus)
               setIsLoading(false)
               writerRequestInFlightRef.current = false
               if (taskSucceeded && resolvedMarkdown && resolvedMarkdown !== sourceMarkdown) {
@@ -2049,7 +2055,7 @@ export function WriterWorkspace({
                     body: JSON.stringify({
                       conversation_id: targetConversationId,
                       content: resolvedMarkdown,
-                      assetStatus: "ready",
+                      assetStatus: taskAssetStatus,
                       imagesRequested: true,
                       ...(typeof pendingTask.expectedRevision === "number" ? { expectedRevision: pendingTask.expectedRevision } : {}),
                     }),
@@ -2133,6 +2139,7 @@ export function WriterWorkspace({
     writerCopy.assistantName,
     writerCopy.generatingDraft,
     writerCopy.imageGenerationFailed,
+    writerCopy.imageGenerationPartial,
   ])
 
   useEffect(() => {
@@ -2760,7 +2767,7 @@ export function WriterWorkspace({
 
       if (target.isLatest) {
         setAssets(nextAssets)
-        setConversationStatus("ready")
+        setConversationStatus(nextAssets.some((asset) => asset.status === "failed") ? "partial" : "ready")
       } else {
         setVersionAssetState((current) => ({
           ...current,
@@ -2793,7 +2800,7 @@ export function WriterWorkspace({
             patchPayload.message_id = assistantDbMessageId
           }
           if (target.isLatest) {
-            patchPayload.status = "ready"
+            patchPayload.status = nextAssets.some((asset) => asset.status === "failed") ? "partial" : "ready"
             patchPayload.imagesRequested = true
           }
 
@@ -2879,7 +2886,9 @@ export function WriterWorkspace({
         ? writerCopy.restoringConversation
         : conversationStatus === "image_generating"
           ? writerCopy.imageGenerationMerging
-          : conversationStatus === "ready"
+          : conversationStatus === "partial"
+            ? writerCopy.imageGenerationPartial
+            : conversationStatus === "ready"
             ? "Draft ready to refine and publish."
             : conversationStatus === "failed"
               ? "Generation failed. Update the prompt and try again."

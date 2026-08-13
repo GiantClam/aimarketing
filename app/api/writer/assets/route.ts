@@ -16,7 +16,7 @@ import {
 import { buildImageAssistantProviderPlan } from "@/lib/image-assistant/aiberm"
 import { executeImageProviderPlan, type ImageGenerationProvider } from "@/lib/image-generation/provider-orchestration"
 import { withTaskTimeout } from "@/lib/task-timeout"
-import { buildPendingWriterAssets, ensureWriterAssetOrder, markWriterAssetsFailed } from "@/lib/writer/assets"
+import { buildPendingWriterAssets, ensureWriterAssetOrder, markWriterAssetsFailed, summarizeWriterAssetCompletion } from "@/lib/writer/assets"
 import { normalizeWriterMode, normalizeWriterPlatform, WRITER_PLATFORM_CONFIG } from "@/lib/writer/config"
 import {
   ensureWriterPromptDiversity,
@@ -349,7 +349,7 @@ function resolveWriterImageProvider(
 async function updateWriterAssetConversationStatus(input: {
   userId: number
   conversationId: string | null
-  status: "image_generating" | "ready" | "failed"
+  status: "image_generating" | "ready" | "partial" | "failed"
 }) {
   if (!input.conversationId) {
     return
@@ -797,18 +797,20 @@ export async function POST(request: NextRequest) {
           })
 
           const orderedAssets = ensureWriterAssetOrder(generatedAssets, platform, mode)
-          const successCount = orderedAssets.filter((asset) => asset.status === "ready" && asset.url).length
+          const completion = summarizeWriterAssetCompletion(orderedAssets)
+          const successCount = completion.readyCount
           const resolvedProvider = resolveWriterImageProvider(orderedAssets)
           const donePayload = {
             provider: resolvedProvider,
             model: getWriterImageModelForProvider(resolvedProvider),
             assets: orderedAssets,
+            status: completion.status,
           }
 
           await updateWriterAssetConversationStatus({
             userId: auth.user.id,
             conversationId,
-            status: successCount > 0 ? "ready" : "failed",
+            status: completion.status,
           })
 
           if (successCount > 0) {
@@ -840,8 +842,8 @@ export async function POST(request: NextRequest) {
 
           emit({
             event: "done",
-            ok: successCount > 0,
-            ...(successCount > 0 ? {} : { error: "writer_assets_failed" }),
+            ok: completion.ok,
+            ...(completion.ok ? {} : { error: "writer_assets_failed" }),
             data: donePayload,
           })
         } catch (error) {
@@ -894,7 +896,8 @@ export async function POST(request: NextRequest) {
       providerPlan: baseProviderPlan,
     })
     const orderedAssets = ensureWriterAssetOrder(generatedAssets, platform, mode)
-    const successCount = orderedAssets.filter((asset) => asset.status === "ready" && asset.url).length
+    const completion = summarizeWriterAssetCompletion(orderedAssets)
+    const successCount = completion.readyCount
     const resolvedProvider = resolveWriterImageProvider(orderedAssets)
 
     if (successCount === 0) {
@@ -940,13 +943,14 @@ export async function POST(request: NextRequest) {
       })
     })
 
-    await updateWriterAssetConversationStatus({ userId: auth.user.id, conversationId, status: "ready" })
+    await updateWriterAssetConversationStatus({ userId: auth.user.id, conversationId, status: completion.status })
 
     return NextResponse.json({
       data: {
         provider: resolvedProvider,
         model: getWriterImageModelForProvider(resolvedProvider),
         assets: orderedAssets,
+        status: completion.status,
       },
     })
   } catch (error: any) {

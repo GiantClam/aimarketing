@@ -47,9 +47,10 @@ import {
 } from "@/lib/writer/session-store"
 import type { WriterConversationSummary } from "@/lib/writer/types"
 
-function getConversationStatusLabel(status: WriterConversationSummary["status"], readySuffix: string, generatingSuffix: string) {
+function getConversationStatusLabel(status: WriterConversationSummary["status"], readySuffix: string, generatingSuffix: string, partialSuffix: string) {
   if (status === "ready") return readySuffix
   if (status === "image_generating") return generatingSuffix
+  if (status === "partial") return partialSuffix
   return ""
 }
 
@@ -424,7 +425,7 @@ export function WriterSidebarItem({
                             active={isActive}
                             leading={<MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-60" />}
                             title={conversation.name || messages.sidebar.newArticle}
-                            subtitle={`${contentTypeLabel ? `${contentTypeLabel} / ` : ""}${routedPlatform}${mode === "thread" ? messages.sidebar.threadSuffix : ""}${getConversationStatusLabel(conversation.status, messages.sidebar.readySuffix, messages.sidebar.generatingImagesSuffix)}`}
+                            subtitle={`${contentTypeLabel ? `${contentTypeLabel} / ` : ""}${routedPlatform}${mode === "thread" ? messages.sidebar.threadSuffix : ""}${getConversationStatusLabel(conversation.status, messages.sidebar.readySuffix, messages.sidebar.generatingImagesSuffix, messages.sidebar.partialImagesSuffix)}`}
                             actions={
                               <>
                               <button

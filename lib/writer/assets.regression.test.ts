@@ -7,6 +7,7 @@ import {
   extractWriterAssetsFromMarkdown,
   partitionWriterAssetsForRecovery,
   resolveWriterAssetMarkdown,
+  summarizeWriterAssetCompletion,
   type WriterAsset,
 } from "./assets"
 
@@ -317,4 +318,22 @@ test("extra generated assets are not appended to article tail when no slot exist
   assert.match(resolved, /https:\/\/cdn\.example\.com\/cover\.png/)
   assert.doesNotMatch(resolved, /writer-asset-slot:start:inline-1/)
   assert.doesNotMatch(resolved, /https:\/\/cdn\.example\.com\/inline-1\.png/)
+})
+
+test("asset completion reports partial success without hiding ready image URLs", () => {
+  const completion = summarizeWriterAssetCompletion([
+    { status: "ready", url: "https://cdn.example.com/cover.png" },
+    { status: "failed", url: "" },
+  ])
+
+  assert.deepEqual(completion, { status: "partial", readyCount: 1, failedCount: 1, ok: true })
+})
+
+test("asset completion fails only when no image produced a stored URL", () => {
+  const completion = summarizeWriterAssetCompletion([
+    { status: "failed", url: "" },
+    { status: "loading", url: "" },
+  ])
+
+  assert.deepEqual(completion, { status: "failed", readyCount: 0, failedCount: 1, ok: false })
 })

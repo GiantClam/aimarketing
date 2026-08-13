@@ -17,6 +17,15 @@ export type WriterAsset = {
   contentType?: string
 }
 
+export type WriterAssetCompletionStatus = "ready" | "partial" | "failed"
+
+export function summarizeWriterAssetCompletion(assets: readonly Pick<WriterAsset, "status" | "url">[]) {
+  const readyCount = assets.filter((asset) => asset.status === "ready" && Boolean(asset.url)).length
+  const failedCount = assets.filter((asset) => asset.status === "failed").length
+  const status: WriterAssetCompletionStatus = readyCount === 0 ? "failed" : failedCount > 0 ? "partial" : "ready"
+  return { status, readyCount, failedCount, ok: readyCount > 0 }
+}
+
 type WriterAssetRole = "cover" | "inline"
 
 type WriterAssetBlueprint = {

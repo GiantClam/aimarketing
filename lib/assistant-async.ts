@@ -918,8 +918,8 @@ async function handleWriterAssets(taskId: number, userId: number, payload: Write
   await progressWrite
 
   await persistProgressEvent({
-    type: result.ok ? "assets_ready" : "assets_failed",
-    label: result.ok ? "Writer images ready" : "Writer image generation failed",
+    type: result.status === "partial" ? "assets_partial" : result.ok ? "assets_ready" : "assets_failed",
+    label: result.status === "partial" ? "Writer images partially ready" : result.ok ? "Writer images ready" : "Writer image generation failed",
     detail: result.error,
     status: result.ok ? "completed" : "failed",
     at: Date.now(),
@@ -933,6 +933,7 @@ async function handleWriterAssets(taskId: number, userId: number, payload: Write
       provider: result.provider,
       model: result.model,
       ok: result.ok,
+      status: result.status,
       error: result.error,
       expected_revision: payload.expectedRevision ?? null,
       events: progressEvents,

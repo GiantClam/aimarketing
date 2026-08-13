@@ -1,6 +1,6 @@
 import type { WriterContentType, WriterLanguage, WriterMode, WriterPlatform } from "@/lib/writer/config"
 
-export type WriterConversationStatus = "drafting" | "text_ready" | "image_generating" | "ready" | "failed"
+export type WriterConversationStatus = "drafting" | "text_ready" | "image_generating" | "ready" | "partial" | "failed"
 export type WriterRetrievalStrategy =
   | "rewrite_only"
   | "no_retrieval"
