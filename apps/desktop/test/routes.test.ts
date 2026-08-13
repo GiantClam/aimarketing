@@ -40,6 +40,15 @@ test("configured provider models populate selectors and take priority over a sta
   assert.equal(preferredConfiguredModel({ ...provider, model: "provider/reasoning" }), "provider/reasoning");
 });
 
+test("desktop workflow and media entry points expose the configured model selector", () => {
+  const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  const selector = /<ModelControls locale=\{locale\} model=\{model\} models=\{models\} reasoningEffort=\{reasoningEffort\} skillId=\{skillId\} showSkill=\{false\}/g;
+  assert.ok((appSource.match(selector) ?? []).length >= 3);
+  assert.match(appSource, /<DesktopWorkflowWorkspace[\s\S]*?model=\{config\.provider\.model\} models=\{config\.provider\.models\}[\s\S]*?onModelChange=\{updateModel\}/);
+  assert.match(appSource, /<DesktopMediaWorkspace[\s\S]*?model=\{config\.provider\.model\} models=\{config\.provider\.models\}[\s\S]*?onModelChange=\{updateModel\}/);
+  assert.match(appSource, /currentWorkflowDefinition\(\)[\s\S]*?model: config\.provider\.model/);
+});
+
 test("desktop home keeps the cloud entry grouping and excludes SaaS-only entries", () => {
   assert.deepEqual(WORKBENCH_HOME_GROUPS.map((group) => group.label), ["AI TEAM", "OFFICE TOOLS", "WORKFLOWS", "CONTENT CREATION", "MORE"]);
   const homePaths = WORKBENCH_HOME_GROUPS.flatMap((group) => group.entries.map((entry) => entry.path));
