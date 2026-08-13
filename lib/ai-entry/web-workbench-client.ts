@@ -117,7 +117,7 @@ export function createWebWorkbenchClient(options: WebWorkbenchClientOptions): Wo
       },
       async create(title = "New chat") {
         const payload = await jsonOrError(await fetchImpl(`${apiBase}/conversations`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ title }) }))
-        const value = (payload.data ?? payload) as Record<string, unknown>
+        const value = (payload?.data ?? payload ?? {}) as Record<string, unknown>
         return { id: String(value.id), title: String(value.name ?? title), updatedAt: toIso(value.updated_at), messageCount: 0 }
       },
       async messages(conversationId) {

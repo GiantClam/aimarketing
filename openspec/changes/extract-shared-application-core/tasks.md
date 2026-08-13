@@ -66,6 +66,7 @@
 - [x] 5.3 Define `WorkbenchClient`, streaming subscription, file action, and `NavigationAdapter` interfaces.
 - [ ] 5.4 Convert shared AI Entry message rendering and workflow UI slices to injected clients and navigation.
 - [x] 5.4a Desktop Workbench navigation and chat/writer artifact actions now use the injected `WorkbenchClient`, preserving artifact MIME metadata through the Tauri adapter.
+- [x] 5.4b SaaS AI Entry route replacement now accepts an injected `NavigationAdapter`; the Next router is retained only as its host-composition fallback.
 - [x] 5.5 Implement the Web adapter with the current `/api/*` contracts and Next navigation. ✓ 2026-08-13 — SaaS composition now adapts the existing `/api/ai` conversation/message/chat SSE contracts behind `WorkbenchClient`, with injected navigation and browser-request cancellation.
 - [x] 5.6 Verify shared UI packages contain no `next/*` imports or hard-coded `/api/` calls. ✓ 2026-08-13 — shared-boundary validation now rejects hard-coded host `/api/*` calls in `workbench-client`/`workbench-ui` while allowing legitimate third-party Provider endpoints.
 - [x] 5.6a `workflow-core` definition migration/hash contract is browser-safe; desktop Vite production build no longer pulls Node-only `crypto`.

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import type { NavigationAdapter } from "@aimarketing/workbench-client"
 import {
   ArrowRight,
   Check,
@@ -1390,6 +1391,7 @@ export function AiEntryWorkspace({
   embeddedLinkActions = [],
   embeddedContextChips = [],
   embeddedGuideMessage = null,
+  navigation,
   onConversationIdChange,
 }: {
   initialConversationId: string | null
@@ -1401,12 +1403,21 @@ export function AiEntryWorkspace({
   embeddedLinkActions?: AiEntryWorkspaceLinkAction[]
   embeddedContextChips?: string[]
   embeddedGuideMessage?: AiEntryWorkspaceGuideMessage | null
+  navigation?: NavigationAdapter
   onConversationIdChange?: (conversationId: string | null) => void
 }) {
   const { locale } = useI18n()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const workspaceNavigation = useMemo<NavigationAdapter>(
+    () => navigation ?? {
+      go: (href) => router.push(href),
+      replace: (href) => router.replace(href),
+      current: () => pathname,
+    },
+    [navigation, pathname, router],
+  )
   const isZh = locale === "zh"
   const displayLocale = isZh ? "zh" : "en"
   const search = searchParams.toString()
@@ -1822,8 +1833,8 @@ export function AiEntryWorkspace({
     const params = new URLSearchParams(search)
     params.delete("entry")
     const nextSearch = params.toString()
-    router.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname)
-  }, [embedded, isPptAssistantRoute, pathname, routeEntryMode, router, search])
+    workspaceNavigation.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname)
+  }, [embedded, isPptAssistantRoute, pathname, routeEntryMode, search, workspaceNavigation])
 
   useEffect(() => {
     if (shouldLockModel || modelsLoading || models.length === 0 || !selectedModelId) return
@@ -1971,9 +1982,9 @@ export function AiEntryWorkspace({
     }
     const nextSearch = params.toString()
     if (pathname !== targetPath || nextSearch !== search) {
-      router.replace(nextSearch ? `${targetPath}?${nextSearch}` : targetPath)
+      workspaceNavigation.replace(nextSearch ? `${targetPath}?${nextSearch}` : targetPath)
     }
-  }, [conversationId, embedded, initialConversationId, pathname, router, search])
+  }, [conversationId, embedded, initialConversationId, pathname, search, workspaceNavigation])
 
   useEffect(() => {
     if (embedded) return
@@ -2021,16 +2032,16 @@ export function AiEntryWorkspace({
       params.delete("agent")
     }
     const nextSearch = params.toString()
-    if (nextSearch !== search) router.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname)
+    if (nextSearch !== search) workspaceNavigation.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname)
   }, [
     agentQueryReady,
     embedded,
     isAgentSelectionExplicit,
     pathname,
-    router,
     search,
     selectedAgentId,
     shouldLockModel,
+    workspaceNavigation,
   ])
 
   useEffect(() => {

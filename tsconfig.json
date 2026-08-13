@@ -26,6 +26,7 @@
       "@aimarketing/runtime-contracts": ["./packages/runtime-contracts/src/index.ts"],
       "@aimarketing/runtime-contracts/*": ["./packages/runtime-contracts/src/*"],
       "@aimarketing/media-runtime": ["./packages/media-runtime/src/index.ts"],
+      "@aimarketing/workbench-client": ["./packages/workbench-client/src/index.ts"],
       "@aimarketing/workbench-ui": ["./packages/workbench-ui/src/index.ts"]
     },
     "incremental": true,

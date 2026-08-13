@@ -55,3 +55,14 @@ test("web WorkbenchClient turns an aborted browser request into a cancelled run"
   })
   assert.equal(status, "cancelled")
 })
+
+test("web WorkbenchClient tolerates an empty successful conversation create response", async () => {
+  const client = createWebWorkbenchClient({
+    navigation: { go: () => undefined, replace: () => undefined, current: () => "/" },
+    fetch: async () => jsonResponse({}),
+  })
+
+  const created = await client.conversations.create("Fallback title")
+  assert.equal(created.title, "Fallback title")
+  assert.equal(created.id, "undefined")
+})
