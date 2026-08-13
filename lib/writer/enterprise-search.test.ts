@@ -35,6 +35,7 @@ test("writer enterprise search binds retrieval to the authenticated enterprise",
   assert.equal(calls[0]?.enterpriseId, 42)
   assert.notEqual(calls[0]?.enterpriseId, 999)
   assert.deepEqual(result?.datasetsUsed, [{ datasetId: "ds-1", datasetName: "Product", scope: "product" }])
+  assert.equal(result?.source, "dify")
   assert.equal(result?.snippets[0]?.content, "product supports workflow automation.")
   assert.equal(JSON.stringify(result).includes("secret-do-not-return"), false)
 })

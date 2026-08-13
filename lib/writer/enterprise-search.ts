@@ -38,7 +38,7 @@ function sanitizeText(value: string) {
 
 function sanitizeContext(context: EnterpriseKnowledgeContext): EnterpriseKnowledgeContext {
   return {
-    source: "dify",
+    source: context.source,
     datasetsUsed: context.datasetsUsed.slice(0, MAX_SNIPPETS).map((dataset) => ({
       datasetId: sanitizeText(dataset.datasetId),
       datasetName: sanitizeText(dataset.datasetName),
