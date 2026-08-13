@@ -1,10 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertRealProviderConfig, hasExpectedSmokeResponse, REAL_PROVIDER_SMOKE_SCOPE } from "./real-provider-config.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const configPath = resolve(process.env.AIMARKETING_REAL_PROVIDER_CONFIG ?? resolve(repoRoot, "apps/desktop/real-providers.test.local.json"));
-const config = JSON.parse(await readFile(configPath, "utf8"));
+const config = assertRealProviderConfig(JSON.parse(await readFile(configPath, "utf8")));
 
 function endpoint(baseUrl, path) {
   return `${String(baseUrl).replace(/\/+$/u, "")}/${String(path).replace(/^\/+/, "")}`;
@@ -61,9 +62,10 @@ const sanitized = results.map((result) => ({
   label: result.label,
   ...(typeof result.status === "number" ? { status: result.status } : {}),
   ok: result.ok,
+  schemaOk: result.ok === true && hasExpectedSmokeResponse(result.label, result.response),
   ...(typeof result.attempt === "number" ? { attempts: result.attempt } : {}),
   ...(result.response && typeof result.response === "object" ? { responseKeys: Object.keys(result.response) } : {}),
   ...(result.error ? { error: result.error } : {}),
 }));
-console.log(JSON.stringify({ configFile: configPath, results: sanitized }, null, 2));
-if (results.some((result) => result.ok !== true)) process.exitCode = 1;
+console.log(JSON.stringify({ configFile: configPath, scope: REAL_PROVIDER_SMOKE_SCOPE, results: sanitized }, null, 2));
+if (results.some((result) => result.ok !== true || !hasExpectedSmokeResponse(result.label, result.response))) process.exitCode = 1;
