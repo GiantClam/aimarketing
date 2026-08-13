@@ -127,6 +127,36 @@ test("runtime activation restores last-known-good when staged activation fails",
   assert.match(source, /\$activated = \$false/u);
   assert.match(source, /Move-Item -LiteralPath \$backupRoot -Destination \$installRootResolved/u);
   assert.match(source, /Activate-StagedRuntime\s*$/mu);
+  if (process.platform !== "win32") return;
+  const functionStart = source.indexOf("function Activate-StagedRuntime() ");
+  const functionEnd = source.indexOf("\ntry {", functionStart);
+  assert.ok(functionStart >= 0 && functionEnd > functionStart);
+  const root = await mkdtemp(join(tmpdir(), "aimarketing-runtime-rollback-"));
+  const installRoot = join(root, "install");
+  const stageRoot = join(root, "stage");
+  const quote = (value) => `'${String(value).replaceAll("'", "''")}'`;
+  await mkdir(join(installRoot, "runtime"), { recursive: true });
+  await mkdir(join(stageRoot, "runtime"), { recursive: true });
+  await writeFile(join(installRoot, "runtime", "sentinel.txt"), "known-good", "utf8");
+  await writeFile(join(stageRoot, "runtime", "sentinel.txt"), "candidate", "utf8");
+  const functionSource = source.slice(functionStart, functionEnd);
+  const command = [
+    "$ErrorActionPreference='Stop'",
+    `$installRootResolved=${quote(installRoot)}`,
+    `$stageRoot=${quote(stageRoot)}`,
+    "function Move-Item { param([string]$LiteralPath,[string]$Destination,[switch]$Force,[switch]$Recurse); if ($Destination -eq $installRootResolved) { throw 'activation_fixture_failure' }; Microsoft.PowerShell.Management\\Move-Item -LiteralPath $LiteralPath -Destination $Destination -Force -Recurse }",
+    functionSource,
+    "try { Activate-StagedRuntime } catch { Write-Output 'activation-failed' }",
+  ].join("\n");
+  try {
+    const result = await execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], { windowsHide: true });
+    assert.match(result.stdout, /activation-failed/u);
+    assert.equal(await readFile(join(installRoot, "runtime", "sentinel.txt"), "utf8"), "known-good");
+    assert.equal(await readFile(join(stageRoot, "runtime", "sentinel.txt"), "utf8"), "candidate");
+    await assert.rejects(readFile(join(root, "install.last-known-good", "runtime", "sentinel.txt")), /ENOENT/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("installer validates the signed-manifest shape before touching the install root", async () => {

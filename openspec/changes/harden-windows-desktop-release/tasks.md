@@ -27,6 +27,7 @@
   - [x] 2026-08-13 `runtime-manifest-crypto.mjs` signs canonical manifest content with an operator-supplied offline Ed25519 private-key path; staging signs only when `AIMARKETING_RUNTIME_SIGNING_KEY` is explicitly provided, while the installer embeds the trusted public key and verifies required signatures before download, extraction, or install-root replacement. Crypto, CLI, and Windows PowerShell tamper tests pass; unsigned development manifests remain explicitly non-required.
 - [x] 2.5 实现 last-known-good 回退和“可用不主动升级”策略
   - [x] 2026-08-13 installer stages and verifies a candidate before swapping the install root, preserves `<root>.last-known-good`, and only runs from explicit bootstrap/repair flows rather than auto-updating a healthy runtime.
+  - [x] 2026-08-14 PowerShell activation fixture forces staged activation to fail after moving the existing runtime; the installer restores the known-good sentinel and leaves the candidate staged for cleanup.
 - [x] 2.6 对每个 runtime 组件完成再分发许可审计
   - [x] 2026-08-13 `desktop:release-audit` scans the normal, portable and standalone runtime ZIPs; all 28 bundled npm package roots in each archive have SPDX/license metadata or a colocated license/notice file, with zero missing evidence.
 
