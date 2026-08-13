@@ -1,15 +1,22 @@
 use serde::Serialize;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
-use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::Mutex;
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::os::windows::process::CommandExt;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-#[derive(Default)]
-pub struct HostState { process: Mutex<Option<HostProcess>> }
+pub struct HostState {
+    process: Arc<Mutex<Option<HostProcess>>>,
+    knowledge: Arc<Mutex<Option<KnowledgeProcess>>>,
+}
 
-struct HostProcess { child: Child, stdin: ChildStdin, job: Option<crate::supervisor::JobObject> }
+impl Default for HostState {
+    fn default() -> Self { Self { process: Arc::new(Mutex::new(None)), knowledge: Arc::new(Mutex::new(None)) } }
+}
+
+struct HostProcess { child: Child, stdin: Arc<Mutex<ChildStdin>>, job: Option<crate::supervisor::JobObject> }
+struct KnowledgeProcess { child: Child, stdin: ChildStdin, stdout: BufReader<ChildStdout>, job: Option<crate::supervisor::JobObject> }
 
 #[derive(Clone, Debug, Serialize)]
 struct HostEvent { raw: String }
@@ -33,6 +40,36 @@ fn parse_response_frame(raw: &[u8]) -> Result<serde_json::Value, &'static str> {
         return Err("runtime_frame_invalid_response");
     }
     Ok(value)
+}
+
+fn parse_host_frame(raw: &[u8]) -> Result<serde_json::Value, &'static str> {
+    let separator = raw.iter().position(|byte| *byte == b':').ok_or("runtime_frame_invalid_prefix")?;
+    let (declared, payload) = raw.split_at(separator);
+    if declared.is_empty() || !declared.iter().all(u8::is_ascii_digit) { return Err("runtime_frame_invalid_prefix"); }
+    let expected = std::str::from_utf8(declared).ok().and_then(|value| value.parse::<usize>().ok()).ok_or("runtime_frame_invalid_prefix")?;
+    if expected > MAX_RUNTIME_MESSAGE_BYTES { return Err("runtime_message_too_large"); }
+    let payload = &payload[1..];
+    if payload.len() != expected { return Err("runtime_frame_length_mismatch"); }
+    let payload = std::str::from_utf8(payload).map_err(|_| "runtime_frame_invalid_utf8")?;
+    let value = serde_json::from_str::<serde_json::Value>(payload).map_err(|_| "runtime_frame_invalid_json")?;
+    if value.get("version").and_then(serde_json::Value::as_u64) != Some(1)
+        || value.get("requestId").and_then(serde_json::Value::as_str).is_none() {
+        return Err("runtime_frame_invalid_request");
+    }
+    if value.get("type").and_then(serde_json::Value::as_str) == Some("service_request") {
+        let method = value.get("method").and_then(serde_json::Value::as_str).ok_or("runtime_frame_invalid_service_request")?;
+        if !matches!(method, "knowledge.index" | "knowledge.search" | "knowledge.write") { return Err("runtime_frame_invalid_service_method"); }
+        return Ok(value);
+    }
+    if value.get("ok").and_then(serde_json::Value::as_bool).is_none() { return Err("runtime_frame_invalid_response"); }
+    Ok(value)
+}
+
+fn encode_frame(value: &serde_json::Value) -> Result<String, String> {
+    let body = serde_json::to_string(value).map_err(|error| error.to_string())?;
+    let bytes = body.as_bytes().len();
+    if bytes > MAX_RUNTIME_MESSAGE_BYTES { return Err("runtime_message_too_large".to_string()); }
+    Ok(format!("{bytes}:{body}\n"))
 }
 
 fn discard_until_newline(reader: &mut impl BufRead) -> io::Result<()> {
@@ -82,6 +119,18 @@ fn host_script(app: &AppHandle) -> Result<PathBuf, String> {
     let development = std::env::current_dir().map_err(|error| error.to_string())?.join("apps").join("desktop").join("dist-runtime").join("host.mjs");
     if development.is_file() { return std::fs::canonicalize(development).map_err(|error| error.to_string()); }
     Err(format!("workflow_host_bundle_missing: {}", packaged.display()))
+}
+
+fn knowledge_script(app: &AppHandle) -> Result<PathBuf, String> {
+    if let Some(path) = configured_runtime_path(app, "knowledgePath").filter(|path| path.is_file()) { return Ok(path); }
+    let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
+    let candidates = [
+        resource.join("dist-runtime").join("knowledge.mjs"),
+        resource.join("_up_").join("dist-runtime").join("knowledge.mjs"),
+        resource.join("knowledge.mjs"),
+        std::env::current_dir().map_err(|error| error.to_string())?.join("apps").join("desktop").join("dist-runtime").join("knowledge.mjs"),
+    ];
+    candidates.into_iter().find(|path| path.is_file()).and_then(|path| std::fs::canonicalize(path).ok()).ok_or_else(|| "knowledge_service_bundle_missing".to_string())
 }
 
 fn node_executable(app: &AppHandle) -> Result<String, String> {
@@ -161,6 +210,70 @@ fn lancedb_runtime_directory(app: &AppHandle) -> Result<Option<String>, String> 
     Ok(candidates.into_iter().find(|path| path.join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").is_file()).and_then(|path| std::fs::canonicalize(path).ok()).map(|path| path.to_string_lossy().into_owned()))
 }
 
+fn service_response(request_id: &str, result: Result<serde_json::Value, String>) -> serde_json::Value {
+    match result {
+        Ok(data) => serde_json::json!({ "version": 1, "requestId": request_id, "type": "service_response", "ok": true, "data": data }),
+        Err(message) => serde_json::json!({ "version": 1, "requestId": request_id, "type": "service_response", "ok": false, "error": { "code": "knowledge_service_failed", "message": message, "retryable": true } }),
+    }
+}
+
+fn ensure_knowledge_process(app: &AppHandle, state: &Arc<Mutex<Option<KnowledgeProcess>>>) -> Result<(), String> {
+    let mut guard = state.lock().map_err(|_| "knowledge_state_poisoned".to_string())?;
+    if let Some(process) = guard.as_mut() {
+        if process.child.try_wait().map_err(|error| error.to_string())?.is_none() { return Ok(()); }
+        *guard = None;
+    }
+    let script = knowledge_script(app)?;
+    let mut child = Command::new(node_executable(app)?)
+        .arg(script)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .creation_flags(if cfg!(windows) { 0x08000000 } else { 0 })
+        .spawn()
+        .map_err(|error| format!("knowledge_service_spawn_failed: {error}"))?;
+    let stdin = child.stdin.take().ok_or_else(|| "knowledge_service_stdin_missing".to_string())?;
+    let stdout = child.stdout.take().ok_or_else(|| "knowledge_service_stdout_missing".to_string())?;
+    let job = match crate::supervisor::JobObject::new() {
+        Ok(job) => {
+            if let Err(error) = job.assign(&child) {
+                let mut child = child;
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("knowledge_service_job_assign_failed: {error}"));
+            }
+            Some(job)
+        }
+        Err(error) => {
+            let mut child = child;
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("knowledge_service_job_create_failed: {error}"));
+        }
+    };
+    *guard = Some(KnowledgeProcess { child, stdin, stdout: BufReader::new(stdout), job });
+    Ok(())
+}
+
+fn dispatch_service_request(app: &AppHandle, state: &Arc<Mutex<Option<KnowledgeProcess>>>, request: &serde_json::Value) -> serde_json::Value {
+    let request_id = request.get("requestId").and_then(serde_json::Value::as_str).unwrap_or("unknown");
+    let result = (|| {
+        ensure_knowledge_process(app, state)?;
+        let mut guard = state.lock().map_err(|_| "knowledge_state_poisoned".to_string())?;
+        let process = guard.as_mut().ok_or_else(|| "knowledge_service_not_running".to_string())?;
+        let frame = encode_frame(request)?;
+        process.stdin.write_all(frame.as_bytes()).and_then(|_| process.stdin.flush()).map_err(|error| format!("knowledge_service_write_failed: {error}"))?;
+        let line = read_bounded_line(&mut process.stdout).map_err(|error| format!("knowledge_service_read_failed: {error}"))?.ok_or_else(|| "knowledge_service_eof".to_string())?;
+        let response = parse_response_frame(&line).map_err(|error| error.to_string())?;
+        if response.get("ok").and_then(serde_json::Value::as_bool) == Some(true) {
+            Ok(response.get("data").cloned().unwrap_or_else(|| serde_json::json!({})))
+        } else {
+            Err(response.get("error").and_then(|error| error.get("message")).and_then(serde_json::Value::as_str).unwrap_or("knowledge_service_failed").to_string())
+        }
+    })();
+    service_response(request_id, result)
+}
+
 #[tauri::command]
 pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), String> {
     let mut guard = state.process.lock().map_err(|_| "host_state_poisoned".to_string())?;
@@ -186,8 +299,10 @@ pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), Str
         .map_err(|error| format!("workflow_host_spawn_failed: {error}"))?;
     let stdout = child.stdout.take().ok_or_else(|| "workflow_host_stdout_missing".to_string())?;
     let stderr = child.stderr.take().ok_or_else(|| "workflow_host_stderr_missing".to_string())?;
-    let stdin = child.stdin.take().ok_or_else(|| "workflow_host_stdin_missing".to_string())?;
+    let stdin = Arc::new(Mutex::new(child.stdin.take().ok_or_else(|| "workflow_host_stdin_missing".to_string())?));
     let event_app = app.clone();
+    let host_stdin = Arc::clone(&stdin);
+    let knowledge_state = Arc::clone(&state.knowledge);
     let log_root = crate::data_dir(&app).map_err(|error| error.to_string())?;
     let stderr_log_root = log_root.clone();
     std::thread::spawn(move || {
@@ -204,7 +319,7 @@ pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), Str
                     continue;
                 }
             };
-            let value = match parse_response_frame(&line) {
+            let value = match parse_host_frame(&line) {
                 Ok(value) => value,
                 Err(code) => {
                     let raw = serde_json::json!({ "type": "workflow_host_protocol_error", "code": code }).to_string();
@@ -213,6 +328,15 @@ pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), Str
                     continue;
                 }
             };
+            if value.get("type").and_then(serde_json::Value::as_str) == Some("service_request") {
+                let response = dispatch_service_request(&event_app, &knowledge_state, &value);
+                if let Ok(frame) = encode_frame(&response) {
+                    if let Ok(mut writer) = host_stdin.lock() {
+                        let _ = writer.write_all(frame.as_bytes()).and_then(|_| writer.flush());
+                    }
+                }
+                continue;
+            }
             let run_id = value.get("data").and_then(|data| data.get("event")).and_then(|event| event.get("runId")).and_then(serde_json::Value::as_str).unwrap_or("host");
             let raw = String::from_utf8(line).expect("validated UTF-8 RPC frame");
             crate::logs::append(&log_root, run_id, &raw);
@@ -254,7 +378,8 @@ pub fn host_send(state: State<'_, HostState>, message: serde_json::Value) -> Res
     if bytes > MAX_RUNTIME_MESSAGE_BYTES { return Err("runtime_message_too_large".to_string()); }
     let mut guard = state.process.lock().map_err(|_| "host_state_poisoned".to_string())?;
     let process = guard.as_mut().ok_or_else(|| "workflow_host_not_running".to_string())?;
-    if let Err(error) = write!(process.stdin, "{bytes}:{body}\n").and_then(|_| process.stdin.flush()) {
+    let write_result = process.stdin.lock().map_err(|_| "workflow_host_stdin_poisoned".to_string()).and_then(|mut stdin| write!(stdin, "{bytes}:{body}\n").and_then(|_| stdin.flush()).map_err(|error| error.to_string()));
+    if let Err(error) = write_result {
         let _ = process.child.kill(); *guard = None; return Err(format!("workflow_host_write_failed: {error}"));
     }
     Ok(())
@@ -268,6 +393,8 @@ pub fn host_stop(state: State<'_, HostState>) -> Result<(), String> {
 pub fn stop_state(state: &HostState) -> Result<(), String> {
     let mut guard = state.process.lock().map_err(|_| "host_state_poisoned".to_string())?;
     if let Some(mut process) = guard.take() { if let Some(job) = process.job.as_ref() { let _ = job.terminate(); } let _ = process.child.kill(); let _ = process.child.wait(); }
+    let mut knowledge = state.knowledge.lock().map_err(|_| "knowledge_state_poisoned".to_string())?;
+    if let Some(mut process) = knowledge.take() { if let Some(job) = process.job.as_ref() { let _ = job.terminate(); } let _ = process.child.kill(); let _ = process.child.wait(); }
     Ok(())
 }
 
@@ -285,6 +412,20 @@ mod tests {
         assert_eq!(parse_response_frame(br#"2:{]"#).unwrap_err(), "runtime_frame_invalid_json");
         assert_eq!(parse_response_frame(br#"2:{}"#).unwrap_err(), "runtime_frame_invalid_response");
         assert_eq!(parse_response_frame(b"8388609:{}").unwrap_err(), "runtime_message_too_large");
+    }
+
+    #[test]
+    fn reverse_service_requests_are_validated_separately_from_responses() {
+        let payload = br#"{"version":1,"requestId":"reverse","type":"service_request","method":"knowledge.search","payload":{"query":"hello"}}"#;
+        let frame = format!("{}:{}", payload.len(), std::str::from_utf8(payload).unwrap());
+        let parsed = parse_host_frame(frame.as_bytes()).unwrap();
+        assert_eq!(parsed["type"], "service_request");
+        let malformed = br#"{"version":1,"requestId":"bad"}"#;
+        let malformed_frame = format!("{}:{}", malformed.len(), std::str::from_utf8(malformed).unwrap());
+        assert_eq!(parse_host_frame(malformed_frame.as_bytes()).unwrap_err(), "runtime_frame_invalid_response");
+        let unsupported = br#"{"version":1,"requestId":"bad","type":"service_request","method":"shell.exec"}"#;
+        let unsupported_frame = format!("{}:{}", unsupported.len(), std::str::from_utf8(unsupported).unwrap());
+        assert_eq!(parse_host_frame(unsupported_frame.as_bytes()).unwrap_err(), "runtime_frame_invalid_service_method");
     }
 
     #[test]

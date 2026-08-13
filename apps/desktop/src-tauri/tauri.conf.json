@@ -17,7 +17,7 @@
   "bundle": {
     "active": true,
     "icon": ["icons/icon.ico"],
-    "resources": ["../dist-runtime/host.mjs", "../dist-runtime/skills", "../dist-runtime/skill-catalog.json", "../dist-runtime/runtime", "../dist-runtime/install-desktop-runtime.ps1"],
+    "resources": ["../dist-runtime/host.mjs", "../dist-runtime/knowledge.mjs", "../dist-runtime/skills", "../dist-runtime/skill-catalog.json", "../dist-runtime/runtime", "../dist-runtime/install-desktop-runtime.ps1"],
     "targets": ["nsis"],
     "windows": { "webviewInstallMode": { "type": "downloadBootstrapper" } }
   }

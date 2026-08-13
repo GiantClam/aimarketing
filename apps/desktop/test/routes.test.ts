@@ -421,6 +421,19 @@ test("desktop supervises a crashed workflow host before marking the active run i
   assert.match(supervisorSource, /SetInformationJobObject/);
 });
 
+test("workflow-host delegates RAG and Obsidian storage to the reverse-RPC knowledge service", () => {
+  const hostSource = readFileSync(resolve(process.cwd(), "runtime/host.ts"), "utf8");
+  const serviceSource = readFileSync(resolve(process.cwd(), "runtime/knowledge-service.ts"), "utf8");
+  const tauriHost = readFileSync(resolve(process.cwd(), "src-tauri/src/host.rs"), "utf8");
+  assert.doesNotMatch(hostSource, /from ["']\.\/(?:rag|obsidian|lancedb)["']/);
+  assert.match(hostSource, /requestService\("knowledge\.(?:index|search|write)"/);
+  assert.match(hostSource, /rawRecord\?\.type === "service_response"/);
+  assert.match(serviceSource, /buildLanceIndex/);
+  assert.match(serviceSource, /writeObsidianNote/);
+  assert.match(tauriHost, /dispatch_service_request/);
+  assert.match(tauriHost, /knowledge_service_bundle_missing/);
+});
+
 test("media recovery persists the provider idempotency key and executor identity", () => {
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
   const hostSource = readFileSync(resolve(process.cwd(), "runtime/host.ts"), "utf8");

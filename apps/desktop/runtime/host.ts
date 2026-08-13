@@ -6,20 +6,17 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { buildOpenCodeCommand, createOpenCodeEventParser, type OpenCodeRuntimeEvent } from "@aimarketing/runtime-contracts/opencode";
 import { createBailianImageAdapter, createBailianVideoAdapter, createHttpMediaAdapter, createMiniMaxAudioAdapter, createMiniMaxVideoAdapter, createOpenAICompatibleImageAdapter, createRunningHubAdapter, downloadMediaOutputs, runMediaJob, type MediaProviderId, type MediaProviderAdapter } from "@aimarketing/media-runtime";
 import { executeWorkflow, migrateWorkflowDefinitionToCurrent, type WorkflowArtifactPort, type WorkflowCapabilityPort, type WorkflowDefinitionEnvelope } from "@aimarketing/workflow-core";
-import { searchVaultIndex } from "./rag";
-import { activateIndexGeneration, createIndexGenerationPath, indexObsidianVault, ObsidianVaultWatcher, writeObsidianNote } from "./obsidian";
 import { detectPresentationArtifacts } from "./presentation-artifacts";
-import { buildLanceIndex } from "./lancedb";
 import { OpenCodeServeClient } from "./opencode-serve";
-import { createRpcReader, writeRpcResponse } from "./rpc";
+import { createRpcReader, writeRpcResponse, writeRpcServiceRequest } from "./rpc";
 import { createDesktopWorkflowPorts } from "./workflow-ports";
 
 type HostCommand = { readonly version: 1; readonly requestId: string; readonly type: "chat.run" | "workflow.run" | "run.cancel" | "run.emergency_stop" | "run.retry" | "media.resume" | "health" | "session.create" | "session.prompt" | "knowledge.index" | "knowledge.search"; readonly runId?: string; readonly sessionId?: string; readonly payload?: Record<string, unknown> };
 type ProviderConfig = { readonly id?: string; readonly source?: string; readonly model?: string; readonly baseUrl?: string; readonly apiKey?: string; readonly reasoningEffort?: string; readonly endpoint?: string; readonly queryEndpoint?: string };
 const active = new Map<string, ReturnType<typeof spawn>>();
 const workflowControllers = new Map<string, AbortController>();
-const vaultWatchers = new Map<string, ObsidianVaultWatcher>();
 const sessions = new Map<string, { readonly conversationId: string; readonly workspacePath: string; readonly sessionId: string; readonly provider?: ProviderConfig }>();
+const serviceRequests = new Map<string, { readonly resolve: (value: Record<string, unknown>) => void; readonly reject: (error: Error) => void; readonly timer: ReturnType<typeof setTimeout> }>();
 let shuttingDown = false;
 function defaultOpenCodeExecutable() {
   if (process.env.AIMARKETING_OPENCODE_PATH) return process.env.AIMARKETING_OPENCODE_PATH;
@@ -31,13 +28,10 @@ function defaultOpenCodeExecutable() {
   return "opencode";
 }
 const serveClient = new OpenCodeServeClient(defaultOpenCodeExecutable(), join(process.env.OPENCODE_RUNTIME_DIR ?? process.cwd(), ".opencode-server"));
-process.once("exit", () => { for (const watcher of vaultWatchers.values()) watcher.stop(); vaultWatchers.clear(); });
 
 async function shutdownHost() {
   if (shuttingDown) return;
   shuttingDown = true;
-  for (const watcher of vaultWatchers.values()) watcher.stop();
-  vaultWatchers.clear();
   await serveClient.stop().catch(() => undefined);
   process.exit(0);
 }
@@ -47,6 +41,31 @@ process.once("SIGINT", () => { void shutdownHost(); });
 
 function respond(command: HostCommand, data: unknown) { writeRpcResponse(process.stdout, { version: 1, requestId: command.requestId, ok: true, data }); }
 function fail(command: HostCommand, code: string, message: string) { writeRpcResponse(process.stdout, { version: 1, requestId: command.requestId, ok: false, error: { code, message, retryable: false } }); }
+
+function requestService(method: "knowledge.index" | "knowledge.search" | "knowledge.write", payload: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  const requestId = randomUUID();
+  writeRpcServiceRequest(process.stdout, { version: 1, requestId, type: "service_request", method, payload });
+  const response = new Promise<Record<string, unknown>>((resolve, reject) => {
+    const timer = setTimeout(() => { serviceRequests.delete(requestId); reject(new Error("service_request_timeout")); }, 120_000);
+    serviceRequests.set(requestId, { resolve, reject, timer });
+    signal?.addEventListener("abort", () => { clearTimeout(timer); serviceRequests.delete(requestId); reject(new Error("service_request_cancelled")); }, { once: true });
+  });
+  return response;
+}
+
+function resolveServiceResponse(raw: Record<string, unknown>) {
+  const requestId = typeof raw.requestId === "string" ? raw.requestId : "";
+  const pending = serviceRequests.get(requestId);
+  if (!pending) return false;
+  clearTimeout(pending.timer);
+  serviceRequests.delete(requestId);
+  if (raw.ok === true && raw.data && typeof raw.data === "object") pending.resolve(raw.data as Record<string, unknown>);
+  else {
+    const error = raw.error && typeof raw.error === "object" ? raw.error as Record<string, unknown> : {};
+    pending.reject(new Error(typeof error.message === "string" ? error.message : "knowledge_service_failed"));
+  }
+  return true;
+}
 
 async function runOpenCode(command: HostCommand, session?: { readonly workspacePath: string; readonly sessionId?: string; readonly provider?: ProviderConfig }, options: { readonly respond?: boolean; readonly signal?: AbortSignal } = {}) {
   const prompt = typeof command.payload?.prompt === "string" ? command.payload.prompt : "";
@@ -183,30 +202,6 @@ async function writeOpenCodeConfig(configDirectory: string, provider: ProviderCo
   await rename(temporary, target);
 }
 
-type EmbeddingConfig = { readonly mode?: "local" | "remote"; readonly baseUrl?: string; readonly model?: string; readonly apiKey?: string };
-
-async function rebuildVaultIndex(vaultPath: string, indexPath: string, embedding: EmbeddingConfig) {
-  const generationPath = createIndexGenerationPath(indexPath);
-  const manifest = await indexObsidianVault(vaultPath, indexPath, 0, generationPath);
-  let state: Awaited<ReturnType<typeof buildLanceIndex>>;
-  try {
-    state = await buildLanceIndex(generationPath, manifest, embedding);
-  } catch {
-    state = { schemaVersion: 1, generation: manifest.generation, status: "lexical_ready", embeddingModel: "lexical-fallback", embeddingDimension: 0, updatedAt: new Date().toISOString() };
-  }
-  await activateIndexGeneration(indexPath, generationPath, manifest.generation);
-  return { manifest, state };
-}
-
-function watchVault(vaultPath: string, indexPath: string, embedding: EmbeddingConfig) {
-  const existing = vaultWatchers.get(indexPath);
-  existing?.stop();
-  const watcher = new ObsidianVaultWatcher(vaultPath, () => {
-    void rebuildVaultIndex(vaultPath, indexPath, embedding).catch(() => undefined);
-  }).start();
-  vaultWatchers.set(indexPath, watcher);
-}
-
 async function prepareSkillWorkspace(workspacePath: string) {
   const source = process.env.AIMARKETING_SKILLS_DIR;
   const configDirectory = join(workspacePath, ".opencode");
@@ -252,13 +247,14 @@ async function runWorkflow(command: HostCommand) {
         const indexPath = typeof config.indexPath === "string" ? config.indexPath : typeof command.payload?.indexPath === "string" ? command.payload.indexPath : "";
         if (!indexPath) throw new Error("knowledge_index_required");
         const query = typeof config.query === "string" ? config.query : typeof inputs.text === "string" ? inputs.text : "";
-        const citations = await searchVaultIndex(indexPath, query, Number(config.limit ?? 8), { mode: config.embeddingMode === "remote" ? "remote" : "local", baseUrl: typeof config.embeddingBaseUrl === "string" ? config.embeddingBaseUrl : undefined, model: typeof config.embeddingModel === "string" ? config.embeddingModel : undefined, apiKey: typeof config.embeddingApiKey === "string" ? config.embeddingApiKey : undefined });
-        return { citations, text: citations.map((item) => `[${item.documentPath}${item.heading ? `#${item.heading}` : ""}] ${item.excerpt}`).join("\n") };
+        const result = await requestService("knowledge.search", { indexPath, query, limit: Number(config.limit ?? 8), embeddingMode: config.embeddingMode, embeddingBaseUrl: config.embeddingBaseUrl, embeddingModel: config.embeddingModel, embeddingApiKey: config.embeddingApiKey }, signal);
+        const citations = Array.isArray(result.results) ? result.results : [];
+        return { citations, text: citations.map((item) => { const value = item as Record<string, unknown>; return `[${String(value.documentPath ?? "")}${value.heading ? `#${String(value.heading)}` : ""}] ${String(value.excerpt ?? "")}`; }).join("\n") };
       }
       if (executorId === "knowledge_write") {
         const vaultPath = typeof config.vaultPath === "string" ? config.vaultPath : typeof command.payload?.vaultPath === "string" ? command.payload.vaultPath : "";
         if (!vaultPath) throw new Error("knowledge_vault_required");
-        return writeObsidianNote({ vaultPath, targetPath: typeof config.targetPath === "string" ? config.targetPath : undefined, content: typeof inputs.text === "string" ? inputs.text : JSON.stringify(inputs, null, 2), baseHash: typeof config.baseHash === "string" ? config.baseHash : undefined });
+        return requestService("knowledge.write", { vaultPath, targetPath: config.targetPath, content: typeof inputs.text === "string" ? inputs.text : JSON.stringify(inputs, null, 2), baseHash: config.baseHash }, signal);
       }
       if (["image_generate", "video_generate", "digital_human", "music_generate", "voice_synthesis", "voice_clone", "audio_generate"].includes(executorId)) return runMediaCapability(command, runId, nodeKey, executorId, config, inputs, workspacePath, signal);
       const prompt = [typeof config.prompt === "string" ? config.prompt : "", typeof config.script === "string" ? config.script : "", typeof config.text === "string" ? config.text : "", typeof inputs.text === "string" ? inputs.text : ""].filter(Boolean).join("\n\n");
@@ -419,6 +415,11 @@ async function stopRun(command: HostCommand, emergency: boolean) {
 }
 
 createRpcReader(process.stdin, (raw) => {
+  const rawRecord = raw && typeof raw === "object" ? raw as unknown as Record<string, unknown> : undefined;
+  if (rawRecord?.type === "service_response") {
+    resolveServiceResponse(rawRecord);
+    return;
+  }
   const command = raw as unknown as HostCommand;
   if (!command.requestId || !command.type) return;
   if (command.type === "health") return respond(command, { status: "ok", capabilities: ["opencode", "opencode-serve", "persistent-sessions", "streaming", "artifacts", "full-access"] });
@@ -458,23 +459,16 @@ createRpcReader(process.stdin, (raw) => {
     const vaultPath = typeof command.payload?.vaultPath === "string" ? command.payload.vaultPath : "";
     const indexPath = typeof command.payload?.indexPath === "string" ? command.payload.indexPath : "";
     if (!vaultPath || !indexPath) return fail(command, "invalid_vault_index", "vaultPath and indexPath are required");
-    return void rebuildVaultIndex(vaultPath, indexPath, command.payload?.embedding && typeof command.payload.embedding === "object" ? command.payload.embedding as EmbeddingConfig : {}).then(async ({ manifest, state }) => {
-      const embedding = command.payload?.embedding && typeof command.payload.embedding === "object" ? command.payload.embedding as EmbeddingConfig : {};
-      try {
-        watchVault(vaultPath, indexPath, embedding);
-        respond(command, { generation: manifest.generation, documents: manifest.documents.length, chunks: manifest.chunks.length, indexPath, semantic: state.status === "semantic_ready", embeddingModel: state.embeddingModel, embeddingDimension: state.embeddingDimension, watcher: "active" });
-      } catch (error) {
-        watchVault(vaultPath, indexPath, embedding);
-        respond(command, { generation: manifest.generation, documents: manifest.documents.length, chunks: manifest.chunks.length, indexPath, semantic: false, embeddingModel: "lexical-fallback", warning: error instanceof Error ? error.message.slice(0, 180) : String(error).slice(0, 180) });
-      }
-    }).catch((error) => fail(command, "vault_index_failed", error instanceof Error ? error.message : String(error)));
+    return void requestService("knowledge.index", { ...command.payload }, undefined)
+      .then((data) => respond(command, data))
+      .catch((error) => fail(command, "vault_index_failed", error instanceof Error ? error.message : String(error)));
   }
   if (command.type === "knowledge.search") {
     const indexPath = typeof command.payload?.indexPath === "string" ? command.payload.indexPath : "";
     const query = typeof command.payload?.query === "string" ? command.payload.query.trim() : "";
-      if (!indexPath || !query) return fail(command, "invalid_knowledge_search", "indexPath and query are required");
-    return void searchVaultIndex(indexPath, query, Number(command.payload?.limit ?? 8), { mode: command.payload?.embeddingMode === "remote" ? "remote" : "local", baseUrl: typeof command.payload?.embeddingBaseUrl === "string" ? command.payload.embeddingBaseUrl : undefined, model: typeof command.payload?.embeddingModel === "string" ? command.payload.embeddingModel : undefined, apiKey: typeof command.payload?.embeddingApiKey === "string" ? command.payload.embeddingApiKey : undefined })
-      .then((results) => respond(command, { indexPath, query, results }))
+    if (!indexPath || !query) return fail(command, "invalid_knowledge_search", "indexPath and query are required");
+    return void requestService("knowledge.search", { ...command.payload, indexPath, query }, undefined)
+      .then((data) => respond(command, data))
       .catch((error) => fail(command, "knowledge_search_failed", error instanceof Error ? error.message : String(error)));
   }
   if (command.type === "run.cancel" || command.type === "run.emergency_stop") return void stopRun(command, command.type === "run.emergency_stop" || command.payload?.emergency === true);

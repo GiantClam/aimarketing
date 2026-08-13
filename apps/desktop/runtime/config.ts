@@ -13,7 +13,7 @@ export interface DesktopConfig {
   readonly provider: DesktopProviderConfig & { readonly model: string };
   readonly providers?: DesktopProviderProfiles;
   readonly defaults?: DesktopProviderDefaults;
-  readonly runtime: { readonly source: "system" | "private"; readonly nodePath?: string; readonly opencodePath?: string; readonly pythonPath?: string; readonly hostPath?: string; readonly skillsPath?: string; readonly fontsPath?: string; readonly lancedbPath?: string; readonly embeddingPath?: string };
+  readonly runtime: { readonly source: "system" | "private"; readonly nodePath?: string; readonly opencodePath?: string; readonly pythonPath?: string; readonly hostPath?: string; readonly knowledgePath?: string; readonly skillsPath?: string; readonly fontsPath?: string; readonly lancedbPath?: string; readonly embeddingPath?: string };
 }
 
 export function defaultDesktopConfig(paths: DesktopPaths): DesktopConfig {
@@ -58,6 +58,7 @@ function parseConfig(raw: string): DesktopConfig {
       ...(value.runtime.opencodePath ? { opencodePath: String(value.runtime.opencodePath) } : {}),
       ...(value.runtime.pythonPath ? { pythonPath: String(value.runtime.pythonPath) } : {}),
       ...(value.runtime.hostPath ? { hostPath: String(value.runtime.hostPath) } : {}),
+      ...(value.runtime.knowledgePath ? { knowledgePath: String(value.runtime.knowledgePath) } : {}),
       ...(value.runtime.skillsPath ? { skillsPath: String(value.runtime.skillsPath) } : {}),
       ...(value.runtime.fontsPath ? { fontsPath: String(value.runtime.fontsPath) } : {}),
       ...(value.runtime.lancedbPath ? { lancedbPath: String(value.runtime.lancedbPath) } : {}),

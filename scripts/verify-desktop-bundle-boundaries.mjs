@@ -26,7 +26,8 @@ export async function collectDesktopBundleFiles(root = repoRoot) {
     .filter((entry) => entry.isFile() && entry.name.endsWith(".js"))
     .map((entry) => join(assetDirectory, entry.name));
   const hostBundle = join(root, "apps", "desktop", "dist-runtime", "host.mjs");
-  return [...assetFiles, ...(await exists(hostBundle) ? [hostBundle] : [])];
+  const knowledgeBundle = join(root, "apps", "desktop", "dist-runtime", "knowledge.mjs");
+  return [...assetFiles, ...(await exists(hostBundle) ? [hostBundle] : []), ...(await exists(knowledgeBundle) ? [knowledgeBundle] : [])];
 }
 
 export function scanDesktopBundle(files) {

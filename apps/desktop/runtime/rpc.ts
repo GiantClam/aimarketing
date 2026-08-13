@@ -33,3 +33,7 @@ export function createRpcReader(input: NodeJS.ReadableStream, onMessage: (comman
 }
 
 export function writeRpcResponse(output: NodeJS.WritableStream, response: RuntimeResponse) { output.write(encodeRpcMessage(response)); }
+
+export function writeRpcServiceRequest(output: NodeJS.WritableStream, request: { readonly version: 1; readonly requestId: string; readonly type: "service_request"; readonly method: string; readonly payload?: Record<string, unknown> }) {
+  output.write(encodeRpcMessage(request));
+}

@@ -8,7 +8,7 @@ import type { DesktopPaths } from "./paths";
 
 const execFileAsync = promisify(execFile);
 export type RuntimeSource = "system" | "private";
-export type RuntimeComponent = "node" | "opencode" | "python" | "host" | "fonts" | "skills" | "lancedb" | "embedding" | "migrations";
+export type RuntimeComponent = "node" | "opencode" | "python" | "host" | "knowledge" | "fonts" | "skills" | "lancedb" | "embedding" | "migrations";
 
 export interface RuntimeProbe {
   readonly component: RuntimeComponent;
@@ -32,6 +32,7 @@ export async function probeRuntime(paths: DesktopPaths, config: DesktopConfig): 
   probes.push(await probeExecutable("opencode", config.runtime.opencodePath ?? (config.runtime.source === "private" ? join(paths.runtime, "opencode", "opencode.exe") : "opencode")));
   probes.push(await probePython(config.runtime.pythonPath ?? (config.runtime.source === "private" ? join(paths.runtime, "python", "python.exe") : "python")));
   probes.push(await probePath("host", config.runtime.hostPath ?? join(paths.runtime, "host.mjs")));
+  probes.push(await probePath("knowledge", config.runtime.knowledgePath ?? join(paths.runtime, "knowledge.mjs")));
   probes.push(await probeFonts(config.runtime.fontsPath ?? join(paths.runtime, "fonts")));
   probes.push(await probeSkills(config.runtime.skillsPath ?? join(paths.runtime, "skills")));
   probes.push(await probeLanceDb(config.runtime.lancedbPath ?? join(paths.runtime, "lancedb")));
@@ -41,7 +42,7 @@ export async function probeRuntime(paths: DesktopPaths, config: DesktopConfig): 
 }
 
 export function isRuntimeReady(manifest: BootstrapManifest) {
-  const mandatory = new Set<RuntimeComponent>(["node", "opencode", "python", "host", "fonts", "skills", "lancedb", "embedding", "migrations"]);
+  const mandatory = new Set<RuntimeComponent>(["node", "opencode", "python", "host", "knowledge", "fonts", "skills", "lancedb", "embedding", "migrations"]);
   return manifest.probes.filter((probe) => mandatory.has(probe.component)).every((probe) => probe.ok);
 }
 

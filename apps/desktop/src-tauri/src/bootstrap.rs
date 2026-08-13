@@ -84,6 +84,8 @@ fn runtime_ready(resource_roots: &[PathBuf], install_root: &Path) -> bool {
         .is_some();
     let host = configured_runtime_path(install_root, "hostPath").is_some_and(|path| path.is_file())
         || resource_roots.iter().any(|root| root.join("host.mjs").is_file() || root.join("dist-runtime").join("host.mjs").is_file());
+    let knowledge = configured_runtime_path(install_root, "knowledgePath").is_some_and(|path| path.is_file())
+        || resource_roots.iter().any(|root| root.join("knowledge.mjs").is_file() || root.join("dist-runtime").join("knowledge.mjs").is_file());
     let skills = configured_runtime_path(install_root, "skillsPath").is_some_and(|path| path.join("ppt-master").join("SKILL.md").is_file() && path.join("ppt-master.manifest.json").is_file())
         || resource_roots.iter().any(|root| {
             let path = if root.join("skills").join("ppt-master").join("SKILL.md").is_file() { root.join("skills") } else { root.join("dist-runtime").join("skills") };
@@ -99,7 +101,7 @@ fn runtime_ready(resource_roots: &[PathBuf], install_root: &Path) -> bool {
         || resource_roots.iter().any(|root| root.join("embedding").join("local-hash-384-v1.json").is_file() || root.join("runtime").join("embedding").join("local-hash-384-v1.json").is_file());
     let database = install_root.join("app.db");
     let migrations = crate::storage::initialize(&database).is_ok() && crate::storage::migrations_ready(&database).unwrap_or(false);
-    node && opencode && python && host && skills && fonts && lancedb && embedding && migrations
+    node && opencode && python && host && knowledge && skills && fonts && lancedb && embedding && migrations
 }
 
 fn configured_runtime_path(install_root: &Path, key: &str) -> Option<PathBuf> {

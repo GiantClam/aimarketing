@@ -34,6 +34,7 @@ function Assert-DesktopPackageArchive {
       "$PackageName/AI Marketing.exe",
       "$PackageName/README.txt",
       "$PackageName/_up_/dist-runtime/host.mjs",
+      "$PackageName/_up_/dist-runtime/knowledge.mjs",
       "$PackageName/_up_/dist-runtime/skill-catalog.json",
       "$PackageName/_up_/dist-runtime/runtime/runtime-manifest.json"
     )
@@ -46,6 +47,7 @@ function Assert-DesktopPackageArchive {
     $expectedLengths = @{
       "$PackageName/AI Marketing.exe" = (Get-Item -LiteralPath $ExecutablePath).Length
       "$PackageName/_up_/dist-runtime/host.mjs" = (Get-Item -LiteralPath (Join-Path $RuntimePath "host.mjs")).Length
+      "$PackageName/_up_/dist-runtime/knowledge.mjs" = (Get-Item -LiteralPath (Join-Path $RuntimePath "knowledge.mjs")).Length
       "$PackageName/_up_/dist-runtime/skill-catalog.json" = (Get-Item -LiteralPath (Join-Path $RuntimePath "skill-catalog.json")).Length
     }
     foreach ($entryName in $expectedLengths.Keys) {

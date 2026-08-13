@@ -7,7 +7,7 @@ import { embeddingDescriptorPath, fontsAssetPath, isRuntimeReady, type Bootstrap
 test("runtime readiness requires every mandatory component", () => {
   const base: BootstrapManifest = { schemaVersion: 1, source: "system", checkedAt: new Date(0).toISOString(), probes: [
     { component: "node", ok: true }, { component: "opencode", ok: true }, { component: "python", ok: true }, { component: "host", ok: true },
-    { component: "fonts", ok: true }, { component: "skills", ok: true }, { component: "lancedb", ok: true }, { component: "embedding", ok: true }, { component: "migrations", ok: true },
+    { component: "knowledge", ok: true }, { component: "fonts", ok: true }, { component: "skills", ok: true }, { component: "lancedb", ok: true }, { component: "embedding", ok: true }, { component: "migrations", ok: true },
   ] };
   assert.equal(isRuntimeReady(base), true);
   assert.equal(isRuntimeReady({ ...base, probes: base.probes.map((probe) => probe.component === "embedding" ? { ...probe, ok: false } : probe) }), false);

@@ -97,6 +97,9 @@ fn runtime_probe(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let configured_host = configured_runtime_path(&data, "hostPath");
     let host_path = configured_host.filter(|path| path.is_file()).or_else(|| [resource.join("dist-runtime").join("host.mjs"), resource.join("_up_").join("dist-runtime").join("host.mjs"), development.join("host.mjs")].into_iter().find(|path| path.is_file())).and_then(canonical_path);
     let host = host_path.is_some();
+    let configured_knowledge = configured_runtime_path(&data, "knowledgePath");
+    let knowledge_path = configured_knowledge.filter(|path| path.is_file()).or_else(|| [resource.join("dist-runtime").join("knowledge.mjs"), resource.join("_up_").join("dist-runtime").join("knowledge.mjs"), development.join("knowledge.mjs")].into_iter().find(|path| path.is_file())).and_then(canonical_path);
+    let knowledge = knowledge_path.is_some();
     let skill_roots = [resource.join("dist-runtime").join("skills"), resource.join("_up_").join("dist-runtime").join("skills"), development.join("skills")];
     let configured_skills = configured_runtime_path(&data, "skillsPath");
     let skill_path = configured_skills.filter(|path| path.join("ppt-master").join("SKILL.md").exists() && path.join("ppt-master.manifest.json").exists()).or_else(|| skill_roots.iter().find(|path| path.join("ppt-master").join("SKILL.md").exists() && path.join("ppt-master.manifest.json").exists()).cloned()).and_then(canonical_path);
@@ -113,10 +116,10 @@ fn runtime_probe(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let embedding = embedding_path.is_some();
     persist_runtime_paths(&data, &[
         ("nodePath", node_path.as_ref()), ("opencodePath", opencode_path.as_ref()), ("pythonPath", python_path.as_ref()),
-        ("hostPath", host_path.as_ref()), ("skillsPath", skill_path.as_ref()), ("fontsPath", fonts_path.as_ref()),
+        ("hostPath", host_path.as_ref()), ("knowledgePath", knowledge_path.as_ref()), ("skillsPath", skill_path.as_ref()), ("fontsPath", fonts_path.as_ref()),
         ("lancedbPath", lancedb_path.as_ref()), ("embeddingPath", embedding_path.as_ref()),
     ])?;
-    Ok(serde_json::json!({ "ready": node && opencode && python && skills && fonts && migrations && host && lancedb && embedding, "node": node, "opencode": opencode, "python": python, "skills": skills, "fonts": fonts, "migrations": migrations, "host": host, "lancedb": lancedb, "embedding": embedding, "semanticRag": lancedb, "paths": { "node": node_path, "opencode": opencode_path, "python": python_path, "host": host_path, "skills": skill_path, "fonts": fonts_path, "lancedb": lancedb_path, "embedding": embedding_path } }))
+    Ok(serde_json::json!({ "ready": node && opencode && python && skills && fonts && migrations && host && knowledge && lancedb && embedding, "node": node, "opencode": opencode, "python": python, "skills": skills, "fonts": fonts, "migrations": migrations, "host": host, "knowledge": knowledge, "lancedb": lancedb, "embedding": embedding, "semanticRag": lancedb, "paths": { "node": node_path, "opencode": opencode_path, "python": python_path, "host": host_path, "knowledge": knowledge_path, "skills": skill_path, "fonts": fonts_path, "lancedb": lancedb_path, "embedding": embedding_path } }))
 }
 
 fn executable_works(path: &std::path::Path, args: &[&str]) -> bool {

@@ -30,6 +30,7 @@ function Verify-Package {
       "$packageName/AI Marketing.exe",
       "$packageName/README.txt",
       "$packageName/_up_/dist-runtime/host.mjs",
+      "$packageName/_up_/dist-runtime/knowledge.mjs",
       "$packageName/_up_/dist-runtime/skill-catalog.json",
       "$packageName/_up_/dist-runtime/runtime/runtime-manifest.json"
     )
@@ -55,6 +56,7 @@ function Verify-Package {
     $sourceLengths = @{
       "$packageName/AI Marketing.exe" = (Get-Item -LiteralPath $executable).Length
       "$packageName/_up_/dist-runtime/host.mjs" = (Get-Item -LiteralPath (Join-Path $runtime "host.mjs")).Length
+      "$packageName/_up_/dist-runtime/knowledge.mjs" = (Get-Item -LiteralPath (Join-Path $runtime "knowledge.mjs")).Length
       "$packageName/_up_/dist-runtime/skill-catalog.json" = (Get-Item -LiteralPath (Join-Path $runtime "skill-catalog.json")).Length
     }
     foreach ($entryName in $sourceLengths.Keys) {
@@ -69,6 +71,7 @@ function Verify-Package {
       portableFlag = [bool](Find-Entry $archive "$packageName/portable.flag")
       executableBytes = (Find-Entry $archive "$packageName/AI Marketing.exe").Length
       hostBytes = (Find-Entry $archive "$packageName/_up_/dist-runtime/host.mjs").Length
+      knowledgeBytes = (Find-Entry $archive "$packageName/_up_/dist-runtime/knowledge.mjs").Length
       catalogBytes = (Find-Entry $archive "$packageName/_up_/dist-runtime/skill-catalog.json").Length
     }
   } finally {
