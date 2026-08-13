@@ -22,9 +22,9 @@ function respondToHostServiceRequest(child: ChildProcessWithoutNullStreams, fram
   child.stdin.write(encodeRpcMessage({ version: 1, requestId: frame.requestId, type: "service_response", ok: true, data }));
 }
 
-function startHost(desktopRoot: string, environment: NodeJS.ProcessEnv = {}) {
+function startHost(desktopRoot: string, environment: Record<string, string | undefined> = {}) {
   const tsxCli = resolve(desktopRoot, "..", "..", "node_modules", "tsx", "dist", "cli.mjs");
-  const child = spawn(process.execPath, [tsxCli, join(desktopRoot, "runtime", "host.ts")], { cwd: desktopRoot, env: { ...process.env, ...environment }, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+  const child = spawn(process.execPath, [tsxCli, join(desktopRoot, "runtime", "host.ts")], { cwd: desktopRoot, env: { ...process.env, ...environment } as NodeJS.ProcessEnv, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
   const frames: Record<string, unknown>[] = [];
   let buffer = new Uint8Array(0);
   const waiters: Array<{ predicate: (frame: Record<string, unknown>) => boolean; resolve: (frame: Record<string, unknown>) => void }> = [];
