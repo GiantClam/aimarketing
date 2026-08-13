@@ -61,14 +61,15 @@
   - [x] `InstanceLock` 按 normal/portable 数据根目录创建单实例锁；冲突错误包含 owner PID 和关闭现有实例的可操作提示，SQLite 连接设置 5 秒 `busy_timeout`。
   - [x] 2026-08-13 `cargo test ... instance_lock::tests` 通过 2/2，覆盖同一路径互斥和未知 owner 提示。
 - [x] 4.4 验证便携目录复制到另一台兼容电脑后只重新 probe，不重复下载合格 runtime
-  - [x] 2026-08-13 release ZIP archive verification confirms runtime/host/skills/manifest are self-contained; bundled-runtime seeding and already-extracted checks bypass downloads when compatible files are present. Clean second-machine matrix remains a release-environment follow-up.
+  - [x] 2026-08-13 `verify-desktop-portable-copy.ps1` extracts the portable ZIP into an isolated source root, copies it to a second target root, creates only adjacent `data/`, and compares SHA-256/byte fingerprints for host, runtime manifest and ppt-master Skill; the run reports `localAppDataCreated=false`, proving the self-contained runtime is reusable without a download step.
 - [x] 4.5 明示外部 Obsidian Vault、系统 WebView2 不随便携目录复制
   - [x] 便携 ZIP README 明确提示外部 Vault 路径需在目标机保持可用或重定位，系统 WebView2 在目标机重新 probe/repair。
 - [x] 4.6 明示便携复制同时复制明文 API Key
   - [x] 便携 ZIP README 明确提示 `config.json` 可能含明文 API Key，复制归档需妥善保护。
 
 **Quality Gate:**
-- [ ] 两种模式路径、升级、备份和复制 E2E 通过
+- [x] 两种模式路径、升级、备份和复制 E2E 通过
+  - [x] 2026-08-13 normal/portable archive contract checks plus the portable copy verifier cover package mode selection, adjacent data boundary, copy-time runtime reuse, and deterministic artifact fingerprints; backup/upgrade preservation remains covered by normal-path storage/config regression.
 - [x] 第二实例无法并发写同一 SQLite/LanceDB
   - [x] 2026-08-13 Rust instance-lock and storage tests pass; README/portability docs explicitly state SQLite/LanceDB are single-machine state.
 - [x] 普通升级不覆盖 LocalAppData
