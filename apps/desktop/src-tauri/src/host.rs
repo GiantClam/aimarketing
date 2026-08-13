@@ -71,21 +71,23 @@ fn read_bounded_line(reader: &mut impl BufRead) -> io::Result<Option<Vec<u8>>> {
 }
 
 fn host_script(app: &AppHandle) -> Result<PathBuf, String> {
+    if let Some(path) = configured_runtime_path(app, "hostPath").filter(|path| path.is_file()) { return Ok(path); }
     let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
     let packaged = resource.join("dist-runtime").join("host.mjs");
-    if packaged.exists() { return Ok(packaged); }
+    if packaged.is_file() { return std::fs::canonicalize(packaged).map_err(|error| error.to_string()); }
     let up_packaged = resource.join("_up_").join("dist-runtime").join("host.mjs");
-    if up_packaged.exists() { return Ok(up_packaged); }
+    if up_packaged.is_file() { return std::fs::canonicalize(up_packaged).map_err(|error| error.to_string()); }
     let flattened = resource.join("host.mjs");
-    if flattened.exists() { return Ok(flattened); }
+    if flattened.is_file() { return std::fs::canonicalize(flattened).map_err(|error| error.to_string()); }
     let development = std::env::current_dir().map_err(|error| error.to_string())?.join("apps").join("desktop").join("dist-runtime").join("host.mjs");
-    if development.exists() { return Ok(development); }
+    if development.is_file() { return std::fs::canonicalize(development).map_err(|error| error.to_string()); }
     Err(format!("workflow_host_bundle_missing: {}", packaged.display()))
 }
 
 fn node_executable(app: &AppHandle) -> Result<String, String> {
     let data = crate::data_dir(app)?;
     let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
+    if let Some(path) = configured_runtime_path(app, "nodePath").filter(|path| path.is_file() && executable_works(path, &["--version"])) { return Ok(path.to_string_lossy().into_owned()); }
     let candidates = [
         data.join("runtime").join("node").join("node.exe"),
         resource.join("dist-runtime").join("runtime").join("node").join("node.exe"),
@@ -93,36 +95,44 @@ fn node_executable(app: &AppHandle) -> Result<String, String> {
         resource.join("runtime").join("node").join("node.exe"),
         resource.join("node.exe"),
     ];
-    Ok(candidates.into_iter().find(|path| path.exists()).or_else(|| system_executable("node")).map(|path| path.to_string_lossy().into_owned()).unwrap_or_else(|| "node".to_string()))
+    Ok(candidates.into_iter().find(|path| path.is_file() && executable_works(path, &["--version"])).and_then(|path| std::fs::canonicalize(path).ok()).or_else(|| system_executable("node")).map(|path| path.to_string_lossy().into_owned()).unwrap_or_else(|| "node".to_string()))
 }
 
 fn opencode_executable(app: &AppHandle) -> Result<Option<String>, String> {
     let data = crate::data_dir(app)?;
     let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
-    let configured = crate::config::read(&data.join("config.json"), &data).ok()
-        .and_then(|value| value.get("runtime").and_then(|runtime| runtime.get("opencodePath")).and_then(|path| path.as_str()).map(PathBuf::from))
-        .filter(|path| path.is_file());
-    if let Some(path) = configured { return Ok(Some(path.to_string_lossy().into_owned())); }
+    let configured = configured_runtime_path(app, "opencodePath");
+    if let Some(path) = configured.filter(|path| path.is_file() && executable_works(path, &["--version"])) { return Ok(Some(path.to_string_lossy().into_owned())); }
     let candidates = [
         data.join("runtime").join("opencode").join("opencode.exe"),
         resource.join("dist-runtime").join("runtime").join("opencode").join("opencode.exe"),
         resource.join("_up_").join("dist-runtime").join("runtime").join("opencode").join("opencode.exe"),
         resource.join("runtime").join("opencode").join("opencode.exe"),
     ];
-    Ok(candidates.into_iter().find(|path| path.exists()).or_else(|| system_executable("opencode")).map(|path| path.to_string_lossy().into_owned()))
+    Ok(candidates.into_iter().find(|path| path.is_file() && executable_works(path, &["--version"])).and_then(|path| std::fs::canonicalize(path).ok()).or_else(|| system_executable("opencode")).map(|path| path.to_string_lossy().into_owned()))
 }
 
 fn system_executable(command: &str) -> Option<PathBuf> {
     let output = Command::new("where.exe").arg(command).output().ok()?;
     if !output.status.success() { return None; }
-    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).find(|path| path.exists())
+    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).filter(|path| path.is_file()).find_map(|path| std::fs::canonicalize(path).ok())
+}
+
+fn executable_works(path: &std::path::Path, args: &[&str]) -> bool {
+    Command::new(path).args(args).output().map(|output| output.status.success()).unwrap_or(false)
+}
+
+fn configured_runtime_path(app: &AppHandle, key: &str) -> Option<PathBuf> {
+    let data = crate::data_dir(app).ok()?;
+    let value = crate::config::read(&data.join("config.json"), &data).ok()?;
+    let path = value.get("runtime")?.get(key)?.as_str().map(PathBuf::from)?;
+    std::fs::canonicalize(path).ok()
 }
 
 fn python_executable(app: &AppHandle) -> Result<Option<String>, String> {
     let data = crate::data_dir(app)?;
     let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
-    let configured = crate::config::read(&data.join("config.json"), &data).ok()
-        .and_then(|value| value.get("runtime").and_then(|runtime| runtime.get("pythonPath")).and_then(|path| path.as_str()).map(PathBuf::from))
+    let configured = configured_runtime_path(app, "pythonPath")
         .filter(|path| path.is_file() && python_capable(path));
     if let Some(path) = configured { return Ok(Some(path.to_string_lossy().into_owned())); }
     let candidates = [
@@ -130,7 +140,7 @@ fn python_executable(app: &AppHandle) -> Result<Option<String>, String> {
         resource.join("dist-runtime").join("runtime").join("python").join("python.exe"),
         resource.join("_up_").join("dist-runtime").join("runtime").join("python").join("python.exe"),
     ];
-    if let Some(path) = candidates.into_iter().find(|path| path.exists() && python_capable(path)) { return Ok(Some(path.to_string_lossy().into_owned())); }
+    if let Some(path) = candidates.into_iter().find(|path| path.is_file() && python_capable(path)).and_then(|path| std::fs::canonicalize(path).ok()) { return Ok(Some(path.to_string_lossy().into_owned())); }
     let system = system_executable("python").filter(|path| python_capable(path));
     Ok(system.map(|path| path.to_string_lossy().into_owned()))
 }
@@ -142,12 +152,13 @@ fn python_capable(path: &std::path::Path) -> bool {
 fn lancedb_runtime_directory(app: &AppHandle) -> Result<Option<String>, String> {
     let data = crate::data_dir(app)?;
     let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
+    if let Some(path) = configured_runtime_path(app, "lancedbPath").filter(|path| path.join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").is_file()) { return Ok(Some(path.to_string_lossy().into_owned())); }
     let candidates = [
         data.join("runtime").join("lancedb"),
         resource.join("dist-runtime").join("runtime").join("lancedb"),
         resource.join("_up_").join("dist-runtime").join("runtime").join("lancedb"),
     ];
-    Ok(candidates.into_iter().find(|path| path.join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").exists()).map(|path| path.to_string_lossy().into_owned()))
+    Ok(candidates.into_iter().find(|path| path.join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").is_file()).and_then(|path| std::fs::canonicalize(path).ok()).map(|path| path.to_string_lossy().into_owned()))
 }
 
 #[tauri::command]
@@ -159,7 +170,7 @@ pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), Str
     }
     let script = host_script(&app)?;
     let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
-    let skills = [resource.join("dist-runtime").join("skills"), resource.join("_up_").join("dist-runtime").join("skills"), resource.join("skills")].into_iter().find(|path| path.exists());
+    let skills = configured_runtime_path(&app, "skillsPath").filter(|path| path.is_dir()).or_else(|| [resource.join("dist-runtime").join("skills"), resource.join("_up_").join("dist-runtime").join("skills"), resource.join("skills")].into_iter().find(|path| path.exists()));
     let python = python_executable(&app)?;
     let mut child = Command::new(node_executable(&app)?)
         .arg(script)

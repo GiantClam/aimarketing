@@ -10,7 +10,7 @@ export interface DesktopConfig {
   readonly obsidianIndexPath?: string;
   readonly offlineRuntimeZipPath?: string;
   readonly provider: { readonly id: string; readonly source?: string; readonly model: string; readonly models?: readonly string[]; readonly baseUrl?: string; readonly apiKey?: string; readonly reasoningEffort?: string; readonly skillId?: string; readonly endpoint?: string; readonly queryEndpoint?: string };
-  readonly runtime: { readonly source: "system" | "private"; readonly opencodePath?: string; readonly pythonPath?: string };
+  readonly runtime: { readonly source: "system" | "private"; readonly nodePath?: string; readonly opencodePath?: string; readonly pythonPath?: string; readonly hostPath?: string; readonly skillsPath?: string; readonly fontsPath?: string; readonly lancedbPath?: string; readonly embeddingPath?: string };
 }
 
 export function defaultDesktopConfig(paths: DesktopPaths): DesktopConfig {
@@ -47,7 +47,17 @@ function parseConfig(raw: string): DesktopConfig {
     ...(typeof value.obsidianIndexPath === "string" ? { obsidianIndexPath: value.obsidianIndexPath } : {}),
     ...(typeof (value as Partial<DesktopConfig>).offlineRuntimeZipPath === "string" ? { offlineRuntimeZipPath: (value as Partial<DesktopConfig>).offlineRuntimeZipPath } : {}),
     provider: { id: String(value.provider.id ?? "local"), model, ...(models.length ? { models } : {}), ...(value.provider.source ? { source: String(value.provider.source) } : {}), ...(value.provider.baseUrl ? { baseUrl: String(value.provider.baseUrl) } : {}), ...(value.provider.apiKey ? { apiKey: String(value.provider.apiKey) } : {}), ...(value.provider.reasoningEffort ? { reasoningEffort: String(value.provider.reasoningEffort) } : {}), ...(typeof value.provider.skillId === "string" && value.provider.skillId.trim() ? { skillId: value.provider.skillId.trim() } : {}), ...(value.provider.endpoint ? { endpoint: String(value.provider.endpoint) } : {}), ...(value.provider.queryEndpoint ? { queryEndpoint: String(value.provider.queryEndpoint) } : {}) },
-    runtime: { source: value.runtime.source === "private" ? "private" : "system", ...(value.runtime.opencodePath ? { opencodePath: String(value.runtime.opencodePath) } : {}), ...(value.runtime.pythonPath ? { pythonPath: String(value.runtime.pythonPath) } : {}) },
+    runtime: {
+      source: value.runtime.source === "private" ? "private" : "system",
+      ...(value.runtime.nodePath ? { nodePath: String(value.runtime.nodePath) } : {}),
+      ...(value.runtime.opencodePath ? { opencodePath: String(value.runtime.opencodePath) } : {}),
+      ...(value.runtime.pythonPath ? { pythonPath: String(value.runtime.pythonPath) } : {}),
+      ...(value.runtime.hostPath ? { hostPath: String(value.runtime.hostPath) } : {}),
+      ...(value.runtime.skillsPath ? { skillsPath: String(value.runtime.skillsPath) } : {}),
+      ...(value.runtime.fontsPath ? { fontsPath: String(value.runtime.fontsPath) } : {}),
+      ...(value.runtime.lancedbPath ? { lancedbPath: String(value.runtime.lancedbPath) } : {}),
+      ...(value.runtime.embeddingPath ? { embeddingPath: String(value.runtime.embeddingPath) } : {}),
+    },
   };
 }
 

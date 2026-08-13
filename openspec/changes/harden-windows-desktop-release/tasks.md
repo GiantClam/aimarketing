@@ -2,7 +2,7 @@
 
 - [ ] 1.1 为 WebView2、Node/workflow-host、OpenCode、Python/PPT、字体、embedding、Skills 和 migrations 建 probe tests
 - [x] 1.2 在 Tauri WebView 创建前执行原生 bootstrap 状态机（`run()` 先获取单实例锁，再完成 WebView2、运行时组件和 SQLite migrations 门禁；任一失败均不创建 Tauri WebView）
-- [ ] 1.3 复用通过 probe 的系统组件并记录 canonical absolute path
+- [x] 1.3 复用通过 probe 的系统组件并记录 canonical absolute path（runtime probe 将 Node、OpenCode、Python、host、Skills、字体、LanceDB 和 embedding 路径写回 `config.json`；host 启动优先使用这些路径）
 - [ ] 1.4 对缺失/损坏组件自动调用 UTF-8 安装脚本
 - [ ] 1.5 安装结束后完整重复 probe，任一失败则阻止主界面
 

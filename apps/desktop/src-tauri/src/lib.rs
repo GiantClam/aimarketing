@@ -61,34 +61,41 @@ fn runtime_probe(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let private_node = data.join("runtime").join("node").join("node.exe");
     let configured_opencode = configured_runtime_executable(&data, "opencodePath");
     let private_opencode = data.join("runtime").join("opencode").join("opencode.exe");
-    let node_path = if private_node.exists() && executable_works(&private_node, &["--version"]) { Some(private_node) } else { system_executable("node").filter(|path| executable_works(path, &["--version"])) };
-    let opencode_path = configured_opencode.filter(|path| executable_works(path, &["--version"])).or_else(|| if private_opencode.exists() && executable_works(&private_opencode, &["--version"]) { Some(private_opencode) } else { system_executable("opencode").filter(|path| executable_works(path, &["--version"])) });
+    let node_path = (if private_node.exists() && executable_works(&private_node, &["--version"]) { Some(private_node) } else { system_executable("node").filter(|path| executable_works(path, &["--version"])) }).and_then(canonical_path);
+    let opencode_path = configured_opencode.filter(|path| executable_works(path, &["--version"])).or_else(|| if private_opencode.exists() && executable_works(&private_opencode, &["--version"]) { Some(private_opencode) } else { system_executable("opencode").filter(|path| executable_works(path, &["--version"])) }).and_then(canonical_path);
     let node = node_path.is_some();
     let opencode = opencode_path.is_some();
     let private_python = data.join("runtime").join("python").join("python.exe");
     let resource_python = resource.join("dist-runtime").join("runtime").join("python").join("python.exe");
-    let python_path = [private_python, resource_python].into_iter().find(|path| python_capable(path)).or_else(system_python);
+    let python_path = [private_python, resource_python].into_iter().find(|path| python_capable(path)).or_else(system_python).and_then(canonical_path);
     let python = python_path.is_some();
     let development = std::env::current_dir().unwrap_or_default().join("apps").join("desktop").join("dist-runtime");
-    let host = [resource.join("dist-runtime").join("host.mjs"), resource.join("_up_").join("dist-runtime").join("host.mjs"), development.join("host.mjs")].iter().any(|path| path.is_file());
+    let host_path = [resource.join("dist-runtime").join("host.mjs"), resource.join("_up_").join("dist-runtime").join("host.mjs"), development.join("host.mjs")].into_iter().find(|path| path.is_file()).and_then(canonical_path);
+    let host = host_path.is_some();
     let skill_roots = [resource.join("dist-runtime").join("skills"), resource.join("_up_").join("dist-runtime").join("skills"), development.join("skills")];
-    let skills = skill_roots.iter().any(|path| path.join("ppt-master").join("SKILL.md").exists() && path.join("ppt-master.manifest.json").exists());
+    let skill_path = skill_roots.iter().find(|path| path.join("ppt-master").join("SKILL.md").exists() && path.join("ppt-master.manifest.json").exists()).cloned().and_then(canonical_path);
+    let skills = skill_path.is_some();
     let fonts = [resource.join("dist-runtime").join("runtime").join("fonts").join("msyh.ttc"), resource.join("_up_").join("dist-runtime").join("runtime").join("fonts").join("msyh.ttc"), development.join("runtime").join("fonts").join("msyh.ttc")].iter().any(|path| path.is_file());
-    let lancedb = data.join("runtime").join("lancedb").join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").exists() || resource.join("dist-runtime").join("runtime").join("lancedb").exists();
-    let embedding = [resource.join("dist-runtime").join("runtime").join("embedding").join("local-hash-384-v1.json"), resource.join("_up_").join("dist-runtime").join("runtime").join("embedding").join("local-hash-384-v1.json"), data.join("runtime").join("embedding").join("local-hash-384-v1.json")].iter().any(|path| path.is_file());
-    let skill_path = skill_roots.iter().find(|path| path.join("ppt-master").join("SKILL.md").exists()).cloned();
-    let fonts_path = [resource.join("dist-runtime").join("runtime").join("fonts"), resource.join("_up_").join("dist-runtime").join("runtime").join("fonts"), development.join("runtime").join("fonts")].into_iter().find(|path| path.exists());
-    let lancedb_path = [data.join("runtime").join("lancedb"), resource.join("dist-runtime").join("runtime").join("lancedb")].into_iter().find(|path| path.join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").exists());
-    Ok(serde_json::json!({ "ready": node && opencode && python && skills && fonts && migrations && host && lancedb && embedding, "node": node, "opencode": opencode, "python": python, "skills": skills, "fonts": fonts, "migrations": migrations, "host": host, "lancedb": lancedb, "embedding": embedding, "semanticRag": lancedb, "paths": { "node": node_path, "opencode": opencode_path, "python": python_path, "skills": skill_path, "fonts": fonts_path, "lancedb": lancedb_path } }))
+    let fonts_path = [resource.join("dist-runtime").join("runtime").join("fonts"), resource.join("_up_").join("dist-runtime").join("runtime").join("fonts"), development.join("runtime").join("fonts")].into_iter().find(|path| path.join("msyh.ttc").is_file()).and_then(canonical_path);
+    let lancedb_candidates = [data.join("runtime").join("lancedb"), resource.join("dist-runtime").join("runtime").join("lancedb")];
+    let lancedb_path = lancedb_candidates.into_iter().find(|path| path.join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").exists()).and_then(canonical_path);
+    let lancedb = lancedb_path.is_some();
+    let embedding_path = [resource.join("dist-runtime").join("runtime").join("embedding").join("local-hash-384-v1.json"), resource.join("_up_").join("dist-runtime").join("runtime").join("embedding").join("local-hash-384-v1.json"), data.join("runtime").join("embedding").join("local-hash-384-v1.json")].into_iter().find(|path| path.is_file()).and_then(canonical_path);
+    let embedding = embedding_path.is_some();
+    Ok(serde_json::json!({ "ready": node && opencode && python && skills && fonts && migrations && host && lancedb && embedding, "node": node, "opencode": opencode, "python": python, "skills": skills, "fonts": fonts, "migrations": migrations, "host": host, "lancedb": lancedb, "embedding": embedding, "semanticRag": lancedb, "paths": { "node": node_path, "opencode": opencode_path, "python": python_path, "host": host_path, "skills": skill_path, "fonts": fonts_path, "lancedb": lancedb_path, "embedding": embedding_path } }))
 }
 
 fn executable_works(path: &std::path::Path, args: &[&str]) -> bool {
     Command::new(path).args(args).output().map(|output| output.status.success()).unwrap_or(false)
 }
 
+fn canonical_path(path: PathBuf) -> Option<PathBuf> {
+    std::fs::canonicalize(path).ok()
+}
+
 fn configured_runtime_executable(data: &std::path::Path, key: &str) -> Option<PathBuf> {
     let value = config::read(&data.join("config.json"), data).ok()?;
-    value.get("runtime")?.get(key)?.as_str().map(PathBuf::from).filter(|path| path.is_file())
+    value.get("runtime")?.get(key)?.as_str().map(PathBuf::from).filter(|path| path.is_file()).and_then(|path| std::fs::canonicalize(path).ok())
 }
 
 fn python_capable(path: &std::path::Path) -> bool {
@@ -98,13 +105,13 @@ fn python_capable(path: &std::path::Path) -> bool {
 fn system_python() -> Option<PathBuf> {
     let output = Command::new("where.exe").arg("python").output().ok()?;
     if !output.status.success() { return None; }
-    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).find(|path| path.exists())
+    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).filter(|path| path.exists()).find_map(|path| std::fs::canonicalize(path).ok())
 }
 
 fn system_executable(command: &str) -> Option<PathBuf> {
     let output = Command::new("where.exe").arg(command).output().ok()?;
     if !output.status.success() { return None; }
-    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).find(|path| path.exists())
+    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).filter(|path| path.exists()).find_map(|path| std::fs::canonicalize(path).ok())
 }
 
 #[derive(Debug, Deserialize, Default)]

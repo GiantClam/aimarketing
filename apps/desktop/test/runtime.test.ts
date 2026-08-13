@@ -34,6 +34,20 @@ test("config writes atomically and recovers from backup", async () => {
     assert.equal(updated.provider.skillId, "ppt-master");
     assert.equal(updated.provider.endpoint, "/videos/generations");
     assert.equal(updated.provider.queryEndpoint, "/api/v1/tasks");
+    const selectedRuntime = {
+      source: "system" as const,
+      nodePath: join(root, "runtime", "node.exe"),
+      opencodePath: join(root, "runtime", "opencode.exe"),
+      pythonPath: join(root, "runtime", "python.exe"),
+      hostPath: join(root, "runtime", "host.mjs"),
+      skillsPath: join(root, "runtime", "skills"),
+      fontsPath: join(root, "runtime", "fonts"),
+      lancedbPath: join(root, "runtime", "lancedb"),
+      embeddingPath: join(root, "runtime", "embedding.json"),
+    };
+    await writeDesktopConfig(paths, { ...updated, runtime: selectedRuntime });
+    const persistedRuntime = await readDesktopConfig(paths);
+    assert.deepEqual(persistedRuntime.runtime, selectedRuntime);
     await writeDesktopConfig(paths, { ...updated, offlineRuntimeZipPath: join(root, "runtime.zip") });
     const offlineConfigured = await readDesktopConfig(paths);
     assert.equal(offlineConfigured.offlineRuntimeZipPath, join(root, "runtime.zip"));
