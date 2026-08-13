@@ -118,5 +118,6 @@
 
 - [ ] 所有阶段与质量门禁通过
 - [ ] 三个 capability specs 全部满足
-- [ ] 发布清单记录签名、hash、体积、测试矩阵和未测组合
+- [x] 发布清单记录签名、hash、体积、测试矩阵和未测组合
+  - [x] 2026-08-14 `docs/desktop/windows-v1-release-checklist.zh-CN.md` records current normal/portable/runtime ZIP, EXE and NSIS SHA-256/size, passed test matrix, real Provider scope, unsigned-manifest/AuthentiCode state, VM gaps, production gaps, and the explicit Seedance exclusion.
 - [ ] Ready for `openspec-archive harden-windows-desktop-release`
