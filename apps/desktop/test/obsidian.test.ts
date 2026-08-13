@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -79,5 +79,45 @@ test("Obsidian index generations activate atomically after a complete manifest",
     assert.equal(resolveActiveIndexPath(index), generationPath);
     assert.equal(JSON.parse(await readFile(join(index, "current-generation.json"), "utf8")).generation, 1);
     assert.equal(JSON.parse(await readFile(join(resolveActiveIndexPath(index), "manifest.json"), "utf8")).documents.length, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("indexes 10,000 Markdown documents and reconciles changes while the watcher is active", { timeout: 30_000 }, async () => {
+  const root = await mkdtemp(join(tmpdir(), "aimarketing-vault-large-"));
+  const vault = join(root, "OneDrive - AI Marketing", "资料库");
+  const index = join(root, "indexes", "large-vault");
+  const bulk = join(vault, "批量文档");
+  const longPath = join(vault, "客户资料", "季度复盘", "2026", "华东区域", "长期项目", "最终交付", "超长路径笔记.md");
+  try {
+    await mkdir(bulk, { recursive: true });
+    await mkdir(join(longPath, ".."), { recursive: true });
+    const totalBulk = 9_999;
+    const batchSize = 250;
+    for (let start = 0; start < totalBulk; start += batchSize) {
+      const end = Math.min(totalBulk, start + batchSize);
+      await Promise.all(Array.from({ length: end - start }, (_, offset) => {
+        const number = start + offset;
+        return writeFile(join(bulk, `文档-${number.toString().padStart(5, "0")}.md`), `# 文档 ${number}\n本地 Vault 索引内容 ${number}`, "utf8");
+      }));
+    }
+    await writeFile(longPath, "# 长路径笔记\nOneDrive 同步目录中的本地内容", "utf8");
+
+    const manifest = await indexObsidianVault(vault, index);
+    assert.equal(manifest.documents.length, 10_000);
+    assert.equal(manifest.chunks.length, 10_000);
+    assert.ok(manifest.documents.some((document) => document.documentPath.endsWith("超长路径笔记.md")));
+
+    const watcher = new ObsidianVaultWatcher(vault, () => undefined).start();
+    try {
+      const removedPath = join(bulk, "文档-00000.md");
+      await writeFile(longPath, "# 长路径笔记\nOneDrive 同步目录中的更新内容", "utf8");
+      await unlink(removedPath);
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      const reconciliation = await reconcileObsidianVault(manifest);
+      assert.ok(reconciliation.changed.includes("客户资料/季度复盘/2026/华东区域/长期项目/最终交付/超长路径笔记.md"));
+      assert.deepEqual(reconciliation.removed, ["批量文档/文档-00000.md"]);
+    } finally {
+      watcher.stop();
+    }
   } finally { await rm(root, { recursive: true, force: true }); }
 });

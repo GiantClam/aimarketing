@@ -56,8 +56,10 @@
 
 **Quality Gate:**
 - [ ] Obsidian 未启动时全部功能可用
-- [ ] 中文、空格、长路径、OneDrive 和 10k+ Markdown fixture 通过
-- [ ] watcher 漏事件后 reconciliation 可恢复一致性
+- [x] 中文、空格、长路径、OneDrive 和 10k+ Markdown fixture 通过
+  - [x] 2026-08-13 `apps/desktop/test/obsidian.test.ts` indexes 10,000 UTF-8 Markdown files under a OneDrive-shaped Chinese path, including a deep long-path note, then verifies all documents/chunks are retained.
+- [x] watcher 漏事件后 reconciliation 可恢复一致性
+  - [x] 2026-08-13 the same regression keeps `ObsidianVaultWatcher` active while mutating/removing files, waits for the debounced watcher window, and verifies manifest hash reconciliation reports changed/removed paths.
 
 ## 4. Local RAG and citations
 
