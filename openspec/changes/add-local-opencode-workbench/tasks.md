@@ -34,10 +34,10 @@
 - [x] 3.3a UI Provider/model/base URL/API key is passed request-scoped to Host, which writes an isolated OpenCode config and env reference (key is not a CLI argument).
 - [x] 3.4a User messages/runs/events/usage are persisted through typed Tauri commands; terminal status is idempotent.
 
-- [ ] 3.1 实现本地 chat service，使用共享 context/session/message/event contracts
-- [ ] 3.2 移除或拒绝 desktop 对 `ai-sdk-native`、Railway、Cloudflare 的文本路由
-- [ ] 3.3 将选定 OpenAI-compatible Provider/model/base URL/key 和 reasoning effort 传入 request-scoped runtime config
-- [ ] 3.4 执行前持久化用户消息，终止时原子保存 assistant 结果、状态、关键事件和用量
+- [x] 3.1 实现本地 chat service，使用共享 context/session/message/event contracts。✓ 2026-08-13 — `LocalChatService`、framed workflow-host RPC 与 `session.create`/`session.prompt` 复用共享 runtime contracts，并以 stable conversation session 运行。
+- [x] 3.2 移除或拒绝 desktop 对 `ai-sdk-native`、Railway、Cloudflare 的文本路由。✓ 2026-08-13 — desktop chat 只经 host-mediated OpenCode；边界与路由 tests 不存在 direct text-provider fallback。
+- [x] 3.3 将选定 OpenAI-compatible Provider/model/base URL/key 和 reasoning effort 传入 request-scoped runtime config。✓ 2026-08-13 — UI 选中的 configured model、endpoint、key 与 reasoning effort 写入 isolated OpenCode config/env reference，key 不作为 CLI 参数。
+- [x] 3.4 执行前持久化用户消息，终止时原子保存 assistant 结果、状态、关键事件和用量。✓ 2026-08-13 — typed Tauri commands 写入 conversations/messages/runs/events/usage，terminal state 与 usage idempotency 由桌面回归覆盖。
 - [ ] 3.5 实现 session loss recovery snapshot，失败不覆盖已持久化历史
 - [ ] 3.6 添加多轮、取消、session loss、crash、坏事件和缺 Provider tests
 
@@ -65,12 +65,12 @@
 
 ## 5. Persist conversations, artifacts, usage and logs
 
-- [ ] 5.1 使用 foundation repositories 保存 conversations/messages/runs/key events/artifacts/usage
+- [x] 5.1 使用 foundation repositories 保存 conversations/messages/runs/key events/artifacts/usage。✓ 2026-08-13 — local SQLite repository commands 是唯一持久化入口，Task Center、history、artifact 与 usage summary 均通过它读取。
 - [x] 5.1a Tauri commands persist conversations, messages, runs and key run events; UI run action writes user message and event/terminal status.
 - [x] 5.1c Task Center lists persisted SQLite runs, exposes terminal status and lets users load the original prompt for an explicit retry.
 - [x] 5.1b Usage events are recorded as model/token/cost metadata without billing or balance enforcement.
 - [x] 5.2a Tauri host writes redacted per-run JSONL from framed stdout and stderr with bounded rolling cleanup.
-- [ ] 5.2 完整 OpenCode NDJSON 和工具 stdio 写 `logs/runs/<run-id>.jsonl` 并脱敏
+- [x] 5.2 完整 OpenCode NDJSON 和工具 stdio 写 `logs/runs/<run-id>.jsonl` 并脱敏。✓ 2026-08-13 — Rust host 将验证后的 framed stdout 与 stderr 分开写入 redacted per-run JSONL，并采用 30 天/1GB 保留策略。
 - [x] 5.3 运行日志执行 30 天或 1GB 保留策略，只清理最早的 `logs/runs/*.jsonl`，不删除用户会话/产物/项目/usage；Rust 回归测试覆盖过期与超容量清理。 ✓ 2026-08-13
 - [ ] 5.4 价格可得时估算成本，不可得时显示“成本未知”
 - [ ] 5.5 支持应用内、Explorer 和默认本地程序打开 artifact
