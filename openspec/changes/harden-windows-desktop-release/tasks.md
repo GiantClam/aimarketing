@@ -3,6 +3,7 @@
 - [x] 1.1 为 WebView2、Node/workflow-host、OpenCode、Python/PPT、字体、embedding、Skills 和 migrations 建 probe tests
   - [x] 2026-08-14 `apps/desktop/test/bootstrap.test.ts` exercises every mandatory runtime component as an isolated damaged fixture; each failed probe blocks readiness and the repaired all-green manifest passes the repeated gate.
 - [x] 1.2 在 Tauri WebView 创建前执行原生 bootstrap 状态机（`run()` 先获取单实例锁，再完成 WebView2、运行时组件和 SQLite migrations 门禁；任一失败均不创建 Tauri WebView）
+  - [x] 2026-08-14 native startup failure dialogs and desktop runtime-repair failure status now select Chinese for `zh-*` system locales and English for all other locales; regression coverage locks both paths.
 - [x] 1.3 复用通过 probe 的系统组件并记录 canonical absolute path（runtime probe 将 Node、OpenCode、Python、host、Skills、字体、LanceDB 和 embedding 路径写回 `config.json`；host 启动优先使用这些路径）
   - [x] 2026-08-13 native `runtime_probe` now prefers every persisted runtime path (not only OpenCode), canonicalizes the selected executable/directories, and atomically persists the selection before returning; the Rust regression proves a saved Node path is reused ahead of system fallback.
   - [x] 2026-08-14 Windows `where.exe` command shims (`opencode`, `opencode.cmd`) are resolved to the dispatched `node_modules/opencode-ai/bin/opencode.exe` before persistence or `CreateProcess`; Rust regression covers the shim path.

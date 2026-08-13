@@ -127,7 +127,7 @@ function buildRoutes(locale: "zh" | "en"): DesktopRoute[] {
   return WORKBENCH_ROUTE_MANIFEST.map((route) => ({ path: route.path, label: route.label[locale], description: route.description[locale], mode: route.mode === "home" ? "library" : route.mode, ...(route.section ? { section: route.section[locale] } : {}), ...(route.glyph ? { glyph: route.glyph } : {}), ...(route.placement ? { placement: route.placement } : {}), iconKey: routeIconKeys[route.path] }));
 }
 
-function localizeRuntimeStatus(status: string, locale: "zh" | "en") {
+export function localizeRuntimeStatus(status: string, locale: "zh" | "en") {
   if (locale === "zh") return status;
   const map: Record<string, string> = {
     "检查本地运行环境…": "Checking local runtime…",
@@ -138,6 +138,7 @@ function localizeRuntimeStatus(status: string, locale: "zh" | "en") {
     "本地数据库需要修复": "Local database needs repair",
     "浏览器预览模式 · Tauri 未连接": "Browser preview · Tauri is not connected",
   };
+  if (status.startsWith("运行环境修复失败：")) return `Runtime repair failed: ${status.slice("运行环境修复失败：".length)}`;
   return map[status] ?? status;
 }
 

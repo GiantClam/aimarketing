@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { WORKBENCH_MEDIA_FEATURES } from "@aimarketing/workbench-ui";
 import { desktopCopy, detectDesktopLocale, mediaPlaceholderEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale } from "../src/i18n";
+import { localizeRuntimeStatus } from "../src/App";
 
 test("desktop locale follows Windows/WebView language by default", () => {
   assert.equal(detectDesktopLocale("zh-CN"), "zh");
@@ -38,4 +39,9 @@ test("retained Agent routes use the same quick prompts as the cloud catalog", ()
 test("account-free home copy keeps the cloud fallback greeting", () => {
   assert.equal(desktopCopy.zh.welcome, "欢迎回来，伙伴");
   assert.equal(desktopCopy.en.welcome, "Welcome back, there");
+});
+
+test("runtime repair failures are fully localized in the English shell", () => {
+  assert.equal(localizeRuntimeStatus("运行环境修复失败：runtime_install_incomplete", "en"), "Runtime repair failed: runtime_install_incomplete");
+  assert.equal(localizeRuntimeStatus("运行环境修复失败：runtime_install_incomplete", "zh"), "运行环境修复失败：runtime_install_incomplete");
 });

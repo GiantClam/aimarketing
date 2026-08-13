@@ -284,9 +284,18 @@ pub fn show_startup_error(error: &str) {
     {
         use std::iter::once;
         use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
-        let title: Vec<u16> = "AI Marketing 启动失败".encode_utf16().chain(once(0)).collect();
-        let message: Vec<u16> = format!("无法准备 Windows 本地运行环境。\\n\\n{error}\\n请检查网络或运行时安装包后重新启动。").encode_utf16().chain(once(0)).collect();
+        let (title_text, message_text) = startup_error_messages_for(startup_is_chinese(), error);
+        let title: Vec<u16> = title_text.encode_utf16().chain(once(0)).collect();
+        let message: Vec<u16> = message_text.encode_utf16().chain(once(0)).collect();
         unsafe { MessageBoxW(std::ptr::null_mut(), message.as_ptr(), title.as_ptr(), MB_OK | MB_ICONERROR); }
+    }
+}
+
+fn startup_error_messages_for(chinese: bool, error: &str) -> (String, String) {
+    if chinese {
+        ("AI Marketing 启动失败".to_string(), format!("无法准备 Windows 本地运行环境。\\n\\n{error}\\n请检查网络或运行时安装包后重新启动。"))
+    } else {
+        ("AI Marketing startup failed".to_string(), format!("Unable to prepare the Windows local runtime.\\n\\n{error}\\nCheck the network or runtime installer and restart the app."))
     }
 }
 
@@ -447,5 +456,17 @@ mod tests {
                 "Probing the local runtime again…",
             ]
         );
+    }
+
+    #[test]
+    fn startup_errors_follow_the_selected_locale() {
+        assert_eq!(startup_error_messages_for(true, "runtime_install_incomplete"), (
+            "AI Marketing 启动失败".to_string(),
+            "无法准备 Windows 本地运行环境。\\n\\nruntime_install_incomplete\\n请检查网络或运行时安装包后重新启动。".to_string(),
+        ));
+        assert_eq!(startup_error_messages_for(false, "runtime_install_incomplete"), (
+            "AI Marketing startup failed".to_string(),
+            "Unable to prepare the Windows local runtime.\\n\\nruntime_install_incomplete\\nCheck the network or runtime installer and restart the app.".to_string(),
+        ));
     }
 }
