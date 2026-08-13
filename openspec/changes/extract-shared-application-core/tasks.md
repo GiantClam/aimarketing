@@ -48,6 +48,7 @@
 - [ ] 4.6 Keep original `lib/workflows/*` paths as thin re-exports or SaaS composition modules.
   - [x] 4.6a `lib/workflows/node-definitions/*` now re-export the same `workflow-core` node types, built-ins, registry and port compatibility instances; SaaS-specific node execution remains host composition.
   - [x] 4.6b `lib/workflows/schema.ts` now re-exports the shared schema types and helpers; the shared core owns generic asset-to-media connection compatibility.
+  - [x] 4.6c `lib/workflows/connect.ts` now re-exports shared edge input mapping and port resolution; SaaS retains only canvas feature gating and localized labels.
 
 **Quality Gate:** PASSED for the shared workflow core — workflow-core contract tests/typecheck and desktop host integration tests pass. The SaaS adapter/re-export parity work remains open in 4.5–4.6.
 

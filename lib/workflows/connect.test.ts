@@ -2,13 +2,20 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  areWorkflowPortsCompatible,
   getWorkflowPortLabel,
   isWorkflowPortCreatable,
   resolveClickConnectInputName,
   resolveClickConnectPorts,
   resolveWorkflowPortConnection,
+  workflowInputNameToValueKind,
   workflowValueKindToInputName,
 } from "./connect"
+import {
+  areWorkflowPortsCompatible as sharedAreWorkflowPortsCompatible,
+  resolveWorkflowPortConnection as sharedResolveWorkflowPortConnection,
+  workflowInputNameToValueKind as sharedWorkflowInputNameToValueKind,
+} from "@aimarketing/workflow-core"
 import { workflowNodeRegistry } from "./node-definitions/registry"
 
 test("workflowValueKindToInputName maps every value kind to its edge input name", () => {
@@ -18,6 +25,12 @@ test("workflowValueKindToInputName maps every value kind to its edge input name"
   assert.equal(workflowValueKindToInputName("video"), "videos")
   assert.equal(workflowValueKindToInputName("audio"), "audios")
   assert.equal(workflowValueKindToInputName("ppt"), "presentations")
+})
+
+test("legacy connection helpers are shared workflow-core exports", () => {
+  assert.equal(areWorkflowPortsCompatible, sharedAreWorkflowPortsCompatible)
+  assert.equal(resolveWorkflowPortConnection, sharedResolveWorkflowPortConnection)
+  assert.equal(workflowInputNameToValueKind, sharedWorkflowInputNameToValueKind)
 })
 
 test("resolveClickConnectInputName resolves compatible source->target pairs", () => {

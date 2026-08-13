@@ -1,84 +1,21 @@
 import {
-  getWorkflowNodeDefinition,
+  resolveClickConnectPorts as resolveClickConnectPortsFromCore,
+  workflowNodeRegistry,
+  workflowValueKindToInputName as workflowValueKindToInputNameFromCore,
   type WorkflowNodeType,
+  type WorkflowPortDefinition,
   type WorkflowValueKind,
-} from "@/lib/workflows/schema"
+} from "@aimarketing/workflow-core"
 import type { WorkflowFeatures } from "@/lib/workflows/features"
-import type { WorkflowPortDefinition } from "@/lib/workflows/node-definitions/types"
-import { areWorkflowPortsCompatible as areRegistryWorkflowPortsCompatible } from "@/lib/workflows/node-definitions/registry"
 
-// Maps a workflow value kind to the edge inputName used in workflow definitions.
-// Kept here (next to the click-connect resolver) so UI and logic share one
-// source of truth for the kind -> inputName mapping.
-export function workflowValueKindToInputName(kind: WorkflowValueKind): string {
-  if (kind === "text") return "text"
-  if (kind === "asset") return "assets"
-  if (kind === "image") return "images"
-  if (kind === "video") return "videos"
-  if (kind === "audio") return "audios"
-  return "presentations"
-}
-
-export type WorkflowPortConnection = {
-  sourcePortId: string
-  targetPortId: string
-}
-
-/**
- * Resolve a legacy value-kind connection to stable Registry port ids. This is
- * the only compatibility fallback used by the canvas; newly-created edges
- * must carry the two ids and leave inputName to the store migration layer.
- */
-export function resolveWorkflowPortConnection(
-  sourceType: WorkflowNodeType,
-  targetType: WorkflowNodeType,
-  sourcePortId?: string | null,
-  targetPortId?: string | null,
-  inputName?: string | null,
-): WorkflowPortConnection | null {
-  const sourceDefinition = getWorkflowNodeDefinition(sourceType)
-  const targetDefinition = getWorkflowNodeDefinition(targetType)
-
-  if (sourcePortId || targetPortId) {
-    const target = targetDefinition.inputs.find((port) => port.id === targetPortId) ?? targetDefinition.inputs[0]
-    const source = sourceDefinition.outputs.find((port) => port.id === sourcePortId) ??
-      sourceDefinition.outputs.find((port) => target && areWorkflowPortsCompatible(port, target))
-    if (source && target && areWorkflowPortsCompatible(source, target)) return { sourcePortId: source.id, targetPortId: target.id }
-    return null
-  }
-
-  const legacyName = inputName ?? null
-  const wantedName = legacyName ? workflowInputNameToValueKind(legacyName) : null
-  for (const source of sourceDefinition.outputs) {
-    for (const target of targetDefinition.inputs) {
-      if (!areWorkflowPortsCompatible(source, target)) continue
-      if (wantedName && source.valueKind !== wantedName && target.valueKind !== wantedName) continue
-      return { sourcePortId: source.id, targetPortId: target.id }
-    }
-  }
-  return null
-}
-
-export function resolveClickConnectPorts(
-  sourceType: WorkflowNodeType,
-  targetType: WorkflowNodeType,
-): WorkflowPortConnection | null {
-  return resolveWorkflowPortConnection(sourceType, targetType)
-}
-
-export function areWorkflowPortsCompatible(source: WorkflowPortDefinition, target: WorkflowPortDefinition) {
-  return areRegistryWorkflowPortsCompatible(source, target)
-}
-
-export function workflowInputNameToValueKind(inputName: string | null | undefined): WorkflowValueKind | null {
-  if (inputName === "text") return "text"
-  if (inputName === "assets" || inputName === "asset") return "asset"
-  if (inputName === "images" || inputName === "image") return "image"
-  if (inputName === "videos" || inputName === "video") return "video"
-  if (inputName === "audios" || inputName === "audio") return "audio"
-  if (inputName === "presentations" || inputName === "presentation" || inputName === "ppt") return "ppt"
-  return null
-}
+export {
+  areWorkflowPortsCompatible,
+  resolveClickConnectPorts,
+  resolveWorkflowPortConnection,
+  workflowInputNameToValueKind,
+  workflowValueKindToInputName,
+} from "@aimarketing/workflow-core"
+export type { WorkflowPortConnection } from "@aimarketing/workflow-core"
 
 export function isWorkflowV2OnlyPort(port: WorkflowPortDefinition) {
   return port.role === "image.first_frame" || port.role === "image.last_frame" || port.role === "image.mask"
@@ -118,8 +55,8 @@ export function resolveClickConnectInputName(
   sourceType: WorkflowNodeType,
   targetType: WorkflowNodeType,
 ): string | null {
-  const connection = resolveClickConnectPorts(sourceType, targetType)
+  const connection = resolveClickConnectPortsFromCore(sourceType, targetType)
   if (!connection) return null
-  const target = getWorkflowNodeDefinition(targetType).inputs.find((port) => port.id === connection.targetPortId)
-  return target ? workflowValueKindToInputName(target.valueKind) : null
+  const target = workflowNodeRegistry.require(targetType).inputs.find((port) => port.id === connection.targetPortId)
+  return target ? workflowValueKindToInputNameFromCore(target.valueKind) : null
 }
