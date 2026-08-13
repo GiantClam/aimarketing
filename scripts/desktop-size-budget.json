@@ -1,0 +1,14 @@
+{
+  "mainZipBytes": 400000000,
+  "runtimeZipBytes": 550000000,
+  "extractedProgramBytes": 900000000,
+  "components": {
+    "application": 350000000,
+    "node": 180000000,
+    "opencode": 220000000,
+    "python": 350000000,
+    "fonts": 40000000,
+    "embedding": 1000000,
+    "skills": 150000000
+  }
+}

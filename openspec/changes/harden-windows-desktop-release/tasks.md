@@ -79,7 +79,8 @@
 - [ ] 5.1 在 Win10 22H2/Win11 x64 运行中文用户名、空格、长路径和 OneDrive 测试
 - [ ] 5.2 运行 OpenCode/workflow-host 强杀、恢复和 Windows Job Object 测试
 - [ ] 5.3 执行日志 30 天/1GB 清理和诊断包脱敏测试
-- [ ] 5.4 执行主 ZIP、解压后、runtime 补齐后的组件级 size budget
+- [x] 5.4 执行主 ZIP、解压后、runtime 补齐后的组件级 size budget
+  - [x] 2026-08-13 `scripts/verify-desktop-size-budget.ps1` reports compressed main normal/portable ZIPs, uncompressed extracted program contents, runtime ZIP size, and application/Node/OpenCode/Python/fonts/embedding/Skills ownership; configured budget overflow fails closed. Current normal/portable/runtime archives pass with 268,943,017 / 269,006,577 / 411,848,658 compressed bytes and 689,076,629 / 689,076,636 / 991,112,444 uncompressed bytes.
 - [ ] 5.5 执行 Authenticode、manifest 签名、依赖漏洞和许可证审计
 - [ ] 5.6 执行 desktop 全量 E2E 与 SaaS lint/build/regression
 - [x] 5.7 发布人工 ZIP 升级说明和已知限制，不启用应用内自动更新
