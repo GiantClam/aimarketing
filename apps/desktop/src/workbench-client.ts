@@ -21,8 +21,14 @@ function makeId(prefix: string) {
 
 function readWorkflowDefinition(raw: string): WorkbenchWorkflow["definition"] {
   try {
-    const value = JSON.parse(raw) as { nodes?: unknown; edges?: unknown };
-    return { nodes: Array.isArray(value.nodes) ? value.nodes : [], edges: Array.isArray(value.edges) ? value.edges : [] };
+    const value = JSON.parse(raw) as { schemaVersion?: unknown; revision?: unknown; definitionHash?: unknown; nodes?: unknown; edges?: unknown };
+    return {
+      ...(typeof value.schemaVersion === "number" ? { schemaVersion: value.schemaVersion } : {}),
+      ...(typeof value.revision === "number" ? { revision: value.revision } : {}),
+      ...(typeof value.definitionHash === "string" ? { definitionHash: value.definitionHash } : {}),
+      nodes: Array.isArray(value.nodes) ? value.nodes : [],
+      edges: Array.isArray(value.edges) ? value.edges : [],
+    };
   } catch {
     return { nodes: [], edges: [] };
   }

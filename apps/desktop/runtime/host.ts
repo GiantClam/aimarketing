@@ -14,7 +14,7 @@ import { OpenCodeServeClient } from "./opencode-serve";
 import { createRpcReader, writeRpcResponse } from "./rpc";
 import { createDesktopWorkflowPorts } from "./workflow-ports";
 
-type HostCommand = { readonly version: 1; readonly requestId: string; readonly type: "chat.run" | "workflow.run" | "run.cancel" | "run.retry" | "media.resume" | "health" | "session.create" | "session.prompt" | "knowledge.index" | "knowledge.search"; readonly runId?: string; readonly sessionId?: string; readonly payload?: Record<string, unknown> };
+type HostCommand = { readonly version: 1; readonly requestId: string; readonly type: "chat.run" | "workflow.run" | "run.cancel" | "run.emergency_stop" | "run.retry" | "media.resume" | "health" | "session.create" | "session.prompt" | "knowledge.index" | "knowledge.search"; readonly runId?: string; readonly sessionId?: string; readonly payload?: Record<string, unknown> };
 type ProviderConfig = { readonly id?: string; readonly source?: string; readonly model?: string; readonly baseUrl?: string; readonly apiKey?: string; readonly reasoningEffort?: string };
 const active = new Map<string, ReturnType<typeof spawn>>();
 const workflowControllers = new Map<string, AbortController>();
@@ -256,7 +256,8 @@ async function runWorkflow(command: HostCommand) {
     } };
   const ports = createDesktopWorkflowPorts({ runId, emit: (event) => emit(command, event), capability });
   artifactPort = ports.artifacts;
-  try { result = await executeWorkflow(normalizedDefinition, { runId, signal: controller.signal, recovering: readWorkflowRecovery(command.payload?.recovering), ports }); } catch (error) {
+  const recoveryDefinitionHash = typeof command.payload?.recoveryDefinitionHash === "string" && command.payload.recoveryDefinitionHash.trim() ? command.payload.recoveryDefinitionHash.trim() : undefined;
+  try { result = await executeWorkflow(normalizedDefinition, { runId, signal: controller.signal, recovering: readWorkflowRecovery(command.payload?.recovering), ...(recoveryDefinitionHash ? { recoveryDefinitionHash } : {}), ...(command.payload?.completed && typeof command.payload.completed === "object" ? { completed: command.payload.completed as Record<string, Record<string, unknown>> } : {}), ports }); } catch (error) {
     workflowControllers.delete(runId);
     emit(command, { event: "runtime_error", code: "workflow_invalid", message: error instanceof Error ? error.message : String(error), retryable: false, runId });
     return;
@@ -374,6 +375,23 @@ async function resumeMediaRun(command: HostCommand) {
 
 function emit(command: HostCommand, event: OpenCodeRuntimeEvent) { writeRpcResponse(process.stdout, { version: 1, requestId: command.requestId, ok: true, data: { event } }); }
 
+async function stopRun(command: HostCommand, emergency: boolean) {
+  const runId = String(command.runId ?? command.payload?.runId ?? "");
+  if (!runId) return fail(command, "run_id_required", "runId is required");
+  const controller = workflowControllers.get(runId);
+  controller?.abort();
+  let stopped = Boolean(controller);
+  for (const [key, child] of active) {
+    if (key !== runId && !key.startsWith(`${runId}:`)) continue;
+    child.kill();
+    active.delete(key);
+    stopped = true;
+  }
+  const served = await serveClient.cancelRun(runId);
+  if (emergency) emit(command, { event: "tool_event", tool: "run:emergency_stop", phase: "completed", message: JSON.stringify({ runId, stopped: stopped || served }), runId });
+  respond(command, { cancelled: stopped || served, emergency });
+}
+
 createRpcReader(process.stdin, (raw) => {
   const command = raw as unknown as HostCommand;
   if (!command.requestId || !command.type) return;
@@ -433,6 +451,6 @@ createRpcReader(process.stdin, (raw) => {
       .then((results) => respond(command, { indexPath, query, results }))
       .catch((error) => fail(command, "knowledge_search_failed", error instanceof Error ? error.message : String(error)));
   }
-  if (command.type === "run.cancel") { const runId = String(command.runId ?? command.payload?.runId ?? ""); const controller = workflowControllers.get(runId); controller?.abort(); let cancelled = Boolean(controller); for (const [key, child] of active) if (key === runId || key.startsWith(`${runId}:`)) { child.kill(); active.delete(key); cancelled = true; } return void serveClient.cancelRun(runId).then((served) => respond(command, { cancelled: cancelled || served })); }
+  if (command.type === "run.cancel" || command.type === "run.emergency_stop") return void stopRun(command, command.type === "run.emergency_stop" || command.payload?.emergency === true);
   fail(command, "unknown_method", `Unsupported method: ${command.type}`);
 }, (error) => process.stderr.write(`[workflow-host] ${error.message}\n`));

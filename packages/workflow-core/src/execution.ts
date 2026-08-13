@@ -12,6 +12,12 @@ export interface WorkflowExecutionOptions {
   readonly retryLimit?: number;
   readonly completed?: Readonly<Record<string, Record<string, unknown>>>;
   readonly recovering?: Readonly<Record<string, { readonly providerTaskId: string; readonly metadata?: Readonly<Record<string, unknown>> }>>;
+  /**
+   * Hash captured when a recoverable run started. A retry must use the exact
+   * same graph/configuration so completed nodes cannot be replayed against a
+   * different branch or provider binding.
+   */
+  readonly recoveryDefinitionHash?: string;
 }
 
 export interface WorkflowExecutionResult {
@@ -27,6 +33,11 @@ export async function executeWorkflow(definition: WorkflowDefinitionEnvelope, op
   const outputs: Record<string, Record<string, unknown>> = { ...(options.completed ?? {}) };
   const sequence = { value: 0 };
   await options.ports.repository?.create({ runId: options.runId, definition });
+  if (options.recoveryDefinitionHash && options.recoveryDefinitionHash !== plan.definitionHash) {
+    await options.ports.repository?.updateStatus(options.runId, "failed");
+    await appendEvent(options, sequence, "run_recovery_rejected", { expectedDefinitionHash: options.recoveryDefinitionHash, actualDefinitionHash: plan.definitionHash });
+    return { runId: options.runId, status: "failed", outputs, plan, error: "workflow_recovery_incompatible_definition" };
+  }
   await options.ports.repository?.updateStatus(options.runId, "running");
   await appendEvent(options, sequence, "run_started", { definitionHash: plan.definitionHash });
   try {

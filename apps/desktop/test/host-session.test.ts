@@ -140,4 +140,8 @@ test("workflow-host routes persisted provider tasks through workflow-core recove
   assert.match(source, /recovering: readWorkflowRecovery\(command\.payload\?\.recovering\)/);
   assert.match(source, /resume: async \(\{ executorId, nodeKey, config, inputs, providerTaskId \}, signal\)/);
   assert.match(source, /runMediaCapability\(command, runId, nodeKey, executorId, config, inputs, workspacePath, signal, providerTaskId\)/);
+  assert.match(source, /recoveryDefinitionHash/);
+  assert.match(source, /completed: command\.payload\.completed/);
+  assert.match(source, /run\.emergency_stop/);
+  assert.match(source, /tool: "run:emergency_stop"/);
 });

@@ -27,6 +27,7 @@ type SavedWorkflow = { id: string; name: string; definition_json: string; update
 type ArtifactRow = { id: string; relative_path: string; mime_type: string; byte_length: number; sha256: string; created_at: string; available?: boolean };
 type RunRow = { id: string; conversation_id?: string | null; status: string; model?: string | null; started_at: string; finished_at?: string | null };
 type RunDetail = { run: RunRow; nodes: Array<{ node_key: string; status: string; output_json?: string | null; updated_at: string }>; events: Array<{ sequence: number; event_type: string; payload_json: string; created_at: string }>; usage: Array<{ provider?: string | null; model: string; input_tokens?: number | null; output_tokens?: number | null; provider_cost?: number | null; estimated_cost?: number | null; created_at: string }> };
+type WorkflowRetryState = { completed: Record<string, Record<string, unknown>>; recoveryDefinitionHash: string };
 type KnowledgeResult = { chunkId: string; documentPath: string; heading?: string; excerpt: string; score: number; lineStart?: number; lineEnd?: number };
 type LocalMessageRow = { role: string; content: string; created_at?: string };
 type DesktopConversationMessage = { id: string; role: "user" | "assistant"; content: string; created_at?: string };
@@ -1414,8 +1415,31 @@ export function App() {
   }
 
   async function prepareRunRetry(run: RunRow) {
-    if (!run.conversation_id) { setRunStatus(locale === "zh" ? "该任务没有关联会话，无法准备重试" : "This task has no conversation and cannot be retried"); return; }
     try {
+      const detail = await tauriBridge.invoke<RunDetail>("inspect_run", { runId: run.id });
+      const started = detail.events.find((event) => event.event_type === "run_started");
+      let startedPayload: Record<string, unknown> = {};
+      try { startedPayload = started ? JSON.parse(started.payload_json) as Record<string, unknown> : {}; } catch { startedPayload = {}; }
+      const definitionHash = typeof startedPayload.definitionHash === "string" ? startedPayload.definitionHash : "";
+      if (definitionHash) {
+        const saved = (await workbenchClient.workflows.list()).find((workflow) => workflow.definition.definitionHash === definitionHash);
+        if (saved) {
+          const completed: Record<string, Record<string, unknown>> = {};
+          for (const node of detail.nodes) {
+            if (node.status !== "succeeded" || !node.output_json) continue;
+            try {
+              const output = JSON.parse(node.output_json);
+              if (output && typeof output === "object" && !Array.isArray(output)) completed[node.node_key] = output as Record<string, unknown>;
+            } catch { /* malformed checkpoints stay visible in evidence and are not reused */ }
+          }
+          setRunStatus(locale === "zh" ? "已验证工作流版本，正在从成功节点准备安全重试…" : "Workflow version verified; preparing a safe retry from successful nodes…");
+          await runAgent(locale === "zh" ? "重试失败或中断的工作流节点" : "Retry failed or interrupted workflow nodes", undefined, undefined, saved.definition, { completed, recoveryDefinitionHash: definitionHash });
+          return;
+        }
+        setRunStatus(locale === "zh" ? "工作流版本已不存在，无法安全重试；请先导入或保存同一版本" : "The original workflow version is unavailable; import or save the same version before retrying");
+        return;
+      }
+      if (!run.conversation_id) { setRunStatus(locale === "zh" ? "该任务没有关联会话，无法准备重试" : "This task has no conversation and cannot be retried"); return; }
       const history = await workbenchClient.conversations.messages(run.conversation_id);
       const latestUser = [...history].reverse().find((message) => message.role === "user");
       if (!latestUser) { setRunStatus(locale === "zh" ? "未找到原始用户指令，无法准备重试" : "The original user instruction was not found"); return; }
@@ -1516,7 +1540,7 @@ export function App() {
     } catch (error) { setRunStatus(locale === "zh" ? `工作流导入失败：${error instanceof Error ? error.message : String(error)}` : `Workflow import failed: ${error instanceof Error ? error.message : String(error)}`); }
   }
 
-  async function runAgent(promptOverride?: string, mediaFeatureId?: MediaFeatureId | "image_generate", mediaInputs?: Record<string, unknown>, workflowOverride?: unknown) {
+  async function runAgent(promptOverride?: string, mediaFeatureId?: MediaFeatureId | "image_generate", mediaInputs?: Record<string, unknown>, workflowOverride?: unknown, workflowRetry?: WorkflowRetryState) {
     if (attachmentsPreparing) { setRunStatus(locale === "zh" ? "正在读取附件，请稍候…" : "Preparing attachments…"); return; }
     const basePrompt = (promptOverride ?? prompt).trim();
     const attachmentContext = attachments.length ? (locale === "zh" ? `\n\n本地附件（已复制到当前项目目录，供本轮 OpenCode 读取）：\n${attachments.map((attachment) => `- ${attachment.relativePath ?? attachment.name} (${attachment.mediaType}, ${attachment.size} bytes)`).join("\n")}` : `\n\nLocal attachments copied into the current project for OpenCode:\n${attachments.map((attachment) => `- ${attachment.relativePath ?? attachment.name} (${attachment.mediaType}, ${attachment.size} bytes)`).join("\n")}`) : "";
@@ -1608,7 +1632,7 @@ export function App() {
         const workflowName = locale === "en" ? `${actionName} workflow` : `${actionName}工作流`;
         const saved = toSavedWorkflow(await workbenchClient.workflows.save({ id: workflowId, title: workflowName, definition: workflowDefinition }));
         setSavedWorkflows((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
-        await sendHostMessage({ version: 1, requestId: runId, runId, type: "workflow.run", payload: { workspacePath: config.workspacePath, provider: config.provider, media: config.provider, vaultPath: config.obsidianVaultPath, indexPath: config.obsidianIndexPath, executable: config.runtime.opencodePath, mediaTempDirectories, definition: workflowDefinition } });
+        await sendHostMessage({ version: 1, requestId: runId, runId, type: "workflow.run", payload: { workspacePath: config.workspacePath, provider: config.provider, media: config.provider, vaultPath: config.obsidianVaultPath, indexPath: config.obsidianIndexPath, executable: config.runtime.opencodePath, mediaTempDirectories, definition: workflowDefinition, ...(workflowRetry ? { completed: workflowRetry.completed, recoveryDefinitionHash: workflowRetry.recoveryDefinitionHash } : {}) } });
       }
       setPrompt(""); setRunStatus(locale === "zh" ? "已发送，等待本地 Agent 事件…" : "Sent; waiting for local Agent events…");
     } catch (error) {
@@ -1620,7 +1644,7 @@ export function App() {
 
   async function cancelActiveRun() {
     if (!activeRunId) return;
-    try { const runId = activeRunId; await sendHostMessage({ version: 1, requestId: `cancel-${runId}`, runId, type: "run.cancel", payload: { runId } }); setRunStatus(locale === "zh" ? "已停止本地 Agent" : "Local Agent stopped"); setActiveRunId(null); setRuns((current) => current.map((run) => run.id === runId ? { ...run, status: "cancelled", finished_at: new Date().toISOString() } : run)); await tauriBridge.invoke("finish_run", { runId, status: "cancelled" }); }
+    try { const runId = activeRunId; await sendHostMessage({ version: 1, requestId: `cancel-${runId}`, runId, type: "run.cancel", payload: { runId, emergency: true } }); setRunStatus(locale === "zh" ? "已紧急停止本地 Agent" : "Local Agent emergency-stopped"); setActiveRunId(null); setRuns((current) => current.map((run) => run.id === runId ? { ...run, status: "cancelled", finished_at: new Date().toISOString() } : run)); await tauriBridge.invoke("finish_run", { runId, status: "cancelled" }); }
     catch (error) { setRunStatus(error instanceof Error ? error.message : (locale === "zh" ? "停止任务失败" : "Failed to stop the run")); }
   }
 

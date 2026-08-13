@@ -145,6 +145,7 @@ pub fn recover_interrupted(path: &Path) -> Result<i64> {
     initialize(path)?;
     let connection = open(path)?;
     let changed = connection.execute("UPDATE runs SET status='interrupted', finished_at=CURRENT_TIMESTAMP WHERE status IN ('running', 'queued', 'started')", [])?;
+    connection.execute("UPDATE run_nodes SET status='interrupted', updated_at=CURRENT_TIMESTAMP WHERE status IN ('queued', 'running', 'started') AND run_id IN (SELECT id FROM runs WHERE status='interrupted')", [])?;
     Ok(changed as i64)
 }
 
@@ -263,6 +264,15 @@ pub fn finish_run(path: &Path, run_id: &str, status: &str) -> Result<()> {
     initialize(path)?;
     let connection = open(path)?;
     connection.execute("UPDATE runs SET status=?2, finished_at=CURRENT_TIMESTAMP WHERE id=?1", params![run_id, status])?;
+    let node_status = match status {
+        "cancelled" => Some("cancelled"),
+        "interrupted" => Some("interrupted"),
+        "failed" => Some("failed"),
+        _ => None,
+    };
+    if let Some(node_status) = node_status {
+        connection.execute("UPDATE run_nodes SET status=?2, updated_at=CURRENT_TIMESTAMP WHERE run_id=?1 AND status IN ('queued', 'running', 'started')", params![run_id, node_status])?;
+    }
     Ok(())
 }
 
@@ -447,9 +457,26 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("app.db");
         create_run(&path, "run-active", None, Some("local")).unwrap();
+        record_run_node(&path, "run-active", "writer", "running", None).unwrap();
         assert_eq!(recover_interrupted(&path).unwrap(), 1);
         assert_eq!(open(&path).unwrap().query_row("SELECT status FROM runs WHERE id='run-active'", [], |row| row.get::<_, String>(0)).unwrap(), "interrupted");
+        assert_eq!(open(&path).unwrap().query_row("SELECT status FROM run_nodes WHERE run_id='run-active' AND node_key='writer'", [], |row| row.get::<_, String>(0)).unwrap(), "interrupted");
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn finishing_a_run_closes_unfinished_nodes_with_the_same_terminal_status() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-node-finish-{}", std::process::id()));
+        let path = root.join("app.db");
+        let _ = fs::remove_dir_all(&root);
+        initialize(&path).unwrap();
+        create_run(&path, "run-node-finish", None, Some("model")).unwrap();
+        record_run_node(&path, "run-node-finish", "writer", "running", None).unwrap();
+        finish_run(&path, "run-node-finish", "cancelled").unwrap();
+        let connection = open(&path).unwrap();
+        let status: String = connection.query_row("SELECT status FROM run_nodes WHERE run_id='run-node-finish' AND node_key='writer'", [], |row| row.get(0)).unwrap();
+        assert_eq!(status, "cancelled");
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

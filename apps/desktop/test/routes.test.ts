@@ -348,6 +348,8 @@ test("desktop conversation history and retry flow consume the injected Workbench
   assert.match(appSource, /workbenchClient\.conversations\.messages\(run\.conversation_id\)/);
   assert.match(appSource, /workbenchClient\.workflows\.list\(\)/);
   assert.match(appSource, /workbenchClient\.workflows\.save\(/);
+  assert.match(appSource, /run_recovery_rejected|recoveryDefinitionHash/);
+  assert.match(appSource, /completed, recoveryDefinitionHash/);
 });
 
 test("task center exposes persisted node, event and usage evidence", () => {

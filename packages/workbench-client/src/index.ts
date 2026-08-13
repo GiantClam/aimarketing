@@ -50,6 +50,9 @@ export interface WorkbenchUsage {
 }
 
 export interface WorkbenchWorkflowDefinition {
+  readonly schemaVersion?: number;
+  readonly revision?: number;
+  readonly definitionHash?: string;
   readonly nodes: readonly unknown[];
   readonly edges: readonly unknown[];
 }

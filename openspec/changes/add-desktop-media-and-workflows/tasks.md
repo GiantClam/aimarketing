@@ -66,14 +66,19 @@
   - [x] 2026-08-13 workflow-core emits bounded node success outputs as stable checkpoint payloads; Tauri persists idempotent `run_checkpoints` rows keyed by run/checkpoint, including foreach iteration keys.
 
 **Quality Gate:**
-- [ ] 完整 DAG、并行、foreach/collect contract tests 通过
-- [ ] 节点注册表与确认范围逐项匹配
-- [ ] desktop composition 不导入 Next route 或 SaaS infrastructure
+- [x] 完整 DAG、并行、foreach/collect contract tests 通过
+  - [x] 2026-08-13 workflow-core execution tests cover deterministic DAG ordering, parallel siblings, foreach/collect concurrency and failure policy.
+- [x] 节点注册表与确认范围逐项匹配
+  - [x] 2026-08-13 registry contract tests cover every approved v1 node and the four excluded SaaS-only capabilities.
+- [x] desktop composition 不导入 Next route 或 SaaS infrastructure
+  - [x] 2026-08-13 shared boundary and provenance tests pass for the desktop composition.
 
 ## 4. Run control and recovery
 
-- [ ] 4.1 实现 workflow/run/node cancel 和紧急停止
-- [ ] 4.2 实现节点/分支重试与 resume compatibility 检查
+- [x] 4.1 实现 workflow/run/node cancel 和紧急停止
+  - [x] 2026-08-13 host cancellation propagates AbortSignal, kills matching OpenCode children, exposes an emergency-stop command/event, and Tauri closes unfinished nodes as cancelled/interrupted.
+- [x] 4.2 实现节点/分支重试与 resume compatibility 检查
+  - [x] 2026-08-13 workflow-core retries failed capability calls, reuses successful node checkpoints for Task Center retries, and rejects definition-hash changes before recovery.
 - [ ] 4.3 媒体 provider job 恢复为 poll/download，OpenCode/本地工具恢复为 interrupted
 - [ ] 4.4 防止重启后重复 artifact registration 和 usage recording
 - [ ] 4.5 实现异常退出、临时 URL 到期和部分产物测试
@@ -92,7 +97,8 @@
 - [x] 5.2 未配置 Provider 的媒体节点保持可见，画布显示双语“需要配置 / Configuration required”状态并提供模型配置入口；运行时仍保留结构化 configuration-required 错误。 ✓ 2026-08-13
 - [x] 5.3 运行页展示文本、工具、媒体进度、产物、错误和用量
   - [x] 2026-08-13 Task Center can inspect any persisted run and displays node statuses/outputs, ordered tool/media/error events, local artifacts referenced by events, retry entry points, and per-run usage totals from SQLite.
-- [ ] 5.4 实现版本化 workflow JSON export/import 和 schema migration
+- [x] 5.4 实现版本化 workflow JSON export/import 和 schema migration
+  - [x] 2026-08-13 export/import uses the shared versioned envelope and migration path; imports receive a new local workflow ID and sanitized provider/path bindings.
 - [ ] 5.5 在另一台机器导入后重新绑定本地路径/Provider，不复制数据库 ID
 
 **Quality Gate:**

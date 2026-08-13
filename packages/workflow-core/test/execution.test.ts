@@ -142,6 +142,17 @@ test("workflow resumes completed outputs without re-executing those nodes", asyn
   assert.equal(result.outputs.writer?.text, "writer:persisted");
 });
 
+test("workflow rejects recovery when the definition hash changed", async () => {
+  const result = await executeWorkflow(definition, {
+    runId: "incompatible-recovery",
+    recoveryDefinitionHash: "not-the-current-definition",
+    completed: { input: { text: "persisted" } },
+    ports: { capability: { execute: async () => { throw new Error("must-not-run"); } } },
+  });
+  assert.equal(result.status, "failed");
+  assert.equal(result.error, "workflow_recovery_incompatible_definition");
+});
+
 test("workflow cancellation signals parallel capabilities and prevents dependent nodes", async () => {
   const controller = new AbortController();
   const started: string[] = [];
