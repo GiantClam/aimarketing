@@ -375,6 +375,10 @@ const en = {
       referencesLabel: "Matched docs",
       loadingOlderMessages: "Loading older messages",
       loadOlderMessages: "Load older messages",
+      revisionHistory: "Validated revisions",
+      revisionLabel: "Revision",
+      activeRevisionLabel: "Active",
+      viewRevision: "View revision",
       quickStart: "Quick start",
       quickStartPrompts: [
         "Write a deep WeChat article about AI customer support agents, including trends, examples, practical advice, and image directions.",
@@ -894,6 +898,10 @@ const zh = {
     referencesLabel: "参考资料",
     loadingOlderMessages: "加载更早消息中...",
     loadOlderMessages: "加载更早消息",
+    revisionHistory: "已验证版本",
+    revisionLabel: "版本",
+    activeRevisionLabel: "当前版本",
+    viewRevision: "查看版本",
     quickStart: "快捷开始",
     quickStartPrompts: [
       "帮我为 AI 营销 Agent 产品写一篇公众号文章，突出企业协作、专家能力和多线程工作台。",

@@ -64,7 +64,8 @@
 
 - [x] 7.1 Update Writer API responses and client types to expose active revision, turn outcome, independent task status, independent asset status, platform binding, and revision diagnostics.
 - [x] 7.2 Keep the active article visible while a new task is pending/running and stop using an empty assistant placeholder as the active draft.
-- [ ] 7.3 Display the latest validated revision by default and allow older revisions to be opened without silently making them active.
+- [x] 7.3 Display the latest validated revision by default and allow older revisions to be opened without silently making them active.
+  - Evidence (2026-08-14): Writer message history now carries persisted revision/active-draft metadata; `revision-history.ts` selects the active validated revision and the workspace exposes read-only older revision preview buttons without changing active state. `pnpm test:writer:revisions` passes 2/2 and root TypeScript reports no new Writer errors.
 - [x] 7.4 Send `expectedRevision` for inline manual saves and show a non-destructive conflict state when the server returns 409.
 - [x] 7.5 Ensure subsequent assistant turns use the latest saved manual revision rather than cached or prior generated text.
 - [ ] 7.6 Add UI regressions for pending revision visibility, revision history, manual-edit continuation, task failure, and independent image progress.

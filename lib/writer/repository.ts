@@ -898,6 +898,9 @@ export async function listWriterMessages(
         assistant.id AS assistant_id,
         assistant.content AS assistant_content,
         assistant.diagnostics AS assistant_diagnostics,
+        assistant.revision AS assistant_revision,
+        assistant.expected_base_revision AS assistant_expected_base_revision,
+        assistant.is_active_draft AS assistant_is_active_draft,
         assistant.created_at AS assistant_created_at,
         prompt.id AS user_id,
         prompt.content AS user_content,
@@ -924,6 +927,9 @@ export async function listWriterMessages(
     assistant_id: number
     assistant_content: string
     assistant_diagnostics: WriterTurnDiagnostics | null
+    assistant_revision: number | null
+    assistant_expected_base_revision: number | null
+    assistant_is_active_draft: boolean | null
     assistant_created_at: Date | null
     user_id: number | null
     user_content: string | null
@@ -940,6 +946,9 @@ export async function listWriterMessages(
     role: "assistant",
     content: row.assistant_content || "",
     diagnostics: row.assistant_diagnostics || null,
+    revision: row.assistant_revision ?? null,
+    expected_base_revision: row.assistant_expected_base_revision ?? null,
+    is_active_draft: Boolean(row.assistant_is_active_draft),
     inputs: { contents: row.user_content || "" },
     created_at: toEpochSeconds(row.user_created_at, toEpochSeconds(row.assistant_created_at, fallbackSeconds)),
   }))

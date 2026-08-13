@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
 
-import { WRITER_PLATFORM_CONFIG, WRITER_PLATFORM_ORDER, type WriterPlatform } from "./config"
+import { WRITER_PLATFORM_ORDER, type WriterPlatform } from "./config"
 import { resolveWriterPlatformBinding } from "./platform-registry"
 import { validateWriterSubmitResult, type WriterSubmitResult } from "./writer-result"
 

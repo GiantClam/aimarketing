@@ -78,6 +78,9 @@ export type WriterHistoryEntry = {
   role?: "user" | "assistant"
   content?: string
   diagnostics?: WriterTurnDiagnostics | null
+  revision?: number | null
+  expected_base_revision?: number | null
+  is_active_draft?: boolean
   inputs: {
     contents: string
   }

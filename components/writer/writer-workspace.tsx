@@ -104,6 +104,7 @@ import type {
   WriterTurnDiagnostics,
 } from "@/lib/writer/types"
 import { cn } from "@/lib/utils"
+import { listWriterRevisionHistory, selectLatestWriterRevision } from "@/lib/writer/revision-history"
 
 type WriterMessage = {
   id: string
@@ -112,6 +113,8 @@ type WriterMessage = {
   content: string
   authorLabel?: string
   diagnostics?: WriterTurnDiagnostics | null
+  revision?: number | null
+  isActiveDraft?: boolean
 }
 
 type WriterCopy = AppMessages["writer"]
@@ -1021,6 +1024,8 @@ const mapHistoryEntriesToMessages = (entries: WriterHistoryEntry[], assistantNam
       content: sanitize(message.answer || ""),
       authorLabel: assistantName,
       diagnostics: message.diagnostics || null,
+      revision: message.revision ?? null,
+      isActiveDraft: Boolean(message.is_active_draft),
     },
   ])
 
@@ -1463,10 +1468,15 @@ export function WriterWorkspace({
     () => draft || (conversationStatus === "drafting" ? "" : inferDraft(messages)),
     [conversationStatus, draft, messages],
   )
-  const latestAssistantMessageId = useMemo(
-    () => [...messages].reverse().find((message) => message.role === "assistant")?.id || null,
+  const revisionHistory = useMemo(
+    () => listWriterRevisionHistory(messages),
     [messages],
   )
+  const latestValidatedRevision = useMemo(
+    () => selectLatestWriterRevision(messages, activeRevision),
+    [activeRevision, messages],
+  )
+  const latestAssistantMessageId = latestValidatedRevision?.id || [...messages].reverse().find((message) => message.role === "assistant")?.id || null
   const activePreviewMessage = useMemo(() => {
     if (previewMessageId) {
       const selectedMessage = messages.find(
@@ -1474,8 +1484,8 @@ export function WriterWorkspace({
       )
       if (selectedMessage) return selectedMessage
     }
-    return [...messages].reverse().find((message) => message.role === "assistant") || null
-  }, [messages, previewMessageId])
+    return latestValidatedRevision || [...messages].reverse().find((message) => message.role === "assistant") || null
+  }, [latestValidatedRevision, messages, previewMessageId])
 
   const buildPreviewContextForMessage = (message: WriterMessage | null): WriterPreviewContext => {
     const isLatest = Boolean(message?.id && message.id === latestAssistantMessageId)
@@ -2902,6 +2912,39 @@ export function WriterWorkspace({
                         {isHistoryLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
                         {isHistoryLoading ? writerCopy.loadingOlderMessages : writerCopy.loadOlderMessages}
                       </Button>
+                    </div>
+                  ) : null}
+
+                  {revisionHistory.length > 0 ? (
+                    <div
+                      className="flex flex-wrap items-center gap-2 border-b border-border/50 bg-background/70 px-3 py-2.5"
+                      data-testid="writer-revision-history"
+                      aria-label={writerCopy.revisionHistory}
+                    >
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        {writerCopy.revisionHistory}
+                      </span>
+                      {revisionHistory.map((revision) => {
+                        const isActive = revision.revision === activeRevision || revision.id === latestAssistantMessageId
+                        return (
+                          <Button
+                            key={revision.id}
+                            type="button"
+                            size="sm"
+                            variant={isActive ? "default" : "outline"}
+                            className={cn(
+                              "h-7 px-2.5 text-[11px]",
+                              isActive ? "dashboard-button-primary" : "dashboard-button-secondary",
+                            )}
+                            aria-pressed={previewMessageId === revision.id}
+                            aria-label={`${writerCopy.viewRevision} ${revision.revision}`}
+                            onClick={() => openPreviewForMessage(revision.id)}
+                          >
+                            {writerCopy.revisionLabel} {revision.revision}
+                            {isActive ? ` · ${writerCopy.activeRevisionLabel}` : ""}
+                          </Button>
+                        )
+                      })}
                     </div>
                   ) : null}
 
