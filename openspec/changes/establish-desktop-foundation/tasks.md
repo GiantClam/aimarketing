@@ -117,7 +117,7 @@
 - [x] 6.6 验证 stdout 仅承载 framed RPC，日志使用 stderr→JSONL。✓ 2026-08-13 — Rust host 只转发长度、UTF-8、JSON 均验证且不超过 8 MiB 的 stdout frame；无效或超长行被丢弃并以结构化 runtime log 记录，stderr 仍单独写入 redacted per-run JSONL。
 
 **Quality Gate:**
-- [x] 并发/反向 RPC 与取消 tests 通过 — 2026-08-14 desktop 96/96, Rust 30/30, and workflow/foreach host integration paths passed with framed service responses.
+- [x] 并发/反向 RPC 与取消 tests 通过 — 2026-08-14 current Desktop 113/113, Rust 39/39, and workflow/foreach host integration paths passed with framed service responses.
 - [x] 主进程强杀后无孤儿子进程 — 2026-08-14 Windows Job Object regression terminates an assigned child tree and asserts the child cannot complete normally after job termination.
 - [x] workflow-host 未打开 SQLite/LanceDB — 2026-08-14 `runtime/host.ts` no longer imports RAG/Obsidian/LanceDB; the isolated `knowledge.mjs` service owns those modules and is supervised by a dedicated Job Object.
 
