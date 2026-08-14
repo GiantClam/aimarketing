@@ -15,6 +15,7 @@
     "test": "tsx --test test/**/*.test.ts",
     "test:real-providers": "node ../../scripts/test-desktop-real-providers.mjs",
     "test:real-providers:video": "node ../../scripts/test-desktop-real-providers.mjs --video-only",
+    "test:real-providers:audio": "node ../../scripts/test-desktop-real-providers.mjs --audio-only",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },

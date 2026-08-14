@@ -7,8 +7,9 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const configPath = resolve(process.env.AIMARKETING_REAL_PROVIDER_CONFIG ?? resolve(repoRoot, "apps/desktop/real-providers.test.local.json"));
 const config = assertRealProviderConfig(JSON.parse(await readFile(configPath, "utf8")));
 const videoOnly = process.argv.includes("--video-only") || process.env.AIMARKETING_PROVIDER_SMOKE_VIDEO_ONLY === "1";
+const audioOnly = process.argv.includes("--audio-only") || process.env.AIMARKETING_PROVIDER_SMOKE_AUDIO_ONLY === "1";
 const includeVideo = videoOnly || process.argv.includes("--include-video") || process.env.AIMARKETING_PROVIDER_SMOKE_INCLUDE_VIDEO === "1";
-const smokeScope = buildRealProviderSmokeScope({ includeVideo, videoOnly });
+const smokeScope = buildRealProviderSmokeScope({ includeVideo, videoOnly, audioOnly });
 
 function endpoint(baseUrl, path) {
   return `${String(baseUrl).replace(/\/+$/u, "")}/${String(path).replace(/^\/+/, "")}`;
@@ -148,6 +149,8 @@ const results = includeVideo && !configuredVideoProfile
   ? [{ label: "video", ok: false, error: "real_provider_config_non_seedance_video_profile_missing" }]
   : videoOnly
     ? []
+  : audioOnly
+    ? [await requestAudio(configuredAudioProfile(config))]
   : [
       await request("llm", endpoint(config.llm.baseUrl, "chat/completions"), config.llm.apiKey, {
         model: config.llm.model,

@@ -24,7 +24,7 @@
 | Desktop Vite/runtime/Skill bundle | `pnpm desktop:build`、`pnpm desktop:verify-bundle` |
 | Tauri Rust | `pnpm desktop:tauri:check` |
 | SaaS 生产构建 | `pnpm build`：425/425 routes |
-| 真实 Provider | 默认 smoke：LLM/image HTTP 200 且 schema 通过；MiniMax audio 最近一次 48 次轮询仍为 `Processing` 并 fail-closed。`pnpm --filter @aimarketing/desktop test:real-providers:video`：RunningHub MiniMax-Hailuo-H3 HTTP 200、76 次轮询后 `SUCCESS`；Seedance 明确未执行 |
+| 真实 Provider | 默认 smoke：LLM/image HTTP 200/schema 通过；一次音频任务 48 次轮询仍为 `Processing` 并 fail-closed，随后 `test:real-providers:audio` 独立重试在第 4 次轮询 `Success`。`test:real-providers:video`：RunningHub MiniMax-Hailuo-H3 HTTP 200、76 次轮询后 `SUCCESS`；Seedance 明确未执行 |
 | Provider 配置契约 | `pnpm test:desktop-real-provider-config`；多 profile、能力默认值、模型列表通过 |
 | 依赖/许可证 | 官方 npm registry audit：0 critical、0 high、0 moderate、0 low；三个归档各 28/28 license evidence |
 | Writer Skill 矩阵 | `pnpm test:writer:skills`：19/19；十平台 fixture clarification/revision 已覆盖 |
