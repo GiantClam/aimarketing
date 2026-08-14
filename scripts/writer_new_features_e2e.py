@@ -736,7 +736,8 @@ def main():
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page(viewport={"width": 1440, "height": 1100})
+        context = browser.new_context(viewport={"width": 1440, "height": 1100})
+        page = context.new_page()
         page.set_default_timeout(90000)
 
         try:
@@ -760,6 +761,7 @@ def main():
                 pass
             raise
         finally:
+            context.close()
             browser.close()
 
 
