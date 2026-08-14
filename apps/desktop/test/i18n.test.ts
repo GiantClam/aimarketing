@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { WORKBENCH_MEDIA_FEATURES } from "@aimarketing/workbench-ui";
+import { WORKBENCH_HOME_GROUPS, WORKBENCH_MEDIA_FEATURES } from "@aimarketing/workbench-ui";
 import { desktopCopy, desktopWriterCopy, detectDesktopLocale, homeGroupLabels, mediaPlaceholderEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale } from "../src/i18n";
 import { localizeRuntimeStatus } from "../src/App";
 
@@ -44,6 +44,9 @@ test("account-free home copy keeps the cloud fallback greeting", () => {
 });
 
 test("desktop home group headings have explicit Chinese and English labels", () => {
+  for (const group of WORKBENCH_HOME_GROUPS) {
+    assert.ok(homeGroupLabels[group.label], `missing home group mapping: ${group.label}`);
+  }
   for (const [key, labels] of Object.entries(homeGroupLabels)) {
     assert.ok(labels.zh, `missing Chinese home group label: ${key}`);
     assert.ok(labels.en, `missing English home group label: ${key}`);
