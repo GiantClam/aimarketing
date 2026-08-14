@@ -42,3 +42,15 @@ test("configured model lists are canonical and prefer the first configured model
   assert.equal(preferredConfiguredModel(provider), "text/model-a");
   assert.deepEqual(modelOptionsForProvider({ provider }, provider), ["text/model-a", "text/model-b"]);
 });
+
+test("same-capability provider profiles keep independent model catalogs and defaults", () => {
+  const imageFast: DesktopProviderConfig = { id: "image-fast", source: "openai-compatible", model: "retired", models: ["image/fast", "image/quality"], baseUrl: "https://fast.test/v1" };
+  const imageQuality: DesktopProviderConfig = { id: "image-quality", source: "bailian", model: "image/hd", models: ["image/hd", "image/4k"], baseUrl: "https://quality.test/v1" };
+  const config = { provider: text, providers: { "image-fast": imageFast, "image-quality": imageQuality }, defaults: { image: "image-quality" as const } };
+  const selected = providerForCapability(config, "image");
+  assert.equal(selected.id, "image-quality");
+  assert.equal(selected.model, "image/hd");
+  assert.deepEqual(modelOptionsForProvider(config, selected), ["image/hd", "image/4k"]);
+  assert.equal(providerForId(config, "image-fast").model, "image/fast");
+  assert.deepEqual(modelOptionsForProvider(config, providerForId(config, "image-fast")), ["image/fast", "image/quality"]);
+});
