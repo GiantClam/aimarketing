@@ -80,6 +80,16 @@ export const workflowActionEnglish: Record<string, string> = {
   upload: "Upload asset", text_input: "Text input", file_create: "Local file", writer: "Content writing", llm_generate: "Model generation", agent_execute: "Agent execution", ppt_generate: "PPT (ppt-master)", image_generate: "Image generation", video_generate: "Video generation", digital_human: "Digital human", music_generate: "Music generation", voice_synthesis: "Voice synthesis", voice_clone: "Voice cloning", audio_generate: "General audio", knowledge_retrieve: "Obsidian retrieval", knowledge_write: "Write to Obsidian", product_store: "Asset store", foreach: "Process each", collect: "Collect results", output: "Workflow output",
 };
 
+/** Home group headings are shared as stable English identifiers with SaaS;
+ * Desktop localizes the visible heading at the presentation boundary. */
+export const homeGroupLabels: Record<string, { zh: string; en: string }> = {
+  "AI TEAM": { zh: "AI 团队", en: "AI TEAM" },
+  "OFFICE TOOLS": { zh: "办公工具", en: "OFFICE TOOLS" },
+  WORKFLOWS: { zh: "工作流", en: "WORKFLOWS" },
+  "CONTENT CREATION": { zh: "内容创作", en: "CONTENT CREATION" },
+  MORE: { zh: "更多", en: "MORE" },
+};
+
 export const mediaEnglish: Record<string, string> = {
   "ai-music": "AI music", "audio-generate": "General audio", "voice-clone": "Voice cloning", "voice-synthesis": "Voice synthesis", "text-to-video": "Text to video", "image-to-video": "Image to video", "reference-to-video": "Reference to video", "video-edit": "Video editing", "digital-human": "Digital human", "video-enhance": "Video enhancement",
 };

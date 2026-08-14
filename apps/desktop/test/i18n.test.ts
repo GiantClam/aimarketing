@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { WORKBENCH_MEDIA_FEATURES } from "@aimarketing/workbench-ui";
-import { desktopCopy, desktopWriterCopy, detectDesktopLocale, mediaPlaceholderEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale } from "../src/i18n";
+import { desktopCopy, desktopWriterCopy, detectDesktopLocale, homeGroupLabels, mediaPlaceholderEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale } from "../src/i18n";
 import { localizeRuntimeStatus } from "../src/App";
 
 test("desktop locale follows Windows/WebView language by default", () => {
@@ -41,6 +41,16 @@ test("retained Agent routes use the same quick prompts as the cloud catalog", ()
 test("account-free home copy keeps the cloud fallback greeting", () => {
   assert.equal(desktopCopy.zh.welcome, "欢迎回来，伙伴");
   assert.equal(desktopCopy.en.welcome, "Welcome back, there");
+});
+
+test("desktop home group headings have explicit Chinese and English labels", () => {
+  for (const [key, labels] of Object.entries(homeGroupLabels)) {
+    assert.ok(labels.zh, `missing Chinese home group label: ${key}`);
+    assert.ok(labels.en, `missing English home group label: ${key}`);
+    assert.doesNotMatch(labels.en, /[\u4e00-\u9fff]/u);
+  }
+  assert.equal(homeGroupLabels["AI TEAM"].zh, "AI 团队");
+  assert.equal(homeGroupLabels["CONTENT CREATION"].zh, "内容创作");
 });
 
 test("runtime repair failures are fully localized in the English shell", () => {

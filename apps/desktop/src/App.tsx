@@ -4,7 +4,7 @@ import { validateWorkflowDefinition, workflowNodeRegistry, type WorkflowDefiniti
 import type { WorkbenchArtifact, WorkbenchKnowledgeResult, WorkbenchRun, WorkbenchRunDetail, WorkbenchWorkflow } from "@aimarketing/workbench-client";
 import { tauriBridge } from "./tauri";
 import { createDesktopWorkbenchClient } from "./workbench-client";
-import { capabilityEnglish, desktopCopy, desktopWriterCopy, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaPlaceholderEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale, workflowActionEnglish, writerContentTypeEnglish, writerLanguageEnglish, writerModeEnglish, writerPlatformEnglish, type DesktopLocalePreference } from "./i18n";
+import { capabilityEnglish, desktopCopy, desktopWriterCopy, homeGroupLabels, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaPlaceholderEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale, workflowActionEnglish, writerContentTypeEnglish, writerLanguageEnglish, writerModeEnglish, writerPlatformEnglish, type DesktopLocalePreference } from "./i18n";
 import { capabilityForWorkflowAction, configuredModelOptions, isMediaProviderConfigured, modelOptionsForProvider, preferredConfiguredModel, providerForCapability, providerForId, requiresConfiguredProviderForWorkflowAction, type DesktopProviderConfig, type DesktopProviderDefaults, type DesktopProviderProfiles } from "./provider-config";
 import { bindWorkflowProviderDefaults, isMediaWorkflowNodeType } from "./workflow-provider-binding";
 import { applyConfiguredMediaModels } from "./media-model-options";
@@ -248,7 +248,7 @@ const desktopCapabilities: Array<{ id: WorkflowAction; title: string; descriptio
 function HomeEntryGroups({ onNavigate, locale }: { onNavigate: (path: string) => void; locale: "zh" | "en" }) {
   return <section className="home-entry-groups" aria-label={locale === "zh" ? "功能入口" : "Workspace entries"}>
     {WORKBENCH_HOME_GROUPS.map((group) => <div key={group.label} className="home-entry-group">
-      <div className="home-entry-group-label">{group.label}</div>
+      <div className="home-entry-group-label">{homeGroupLabels[group.label]?.[locale] ?? group.label}</div>
       <div className="home-entry-group-list">
         {group.entries.map((entry) => <button key={`${entry.path}:${entry.label[locale]}`} type="button" className={`home-entry-card home-entry-card--${entry.tone}`} onClick={() => onNavigate(entry.path)}>
           <span className={`home-entry-icon home-entry-icon--${entry.tone}`} aria-hidden="true"><WorkbenchRouteIcon name={routeIconKeys[entry.path] ?? (entry.path.includes("writer") ? "writer" : entry.path.includes("video") ? "video" : entry.path.includes("image") ? "image" : entry.path.includes("workflows") ? "workflow" : entry.path.includes("tasks") ? "task" : entry.path.includes("knowledge") ? "knowledge" : entry.path.includes("assets") ? "asset" : entry.path.includes("ppt") ? "ppt" : entry.path.includes("consulting") ? "advisor" : "chat")} size={19} /></span>
