@@ -17,9 +17,9 @@ function json(response, payload) {
   response.end(JSON.stringify(payload));
 }
 
-function runSmoke(configPath, port) {
+function runSmoke(configPath, port, extraArgs = []) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [smokeScript, "--include-video"], {
+    const child = spawn(process.execPath, [smokeScript, ...extraArgs], {
       cwd: repoRoot,
       env: {
         ...process.env,
@@ -70,7 +70,14 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
     defaults: { text: "text", image: "image", video: "video", audio: "audio" },
   }), "utf8");
   try {
-    const result = await runSmoke(configPath, port);
+    const defaultResult = await runSmoke(configPath, port);
+    assert.equal(defaultResult.code, 0, `${defaultResult.stdout}\n${defaultResult.stderr}`);
+    const defaultReport = JSON.parse(defaultResult.stdout);
+    assert.deepEqual(defaultReport.scope, { executed: ["llm", "image", "audio"], excluded: ["video", "seedance"] });
+    assert.deepEqual(defaultReport.results.map((item) => item.label), ["llm", "image", "audio"]);
+    assert.equal(defaultResult.stdout.includes("video-1"), false);
+
+    const result = await runSmoke(configPath, port, ["--include-video"]);
     assert.equal(result.code, 0, `${result.stdout}\n${result.stderr}`);
     const report = JSON.parse(result.stdout);
     assert.deepEqual(report.scope, { executed: ["llm", "image", "audio", "video"], excluded: ["seedance"] });
