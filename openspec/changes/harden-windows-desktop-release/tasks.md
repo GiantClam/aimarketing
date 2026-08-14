@@ -132,6 +132,7 @@
   - [x] 2026-08-14 Desktop media route action regressions: the shared `/dashboard/video` surface preserves selected audio capabilities, while `/dashboard/ai` and Home reset stale media actions to text; launcher/body feature selection stays synchronized; `routes.test.ts` passes 43/43 and desktop typecheck/build pass.
   - [x] 2026-08-14 model-selector audit: active chat, Writer, workflow, media, Home, and retained Writer migration surfaces all pass the configured model catalog into `ModelControls`; `provider-config.test.ts` and `routes.test.ts` cover configured-model priority, same-capability profiles, and stale-selection fallback.
   - [x] 2026-08-14 final local gate rerun: `pnpm desktop:test` passed 123/123; `pnpm desktop:build` transformed 1,849 modules; bundle/network scans checked 822,545 bytes with zero violations; Tauri `cargo check`, root lint, Provider parity 2/2, Writer Skill matrix 20/20, Writer cutover check, and SaaS `pnpm build` (425/425 routes) all passed. Clean VM, signed artifacts, and production live-provider/browser gates remain open.
+  - [x] 2026-08-14 post-embedding-change package gates passed: `desktop:verify-packages` validated normal/portable ZIPs (269,787,833 / 269,851,589 bytes), `desktop:verify-size-budget` stayed within all configured budgets, and `desktop:verify-portable-copy` returned `status=ok` with byte-identical runtime fingerprints and `localAppDataCreated=false`.
 - [x] 5.7 发布人工 ZIP 升级说明和已知限制，不启用应用内自动更新
   - [x] 普通/便携 ZIP README 均说明关闭应用后手动替换；便携模式先备份 `data/`；不自动下载或替换自身，并明确外部 Vault、系统 WebView2 和明文 API Key 边界。
 
