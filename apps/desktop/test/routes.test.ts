@@ -528,4 +528,5 @@ test("media feature tabs keep the launcher and body selection synchronized", () 
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
   assert.match(appSource, /onMediaFeatureChange\?\.\(featureId\)/u);
   assert.match(appSource, /mediaFeatureId=\{activeFeatureId\}[\s\S]*?onMediaFeatureChange=\{setActiveFeatureId\}/u);
+  assert.match(appSource, /setActiveFeatureId\(isVideo[\s\S]*?\}, \[isVideo, workflowAction\]\)/u);
 });
