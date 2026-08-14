@@ -19,6 +19,7 @@
     "desktop:build": "pnpm --filter @aimarketing/desktop build",
     "desktop:verify-bundle": "node scripts/verify-desktop-bundle-boundaries.mjs",
     "desktop:verify-network-boundary": "node scripts/verify-desktop-network-boundary.mjs",
+    "test:desktop:offline-egress": "pnpm exec tsx --test apps/desktop/test/host-session.test.ts",
     "desktop:verify-packages": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-desktop-packages.ps1",
     "desktop:verify-size-budget": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-desktop-size-budget.ps1",
     "desktop:verify-portable-copy": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-desktop-portable-copy.ps1",

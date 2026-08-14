@@ -108,6 +108,7 @@
 - [ ] 5.6 执行 desktop 全量 E2E 与 SaaS lint/build/regression
   - [x] 2026-08-14 current Windows rerun passed Desktop tests 111/111, root `pnpm lint`, TypeScript, shared boundary/provenance, Provider parity, AI-entry regressions, desktop build/bundle/Tauri checks, and Next production build (425/425 routes). Full browser E2E and live SaaS regression remain open.
   - [x] 2026-08-14 sequential rerun (after avoiding concurrent bundle mutation) passed `pnpm desktop:build`, `pnpm desktop:tauri:check`, and `pnpm build`; the Desktop Vite bundle completed with 1,848 modules and Next generated all 425 routes.
+  - [x] 2026-08-14 `pnpm desktop:test` now passes 112/112, including a built-host offline-egress test that exercises a local file workflow under fetch/http/https/net/tls/dns guards.
   - [x] 2026-08-14 `desktop:release-preflight` now composes package, size, portable-copy, release-audit, signing, bundle-boundary and network-boundary gates; it fails closed on unsigned artifacts before any release result is emitted.
 - [x] 5.7 发布人工 ZIP 升级说明和已知限制，不启用应用内自动更新
   - [x] 普通/便携 ZIP README 均说明关闭应用后手动替换；便携模式先备份 `data/`；不自动下载或替换自身，并明确外部 Vault、系统 WebView2 和明文 API Key 边界。
@@ -116,6 +117,7 @@
 - [ ] 全新 VM 可完成首个对话、PPT、媒体、工作流和 Vault 检索
 - [ ] 除 runtime 源和用户 Provider 外无其他网络请求
   - [x] 2026-08-14 `desktop:verify-network-boundary` scans the built UI/host/knowledge bundles (742,989 UTF-8 bytes) and reports zero hardcoded external endpoints; local loopback and runtime-configured Provider indirection remain allowed. Clean-VM dynamic egress verification remains open.
+  - [x] 2026-08-14 built `dist-runtime/host.mjs` completed a local file workflow under a Node network guard that rejects fetch/http/https/net/tls/dns egress; the run reached `done` with empty stderr. This proves the local no-Provider workflow path is offline-safe; clean-VM dynamic egress and configured user-Provider requests remain separate release evidence.
 - [x] Desktop bundle 排除 Lead Hunter、auth、enterprise、billing、R2、Railway、Cloudflare、Dify/RAGFlow
   - [x] 2026-08-13 desktop architecture scan and shared-boundary/provenance tests reject these imports/routes; release EXE startup remained alive for 8 seconds and exited cleanly.
 

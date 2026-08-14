@@ -19,7 +19,7 @@
 
 | 范围 | 证据 |
 | --- | --- |
-| Desktop 单元/集成回归 | `pnpm desktop:test`：111/111 |
+| Desktop 单元/集成回归 | `pnpm desktop:test`：112/112 |
 | Desktop TypeScript、ESLint | `pnpm --filter @aimarketing/desktop typecheck`、根 `pnpm lint` |
 | Desktop Vite/runtime/Skill bundle | `pnpm desktop:build`、`pnpm desktop:verify-bundle` |
 | Tauri Rust | `pnpm desktop:tauri:check` |

@@ -22,10 +22,12 @@ function respondToHostServiceRequest(child: ChildProcessWithoutNullStreams, fram
   child.stdin.write(encodeRpcMessage({ version: 1, requestId: frame.requestId, type: "service_response", ok: true, data }));
 }
 
-function startHost(desktopRoot: string, environment: Record<string, string | undefined> = {}) {
+function startHost(desktopRoot: string, environment: Record<string, string | undefined> = {}, built = false) {
   const tsxCli = resolve(desktopRoot, "..", "..", "node_modules", "tsx", "dist", "cli.mjs");
-  const child = spawn(process.execPath, [tsxCli, join(desktopRoot, "runtime", "host.ts")], { cwd: desktopRoot, env: { ...process.env, ...environment } as NodeJS.ProcessEnv, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+  const command = built ? [join(desktopRoot, "dist-runtime", "host.mjs")] : [tsxCli, join(desktopRoot, "runtime", "host.ts")];
+  const child = spawn(process.execPath, command, { cwd: desktopRoot, env: { ...process.env, ...environment } as NodeJS.ProcessEnv, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
   const frames: Record<string, unknown>[] = [];
+  const stderr: string[] = [];
   let buffer = new Uint8Array(0);
   const waiters: Array<{ predicate: (frame: Record<string, unknown>) => boolean; resolve: (frame: Record<string, unknown>) => void }> = [];
   child.stdout.on("data", (chunk: Buffer) => {
@@ -46,14 +48,50 @@ function startHost(desktopRoot: string, environment: Record<string, string | und
       }
     }
   });
+  child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk.toString("utf8")));
   const waitFor = (predicate: (frame: Record<string, unknown>) => boolean, timeoutMs = 15_000) => new Promise<Record<string, unknown>>((resolveFrame, reject) => {
     const existing = frames.find(predicate);
     if (existing) { resolveFrame(existing); return; }
     const timer = setTimeout(() => reject(new Error("workflow_host_frame_timeout")), timeoutMs);
     waiters.push({ predicate, resolve: (frame) => { clearTimeout(timer); resolveFrame(frame); } });
   });
-  return { child: child as ChildProcessWithoutNullStreams, frames, waitFor };
+  return { child: child as ChildProcessWithoutNullStreams, frames, stderr, waitFor };
 }
+
+test("built workflow-host completes a local file workflow without network egress", async () => {
+  const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const workspace = await mkdtemp(join(tmpdir(), "aimarketing-host-offline-network-"));
+  const guard = join(desktopRoot, "test", "fixtures", "deny-network-egress.cjs");
+  const child = startHost(desktopRoot, { NODE_OPTIONS: `--require=${guard}` }, true);
+  try {
+    const runId = `offline-network-${randomUUID()}`;
+    child.child.stdin.write(encodeRpcMessage({ version: 1, requestId: randomUUID(), runId, type: "workflow.run", payload: {
+      workspacePath: workspace,
+      definition: {
+        schemaVersion: 2, revision: 1, definitionHash: "",
+        nodes: [
+          { nodeKey: "input", type: "text_input", nodeVersion: 1, title: "Input", positionX: 0, positionY: 0, config: { text: "offline hello" } },
+          { nodeKey: "file", type: "file_create", nodeVersion: 1, title: "File", positionX: 1, positionY: 0, config: { fileName: "offline.md", fileFormat: "md" } },
+          { nodeKey: "output", type: "output", nodeVersion: 1, title: "Output", positionX: 2, positionY: 0, config: {} },
+        ],
+        edges: [
+          { edgeKey: "input-file", sourceNodeKey: "input", sourcePortId: "text", targetNodeKey: "file", targetPortId: "text" },
+          { edgeKey: "file-output", sourceNodeKey: "file", sourcePortId: "asset", targetNodeKey: "output", targetPortId: "assets" },
+        ],
+      },
+    } }));
+    const terminal = await child.waitFor((frame) => {
+      const event = (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined;
+      return (event?.event === "done" || event?.event === "runtime_error") && event?.runId === runId;
+    }, 20_000);
+    const event = (terminal.data as Record<string, unknown>).event as Record<string, unknown>;
+    assert.equal(event.event, "done", JSON.stringify(event));
+    assert.equal(child.stderr.join(""), "");
+  } finally {
+    child.child.kill();
+    await rm(workspace, { recursive: true, force: true });
+  }
+});
 
 test("workflow-host runs a mixed text, image, video, audio and PPT workflow with local providers", async () => {
   const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
