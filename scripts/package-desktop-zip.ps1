@@ -95,7 +95,15 @@ The system WebView2 runtime is not copied; the first launch probes or repairs it
 "@
 
 if (Test-Path -LiteralPath $zip -PathType Leaf) { Remove-Item -LiteralPath $zip -Force }
-Compress-Archive -LiteralPath $packageRoot -DestinationPath $zip -CompressionLevel Optimal
+$tarCommand = Get-Command tar.exe -ErrorAction SilentlyContinue
+if ($null -ne $tarCommand) {
+  # Windows ships bsdtar; it is materially faster and more reliable than
+  # Compress-Archive for the 270 MB green package on large runtime trees.
+  & $tarCommand.Source -a -c -f $zip -C $stage $packageName
+  if ($LASTEXITCODE -ne 0) { throw "desktop_package_tar_failed:$LASTEXITCODE" }
+} else {
+  Compress-Archive -LiteralPath $packageRoot -DestinationPath $zip -CompressionLevel Optimal
+}
 Assert-DesktopPackageArchive -ArchivePath $zip -PackageName $packageName -ExecutablePath $executable -RuntimePath $distRuntime -ExpectPortable:$Portable
 Get-Item -LiteralPath $zip | Select-Object FullName, Length, LastWriteTime
 } finally {
