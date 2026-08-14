@@ -122,6 +122,7 @@
   - [x] 2026-08-14 latest bounded default smoke passed LLM, `gpt-image-2`, and MiniMax audio with HTTP 200/schema; the result scope explicitly executed only `llm,image,audio` and excluded `video,seedance`.
   - [x] 2026-08-14 PPTOKEN connectivity smoke was narrowed to the configured `gpt-image-2` only and defaulted to `256x256`; the direct image request returned HTTP 200 with one image result, while unsupported sizes fail before any request.
   - [x] 2026-08-14 latest current revalidation supersedes the transient success records above for the image boundary: `/v1/models` returned HTTP 200 with `gpt-image-2` present, but `gpt-image-2` generation at `256x256` returned proxy HTTP 401 `Invalid token` and direct timeout. The fail-closed verifier returned non-zero; video and Seedance remained excluded.
+  - [x] 2026-08-14 latest full non-video rerun kept ordinary chat healthy (LLM HTTP 200/schema) while image generation timed out and MiniMax audio remained `Processing` after 24 bounded polls; the external media availability issue does not alter the local OpenCode chat pass.
 - [x] 6.3 捕获证据证明所有普通 desktop chat 选择 OpenCode
   - [x] 2026-08-13 architecture-boundary and route tests require `session.create`/`session.prompt` and reject direct chat-completions or `ai-sdk-native` paths.
 - [x] 6.4 扫描 bundle 和网络日志，确认无排除的 SaaS 模块/端点
