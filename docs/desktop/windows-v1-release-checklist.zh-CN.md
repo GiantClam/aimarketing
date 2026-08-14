@@ -34,6 +34,7 @@
 - Authenticode：当前主机 `Microsoft.PowerShell.Security` 无法加载，EXE/DLL 未签名；不能宣称通过。
 - Runtime manifest：当前为 `development_unsigned`，没有发布签名私钥，不能宣称通过。
 - Win10 22H2/Win11 x64 干净 VM：中文用户名、空格、长路径、OneDrive、缺失 WebView2、离线安装尚未完成。
+- 当前开发机路径矩阵已通过：便携包在中文、空格、长路径和 OneDrive 形态目录均可启动并保持 8 秒；该结果标记为 `cleanVm=false`，不替代 Win10/Win11 干净 VM。
 - 真实生产 Writer：URL research、完整修订、图片恢复、质量盲测、生产 OpenCode Skill release/digest、billing idempotency 尚未完成。
 - 网络边界：本机 bundle boundary 已通过；仍需在干净 VM 和真实 Provider 配置下确认除 runtime 源与用户 Provider 外无额外请求。
 - 按要求不执行 Seedance 视频生成测试；视频能力仅由本地 fake Provider/工作流契约覆盖。
