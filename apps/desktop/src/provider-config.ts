@@ -58,7 +58,13 @@ export function providerForId(config: ProviderConfigContainer, providerId?: stri
 }
 
 export function providerForCapability(config: ProviderConfigContainer, capability: ProviderCapability): ResolvedDesktopProviderConfig {
-  return providerForId(config, config.defaults?.[capability]);
+  const selectedId = config.defaults?.[capability];
+  const selected = selectedId ? config.providers?.[selectedId] : undefined;
+  if (selected && !supportsProviderCapability(selected, capability)) {
+    const compatible = Object.entries(config.providers ?? {}).find(([id, provider]) => id !== selectedId && supportsProviderCapability(provider, capability));
+    if (compatible) return providerForId(config, compatible[0]);
+  }
+  return providerForId(config, selectedId);
 }
 
 export function capabilityForWorkflowAction(action: string): ProviderCapability {
@@ -87,6 +93,7 @@ export function supportsProviderCapability(provider: DesktopProviderConfig, capa
   if (/image|vision|text2image|images/iu.test(identity)) return capability === "image";
   if (/video|hailuo|seedance|wanx|digital[-_ ]?human/iu.test(identity)) return capability === "video";
   if (/audio|speech|music|voice|tts/iu.test(identity)) return capability === "audio";
+  if (/text|chat|llm|language|gpt|deepseek|qwen|claude/iu.test(identity)) return capability === "text";
   if (source === "runninghub") return capability === "video";
   if (source === "minimax") return capability === "audio";
   if (source === "bailian" || source === "dashscope") return capability === "image";

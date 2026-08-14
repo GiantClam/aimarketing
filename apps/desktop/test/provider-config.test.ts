@@ -81,3 +81,17 @@ test("settings can filter known profiles by capability without breaking legacy p
   assert.equal(supportsProviderCapability({ capabilities: ["image"] }, "audio"), false);
   assert.equal(supportsProviderCapability({ id: "custom", model: "custom-model" }, "text"), true);
 });
+
+test("capability defaults recover from an existing incompatible profile", () => {
+  const config = {
+    provider: text,
+    providers: {
+      text,
+      image: { ...image, source: "openai-compatible" },
+      audio: { id: "audio", source: "minimax", model: "speech-2.8-turbo", baseUrl: "https://audio.test/v1" },
+    },
+    defaults: { image: "audio" },
+  };
+  assert.equal(providerForCapability(config, "image").id, "image");
+  assert.equal(providerForCapability(config, "audio").id, "text");
+});

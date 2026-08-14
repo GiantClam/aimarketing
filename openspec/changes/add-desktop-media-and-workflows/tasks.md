@@ -44,6 +44,7 @@
   - [x] 2.1d 2026-08-14 media feature-level model fields now derive their options from the active capability Provider profile, deduplicate configured models, fall back to the first configured model when stale, and stay synchronized with the top-level selector; `apps/desktop/test/media-model-options.test.ts` and the full Desktop suite pass.
   - [x] 2026-08-14 mixed workflow dispatch keeps the sanitized portable definition separate from the in-memory host definition; media nodes are rebound to the configured image/video/audio profile and its preferred model before execution, with regression coverage proving stale bindings and API keys are not carried forward.
   - [x] 2026-08-14 direct media routes and workflow canvas readiness now resolve Provider configuration per capability/node; an unrelated configured image/audio/video profile cannot unlock another media node, with route regression coverage for same-type multi-provider isolation.
+  - [x] 2026-08-14 `providerForCapability` now repairs an existing incompatible capability default by selecting the first known compatible profile; unknown legacy defaults retain the prior legacy fallback behavior, with regression coverage for imported misbindings.
 - [x] 2.2 提交前持久化 idempotency key，提交后立即保存 provider task ID（桌面在发送 `workflow.run` 前为每个媒体节点写入 queued attempt；收到 provider task ID 事件后幂等更新同一记录）
 - [x] 2.3 实现可恢复 poll 和 provider 支持时的 cancel（`runMediaJob` 使用持久化 task ID 续 poll，并通过未 aborted 的控制端口发送 provider cancel）
 - [x] 2.4 从 Rust 请求 canonical temp path，流式下载并原子移动到项目目录
