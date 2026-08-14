@@ -64,6 +64,7 @@ test("desktop host emits terminal media attempt events for recovery idempotency"
   assert.match(app, /status === "succeeded"[\s\S]*record_usage/);
   assert.match(host, /task\.usage/);
   assert.match(host, /status: "download_failed"/);
+  assert.match(host, /if \(!artifacts\.length\) throw new Error\("media_outputs_not_downloadable"\)/);
   assert.match(host, /tempDirectory/);
   assert.match(app, /allocate_media_temp/);
   assert.match(app, /payload\.status === "download_failed"/);
