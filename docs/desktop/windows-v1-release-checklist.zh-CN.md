@@ -32,6 +32,7 @@
 | Writer Skill 矩阵 | `pnpm test:writer:skills`：20/20；十平台 fixture clarification/revision 已覆盖 |
 | Writer 浏览器 fixture E2E | `pnpm test:e2e:writer:new-features`：fixture-enabled 场景完成 workspace/session/cursor/new-session/生成 turn，provider-missing 场景正确返回 `enabled=false` 与 `llm_api_key_missing`；不等同于生产 Provider smoke |
 | 线上共享模型选择 | `pnpm test:e2e:ai-entry:model-selection:with-server`：模型目录可读，已选模型首选（`fallbackAttemptCount=0`），`/api/ai/chat` 返回成功；本次 provider model 为 `deepseek-v4-pro` |
+| Writer 本地质量/cutover gate | `pnpm test:writer:quality`：3/3；`pnpm writer:cutover:check`：10 个平台 digest、38 个 runtime Skill、migration revision columns 和 `legacyMarkers=[]` 均通过；生产 runtime 未配置，不能替代生产发布 |
 
 ## 未测组合与发布阻塞
 
