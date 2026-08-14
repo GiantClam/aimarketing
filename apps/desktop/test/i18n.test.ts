@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { WORKBENCH_HOME_GROUPS, WORKBENCH_MEDIA_FEATURES } from "@aimarketing/workbench-ui";
-import { desktopCopy, desktopWriterCopy, detectDesktopLocale, homeGroupLabels, mediaPlaceholderEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale } from "../src/i18n";
+import { desktopCopy, desktopWriterCopy, detectDesktopLocale, homeGroupLabels, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaPlaceholderEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale } from "../src/i18n";
 import { localizeRuntimeStatus } from "../src/App";
 
 test("desktop locale follows Windows/WebView language by default", () => {
@@ -25,6 +25,22 @@ test("English desktop media fields do not leak untranslated Chinese placeholders
     const translated = mediaPlaceholderEnglish[placeholder];
     assert.ok(translated, `missing English placeholder translation: ${placeholder}`);
     assert.doesNotMatch(translated, /[\u4e00-\u9fff]/u);
+  }
+});
+
+test("English desktop media catalog translates every shared Chinese presentation field", () => {
+  const containsChinese = (value: string | undefined) => Boolean(value && /[\u4e00-\u9fff]/u.test(value));
+  for (const feature of WORKBENCH_MEDIA_FEATURES) {
+    if (containsChinese(feature.title)) assert.ok(mediaEnglish[feature.id], `missing English media title: ${feature.id}`);
+    if (containsChinese(feature.summary)) assert.ok(mediaSummaryEnglish[feature.id], `missing English media summary: ${feature.id}`);
+    if (containsChinese(feature.submitLabel)) assert.ok(mediaSubmitEnglish[feature.id], `missing English media submit label: ${feature.id}`);
+    for (const field of feature.fields) {
+      if (containsChinese(field.label)) assert.ok(mediaFieldEnglish[field.label], `missing English media field: ${feature.id}/${field.label}`);
+      if (containsChinese(field.placeholder)) assert.ok(mediaPlaceholderEnglish[field.placeholder!], `missing English media placeholder: ${feature.id}/${field.id}`);
+      for (const option of field.options ?? []) {
+        if (containsChinese(option.label)) assert.ok(mediaOptionEnglish[option.label], `missing English media option: ${feature.id}/${field.id}/${option.label}`);
+      }
+    }
   }
 });
 
