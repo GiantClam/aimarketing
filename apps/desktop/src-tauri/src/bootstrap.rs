@@ -208,11 +208,26 @@ pub fn ensure_runtime_before_window() -> Result<(), String> {
         .args(["-InstallRoot"])
         .arg(&install_root);
     if let Some(offline_zip) = offline_zip.as_ref() { command.args(["-OfflineZip"]).arg(offline_zip); }
-    let status = command
+    let output = command
         .creation_flags(CREATE_NO_WINDOW)
-        .status()
+        .output()
         .map_err(|error| format!("runtime_installer_spawn_failed: {error}"))?;
-    if !status.success() { return Err(format!("runtime_install_failed:{}", status.code().unwrap_or(-1))); }
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr)
+            .lines()
+            .chain(String::from_utf8_lossy(&output.stdout).lines())
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .take(3)
+            .collect::<Vec<_>>()
+            .join(" | ");
+        let detail = detail.chars().take(512).collect::<String>();
+        return Err(format!(
+            "runtime_install_failed:{}{}",
+            output.status.code().unwrap_or(-1),
+            if detail.is_empty() { String::new() } else { format!(":{detail}") }
+        ));
+    }
     progress.update(progress_messages[2]);
     if runtime_ready(&resource_roots, &install_root) { Ok(()) } else { Err("runtime_install_incomplete".to_string()) }
 }
@@ -263,14 +278,25 @@ fn runtime_ready(resource_roots: &[PathBuf], install_root: &Path) -> bool {
 fn configured_runtime_path(install_root: &Path, key: &str) -> Option<PathBuf> {
     let value = crate::config::read(&install_root.join("config.json"), install_root).ok()?;
     let configured = value.get("runtime")?.get(key)?.as_str()?;
-    std::fs::canonicalize(configured).ok()
+    std::fs::canonicalize(configured).ok().map(powershell_compatible_path)
 }
 
 fn configured_offline_runtime_zip(install_root: &Path) -> Option<PathBuf> {
     let value = crate::config::read(&install_root.join("config.json"), install_root).ok()?;
     let configured = value.get("offlineRuntimeZipPath")?.as_str()?;
     let path = std::fs::canonicalize(configured).ok()?;
-    path.is_file().then_some(path)
+    path.is_file().then_some(powershell_compatible_path(path))
+}
+
+pub(crate) fn powershell_compatible_path(path: PathBuf) -> PathBuf {
+    let value = path.to_string_lossy();
+    if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{rest}"));
+    }
+    if let Some(rest) = value.strip_prefix(r"\\?\") {
+        return PathBuf::from(rest);
+    }
+    path
 }
 
 fn lancedb_ready(root: &Path) -> bool {
@@ -438,10 +464,16 @@ mod tests {
         value["offlineRuntimeZipPath"] = serde_json::Value::String(zip.to_string_lossy().into_owned());
         crate::config::write(&root.join("config.json"), &value).unwrap();
 
-        assert_eq!(configured_offline_runtime_zip(&root), Some(std::fs::canonicalize(zip).unwrap()));
+        assert_eq!(configured_offline_runtime_zip(&root), Some(powershell_compatible_path(std::fs::canonicalize(zip).unwrap())));
         let source = include_str!("bootstrap.rs");
         assert!(source.contains("-OfflineZip"));
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn powershell_path_strips_windows_extended_prefixes() {
+        assert_eq!(powershell_compatible_path(PathBuf::from(r"\\?\C:\runtime.zip")), PathBuf::from(r"C:\runtime.zip"));
+        assert_eq!(powershell_compatible_path(PathBuf::from(r"\\?\UNC\server\share\runtime.zip")), PathBuf::from(r"\\server\share\runtime.zip"));
     }
 
     #[test]

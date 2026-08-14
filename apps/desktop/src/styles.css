@@ -6,7 +6,7 @@ body { margin: 0; min-width: 1080px; min-height: 720px; background-color: var(--
 .bootstrap-screen h1 { margin: 4px 0 0; font-family: var(--wb-display-font, "Barlow Condensed", "Microsoft YaHei", sans-serif); font-size: 36px; }
 .bootstrap-screen p { max-width: 520px; margin: 0; color: var(--wb-muted-foreground, #777); line-height: 1.7; }
 .bootstrap-screen small { max-width: 520px; color: var(--wb-muted-foreground, #777); font-size: 12px; line-height: 1.6; }
-.bootstrap-mark { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 8px; background: var(--wb-primary, #ffd000); color: var(--wb-primary-foreground, #111); font-weight: 800; }
+.bootstrap-mark { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 14px; background: #111 url("/brand/ai-marketing-icon-64.png") center / cover no-repeat; color: transparent; font-size: 0; }
 button, textarea { font: inherit; }
 button { cursor: pointer; }
 .shell { display: block; min-height: 100vh; }
@@ -512,7 +512,10 @@ textarea:focus { border-color: var(--wb-primary, #ffd000); }
 .wb-locale-option:hover, .wb-locale-option.is-active { background: var(--wb-primary, #ffd000); color: var(--wb-primary-foreground, #111); }
 .wb-shell-collapsed .wb-locale-switcher { flex-direction: column; width: 40px; border-radius: 12px; }
 .wb-shell-collapsed .wb-locale-option { min-width: 32px; padding: 0 4px; }
-.wb-brand-mark { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 6px; background: var(--wb-primary, #ffd000); color: var(--wb-primary-foreground, #111); font-size: 13px; }
+.wb-brand-mark { display: grid; flex: 0 0 44px; place-items: center; width: 44px; height: 44px; border-radius: 10px; background: #111 url("/brand/ai-marketing-icon-64.png") center / cover no-repeat; color: transparent; font-size: 0; }
+.wb-brand-title { display: block; width: 220px; height: 48px; overflow: hidden; background: url("/brand/ai-marketing-logo.svg") left center / contain no-repeat; color: transparent; font-size: 0; }
+.wb-shell:not(.wb-shell-collapsed) .wb-brand-mark { display: none; }
+.wb-shell:not(.wb-shell-collapsed) .wb-sidebar-brand { width: 100%; }
 .wb-local-label { color: var(--wb-muted-foreground, #777); font-size: 11px; margin: 13px 0 16px; }
 .wb-sidebar-nav { display: grid; gap: 3px; overflow: auto; }
 .wb-nav-section { margin: 13px 8px 5px; color: color-mix(in srgb, var(--wb-muted-foreground, #777) 72%, transparent); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }

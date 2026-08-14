@@ -111,13 +111,13 @@ fn host_script(app: &AppHandle) -> Result<PathBuf, String> {
     if let Some(path) = configured_runtime_path(app, "hostPath").filter(|path| path.is_file()) { return Ok(path); }
     let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
     let packaged = resource.join("dist-runtime").join("host.mjs");
-    if packaged.is_file() { return std::fs::canonicalize(packaged).map_err(|error| error.to_string()); }
+    if packaged.is_file() { return std::fs::canonicalize(packaged).map(crate::bootstrap::powershell_compatible_path).map_err(|error| error.to_string()); }
     let up_packaged = resource.join("_up_").join("dist-runtime").join("host.mjs");
-    if up_packaged.is_file() { return std::fs::canonicalize(up_packaged).map_err(|error| error.to_string()); }
+    if up_packaged.is_file() { return std::fs::canonicalize(up_packaged).map(crate::bootstrap::powershell_compatible_path).map_err(|error| error.to_string()); }
     let flattened = resource.join("host.mjs");
-    if flattened.is_file() { return std::fs::canonicalize(flattened).map_err(|error| error.to_string()); }
+    if flattened.is_file() { return std::fs::canonicalize(flattened).map(crate::bootstrap::powershell_compatible_path).map_err(|error| error.to_string()); }
     let development = std::env::current_dir().map_err(|error| error.to_string())?.join("apps").join("desktop").join("dist-runtime").join("host.mjs");
-    if development.is_file() { return std::fs::canonicalize(development).map_err(|error| error.to_string()); }
+    if development.is_file() { return std::fs::canonicalize(development).map(crate::bootstrap::powershell_compatible_path).map_err(|error| error.to_string()); }
     Err(format!("workflow_host_bundle_missing: {}", packaged.display()))
 }
 
@@ -130,7 +130,7 @@ fn knowledge_script(app: &AppHandle) -> Result<PathBuf, String> {
         resource.join("knowledge.mjs"),
         std::env::current_dir().map_err(|error| error.to_string())?.join("apps").join("desktop").join("dist-runtime").join("knowledge.mjs"),
     ];
-    candidates.into_iter().find(|path| path.is_file()).and_then(|path| std::fs::canonicalize(path).ok()).ok_or_else(|| "knowledge_service_bundle_missing".to_string())
+    candidates.into_iter().find(|path| path.is_file()).and_then(|path| std::fs::canonicalize(path).ok().map(crate::bootstrap::powershell_compatible_path)).ok_or_else(|| "knowledge_service_bundle_missing".to_string())
 }
 
 fn node_executable(app: &AppHandle) -> Result<String, String> {
@@ -144,7 +144,7 @@ fn node_executable(app: &AppHandle) -> Result<String, String> {
         resource.join("runtime").join("node").join("node.exe"),
         resource.join("node.exe"),
     ];
-    Ok(candidates.into_iter().find(|path| path.is_file() && executable_works(path, &["--version"])).and_then(|path| std::fs::canonicalize(path).ok()).or_else(|| system_executable("node")).map(|path| path.to_string_lossy().into_owned()).unwrap_or_else(|| "node".to_string()))
+    Ok(candidates.into_iter().find(|path| path.is_file() && executable_works(path, &["--version"])).and_then(|path| std::fs::canonicalize(path).ok().map(crate::bootstrap::powershell_compatible_path)).or_else(|| system_executable("node")).map(|path| path.to_string_lossy().into_owned()).unwrap_or_else(|| "node".to_string()))
 }
 
 fn opencode_executable(app: &AppHandle) -> Result<Option<String>, String> {
@@ -158,13 +158,13 @@ fn opencode_executable(app: &AppHandle) -> Result<Option<String>, String> {
         resource.join("_up_").join("dist-runtime").join("runtime").join("opencode").join("opencode.exe"),
         resource.join("runtime").join("opencode").join("opencode.exe"),
     ];
-    Ok(candidates.into_iter().find(|path| path.is_file() && executable_works(path, &["--version"])).and_then(|path| std::fs::canonicalize(path).ok()).or_else(|| system_executable("opencode")).map(|path| path.to_string_lossy().into_owned()))
+    Ok(candidates.into_iter().find(|path| path.is_file() && executable_works(path, &["--version"])).and_then(|path| std::fs::canonicalize(path).ok().map(crate::bootstrap::powershell_compatible_path)).or_else(|| system_executable("opencode")).map(|path| path.to_string_lossy().into_owned()))
 }
 
 fn system_executable(command: &str) -> Option<PathBuf> {
     let output = Command::new("where.exe").arg(command).output().ok()?;
     if !output.status.success() { return None; }
-    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).flat_map(crate::resolve_windows_command_shim).filter(|path| path.is_file() && executable_works(path, &["--version"])).find_map(|path| std::fs::canonicalize(path).ok())
+    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).flat_map(crate::resolve_windows_command_shim).filter(|path| path.is_file() && executable_works(path, &["--version"])).find_map(|path| std::fs::canonicalize(path).ok().map(crate::bootstrap::powershell_compatible_path))
 }
 
 fn executable_works(path: &std::path::Path, args: &[&str]) -> bool {
@@ -175,7 +175,7 @@ fn configured_runtime_path(app: &AppHandle, key: &str) -> Option<PathBuf> {
     let data = crate::data_dir(app).ok()?;
     let value = crate::config::read(&data.join("config.json"), &data).ok()?;
     let path = value.get("runtime")?.get(key)?.as_str().map(PathBuf::from)?;
-    std::fs::canonicalize(path).ok()
+    std::fs::canonicalize(path).ok().map(crate::bootstrap::powershell_compatible_path)
 }
 
 fn python_executable(app: &AppHandle) -> Result<Option<String>, String> {
@@ -189,7 +189,7 @@ fn python_executable(app: &AppHandle) -> Result<Option<String>, String> {
         resource.join("dist-runtime").join("runtime").join("python").join("python.exe"),
         resource.join("_up_").join("dist-runtime").join("runtime").join("python").join("python.exe"),
     ];
-    if let Some(path) = candidates.into_iter().find(|path| path.is_file() && python_capable(path)).and_then(|path| std::fs::canonicalize(path).ok()) { return Ok(Some(path.to_string_lossy().into_owned())); }
+    if let Some(path) = candidates.into_iter().find(|path| path.is_file() && python_capable(path)).and_then(|path| std::fs::canonicalize(path).ok().map(crate::bootstrap::powershell_compatible_path)) { return Ok(Some(path.to_string_lossy().into_owned())); }
     let system = system_executable("python").filter(|path| python_capable(path));
     Ok(system.map(|path| path.to_string_lossy().into_owned()))
 }
@@ -207,7 +207,7 @@ fn lancedb_runtime_directory(app: &AppHandle) -> Result<Option<String>, String> 
         resource.join("dist-runtime").join("runtime").join("lancedb"),
         resource.join("_up_").join("dist-runtime").join("runtime").join("lancedb"),
     ];
-    Ok(candidates.into_iter().find(|path| path.join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").is_file()).and_then(|path| std::fs::canonicalize(path).ok()).map(|path| path.to_string_lossy().into_owned()))
+    Ok(candidates.into_iter().find(|path| path.join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").is_file()).and_then(|path| std::fs::canonicalize(path).ok().map(crate::bootstrap::powershell_compatible_path)).map(|path| path.to_string_lossy().into_owned()))
 }
 
 fn service_response(request_id: &str, result: Result<serde_json::Value, String>) -> serde_json::Value {

@@ -1658,7 +1658,11 @@ export function App() {
         if (sessionResponse.ok !== true) throw new Error(String((sessionResponse.error as { message?: string } | undefined)?.message ?? "opencode_session_unavailable"));
         const sessionId = String((sessionResponse.data as { sessionId?: string } | undefined)?.sessionId ?? "");
         if (!sessionId) throw new Error("opencode_session_id_missing");
-        await tauriBridge.invoke("set_conversation_session", { conversationId, sessionId });
+        // The runtime-response listener persists the session ID as soon as the
+        // session.create frame arrives. Do not await a second SQLite write here:
+        // the prompt must be sent immediately even when the local database is
+        // briefly busy with the first persistence operation.
+        void tauriBridge.invoke("set_conversation_session", { conversationId, sessionId }).catch(() => undefined);
         const recovered = (sessionResponse.data as { recovered?: unknown } | undefined)?.recovered === true;
         const recoverySnapshot = recovered ? createSessionRecoverySnapshot(priorConversationHistory.filter((message): message is typeof message & { role: "user" | "assistant" } => message.role === "user" || message.role === "assistant")) : "";
         const promptWithRecovery = recoverySnapshot ? `${recoverySnapshot}\n\nCurrent request: ${openCodePrompt}` : openCodePrompt;

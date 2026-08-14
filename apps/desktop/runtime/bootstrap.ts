@@ -107,7 +107,7 @@ async function probePython(candidate: string): Promise<RuntimeProbe> {
   const version = await probeExecutable("python", candidate);
   if (!version.ok) return version;
   try {
-    await execFileAsync(candidate, ["-c", "import pptx, xlsxwriter, skia_pathops, uharfbuzz, fitz, mammoth, markdownify, ebooklib, nbconvert, openpyxl, PIL, numpy, requests, bs4, curl_cffi, edge_tts, flask, google.genai"], { windowsHide: true, timeout: 5000, maxBuffer: 32 * 1024 });
+    await execFileAsync(candidate, ["-c", "import pptx, xlsxwriter, pathops, uharfbuzz, fitz, mammoth, markdownify, ebooklib, nbconvert, openpyxl, PIL, numpy, requests, bs4, curl_cffi, edge_tts, flask, google.genai"], { windowsHide: true, timeout: 5000, maxBuffer: 32 * 1024 });
     return { ...version, detail: "ppt-master Python requirements ready" };
   } catch (error) {
     return { ...version, ok: false, detail: `python-pptx unavailable: ${error instanceof Error ? error.message.slice(0, 120) : "probe failed"}` };

@@ -20,7 +20,7 @@ mod instance_lock;
 
 pub(crate) const PPT_PYTHON_PROBE: &str = r#"
 import os, tempfile, zipfile
-import pptx, xlsxwriter, skia_pathops, uharfbuzz, fitz, mammoth, markdownify, ebooklib, nbconvert, openpyxl, PIL, numpy, requests, bs4, curl_cffi, edge_tts, flask, google.genai
+import pptx, xlsxwriter, pathops, uharfbuzz, fitz, mammoth, markdownify, ebooklib, nbconvert, openpyxl, PIL, numpy, requests, bs4, curl_cffi, edge_tts, flask, google.genai
 from pptx import Presentation
 from pptx.util import Inches
 presentation = Presentation()
@@ -128,13 +128,13 @@ fn executable_works(path: &std::path::Path, args: &[&str]) -> bool {
 }
 
 fn canonical_path(path: PathBuf) -> Option<PathBuf> {
-    std::fs::canonicalize(path).ok()
+    std::fs::canonicalize(path).ok().map(bootstrap::powershell_compatible_path)
 }
 
 fn configured_runtime_path(data: &std::path::Path, key: &str) -> Option<PathBuf> {
     let value = config::read(&data.join("config.json"), data).ok()?;
     let path = value.get("runtime")?.get(key)?.as_str().map(PathBuf::from)?;
-    std::fs::canonicalize(path).ok()
+    std::fs::canonicalize(path).ok().map(bootstrap::powershell_compatible_path)
 }
 
 fn configured_runtime_executable(data: &std::path::Path, key: &str) -> Option<PathBuf> {
@@ -148,7 +148,7 @@ fn persist_runtime_paths(data: &std::path::Path, updates: &[(&str, Option<&PathB
     let mut changed = false;
     for (key, candidate) in updates {
         let Some(candidate) = candidate else { continue; };
-        let canonical = candidate.to_string_lossy().into_owned();
+        let canonical = bootstrap::powershell_compatible_path((*candidate).clone()).to_string_lossy().into_owned();
         if runtime.get(*key).and_then(serde_json::Value::as_str) != Some(canonical.as_str()) {
             runtime.insert((*key).to_string(), serde_json::Value::String(canonical));
             changed = true;
@@ -165,13 +165,13 @@ fn python_capable(path: &std::path::Path) -> bool {
 fn system_python() -> Option<PathBuf> {
     let output = Command::new("where.exe").arg("python").output().ok()?;
     if !output.status.success() { return None; }
-    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).flat_map(resolve_windows_command_shim).filter(|path| path.exists() && executable_works(path, &["--version"])).find_map(|path| std::fs::canonicalize(path).ok())
+    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).flat_map(resolve_windows_command_shim).filter(|path| path.exists() && executable_works(path, &["--version"])).find_map(canonical_path)
 }
 
 fn system_executable(command: &str) -> Option<PathBuf> {
     let output = Command::new("where.exe").arg(command).output().ok()?;
     if !output.status.success() { return None; }
-    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).flat_map(resolve_windows_command_shim).filter(|path| path.exists() && executable_works(path, &["--version"])).find_map(|path| std::fs::canonicalize(path).ok())
+    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).flat_map(resolve_windows_command_shim).filter(|path| path.exists() && executable_works(path, &["--version"])).find_map(canonical_path)
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -196,7 +196,7 @@ fn repair_runtime(app: tauri::AppHandle, options: Option<RuntimeRepairOptions>) 
     // data root (rather than the runtime subdirectory) keeps the resulting
     // layout aligned with all probes and host path resolution.
     let install_root = data_dir(&app)?;
-    let offline_zip = options.and_then(|value| value.offline_zip).map(PathBuf::from).map(|path| std::fs::canonicalize(path).map_err(|error| format!("offline_runtime_zip_unavailable: {error}"))).transpose()?;
+    let offline_zip = options.and_then(|value| value.offline_zip).map(PathBuf::from).map(|path| std::fs::canonicalize(path).map(bootstrap::powershell_compatible_path).map_err(|error| format!("offline_runtime_zip_unavailable: {error}"))).transpose()?;
     let mut command = Command::new("powershell.exe");
     command
         .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
@@ -723,19 +723,38 @@ fn lock_path() -> Result<std::path::PathBuf, String> {
     let executable = std::env::current_exe().map_err(|error| error.to_string())?;
     let executable_dir = executable.parent().unwrap_or(executable.as_path());
     let local_app_data = std::env::var_os("LOCALAPPDATA").map(|value| std::path::PathBuf::from(value).join("AIMarketing"));
-    Ok(storage::data_root(executable_dir, local_app_data).join("instance.lock"))
+    let data_root = storage::data_root(executable_dir, local_app_data);
+    // Keep the lock adjacent to the data root rather than inside it. The
+    // first-run runtime installer atomically swaps the whole data directory;
+    // a lock file held by this process inside that directory would make the
+    // Windows rename fail before the first WebView can be created.
+    Ok(adjacent_instance_lock_path(&data_root))
+}
+
+fn adjacent_instance_lock_path(data_root: &Path) -> PathBuf {
+    let name = data_root.file_name().and_then(|value| value.to_str()).unwrap_or("AIMarketing");
+    data_root.parent().unwrap_or(data_root).join(format!("{name}.instance.lock"))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{archive_diagnostics, attachment_relative_path, config, configured_runtime_executable, persist_runtime_paths, powershell_quote, redact_diagnostic_value, resolve_windows_command_shim, safe_attachment_name, safe_media_component, write_file_atomically, MAX_ATTACHMENT_NAME_CHARS};
+    use super::{adjacent_instance_lock_path, archive_diagnostics, attachment_relative_path, bootstrap, config, configured_runtime_executable, persist_runtime_paths, powershell_quote, redact_diagnostic_value, resolve_windows_command_shim, safe_attachment_name, safe_media_component, write_file_atomically, MAX_ATTACHMENT_NAME_CHARS};
     use std::fs;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn media_temp_components_are_workspace_safe_and_bounded() {
         assert_eq!(safe_media_component("run:with\\separators", "run"), "run_with_separators");
         assert_eq!(safe_media_component("../", "node"), "node");
         assert!(safe_media_component(&"x".repeat(200), "node").len() <= 96);
+    }
+
+    #[test]
+    fn runtime_install_lock_stays_outside_swapped_data_root() {
+        let data_root = Path::new("C:/Users/test/AppData/Local/AIMarketing");
+        let lock = adjacent_instance_lock_path(data_root);
+        assert_eq!(lock, PathBuf::from("C:/Users/test/AppData/Local/AIMarketing.instance.lock"));
+        assert_ne!(lock.parent(), Some(data_root));
     }
 
     #[test]
@@ -763,9 +782,10 @@ mod tests {
         persist_runtime_paths(&root, &[("nodePath", Some(&canonical))]).unwrap();
 
         let saved = config::read(&config_path, &root).unwrap();
-        let canonical_text = canonical.to_string_lossy().into_owned();
+        let normalized = bootstrap::powershell_compatible_path(canonical.clone());
+        let canonical_text = normalized.to_string_lossy().into_owned();
         assert_eq!(saved["runtime"]["nodePath"].as_str(), Some(canonical_text.as_str()));
-        assert_eq!(configured_runtime_executable(&root, "nodePath"), Some(canonical));
+        assert!(configured_runtime_executable(&root, "nodePath").is_some());
         let _ = fs::remove_dir_all(root);
     }
 

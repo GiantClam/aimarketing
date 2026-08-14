@@ -129,6 +129,8 @@ test("installer keeps source fallback, resume, proxy and disk gates fail-closed"
 test("runtime activation restores last-known-good when staged activation fails", async () => {
   const source = await readFile(scriptPath, "utf8");
   assert.match(source, /function Activate-StagedRuntime\(\)/u);
+  assert.match(source, /Preserve user-owned/u);
+  assert.match(source, /Copy-Item -LiteralPath \$existing\.FullName/u);
   assert.match(source, /\$movedExisting = \$false/u);
   assert.match(source, /\$activated = \$false/u);
   assert.match(source, /Move-Item -LiteralPath \$backupRoot -Destination \$installRootResolved/u);

@@ -8,6 +8,24 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# Some stripped-down Windows PowerShell installations do not load the
+# Microsoft.PowerShell.Utility module under the desktop bootstrap environment.
+# Keep the installer self-contained with the .NET implementation in that case.
+if ($null -eq (Get-Command Get-FileHash -ErrorAction SilentlyContinue)) {
+  function Get-FileHash {
+    param([Parameter(Mandatory = $true)][string]$LiteralPath, [string]$Algorithm = "SHA256")
+    $stream = [IO.File]::OpenRead($LiteralPath)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+      [pscustomobject]@{ Algorithm = $Algorithm; Hash = ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '') }
+    } finally {
+      $sha.Dispose()
+      $stream.Dispose()
+    }
+  }
+}
+
 $mirrors = @("aliyun", "tencent", "tsinghua", "official")
 $manifest = Get-Content -Raw -Encoding UTF8 $ManifestPath | ConvertFrom-Json
 $installRootResolved = [IO.Path]::GetFullPath([string]$InstallRoot)
@@ -378,6 +396,13 @@ function Activate-StagedRuntime() {
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $installRootResolved) | Out-Null
   try {
     if (Test-Path -LiteralPath $installRootResolved) {
+      # Runtime activation swaps the entire data root. Preserve user-owned
+      # state (config, database, logs and projects) while replacing only the
+      # green runtime payload; otherwise every repair would erase settings.
+      foreach ($existing in Get-ChildItem -LiteralPath $installRootResolved -Force) {
+        if ($existing.Name -in @("runtime", "skills")) { continue }
+        Copy-Item -LiteralPath $existing.FullName -Destination (Join-Path $stageRoot $existing.Name) -Recurse -Force
+      }
       if (Test-Path -LiteralPath $backupRoot) { Remove-Item -LiteralPath $backupRoot -Recurse -Force }
       Move-Item -LiteralPath $installRootResolved -Destination $backupRoot
       $movedExisting = $true

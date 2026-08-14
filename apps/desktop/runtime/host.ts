@@ -187,6 +187,7 @@ async function writeOpenCodeConfig(configDirectory: string, provider: ProviderCo
   const config = {
     share: "disabled",
     autoupdate: false,
+    model: `${selected.providerId}/${model}`,
     permission: {
       read: "allow", edit: "allow", bash: "allow", glob: "allow", grep: "allow", list: "allow",
       skill: "allow", task: "allow", websearch: "allow", webfetch: "allow", question: "deny", delete: "allow",

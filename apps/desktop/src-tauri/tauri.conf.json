@@ -12,11 +12,11 @@
   "app": {
     "withGlobalTauri": true,
     "windows": [{ "title": "AI Marketing", "width": 1360, "height": 860, "minWidth": 1080, "minHeight": 720, "resizable": true }],
-    "security": { "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'" }
+    "security": { "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'" }
   },
   "bundle": {
     "active": true,
-    "icon": ["icons/icon.ico"],
+    "icon": ["icons/ai-marketing-icon.ico"],
     "resources": ["../dist-runtime/host.mjs", "../dist-runtime/knowledge.mjs", "../dist-runtime/skills", "../dist-runtime/skill-catalog.json", "../dist-runtime/runtime", "../dist-runtime/install-desktop-runtime.ps1", "../dist-runtime/runtime-manifest-crypto.mjs"],
     "targets": ["nsis"],
     "windows": { "webviewInstallMode": { "type": "downloadBootstrapper" } }
