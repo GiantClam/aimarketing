@@ -105,6 +105,7 @@ test("installer seeds bundled runtime and skills before downloading missing comp
   assert.match(source, /Invoke-ResumableDownload\s+\$url\s+\$tmp\s+90/u);
   assert.match(source, /HttpWebRequest/u);
   assert.match(source, /pip install[^\n]+--timeout 30/u);
+  assert.match(source, /if \(-not \$OfflineZip\) \{ Seed-BundledRuntime \}/u);
 });
 
 test("installer keeps source fallback, resume, proxy and disk gates fail-closed", async () => {
@@ -120,6 +121,9 @@ test("installer keeps source fallback, resume, proxy and disk gates fail-closed"
   assert.match(source, /--proxy/u);
   assert.match(source, /Assert-OfflineArchiveManifest/u);
   assert.match(source, /runtime_offline_manifest_mismatch/u);
+  assert.match(source, /function Expand-SafeZip\(\[string\]\$archivePath, \[string\]\$destination\)/u);
+  assert.match(source, /runtime_archive_entry_unsafe/u);
+  assert.match(source, /ZipFile\]::ExtractToDirectory/u);
 });
 
 test("runtime activation restores last-known-good when staged activation fails", async () => {
@@ -283,6 +287,43 @@ test("offline validation rejects an archive whose embedded manifest diverges", a
     await execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", `Compress-Archive -Path ${quote(`${archiveRoot}\\*`)} -DestinationPath ${quote(zipPath)} -Force`], { windowsHide: true });
     await assert.rejects(execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath, "-ManifestPath", manifestPath, "-InstallRoot", installRoot, "-OfflineZip", zipPath, "-ValidateOnly"], { windowsHide: true }));
     await assert.rejects(readFile(join(installRoot, "runtime", "fixture.bin")));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("offline extraction rejects zip-slip entries before creating the destination", async (t) => {
+  if (process.platform !== "win32") { t.skip("PowerShell runtime extraction is Windows-only"); return; }
+  const root = await mkdtemp(join(tmpdir(), "aimarketing-offline-zip-slip-"));
+  const zipPath = join(root, "runtime.zip");
+  const target = join(root, "target");
+  const source = await readFile(scriptPath, "utf8");
+  const functionStart = source.indexOf("function Expand-SafeZip");
+  const functionEnd = source.indexOf("\n}\n\nAssert-RuntimeManifestSchema", functionStart) + 3;
+  assert.ok(functionStart >= 0 && functionEnd > functionStart);
+  const functionSource = source.slice(functionStart, functionEnd);
+  const quote = (value) => `'${String(value).replaceAll("'", "''")}'`;
+  const createZip = [
+    "$ErrorActionPreference='Stop'",
+    "Add-Type -AssemblyName System.IO.Compression",
+    "Add-Type -AssemblyName System.IO.Compression.FileSystem",
+    `$archive=[IO.Compression.ZipFile]::Open(${quote(zipPath)},[IO.Compression.ZipArchiveMode]::Create)`,
+    "$entry=$archive.CreateEntry('../escape.txt')",
+    "$writer=[IO.StreamWriter]::new($entry.Open())",
+    "$writer.Write('escape')",
+    "$writer.Dispose()",
+    "$archive.Dispose()",
+  ].join("\n");
+  const runExtraction = [
+    "$ErrorActionPreference='Stop'",
+    functionSource,
+    `Expand-SafeZip ${quote(zipPath)} ${quote(target)}`,
+  ].join("\n");
+  try {
+    await execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", createZip], { windowsHide: true });
+    await assert.rejects(execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", runExtraction], { windowsHide: true }), /runtime_archive_entry_unsafe/u);
+    await assert.rejects(readFile(join(root, "escape.txt")), /ENOENT/u);
+    await assert.rejects(readFile(join(target, "escape.txt")), /ENOENT/u);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

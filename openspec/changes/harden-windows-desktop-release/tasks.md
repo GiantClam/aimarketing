@@ -22,8 +22,8 @@
 
 - [x] 2.1 定义 component/source/compatibility/hash/size/signature manifest schema
   - [x] `stage-desktop-runtime.ps1` 生成 Windows x64 manifest 元数据（manifestId、platform、architecture、compatibility、sha256/size、mirror sources、Ed25519 signature algorithm slot）；`install-desktop-runtime.ps1` 在任何下载、解压或替换前 fail-closed 校验 schema、目标架构、hash、size、来源和安全相对路径。
-  - [x] 2026-08-14 `pnpm test:desktop-runtime-installer` 通过 18/18（含 `-ValidateOnly` 不触碰 install root、镜像逐级回退、last-known-good 回滚、离线 manifest 一致性和签名篡改拒绝）；PowerShell parser 检查 installer/stager 通过；真实生成 manifest 验证 `aimarketing-runtime-windows-x64-v1`、Windows/x64、sha256 和 ed25519 元数据。
-  - [x] 2026-08-14 the embedded PPT probe now uses Python Unicode escapes for its Chinese text, avoiding legacy PowerShell ANSI reinterpretation; the full 18/18 runtime installer suite and explicit PowerShell parser check pass.
+  - [x] 2026-08-14 `pnpm test:desktop-runtime-installer` 通过 19/19（含 `-ValidateOnly` 不触碰 install root、镜像逐级回退、last-known-good 回滚、离线 manifest 一致性、签名篡改拒绝和 zip-slip 路径拒绝）；PowerShell parser 检查 installer/stager 通过；真实生成 manifest 验证 `aimarketing-runtime-windows-x64-v1`、Windows/x64、sha256 和 ed25519 元数据。
+  - [x] 2026-08-14 the embedded PPT probe now uses Python Unicode escapes for its Chinese text, avoiding legacy PowerShell ANSI reinterpretation; the full 19/19 runtime installer suite and explicit PowerShell parser check pass.
 - [x] 2.2 实现阿里云 → 腾讯云 → 清华适用源 → 官方源路由
   - [x] 2026-08-13 `install-desktop-runtime.ps1` keeps the ordered source list for each manifest asset and continues to the next source after a bounded download/hash failure; installer regression asserts the exact order and all source URLs remain manifest-controlled.
 - [x] 2.3 实现断点续传、代理、磁盘检查、临时目录和原子安装
@@ -38,7 +38,7 @@
 
 **Quality Gate:**
 - [x] 损坏签名、hash、size 或组件身份均 fail closed
-  - [x] 2026-08-14 manifest schema, target, safe-path, SHA-256 and size checks run before installation; the combined runtime installer/package/download/crypto suite passes 18/18.
+  - [x] 2026-08-14 manifest schema, target, safe-path, SHA-256 and size checks run before installation; the combined runtime installer/package/download/crypto suite passes 19/19.
 - [x] 镜像回退测试覆盖每一级来源
   - [x] 2026-08-13 `install-desktop-runtime.test.mjs` uses a local HTTP fixture that returns bounded 503 failures before each approved source; every success position (阿里云、腾讯云、清华适用源、官方源) verifies the exact request prefix and hash-verified payload without external network access.
 - [x] API Key、签名私钥不进入发布包或日志
@@ -50,8 +50,10 @@
   - [x] 2026-08-13 使用 `scripts/package-desktop-runtime.ps1` 生成 `.artifacts/desktop-runtime-release-retry/AIMarketing-Runtime-x64.zip`（411,848,658 bytes，25,256 entries）；归档包含 root manifest、安装器、runtime/skills、解压后的 `runtime/python/python.exe`、PPTX/pathops 依赖，并沿用源 manifest 的 SHA-256 资产集合。签名校验仍由 2.2 覆盖。
 - [x] 3.2 实现本地选择、验证、断点/重复安装和回滚
   - [x] 2026-08-13 `install-desktop-runtime.ps1 -OfflineZip` 使用 staging、manifest/size/hash 校验和 last-known-good 交换；离线安装返回 `status=ok`，重复执行使用独立 install root 验证幂等路径。
+  - [x] 2026-08-14 offline 安装路径跳过 self-contained ZIP 不需要的 bundled runtime/skills 重复 staging，并使用带路径穿越校验的 .NET `ZipFile` 解压；真实 411,848,658-byte runtime ZIP 在当前 Windows 主机首次安装约 46 秒、重复安装约 32 秒，均返回 `status=ok`。
 - [x] 3.3 验证全部在线源不可用时可完成首次环境安装
   - [x] 2026-08-13 使用已生成 ZIP 执行离线首次安装，返回 `{"status":"ok","source":"offline","installed":["node-embed-amd64","python-embed-amd64","python-get-pip"]}`；PPTX capability probe 通过且未访问在线安装分支。
+  - [x] 2026-08-14 使用同一真实 runtime ZIP 完成完整解压、Node/OpenCode/Python/PPT capability probe、manifest/hash 校验和激活；重复执行再次返回相同 installed 集合。证据来自当前 Windows 开发机，clean offline VM 仍是质量门禁。
 - [x] 3.4 验证离线包不覆盖较新的兼容用户数据或配置
   - [x] 2026-08-13 installer preflights the offline ZIP's embedded `runtime-manifest.json` against the externally selected manifest before extraction; a fixture with a diverging manifest is rejected in `-ValidateOnly` and leaves the install root untouched.
 

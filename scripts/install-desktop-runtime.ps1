@@ -84,6 +84,24 @@ function Assert-OfflineArchiveManifest([string]$archivePath) {
   }
 }
 
+function Expand-SafeZip([string]$archivePath, [string]$destination) {
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $destinationFull = [IO.Path]::GetFullPath($destination)
+  $destinationPrefix = if ($destinationFull.EndsWith([IO.Path]::DirectorySeparatorChar)) { $destinationFull } else { $destinationFull + [IO.Path]::DirectorySeparatorChar }
+  $archive = [IO.Compression.ZipFile]::OpenRead([IO.Path]::GetFullPath($archivePath))
+  try {
+    foreach ($entry in $archive.Entries) {
+      $entryRelative = $entry.FullName.Replace('/', [IO.Path]::DirectorySeparatorChar)
+      $entryFull = [IO.Path]::GetFullPath([IO.Path]::Combine($destinationFull, $entryRelative))
+      if ($entryFull -ne $destinationFull -and -not $entryFull.StartsWith($destinationPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "runtime_archive_entry_unsafe:$($entry.FullName)"
+      }
+    }
+  } finally { $archive.Dispose() }
+  New-Item -ItemType Directory -Force -Path $destinationFull | Out-Null
+  [IO.Compression.ZipFile]::ExtractToDirectory([IO.Path]::GetFullPath($archivePath), $destinationFull)
+}
+
 Assert-RuntimeManifestSchema
 Assert-ManifestSignature
 if ($OfflineZip) { Assert-OfflineArchiveManifest $OfflineZip }
@@ -193,19 +211,19 @@ function Expand-ArchiveAssets() {
     if ($asset.kind -ne "archive") { continue }
     $archive = Join-Path $stageRoot $asset.relativePath
     $target = Join-Path $stageRoot $asset.extractPath
+    $alreadyExtracted = if ($asset.id -eq "node-embed-amd64") {
+      Test-Path -LiteralPath (Join-Path $stageRoot "runtime/node/node.exe") -PathType Leaf
+    } elseif ($asset.id -eq "python-embed-amd64") {
+      Test-Path -LiteralPath (Join-Path $stageRoot "runtime/python/python.exe") -PathType Leaf
+    } else { $false }
+    if ($alreadyExtracted) { continue }
     if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
       # A compatible bundled/system runtime may have satisfied this asset
       # before download. In that case there is nothing left to extract.
-      $alreadyExtracted = if ($asset.id -eq "node-embed-amd64") {
-        Test-Path -LiteralPath (Join-Path $stageRoot "runtime/node/node.exe") -PathType Leaf
-      } elseif ($asset.id -eq "python-embed-amd64") {
-        Test-Path -LiteralPath (Join-Path $stageRoot "runtime/python/python.exe") -PathType Leaf
-      } else { $false }
       if ($alreadyExtracted) { continue }
       throw "runtime archive missing: $($asset.id)"
     }
-    New-Item -ItemType Directory -Force -Path $target | Out-Null
-    Expand-Archive -LiteralPath $archive -DestinationPath $target -Force
+    Expand-SafeZip $archive $target
   }
   $nodeRoot = Join-Path $stageRoot "runtime/node"
   $nestedNode = Get-ChildItem -LiteralPath $nodeRoot -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "node.exe") -PathType Leaf } | Select-Object -First 1
@@ -377,9 +395,11 @@ function Activate-StagedRuntime() {
 
 try {
   Assert-SufficientDiskSpace
-  Seed-BundledRuntime
+  # An offline runtime archive is self-contained. Avoid copying the packaged
+  # runtime/skills into staging before extracting the same bytes again.
+  if (-not $OfflineZip) { Seed-BundledRuntime }
   if ($OfflineZip) {
-    Expand-Archive -LiteralPath ([IO.Path]::GetFullPath($OfflineZip)) -DestinationPath $stageRoot -Force
+    Expand-SafeZip ([IO.Path]::GetFullPath($OfflineZip)) $stageRoot
   } else {
     foreach ($asset in $manifest.assets) { Install-VerifiedAsset $asset }
   }

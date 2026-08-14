@@ -22,7 +22,7 @@
 | Desktop 单元/集成回归 | `pnpm desktop:test`：112/112 |
 | Desktop TypeScript、ESLint | `pnpm --filter @aimarketing/desktop typecheck`、根 `pnpm lint` |
 | Desktop Vite/runtime/Skill bundle | `pnpm desktop:build`、`pnpm desktop:verify-bundle` |
-| 绿色 Runtime 安装/签名/离线回滚 | `pnpm test:desktop-runtime-installer`：18/18；完整 preflight 在未签名 manifest 处按预期 fail-closed |
+| 绿色 Runtime 安装/签名/离线回滚 | `pnpm test:desktop-runtime-installer`：19/19；真实 411,848,658-byte Runtime ZIP 在当前 Windows 主机离线完整安装/重复安装均返回 `status=ok`；完整 preflight 在未签名 manifest 处按预期 fail-closed |
 | Tauri Rust | `pnpm desktop:tauri:check` |
 | SaaS 生产构建 | `pnpm build`：425/425 routes |
 | 真实 Provider | 默认 smoke：LLM/image HTTP 200/schema 通过；一次音频任务 48 次轮询仍为 `Processing` 并 fail-closed，随后 `test:real-providers:audio` 独立重试在第 4 次轮询 `Success`。`test:real-providers:video`：RunningHub MiniMax-Hailuo-H3 HTTP 200、76 次轮询后 `SUCCESS`；Seedance 明确未执行 |
