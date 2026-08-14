@@ -142,8 +142,9 @@ async function requestAudio(profile) {
   const submit = await request("audio", baseUrl, profile.apiKey, {
     model: profile.model,
     text: "desktop audio provider smoke",
+    language_boost: "auto",
     voice_setting: { voice_id: "English_Trustworth_Man", speed: 1, vol: 1, pitch: 0 },
-    audio_setting: { audio_type: "mp3" },
+    audio_setting: { audio_sample_rate: 32000, bitrate: 128000, format: "mp3", channel: 1 },
   });
   const submittedTaskId = submit.response?.task_id;
   if (!submit.ok || submittedTaskId === undefined || submittedTaskId === null || submittedTaskId === 0) return submit;

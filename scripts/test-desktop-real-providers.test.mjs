@@ -46,6 +46,7 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
   const imageSizes = [];
   const imageModels = [];
   const imageBodies = [];
+  const audioBodies = [];
   const musicModels = [];
   const server = createServer((request, response) => {
     if (request.method === "POST" && request.url === "/v1/chat/completions") return json(response, { model: "chat", choices: [{ message: { content: "ok" } }], usage: {} });
@@ -62,7 +63,16 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
       });
       return;
     }
-    if (request.method === "POST" && request.url === "/v1/t2a_async_v2") return json(response, { task_id: 11 });
+    if (request.method === "POST" && request.url === "/v1/t2a_async_v2") {
+      let body = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk) => { body += chunk; });
+      request.on("end", () => {
+        audioBodies.push(JSON.parse(body));
+        json(response, { task_id: 11 });
+      });
+      return;
+    }
     if (request.method === "GET" && request.url?.startsWith("/v1/query/t2a_async_query_v2")) return json(response, { task_id: 11, status: "Success", base_resp: { status_code: 0 } });
     if (request.method === "POST" && request.url === "/v1/music_generation") {
       let body = "";
@@ -116,6 +126,13 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
       output_format: "png",
       moderation: "auto",
       response_format: "url",
+    });
+    assert.deepEqual(audioBodies[0], {
+      model: "speech-2.8-turbo",
+      text: "desktop audio provider smoke",
+      language_boost: "auto",
+      voice_setting: { voice_id: "English_Trustworth_Man", speed: 1, vol: 1, pitch: 0 },
+      audio_setting: { audio_sample_rate: 32000, bitrate: 128000, format: "mp3", channel: 1 },
     });
     assert.equal(defaultResult.stdout.includes("video-1"), false);
 

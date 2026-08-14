@@ -26,7 +26,7 @@
 | 绿色 Runtime 安装/签名/离线回滚 | `pnpm test:desktop-runtime-installer`：19/19；真实 411,848,658-byte Runtime ZIP 在当前 Windows 主机离线完整安装/重复安装均返回 `status=ok`；完整 preflight 在未签名 manifest 处按预期 fail-closed |
 | Tauri Rust | `pnpm desktop:tauri:check` |
 | SaaS 生产构建 | `pnpm build`：425/425 routes |
-| 真实 Provider（当前状态） | LLM 历史 smoke HTTP 200/schema；本地音频 profile 当前优先 `speech-2.8-hd`、同时保留 `speech-2.8-turbo` 可切换；直接 HD 探针 HTTP 200/schema、36 次轮询 `Success`，但桌面新建音频任务在 120/180 次轮询仍为 `Processing`，所以音频 gate 仍按 fail-closed 处理；MiniMax music-only `/music_generation` HTTP 200/schema（首个请求）；最新 video-only 非 Seedance `video-minimax-h3` 第 164 次轮询 RunningHub `SUCCESS`。PPTOKEN `/v1/models` HTTP 200 列出 15 个模型，专用 smoke 只验证 `gpt-image-2` 的低分辨率 `256x256`：直连生成 HTTP 200/schema、1 张图片（约 29.9s），代理路径仍为 `401 Invalid token`；随后桌面 `test:real-providers:image` 重试同样 HTTP 200/schema、首个请求成功。按“任一路径成功即通过”判定图片 gate，Seedance 未执行 |
+| 真实 Provider（当前状态） | LLM HTTP 200/schema；本地音频 profile 当前优先 `speech-2.8-hd`、同时保留 `speech-2.8-turbo` 可切换；补齐 MiniMax 官方异步请求字段后，audio-only HTTP 200/schema、88 次轮询 `Success`，默认非视频 smoke 同时通过 LLM/image/audio（音频第 63 次轮询成功）；MiniMax music-only `/music_generation` HTTP 200/schema（首个请求）；最新 video-only 非 Seedance `video-minimax-h3` 第 164 次轮询 RunningHub `SUCCESS`。PPTOKEN `/v1/models` HTTP 200 列出 15 个模型，专用 smoke 只验证 `gpt-image-2` 的低分辨率 `256x256`：直连生成 HTTP 200/schema、1 张图片（约 29.9s），代理路径仍为 `401 Invalid token`；随后桌面 `test:real-providers:image` 重试同样 HTTP 200/schema、首个请求成功。Seedance 未执行 |
 | Provider 配置契约 | `pnpm test:desktop-real-provider-config`；多 profile、能力默认值、模型列表通过 |
 | 依赖/许可证 | 官方 npm registry audit：0 critical、0 high、0 moderate、0 low；三个归档各 28/28 license evidence |
 | Writer Skill 矩阵 | `pnpm test:writer:skills`：20/20；十平台 fixture clarification/revision 已覆盖 |
@@ -47,7 +47,7 @@
 - 真实生产 Writer：URL research、完整修订、图片恢复、质量盲测、生产 OpenCode Skill release/digest、billing idempotency 尚未完成；本机 fixture 浏览器 E2E 已通过但不替代生产验证。
 - 网络边界：本机 bundle boundary 已通过；仍需在干净 VM 和真实 Provider 配置下确认除 runtime 源与用户 Provider 外无额外请求。
 - PPTOKEN 图片 provider：当前凭据下 `/v1/models` 返回 HTTP 200、共 15 个模型并包含 `gpt-image-2`。最新专用 `--mode=both` smoke 固定只请求 `gpt-image-2`、优先 `256x256`：直连生成返回 HTTP 200/schema、`imageCount=1`（约 29.9s），代理路径仍返回 `401 Invalid token`；随后桌面 `test:real-providers:image` 在同一低分辨率配置下首个请求 HTTP 200/schema。因任一路径成功即满足 gate，当前图片 provider 可用。后续若更换凭据仍需重跑该专用 smoke，且不需要验证目录中的其他图片模型。
-- MiniMax 音频 provider：`speech-2.8-hd` 与 `speech-2.8-turbo` 均在本地模型列表中；直接 HD 探针曾在第 36 次达到 `Success`，但桌面 smoke 新建任务在 120/180 次有界轮询后仍为 `Processing`。当前不能宣称桌面音频 gate 通过，需上游任务队列稳定后重跑。
+- MiniMax 音频 provider：`speech-2.8-hd` 与 `speech-2.8-turbo` 均在本地模型列表中；smoke 已补齐官方异步请求字段，当前 HD 音频与默认 LLM/image/audio smoke 均已达到 `Success`。保留历史 `Processing` 记录用于说明上游队列波动，但当前音频 gate 已通过。
 - 按要求不执行 Seedance 视频生成测试；非 Seedance 视频能力已用真实 RunningHub MiniMax-Hailuo-H3 smoke 覆盖，视频任务提交/轮询失败仍会 fail-closed。
 - 最新非 Seedance video-only 结果：`video-minimax-h3` HTTP 200/schema、164 次轮询后 `SUCCESS`；Seedance 仍明确排除。
 
