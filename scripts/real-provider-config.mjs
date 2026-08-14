@@ -1,5 +1,6 @@
 const REQUIRED_SMOKE_ENTRIES = ["llm", "image"];
 const CAPABILITY_DEFAULTS = new Set(["text", "image", "video", "audio"]);
+const VIDEO_PROVIDER_SOURCES = new Set(["bailian", "dashscope", "minimax", "runninghub"]);
 
 function isRecord(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -88,7 +89,70 @@ export function hasExpectedSmokeResponse(label, response) {
     const statusCode = response.base_resp && typeof response.base_resp === "object" ? response.base_resp.status_code : undefined;
     return (requiredString(String(response.task_id ?? "")) && statusCode === 0 && ["Success", "Succeeded"].includes(String(response.status ?? ""))) || (isRecord(response.data) && requiredString(String(response.data.audio ?? "")));
   }
+  if (label === "video") {
+    const nestedData = isRecord(response.data) ? response.data : undefined;
+    const output = isRecord(response.output) ? response.output : undefined;
+    const status = String(response.status ?? response.taskStatus ?? nestedData?.status ?? nestedData?.taskStatus ?? output?.status ?? output?.taskStatus ?? output?.task_status ?? "").toLowerCase();
+    const successfulStatus = ["success", "succeeded", "completed", "done"].includes(status);
+    const directUrl = requiredString(response.url) || requiredString(response.video_url) || requiredString(response.videoUrl);
+    const outputResult = output && (requiredString(output.url) || requiredString(output.video_url) || requiredString(output.videoUrl));
+    const results = Array.isArray(response.results) && response.results.some((item) => isRecord(item) && (requiredString(item.url) || requiredString(item.video_url) || requiredString(item.videoUrl)));
+    const nestedResults = isRecord(response.data) && Array.isArray(response.data.results) && response.data.results.some((item) => isRecord(item) && (requiredString(item.url) || requiredString(item.video_url) || requiredString(item.videoUrl)));
+    return successfulStatus && (directUrl || outputResult || results || nestedResults);
+  }
   return false;
 }
 
 export const REAL_PROVIDER_SMOKE_SCOPE = Object.freeze({ executed: ["llm", "image", "audio"], excluded: ["video", "seedance"] });
+
+function profileContainsSeedance(profile) {
+  if (!isRecord(profile)) return false;
+  return [profile.model, profile.source, profile.provider, profile.endpoint, profile.queryEndpoint]
+    .filter((value) => typeof value === "string")
+    .some((value) => /seedance|sparkvideo/iu.test(value));
+}
+
+function profileDeclaresVideoCapability(profile) {
+  if (!isRecord(profile)) return false;
+  const capabilities = Array.isArray(profile.capabilities)
+    ? profile.capabilities
+    : typeof profile.capabilities === "string"
+      ? profile.capabilities.split(/[,\s]+/u)
+      : [];
+  if (capabilities.some((value) => String(value).trim().toLowerCase() === "video")) return true;
+  const identity = [profile.model, profile.endpoint, profile.queryEndpoint]
+    .filter((value) => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+  return /video|hailuo|wanx/iu.test(identity);
+}
+
+/**
+ * Resolve a configured video profile that is safe to exercise in the real
+ * provider smoke. Seedance is intentionally excluded by acceptance scope;
+ * callers can fail closed when no other configured video profile exists.
+ */
+export function resolveNonSeedanceVideoProfile(config) {
+  if (!isRecord(config) || !isRecord(config.providers)) return undefined;
+  const preferredId = isRecord(config.defaults) && requiredString(config.defaults.video) ? config.defaults.video : undefined;
+  const ordered = [
+    ...(preferredId && config.providers[preferredId] ? [[preferredId, config.providers[preferredId]]] : []),
+    ...Object.entries(config.providers).filter(([id]) => id !== preferredId),
+  ];
+  for (const [id, profile] of ordered) {
+    if (!isRecord(profile) || profileContainsSeedance(profile)) continue;
+    const source = String(profile.source ?? profile.provider ?? "").trim().toLowerCase();
+    if (!VIDEO_PROVIDER_SOURCES.has(source)) continue;
+    if (!profileDeclaresVideoCapability(profile)) continue;
+    if (!requiredString(profile.baseUrl) || !requiredString(profile.apiKey) || !requiredString(profile.model)) continue;
+    return { id, profile };
+  }
+  return undefined;
+}
+
+export function buildRealProviderSmokeScope({ includeVideo = false } = {}) {
+  return Object.freeze({
+    executed: Object.freeze(includeVideo ? ["llm", "image", "audio", "video"] : ["llm", "image", "audio"]),
+    excluded: Object.freeze(["seedance"]),
+  });
+}

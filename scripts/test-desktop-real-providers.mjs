@@ -1,26 +1,28 @@
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertRealProviderConfig, hasExpectedSmokeResponse, REAL_PROVIDER_SMOKE_SCOPE } from "./real-provider-config.mjs";
+import { assertRealProviderConfig, buildRealProviderSmokeScope, hasExpectedSmokeResponse, resolveNonSeedanceVideoProfile } from "./real-provider-config.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const configPath = resolve(process.env.AIMARKETING_REAL_PROVIDER_CONFIG ?? resolve(repoRoot, "apps/desktop/real-providers.test.local.json"));
 const config = assertRealProviderConfig(JSON.parse(await readFile(configPath, "utf8")));
+const includeVideo = process.argv.includes("--include-video") || process.env.AIMARKETING_PROVIDER_SMOKE_INCLUDE_VIDEO === "1";
+const smokeScope = buildRealProviderSmokeScope({ includeVideo });
 
 function endpoint(baseUrl, path) {
   return `${String(baseUrl).replace(/\/+$/u, "")}/${String(path).replace(/^\/+/, "")}`;
 }
 
-async function request(label, url, apiKey, body) {
+async function request(label, url, apiKey, body, { method = "POST", headers = {} } = {}) {
   const retries = Math.max(0, Number(process.env.AIMARKETING_PROVIDER_RETRIES ?? 2));
   const transientStatuses = new Set([408, 425, 429, 500, 502, 503, 504]);
   let lastResult;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
       const response = await fetch(url, {
-        method: "POST",
-        headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-        body: JSON.stringify(body),
+        method,
+        headers: { authorization: `Bearer ${apiKey}`, ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         signal: AbortSignal.timeout(Number(process.env.AIMARKETING_PROVIDER_TIMEOUT_MS ?? 120000)),
       });
       const text = await response.text();
@@ -35,6 +37,65 @@ async function request(label, url, apiKey, body) {
     await new Promise((resolve) => setTimeout(resolve, Math.min(5000, 500 * 2 ** attempt)));
   }
   return lastResult ?? { label, ok: false, error: "provider_smoke_no_result" };
+}
+
+function providerSource(profile) {
+  return String(profile.source ?? profile.provider ?? "").trim().toLowerCase();
+}
+
+function taskIdFromResponse(response) {
+  const data = response?.data && typeof response.data === "object" ? response.data : undefined;
+  const output = response?.output && typeof response.output === "object" ? response.output : undefined;
+  return response?.task_id ?? response?.taskId ?? response?.id ?? data?.task_id ?? data?.taskId ?? output?.task_id ?? output?.taskId;
+}
+
+async function pollVideo(label, profile, taskId, source, queryPath) {
+  const maxPolls = Math.max(1, Number(process.env.AIMARKETING_PROVIDER_VIDEO_POLLS ?? 12));
+  const delayMs = Math.max(0, Number(process.env.AIMARKETING_PROVIDER_VIDEO_POLL_DELAY_MS ?? 1500));
+  let query;
+  for (let attempt = 1; attempt <= maxPolls; attempt += 1) {
+    const isRunningHub = source === "runninghub";
+    const url = isRunningHub
+      ? endpoint(profile.baseUrl, queryPath)
+      : endpoint(profile.baseUrl, `${queryPath}${queryPath.includes("?") ? "&" : "?"}task_id=${encodeURIComponent(String(taskId))}`);
+    query = await request(label, url, profile.apiKey, isRunningHub ? { taskId: String(taskId) } : undefined, { method: isRunningHub ? "POST" : "GET" });
+    query.attempt = attempt;
+    const status = String(query.response?.status ?? query.response?.taskStatus ?? query.response?.data?.status ?? query.response?.data?.taskStatus ?? query.response?.output?.status ?? query.response?.output?.taskStatus ?? query.response?.output?.task_status ?? "").toLowerCase();
+    if (!query.ok || ["success", "succeeded", "completed", "done", "failed", "error"].includes(status) || hasExpectedSmokeResponse("video", query.response)) return query;
+    if (attempt < maxPolls) await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  return query ?? { label, ok: false, error: "video_provider_smoke_no_query_result" };
+}
+
+async function requestVideo(profileEntry) {
+  const { profile } = profileEntry;
+  const source = providerSource(profile);
+  let submitPath;
+  let queryPath;
+  let body;
+  let headers;
+  if (source === "bailian" || source === "dashscope") {
+    submitPath = profile.endpoint || "/api/v1/services/aigc/video-generation/video-synthesis";
+    queryPath = profile.queryEndpoint || "/api/v1/tasks";
+    body = { model: profile.model, input: { prompt: "A short desktop provider smoke video of a yellow cube on a white table" }, parameters: { resolution: "720P", ratio: "16:9", duration: 3 } };
+    headers = { "X-DashScope-Async": "enable" };
+  } else if (source === "minimax") {
+    submitPath = profile.endpoint || "/video_generation";
+    queryPath = profile.queryEndpoint || "/query/video_generation";
+    body = { model: profile.model, prompt: "A short desktop provider smoke video of a yellow cube on a white table", duration: 6, resolution: "768P", prompt_optimizer: true };
+  } else if (source === "runninghub") {
+    submitPath = profile.endpoint;
+    queryPath = profile.queryEndpoint || "/openapi/v2/query";
+    if (!submitPath) return { label: "video", ok: false, error: "real_provider_config_video_endpoint_missing" };
+    body = { prompt: "A short desktop provider smoke video of a yellow cube on a white table", resolution: "720p", duration: "5", ratio: "adaptive", generateAudio: false };
+  } else {
+    return { label: "video", ok: false, error: `real_provider_video_source_unsupported:${source || "missing"}` };
+  }
+  const submit = await request("video", endpoint(profile.baseUrl, submitPath), profile.apiKey, body, { headers });
+  const taskId = taskIdFromResponse(submit.response);
+  if (!submit.ok || taskId === undefined || taskId === null || taskId === "") return submit;
+  if (source === "bailian" || source === "dashscope") queryPath = `${queryPath.replace(/\/+$/u, "")}/${encodeURIComponent(String(taskId))}`;
+  return pollVideo("video", profile, taskId, source, queryPath);
 }
 
 async function requestAudio(profile) {
@@ -77,24 +138,33 @@ function configuredAudioProfile(value) {
 // The configured LLM and image entries can point at the same upstream. Run
 // them serially so a capacity-limited gateway does not turn a valid smoke into
 // a client-side concurrency failure. Transient upstream errors are retried a
-// bounded number of times; video generation (including seedance) remains
-// intentionally out of this smoke suite.
-const results = [
-  await request("llm", endpoint(config.llm.baseUrl, "chat/completions"), config.llm.apiKey, {
-    model: config.llm.model,
-    messages: [{ role: "user", content: "Reply with exactly: desktop provider smoke ok" }],
-    max_tokens: 32,
-    temperature: 0,
-  }),
-  await request("image", endpoint(config.image.baseUrl, "images/generations"), config.image.apiKey, {
-    model: config.image.model,
-    prompt: "A simple yellow square on a white background, no text",
-    size: "1024x1024",
-    n: 1,
-    response_format: "url",
-  }),
-  await requestAudio(configuredAudioProfile(config)),
-];
+// bounded number of times. The default scope excludes video/Seedance; the
+// explicit --include-video path only selects a configured non-Seedance profile.
+const configuredVideoProfile = includeVideo ? resolveNonSeedanceVideoProfile(config) : undefined;
+const results = includeVideo && !configuredVideoProfile
+  ? [{ label: "video", ok: false, error: "real_provider_config_non_seedance_video_profile_missing" }]
+  : [
+      await request("llm", endpoint(config.llm.baseUrl, "chat/completions"), config.llm.apiKey, {
+        model: config.llm.model,
+        messages: [{ role: "user", content: "Reply with exactly: desktop provider smoke ok" }],
+        max_tokens: 32,
+        temperature: 0,
+      }),
+      await request("image", endpoint(config.image.baseUrl, "images/generations"), config.image.apiKey, {
+        model: config.image.model,
+        prompt: "A simple yellow square on a white background, no text",
+        size: "1024x1024",
+        n: 1,
+        response_format: "url",
+      }),
+      await requestAudio(configuredAudioProfile(config)),
+    ];
+
+if (includeVideo && configuredVideoProfile) {
+  const videoResult = await requestVideo(configuredVideoProfile);
+  videoResult.profileId = configuredVideoProfile.id;
+  results.push(videoResult);
+}
 
 const sanitized = results.map((result) => ({
   label: result.label,
@@ -102,8 +172,11 @@ const sanitized = results.map((result) => ({
   ok: result.ok,
   schemaOk: result.ok === true && hasExpectedSmokeResponse(result.label, result.response),
   ...(typeof result.attempt === "number" ? { attempts: result.attempt } : {}),
+  ...(typeof result.profileId === "string" ? { profileId: result.profileId } : {}),
+  ...((typeof result.response?.status === "string" && result.response.status.trim()) ? { providerStatus: result.response.status } : {}),
+  ...((typeof result.response?.data?.status === "string" && result.response.data.status.trim()) ? { providerStatus: result.response.data.status } : {}),
   ...(result.response && typeof result.response === "object" ? { responseKeys: Object.keys(result.response) } : {}),
   ...(result.error ? { error: result.error } : {}),
 }));
-console.log(JSON.stringify({ configFile: configPath, scope: REAL_PROVIDER_SMOKE_SCOPE, results: sanitized }, null, 2));
+console.log(JSON.stringify({ configFile: configPath, scope: smokeScope, results: sanitized }, null, 2));
 if (results.some((result) => result.ok !== true || !hasExpectedSmokeResponse(result.label, result.response))) process.exitCode = 1;
