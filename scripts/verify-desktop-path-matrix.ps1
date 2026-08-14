@@ -32,7 +32,9 @@ try {
   $packageRoot = Get-ChildItem -LiteralPath $source -Directory | Select-Object -First 1
   if ($null -eq $packageRoot) { throw "desktop_path_matrix_package_root_missing" }
   $variants = @(
-    [ordered]@{ id = "unicode-user"; directory = "中文 用户" },
+    # Construct the Chinese directory from code points so Windows PowerShell 5.1
+    # cannot reinterpret a UTF-8 source literal as the system ANSI code page.
+    [ordered]@{ id = "unicode-user"; directory = ([string][char]0x4E2D + [char]0x6587 + " " + [char]0x7528 + [char]0x6237) },
     [ordered]@{ id = "space"; directory = "AI Marketing space path" },
     [ordered]@{ id = "long"; directory = ("AIMarketing-" + ("long-" * 14) + "path") },
     [ordered]@{ id = "onedrive"; directory = "OneDrive - AI Marketing" }

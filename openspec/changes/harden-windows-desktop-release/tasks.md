@@ -94,6 +94,7 @@
 - [ ] 5.1 在 Win10 22H2/Win11 x64 运行中文用户名、空格、长路径和 OneDrive 测试
   - [x] 2026-08-14 current Windows host path matrix: `pnpm desktop:verify-path-matrix` extracted the portable package into Unicode-user, space, long-path (184 characters) and OneDrive-shaped directories; all four EXE launches remained alive for 8 seconds and were terminated cleanly. The report sets `cleanVm=false`; Win10 22H2/Win11 clean-VM coverage remains open.
   - [x] 2026-08-14 latest rebuilt portable ZIP rerun with a 4-second bounded startup probe passed all four variants (`unicode-user`, `space`, `long`, `onedrive`) with `alive_then_stopped`; the report still correctly records `cleanVm=false`.
+  - [x] 2026-08-14 fixed the Windows PowerShell UTF-8/ANSI boundary by constructing the Chinese directory from Unicode code points; the latest 2-second rerun reports the real `中文 用户` path (103 characters), plus space/184-character/OneDrive variants, all `alive_then_stopped` with `cleanVm=false`.
 - [x] 5.2 运行 OpenCode/workflow-host 强杀、恢复和 Windows Job Object 测试
   - [x] 2026-08-14 desktop fake OpenCode E2E remains green; `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml` passes 29/29, including Windows command-shim resolution and Job Object child-tree termination.
 - [x] 5.3 执行日志 30 天/1GB 清理和诊断包脱敏测试
