@@ -17,7 +17,7 @@ function json(response, payload) {
   response.end(JSON.stringify(payload));
 }
 
-function runSmoke(configPath, port, extraArgs = []) {
+function runSmoke(configPath, port, extraArgs = [], extraEnv = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [smokeScript, ...extraArgs], {
       cwd: repoRoot,
@@ -27,6 +27,7 @@ function runSmoke(configPath, port, extraArgs = []) {
         AIMARKETING_PROVIDER_TIMEOUT_MS: "5000",
         AIMARKETING_PROVIDER_VIDEO_POLLS: "2",
         AIMARKETING_PROVIDER_VIDEO_POLL_DELAY_MS: "0",
+        ...extraEnv,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -94,6 +95,11 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
     assert.deepEqual(imageOnlyReport.scope, { executed: ["image"], excluded: ["video", "seedance"] });
     assert.deepEqual(imageOnlyReport.results.map((item) => item.label), ["image"]);
     assert.deepEqual(imageSizes.slice(1, 2), ["256x256"]);
+
+    const invalidSizeResult = await runSmoke(configPath, port, ["--image-only"], { AIMARKETING_PROVIDER_IMAGE_SIZE: "2048x2048" });
+    assert.equal(invalidSizeResult.code, 1);
+    assert.match(`${invalidSizeResult.stdout}\n${invalidSizeResult.stderr}`, /real_provider_image_size_unsupported:2048x2048/u);
+    assert.equal(imageSizes.length, 2, "invalid image size must fail before issuing a provider request");
 
     const result = await runSmoke(configPath, port, ["--include-video"]);
     assert.equal(result.code, 0, `${result.stdout}\n${result.stderr}`);
