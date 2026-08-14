@@ -1127,12 +1127,12 @@ export function App() {
     });
   };
   const updateModel = (model: string) => persistProviderSelection((current) => {
-    const profileId = current.defaults?.[activeCapability];
+    const profileId = providerForCapability(current, activeCapability).id;
     if (profileId && current.providers?.[profileId]) return { ...current, providers: { ...current.providers, [profileId]: { ...current.providers[profileId], model } } };
     return { ...current, provider: { ...current.provider, model } };
   });
   const updateReasoning = (reasoning: string) => persistProviderSelection((current) => {
-    const profileId = current.defaults?.[activeCapability];
+    const profileId = providerForCapability(current, activeCapability).id;
     if (profileId && current.providers?.[profileId]) return { ...current, providers: { ...current.providers, [profileId]: { ...current.providers[profileId], reasoningEffort: reasoning } } };
     return { ...current, provider: { ...current.provider, reasoningEffort: reasoning } };
   });

@@ -76,8 +76,14 @@ test("workspace model and reasoning changes persist to the selected capability p
   assert.match(appSource, /const persistProviderSelection = \(update: \(current: DesktopConfig\) => DesktopConfig\)/);
   assert.match(appSource, /configRef\.current = nextConfig/);
   assert.match(appSource, /tauriBridge\.invoke\("write_config", \{ value: nextConfig \}\)/);
-  assert.match(appSource, /const profileId = current\.defaults\?\.\[activeCapability\]/);
+  assert.match(appSource, /const profileId = providerForCapability\(current, activeCapability\)\.id/u);
   assert.match(appSource, /reasoningEffort: reasoning/);
+});
+
+test("model changes persist to the resolved compatible profile after fallback", () => {
+  const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  assert.match(appSource, /const profileId = providerForCapability\(current, activeCapability\)\.id/u);
+  assert.doesNotMatch(appSource, /const profileId = current\.defaults\?\.\[activeCapability\]/u);
 });
 
 test("desktop usage records the model reported by the active Provider event", () => {
