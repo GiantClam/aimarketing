@@ -16,6 +16,16 @@ function trimText(value) {
   return typeof value === "string" ? value.trim() : ""
 }
 
+const SUPPORTED_IMAGE_SIZES = new Set(["256x256", "512x512", "1024x1024", "1536x1024", "1024x1536"])
+
+function resolveImageSize(value) {
+  const imageSize = trimText(value) || "256x256"
+  if (!SUPPORTED_IMAGE_SIZES.has(imageSize)) {
+    throw new Error(`pptoken_image_size_unsupported:${imageSize}`)
+  }
+  return imageSize
+}
+
 function buildSafePreview(value, maxLength = 240) {
   if (typeof value !== "string") return null
   return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
@@ -97,10 +107,10 @@ if (!apiKey) {
 
 const baseUrl = trimText(process.env.IMAGE_ASSISTANT_PPTOKEN_BASE_URL) || "https://api.pptoken.cc/v1"
 const apiRoot = baseUrl.replace(/\/v1\/?$/, "")
-const model =
-  trimText(process.env.IMAGE_ASSISTANT_PPTOKEN_MODEL) ||
-  trimText(process.env.PPTOKEN_IMAGE_MODEL) ||
-  "gpt-image-2"
+// The connectivity check intentionally exercises one known image model only.
+// Other models shown by the upstream catalog are not part of this smoke path.
+const model = "gpt-image-2"
+const imageSize = resolveImageSize(process.env.PPTOKEN_TEST_IMAGE_SIZE)
 const prompt =
   trimText(process.env.PPTOKEN_TEST_PROMPT) ||
   "A single red apple on a wooden table, soft studio lighting, photorealistic, clean background."
@@ -116,7 +126,7 @@ const directBody = {
   model,
   prompt,
   n: 1,
-  size: "1024x1024",
+  size: imageSize,
   quality: "auto",
   background: "auto",
   output_format: "png",
@@ -141,6 +151,7 @@ console.log(
     directEndpoint,
     proxyEndpoint,
     model,
+    imageSize,
     timeoutSeconds,
     savedKeyId,
   }),

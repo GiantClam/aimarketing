@@ -120,6 +120,7 @@
   - [x] 2026-08-14 latest verification on the current host: LLM HTTP 200/schema and MiniMax audio HTTP 200/schema passed, while the configured PPTOKEN image endpoint returned HTTP 502 `upstream_error` after 3 bounded attempts. This remains an upstream availability blocker, not a local chat/OpenCode failure; video and Seedance stayed excluded.
   - [x] 2026-08-14 targeted rerun now confirms the configured `gpt-image-2` image provider is available: the image-only smoke returned HTTP 200/schema on the first attempt with a 60-second request bound, and low-resolution-first direct probes (`256x256`, `512x512`, `1024x1024`) all returned HTTP 200/schema. Video and Seedance remained excluded; the user-local config was unchanged.
   - [x] 2026-08-14 latest bounded default smoke passed LLM, `gpt-image-2`, and MiniMax audio with HTTP 200/schema; the result scope explicitly executed only `llm,image,audio` and excluded `video,seedance`.
+  - [x] 2026-08-14 PPTOKEN connectivity smoke was narrowed to the configured `gpt-image-2` only and defaulted to `256x256`; the direct image request returned HTTP 200 with one image result, while unsupported sizes fail before any request.
 - [x] 6.3 捕获证据证明所有普通 desktop chat 选择 OpenCode
   - [x] 2026-08-13 architecture-boundary and route tests require `session.create`/`session.prompt` and reject direct chat-completions or `ai-sdk-native` paths.
 - [x] 6.4 扫描 bundle 和网络日志，确认无排除的 SaaS 模块/端点
