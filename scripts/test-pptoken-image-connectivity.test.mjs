@@ -55,7 +55,32 @@ test("PPTOKEN connectivity smoke uses gpt-image-2 at low resolution", async () =
     assert.equal(requestBody.model, "gpt-image-2")
     assert.equal(requestBody.size, "256x256")
     assert.match(result.stdout, /"imageSize":"256x256"/u)
+    assert.match(result.stdout, /"success":true/u)
     assert.equal(result.stdout.includes("fixture-pptoken-key"), false)
+  } finally {
+    server.close()
+    await once(server, "close").catch(() => undefined)
+  }
+})
+
+test("PPTOKEN connectivity smoke fails when the selected model returns an upstream error", async () => {
+  const server = createServer((request, response) => {
+    if (request.method !== "POST" || request.url !== "/v1/images/generations") {
+      response.writeHead(404)
+      response.end()
+      return
+    }
+    response.writeHead(401, { "content-type": "application/json" })
+    response.end(JSON.stringify({ message: "Invalid token" }))
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  const port = server.address().port
+  try {
+    const result = await runConnectivity(`http://127.0.0.1:${port}/v1`)
+    assert.equal(result.code, 1, `${result.stdout}\n${result.stderr}`)
+    assert.match(result.stdout, /"success":false/u)
+    assert.match(result.stdout, /Invalid token/u)
   } finally {
     server.close()
     await once(server, "close").catch(() => undefined)

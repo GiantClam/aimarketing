@@ -92,6 +92,19 @@ async function runRequest({ label, endpoint, headers, body, timeoutMs }) {
         null,
       bodyPreview: parsed ? null : buildSafePreview(text),
     }
+  } catch (error) {
+    return {
+      label,
+      ok: false,
+      status: null,
+      elapsedMs: Date.now() - startedAt,
+      imageCount: 0,
+      savedImagePath: null,
+      topLevelKeys: [],
+      errorCode: trimText(error?.cause?.code) || trimText(error?.code) || "request_failed",
+      errorMessage: trimText(error?.message) || "request_failed",
+      bodyPreview: null,
+    }
   } finally {
     clearTimeout(timeout)
   }
@@ -157,6 +170,8 @@ console.log(
   }),
 )
 
+const results = []
+
 if (mode === "direct" || mode === "both") {
   const directResult = await runRequest({
     label: "direct",
@@ -166,6 +181,7 @@ if (mode === "direct" || mode === "both") {
     timeoutMs,
   })
   console.log(JSON.stringify(directResult))
+  results.push(directResult)
 }
 
 if (mode === "proxy" || mode === "both") {
@@ -177,4 +193,9 @@ if (mode === "proxy" || mode === "both") {
     timeoutMs,
   })
   console.log(JSON.stringify(proxyResult))
+  results.push(proxyResult)
 }
+
+const success = results.some((result) => result.ok === true)
+console.log(JSON.stringify({ success, attempted: results.length, model, imageSize }))
+if (!success) process.exitCode = 1
