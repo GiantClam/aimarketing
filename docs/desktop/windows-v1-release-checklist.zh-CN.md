@@ -9,10 +9,10 @@
 
 | 产物 | 字节数 | SHA-256 | 状态 |
 | --- | ---: | --- | --- |
-| 普通 ZIP `.artifacts/desktop-release/AI-Marketing-Windows-x64-normal.zip` | 269,786,294 | `50e2f3eb71d977f8343a0d38ea88c767308bb9c19c2bab7446d3f9f7ab2b3b3f` | 已生成 |
-| 便携 ZIP `.artifacts/desktop-release/AI-Marketing-Windows-x64-portable.zip` | 269,850,046 | `60b6f8c320e553964a0674095d3eee598c1eab3a2172b22cc504c34efdcbe4ad` | 已生成 |
+| 普通 ZIP `.artifacts/desktop-release/AI-Marketing-Windows-x64-normal.zip` | 269,787,584 | `46c249ed8e3fa5205f847778213646f0c11c1dc2f5347324b1685195d677cd17` | 已生成 |
+| 便携 ZIP `.artifacts/desktop-release/AI-Marketing-Windows-x64-portable.zip` | 269,851,340 | `295eb7a60d0a65c80f78cf331b63e175aa46f70d8a6f675d396c235be589f036` | 已生成 |
 | Runtime ZIP `.artifacts/desktop-runtime-release-retry/AIMarketing-Runtime-x64.zip` | 411,848,658 | `37b08668bef57370588ab941129f76a63b6950404a211560a5fd77adde4b1030` | 已生成 |
-| Release EXE `apps/desktop/src-tauri/target/release/ai-marketing.exe` | 12,649,984 | `373cbe756d65aaf18370fdafe04fbd8cce42cf7512319d56ebbd53d5c67147fe` | 未签名开发构建 |
+| Release EXE `apps/desktop/src-tauri/target/release/ai-marketing.exe` | 12,649,984 | `d735ebcf391e5f36924e991628ad0ba4561c6341bd14adacfb7906ebc0b26ad7` | 未签名开发构建 |
 | NSIS `apps/desktop/src-tauri/target/release/bundle/nsis/AI Marketing_0.1.0_x64-setup.exe` | 180,130,496 | `8e0abb127964e664dd497c0bfd85687ea8a92028006d20aded4dec2baa71b688` | 未签名开发构建 |
 
 ## 已通过矩阵
@@ -22,6 +22,7 @@
 | Desktop 单元/集成回归 | `pnpm desktop:test`：115/115 |
 | Desktop TypeScript、ESLint | `pnpm --filter @aimarketing/desktop typecheck`、根 `pnpm lint` |
 | Desktop Vite/runtime/Skill bundle | `pnpm desktop:build`、`pnpm desktop:verify-bundle` |
+| Runtime verifier/package contract | 最新 `_up_/dist-runtime` 和普通/便携 ZIP 均包含 `install-desktop-runtime.ps1`（22,816 bytes）与 `runtime-manifest-crypto.mjs`（2,651 bytes） |
 | 绿色 Runtime 安装/签名/离线回滚 | `pnpm test:desktop-runtime-installer`：19/19；真实 411,848,658-byte Runtime ZIP 在当前 Windows 主机离线完整安装/重复安装均返回 `status=ok`；完整 preflight 在未签名 manifest 处按预期 fail-closed |
 | Tauri Rust | `pnpm desktop:tauri:check` |
 | SaaS 生产构建 | `pnpm build`：425/425 routes |

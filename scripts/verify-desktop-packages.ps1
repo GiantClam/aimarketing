@@ -38,7 +38,9 @@ function Verify-Package {
       "$packageName/_up_/dist-runtime/host.mjs",
       "$packageName/_up_/dist-runtime/knowledge.mjs",
       "$packageName/_up_/dist-runtime/skill-catalog.json",
-      "$packageName/_up_/dist-runtime/runtime/runtime-manifest.json"
+      "$packageName/_up_/dist-runtime/runtime/runtime-manifest.json",
+      "$packageName/_up_/dist-runtime/install-desktop-runtime.ps1",
+      "$packageName/_up_/dist-runtime/runtime-manifest-crypto.mjs"
     )
     if ($ExpectPortable) { $required += "$packageName/portable.flag" }
     if (-not $ExpectPortable -and (Find-Entry $archive "$packageName/portable.flag")) { throw "desktop_package_unexpected_portable_flag: $Mode" }
@@ -64,6 +66,8 @@ function Verify-Package {
       "$packageName/_up_/dist-runtime/host.mjs" = (Get-Item -LiteralPath (Join-Path $runtime "host.mjs")).Length
       "$packageName/_up_/dist-runtime/knowledge.mjs" = (Get-Item -LiteralPath (Join-Path $runtime "knowledge.mjs")).Length
       "$packageName/_up_/dist-runtime/skill-catalog.json" = (Get-Item -LiteralPath (Join-Path $runtime "skill-catalog.json")).Length
+      "$packageName/_up_/dist-runtime/install-desktop-runtime.ps1" = (Get-Item -LiteralPath (Join-Path $runtime "install-desktop-runtime.ps1")).Length
+      "$packageName/_up_/dist-runtime/runtime-manifest-crypto.mjs" = (Get-Item -LiteralPath (Join-Path $runtime "runtime-manifest-crypto.mjs")).Length
     }
     foreach ($entryName in $sourceLengths.Keys) {
       $entry = Find-Entry $archive $entryName
@@ -79,6 +83,8 @@ function Verify-Package {
       hostBytes = (Find-Entry $archive "$packageName/_up_/dist-runtime/host.mjs").Length
       knowledgeBytes = (Find-Entry $archive "$packageName/_up_/dist-runtime/knowledge.mjs").Length
       catalogBytes = (Find-Entry $archive "$packageName/_up_/dist-runtime/skill-catalog.json").Length
+      installerBytes = (Find-Entry $archive "$packageName/_up_/dist-runtime/install-desktop-runtime.ps1").Length
+      manifestVerifierBytes = (Find-Entry $archive "$packageName/_up_/dist-runtime/runtime-manifest-crypto.mjs").Length
     }
   } finally {
     $archive.Dispose()

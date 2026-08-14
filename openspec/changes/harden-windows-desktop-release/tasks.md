@@ -62,16 +62,16 @@
 - [x] 被篡改离线包不会修改当前 runtime
   - [x] 2026-08-13 `install-desktop-runtime.test.mjs` repacks a tampered embedded manifest, observes fail-closed `runtime_offline_manifest_mismatch`, and confirms no runtime file is created or replaced.
 - [x] 主程序 ZIP 不重复内置完整 runtime
-  - [x] 2026-08-14 `desktop:verify-packages` now fails closed if normal/portable archives contain embedded Python, Node/OpenCode `node_modules`, or a nested `AIMarketing-Runtime-x64.zip`; it now resolves the current `.artifacts/desktop-release/*.zip` outputs before legacy per-mode folders, and the latest release EXE archives pass with 269,786,294 / 269,850,046 compressed bytes.
+  - [x] 2026-08-14 `desktop:verify-packages` now fails closed if normal/portable archives contain embedded Python, Node/OpenCode `node_modules`, or a nested `AIMarketing-Runtime-x64.zip`; it now resolves the current `.artifacts/desktop-release/*.zip` outputs before legacy per-mode folders, and the latest release EXE archives pass with 269,787,584 / 269,851,340 compressed bytes.
 
 ## 4. Normal and portable packages
 
 - [x] 4.1 生成普通 ZIP，数据/runtime 默认位于 `%LOCALAPPDATA%\AIMarketing`
-  - [x] 2026-08-14 使用最新 Windows release EXE 生成并读取校验 `AI-Marketing-Windows-x64-normal.zip`（269,786,294 bytes）；归档含 EXE、host、knowledge service、Skill catalog、runtime manifest，且不含 `portable.flag`。README 标注 `%LOCALAPPDATA%\AIMarketing`、Win10 22H2/Win11 x64 和人工升级方式。
+  - [x] 2026-08-14 使用最新 Windows release EXE 生成并读取校验 `AI-Marketing-Windows-x64-normal.zip`（269,787,584 bytes）；归档含 EXE、host、knowledge service、Skill catalog、runtime manifest、安装器和 manifest verifier，且不含 `portable.flag`。README 标注 `%LOCALAPPDATA%\AIMarketing`、Win10 22H2/Win11 x64 和人工升级方式。
   - [x] `desktop:verify-packages` 优先校验打包脚本生成的 `.artifacts/desktop-release/*.zip`，并保留旧目录兼容回退；普通 ZIP 的必需条目、portable.flag 排除项及 EXE/host/catalog 字节长度通过。
 - [x] 4.2 生成含 `portable.flag` 的便携 ZIP，全部应用数据位于程序旁 `data/`
   - [x] 4.2a 打包脚本在压缩后检查 portable/runtime 必需条目，并核对可执行文件、host 和 Skill catalog 的归档字节长度。
-  - [x] 4.2b 2026-08-14 使用最新 release EXE 生成 269,850,046 字节的 `AI-Marketing-Windows-x64-portable.zip`；独立归档读取校验了 EXE、`portable.flag`、README、workflow host、knowledge service、Skill catalog 和 runtime manifest，以及 EXE、host、knowledge、catalog 的字节长度。跨机器复制验证仍由 4.4 覆盖；NSIS 不作为绿色 ZIP 发布依赖。
+  - [x] 4.2b 2026-08-14 使用最新 release EXE 生成 269,851,340 字节的 `AI-Marketing-Windows-x64-portable.zip`；独立归档读取校验了 EXE、`portable.flag`、README、workflow host、knowledge service、Skill catalog、runtime manifest、安装器和 manifest verifier，以及 EXE、host、knowledge、catalog 的字节长度。跨机器复制验证仍由 4.4 覆盖；NSIS 不作为绿色 ZIP 发布依赖。
   - [x] `desktop:verify-packages` 优先校验打包脚本生成的 `.artifacts/desktop-release/*.zip`，并保留旧目录兼容回退；便携 ZIP 的必需条目、portable.flag 和 EXE/host/catalog 字节长度通过。
 - [x] 4.3 实现普通/便携单实例锁和数据库/索引占用提示
   - [x] `InstanceLock` 按 normal/portable 数据根目录创建单实例锁；冲突错误包含 owner PID 和关闭现有实例的可操作提示，SQLite 连接设置 5 秒 `busy_timeout`。
@@ -103,8 +103,8 @@
 - [x] 5.3 执行日志 30 天/1GB 清理和诊断包脱敏测试
   - [x] 2026-08-13 Rust tests verify 30-day expiry, oldest-first 1GB retention, recursive API-key/token/password/authorization redaction, and a real PowerShell diagnostic ZIP extraction containing only `[REDACTED]` secrets. The same pass also fixed `Compress-Archive -LiteralPath 'staging\\*'` so diagnostics are actually produced.
 - [x] 5.4 执行主 ZIP、解压后、runtime 补齐后的组件级 size budget
-  - [x] 2026-08-14 `scripts/verify-desktop-size-budget.ps1` now measures the current `.artifacts/desktop-release/*.zip` outputs, reports compressed main normal/portable ZIPs, uncompressed extracted program contents, runtime ZIP size, and application/Node/OpenCode/Python/fonts/embedding/Skills ownership; configured budget overflow fails closed. Current normal/portable/runtime archives pass with 269,786,294 / 269,850,046 / 411,848,658 compressed bytes and 691,007,143 / 691,007,150 / 991,112,444 uncompressed bytes.
-  - [x] 2026-08-14 bundle boundaries, package contracts, size budget, and portable-copy verification all passed against the latest release directory; normal/portable compressed sizes are 269,786,294 / 269,850,046 bytes and runtime remains 411,848,658 bytes.
+  - [x] 2026-08-14 `scripts/verify-desktop-size-budget.ps1` now measures the current `.artifacts/desktop-release/*.zip` outputs, reports compressed main normal/portable ZIPs, uncompressed extracted program contents, runtime ZIP size, and application/Node/OpenCode/Python/fonts/embedding/Skills ownership; configured budget overflow fails closed. Current normal/portable/runtime archives pass with 269,787,584 / 269,851,340 / 411,848,658 compressed bytes and 691,009,794 / 691,009,801 / 991,112,444 uncompressed bytes.
+  - [x] 2026-08-14 bundle boundaries, package contracts, size budget, and portable-copy verification all passed against the latest release directory; normal/portable compressed sizes are 269,787,584 / 269,851,340 bytes and runtime remains 411,848,658 bytes; package contract now reports installer 22,816 bytes and manifest verifier 2,651 bytes.
 - [ ] 5.5 执行 Authenticode、manifest 签名、依赖漏洞和许可证审计
   - [x] 2026-08-14 `scripts/sign-windows-release.ps1` and `pnpm desktop:sign-release` provide a fail-closed release entry point: the main Tauri executable and shipped Node/OpenCode binaries are signed with an operator-selected Authenticode certificate, then re-verified; runtime manifest verification is required when `-RequireManifestSignature` is used. The current host has the Windows SDK signing tool, but no operator certificate/private key; the release parent remains open.
   - [x] 2026-08-14 `runtime-manifest-crypto.mjs` now strips the UTF-8 BOM emitted by Windows PowerShell before JSON parsing; the signed-manifest CLI regression covers BOM input, and the current release `-VerifyOnly` audit reaches the unsigned-manifest/AuthentiCode checks instead of failing on encoding.
@@ -114,6 +114,7 @@
   - [x] 2026-08-14 `pnpm audit --registry=https://registry.npmjs.org` plus generated overrides now reports 0 critical, 0 high, 0 moderate and 0 low vulnerabilities; the release audit records dependency status `pass` and license evidence remains 28/28 packages per archive. Authenticode is `incomplete` and manifests remain `development_unsigned`, so `-RequireAuthenticode` and `-RequireSignedManifest` continue to fail closed for release CI.
 - [ ] 5.6 执行 desktop 全量 E2E 与 SaaS lint/build/regression
   - [x] 2026-08-14 current Windows rerun passed Desktop tests 115/115, root `pnpm lint`, TypeScript, shared boundary/provenance, Provider parity, AI-entry regressions, desktop build/bundle/Tauri checks, and Next production build (425/425 routes). Full browser E2E and live SaaS regression remain open.
+  - [x] 2026-08-14 `tauri build --no-bundle` rebuilt the release resources after adding `runtime-manifest-crypto.mjs` to `tauri.conf.json`; the latest normal/portable ZIP contract verifies installer bytes 22,816 and manifest verifier bytes 2,651. NSIS remains outside the green ZIP target.
   - [x] 2026-08-14 sequential rerun (after avoiding concurrent bundle mutation) passed `pnpm desktop:build`, `pnpm desktop:tauri:check`, and `pnpm build`; the Desktop Vite bundle completed with 1,848 modules and Next generated all 425 routes.
   - [x] 2026-08-14 `pnpm desktop:test` now passes 115/115, including a built-host offline-egress test that exercises a local file workflow under fetch/http/https/net/tls/dns guards.
   - [x] 2026-08-14 latest i18n source was rebuilt with `pnpm --filter @aimarketing/desktop exec tauri build --bundles nsis`; the x64 NSIS installer was generated at 180,130,496 bytes with SHA-256 `8e0abb127964e664dd497c0bfd85687ea8a92028006d20aded4dec2baa71b688`. The release EXE stayed alive for 8 seconds and both EXE/installer remain `NotSigned`; signed release evidence is still open.

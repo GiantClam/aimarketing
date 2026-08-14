@@ -36,7 +36,9 @@ function Assert-DesktopPackageArchive {
       "$PackageName/_up_/dist-runtime/host.mjs",
       "$PackageName/_up_/dist-runtime/knowledge.mjs",
       "$PackageName/_up_/dist-runtime/skill-catalog.json",
-      "$PackageName/_up_/dist-runtime/runtime/runtime-manifest.json"
+      "$PackageName/_up_/dist-runtime/runtime/runtime-manifest.json",
+      "$PackageName/_up_/dist-runtime/install-desktop-runtime.ps1",
+      "$PackageName/_up_/dist-runtime/runtime-manifest-crypto.mjs"
     )
     if ($ExpectPortable) { $requiredEntries += "$PackageName/portable.flag" }
     foreach ($entryName in $requiredEntries) {
@@ -49,6 +51,8 @@ function Assert-DesktopPackageArchive {
       "$PackageName/_up_/dist-runtime/host.mjs" = (Get-Item -LiteralPath (Join-Path $RuntimePath "host.mjs")).Length
       "$PackageName/_up_/dist-runtime/knowledge.mjs" = (Get-Item -LiteralPath (Join-Path $RuntimePath "knowledge.mjs")).Length
       "$PackageName/_up_/dist-runtime/skill-catalog.json" = (Get-Item -LiteralPath (Join-Path $RuntimePath "skill-catalog.json")).Length
+      "$PackageName/_up_/dist-runtime/install-desktop-runtime.ps1" = (Get-Item -LiteralPath (Join-Path $RuntimePath "install-desktop-runtime.ps1")).Length
+      "$PackageName/_up_/dist-runtime/runtime-manifest-crypto.mjs" = (Get-Item -LiteralPath (Join-Path $RuntimePath "runtime-manifest-crypto.mjs")).Length
     }
     foreach ($entryName in $expectedLengths.Keys) {
       $entry = Find-ArchiveEntry $archive $entryName

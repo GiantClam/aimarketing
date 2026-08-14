@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 test("desktop package verifier checks normal and portable archive contracts", async () => {
   const script = await readFile(join(dirname(fileURLToPath(import.meta.url)), "verify-desktop-packages.ps1"), "utf8");
+  const tauriConfig = await readFile(join(dirname(fileURLToPath(import.meta.url)), "..", "apps", "desktop", "src-tauri", "tauri.conf.json"), "utf8");
   assert.match(script, /AI-Marketing-Windows-x64-\$Mode/u);
   assert.match(script, /portable\.flag/u);
   assert.match(script, /runtime\/runtime-manifest\.json/u);
@@ -18,4 +19,8 @@ test("desktop package verifier checks normal and portable archive contracts", as
   assert.match(script, /desktop-release-\$Mode/u);
   assert.match(script, /Verify-Package -Mode "normal"/u);
   assert.match(script, /Verify-Package -Mode "portable"/u);
+  assert.match(script, /install-desktop-runtime\.ps1/u);
+  assert.match(script, /runtime-manifest-crypto\.mjs/u);
+  assert.match(tauriConfig, /dist-runtime\/install-desktop-runtime\.ps1/u);
+  assert.match(tauriConfig, /dist-runtime\/runtime-manifest-crypto\.mjs/u);
 });
