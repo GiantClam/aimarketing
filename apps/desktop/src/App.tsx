@@ -221,14 +221,21 @@ function isWorkflowDefinition(value: unknown): value is WorkflowDefinitionEnvelo
   return Boolean(value && typeof value === "object" && (value as { schemaVersion?: unknown }).schemaVersion === 2 && Array.isArray((value as { nodes?: unknown }).nodes) && Array.isArray((value as { edges?: unknown }).edges));
 }
 
-function parseImageInputs(prompt: string): Record<string, unknown> {
-  const read = (label: string) => prompt.match(new RegExp(`${label}：([^\\n]+)`))?.[1]?.trim() ?? "";
-  const count = Number(read("生成数量"));
+export function parseImageInputs(prompt: string): Record<string, unknown> {
+  const read = (...labels: string[]) => {
+    for (const label of labels) {
+      const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const value = prompt.match(new RegExp(`(?:^|\\n)${escaped}\\s*[:：]\\s*([^\\n]+)`, "mi"))?.[1]?.trim();
+      if (value) return value;
+    }
+    return "";
+  };
+  const count = Number(read("生成数量", "Count"));
   return {
-    quality: read("图片质量") || "standard",
-    size: read("图片尺寸") || "1024x1024",
+    quality: read("图片质量", "Quality") || "standard",
+    size: read("图片尺寸", "Size") || "1024x1024",
     ...(Number.isFinite(count) && count > 0 ? { n: count } : { n: 1 }),
-    referenceImages: read("参考素材"),
+    referenceImages: read("参考素材", "Reference assets"),
   };
 }
 
@@ -1552,7 +1559,12 @@ export function App() {
     if (knowledgeContextEnabled && basePrompt && config.obsidianIndexPath) {
       try {
         const results = await workbenchClient.knowledge.search({ indexPath: config.obsidianIndexPath, query: basePrompt, limit: 6, embedding: embeddingPayload(config) });
-        if (results.length) knowledgeContext = `\n\n本地 Obsidian 知识库上下文（仅来自已选择的 Vault，请优先基于引用回答）：\n${results.map((item) => `[${item.documentPath}${item.heading ? `#${item.heading}` : ""}] ${item.excerpt}`).join("\n")}`;
+        if (results.length) {
+          const knowledgeHeader = locale === "zh"
+            ? "本地 Obsidian 知识库上下文（仅来自已选择的 Vault，请优先基于引用回答）"
+            : "Local Obsidian knowledge context (selected Vault only; prefer cited sources)";
+          knowledgeContext = `\n\n${knowledgeHeader}:\n${results.map((item) => `[${item.documentPath}${item.heading ? `#${item.heading}` : ""}] ${item.excerpt}`).join("\n")}`;
+        }
       } catch {
         setRunStatus(locale === "zh" ? "Obsidian 检索不可用，本轮继续使用普通 OpenCode 上下文" : "Obsidian search is unavailable; this turn will use ordinary OpenCode context");
       }

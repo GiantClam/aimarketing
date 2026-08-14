@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { WORKBENCH_HOME_GROUPS, WORKBENCH_MEDIA_FEATURES, WORKBENCH_ROUTE_MANIFEST } from "@aimarketing/workbench-ui";
 import { desktopCopy, desktopWriterCopy, detectDesktopLocale, homeGroupLabels, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaPlaceholderEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale } from "../src/i18n";
-import { localizeRuntimeStatus } from "../src/App";
+import { localizeRuntimeStatus, parseImageInputs } from "../src/App";
 
 test("desktop locale follows Windows/WebView language by default", () => {
   assert.equal(detectDesktopLocale("zh-CN"), "zh");
@@ -151,4 +151,19 @@ test("image prompt metadata follows the active media locale", () => {
   assert.match(activeMedia, /\$\{mediaUi\.quality\}: \$\{imageSettings\.quality\}/u);
   assert.doesNotMatch(activeMedia, /参考素材：\$\{imageSettings\.referenceImages\}/u);
   assert.doesNotMatch(activeMedia, /图片质量：\$\{imageSettings\.quality\}/u);
+});
+
+test("image prompt metadata parses both localized label forms", () => {
+  assert.deepEqual(parseImageInputs("subject\nQuality: hd\nSize: 256x256\nCount: 1\nReference assets: local.png"), {
+    quality: "hd",
+    size: "256x256",
+    n: 1,
+    referenceImages: "local.png",
+  });
+  assert.deepEqual(parseImageInputs("主体\n图片质量：standard\n图片尺寸：1024x1024\n生成数量：4\n参考素材：本地产物.png"), {
+    quality: "standard",
+    size: "1024x1024",
+    n: 4,
+    referenceImages: "本地产物.png",
+  });
 });
