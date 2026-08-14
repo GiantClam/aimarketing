@@ -80,6 +80,7 @@
 - [x] 4.5 返回 Vault 相对路径、标题、段落、行范围和可点击引用
   - [x] 2026-08-13 knowledge search DTOs retain relative path, heading and line range; desktop knowledge UI renders clickable Vault-root-constrained citations.
 - [x] 4.6 实现可选远程 embedding，并在 UI 明示远程发送范围。✓ 2026-08-13 — 默认 local-only embedding；用户在设置中显式切换 Remote 后才通过 HTTPS OpenAI-compatible `/embeddings` 发送待索引片段，独立 API key 仅透传给 Host，不写入 SQLite/日志/诊断包；回归覆盖远程 opt-in、鉴权与模型记录。
+  - [x] 2026-08-14 runtime `config.json` normalization now preserves the selected embedding mode, endpoint, model, and remote key across restart; `apps/desktop/test/runtime.test.ts` covers the persisted remote configuration while existing boundary tests keep it opt-in.
 
 **Quality Gate:**
 - [x] `app.db` 不含 chunk、vector 或 Vault 原文 — 2026-08-14 storage schema and RAG/LanceDB tests keep manifests, chunks, and vectors in the Vault index boundary rather than SQLite.

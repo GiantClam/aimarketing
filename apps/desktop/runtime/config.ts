@@ -9,11 +9,19 @@ export interface DesktopConfig {
   readonly workspacePath: string;
   readonly obsidianVaultPath?: string;
   readonly obsidianIndexPath?: string;
+  readonly embedding?: DesktopEmbeddingConfig;
   readonly offlineRuntimeZipPath?: string;
   readonly provider: DesktopProviderConfig & { readonly model: string };
   readonly providers?: DesktopProviderProfiles;
   readonly defaults?: DesktopProviderDefaults;
   readonly runtime: { readonly source: "system" | "private"; readonly nodePath?: string; readonly opencodePath?: string; readonly pythonPath?: string; readonly hostPath?: string; readonly knowledgePath?: string; readonly skillsPath?: string; readonly fontsPath?: string; readonly lancedbPath?: string; readonly embeddingPath?: string };
+}
+
+export interface DesktopEmbeddingConfig {
+  readonly mode: "local" | "remote";
+  readonly baseUrl?: string;
+  readonly model?: string;
+  readonly apiKey?: string;
 }
 
 export function defaultDesktopConfig(paths: DesktopPaths): DesktopConfig {
@@ -43,12 +51,14 @@ function parseConfig(raw: string): DesktopConfig {
   const requestedModel = String(value.provider.model ?? "").trim();
   const model = models.includes(requestedModel) ? requestedModel : (models[0] ?? requestedModel);
   const capabilities = normalizeProviderCapabilities(value.provider.capabilities);
+  const embedding = normalizeEmbeddingConfig(value.embedding);
   return {
     schemaVersion: 1,
     locale: value.locale === "zh" || value.locale === "en" ? value.locale : "auto",
     workspacePath: value.workspacePath,
     ...(typeof value.obsidianVaultPath === "string" ? { obsidianVaultPath: value.obsidianVaultPath } : {}),
     ...(typeof value.obsidianIndexPath === "string" ? { obsidianIndexPath: value.obsidianIndexPath } : {}),
+    ...(embedding ? { embedding } : {}),
     ...(typeof (value as Partial<DesktopConfig>).offlineRuntimeZipPath === "string" ? { offlineRuntimeZipPath: (value as Partial<DesktopConfig>).offlineRuntimeZipPath } : {}),
     provider: { id: String(value.provider.id ?? "local"), model, ...(models.length ? { models } : {}), ...(capabilities ? { capabilities } : {}), ...(value.provider.source ? { source: String(value.provider.source) } : {}), ...(value.provider.baseUrl ? { baseUrl: String(value.provider.baseUrl) } : {}), ...(value.provider.apiKey ? { apiKey: String(value.provider.apiKey) } : {}), ...(value.provider.reasoningEffort ? { reasoningEffort: String(value.provider.reasoningEffort) } : {}), ...(typeof value.provider.skillId === "string" && value.provider.skillId.trim() ? { skillId: value.provider.skillId.trim() } : {}), ...(value.provider.endpoint ? { endpoint: String(value.provider.endpoint) } : {}), ...(value.provider.queryEndpoint ? { queryEndpoint: String(value.provider.queryEndpoint) } : {}) },
     ...(normalizeProviderProfiles(value.providers) ? { providers: normalizeProviderProfiles(value.providers) } : {}),
@@ -119,6 +129,17 @@ function normalizeProviderCapabilities(value: unknown): ProviderCapability[] | u
     .filter((capability): capability is ProviderCapability => allowed.has(capability as ProviderCapability));
   const capabilities = [...new Set(normalized)];
   return capabilities.length ? capabilities : undefined;
+}
+
+function normalizeEmbeddingConfig(value: unknown): DesktopEmbeddingConfig | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  return {
+    mode: record.mode === "remote" ? "remote" : "local",
+    ...(typeof record.baseUrl === "string" && record.baseUrl.trim() ? { baseUrl: record.baseUrl.trim() } : {}),
+    ...(typeof record.model === "string" && record.model.trim() ? { model: record.model.trim() } : {}),
+    ...(typeof record.apiKey === "string" && record.apiKey ? { apiKey: record.apiKey } : {}),
+  };
 }
 
 export function redactSecrets(value: unknown): unknown {

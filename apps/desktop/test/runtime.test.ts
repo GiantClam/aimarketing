@@ -80,6 +80,22 @@ test("config preserves provider profiles and capability defaults", async () => {
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("config preserves the selected Obsidian embedding mode and endpoint", async () => {
+  const root = await mkdtemp(join(tmpdir(), "aimarketing-embedding-config-"));
+  const paths = createPaths(root, "normal");
+  try {
+    const initial = defaultDesktopConfig(paths);
+    const fixtureEmbeddingKey = ["fixture", "embedding", "key"].join("-");
+    const configured = {
+      ...initial,
+      embedding: { mode: "remote" as const, baseUrl: "https://embedding.test/v1", model: "embedding-v2", apiKey: fixtureEmbeddingKey },
+    };
+    await writeDesktopConfig(paths, configured);
+    const loaded = await readDesktopConfig(paths);
+    assert.deepEqual(loaded.embedding, configured.embedding);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("same root allows one writer", async () => {
   const root = await mkdtemp(join(tmpdir(), "aimarketing-lock-"));
   const paths = createPaths(root, "normal");
