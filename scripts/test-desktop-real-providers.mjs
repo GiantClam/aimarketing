@@ -115,18 +115,18 @@ async function requestVideo(profileEntry) {
   if (source === "bailian" || source === "dashscope") {
     submitPath = profile.endpoint || "/api/v1/services/aigc/video-generation/video-synthesis";
     queryPath = profile.queryEndpoint || "/api/v1/tasks";
-    body = { model: profile.model, input: { prompt: "A short desktop provider smoke video of a yellow cube on a white table" }, parameters: { resolution: "720P", ratio: "16:9", duration: 3 } };
+    body = { model: profile.model, input: { prompt: "A short abstract animation of soft blue and white geometric gradients moving slowly across a clean background" }, parameters: { resolution: "720P", ratio: "16:9", duration: 3 } };
     headers = { "X-DashScope-Async": "enable" };
   } else if (source === "minimax") {
     submitPath = profile.endpoint || "/video_generation";
     queryPath = profile.queryEndpoint || "/query/video_generation";
-    body = { model: profile.model, prompt: "A short desktop provider smoke video of a yellow cube on a white table", duration: 6, resolution: "768P", prompt_optimizer: true };
+    body = { model: profile.model, prompt: "A short abstract animation of soft blue and white geometric gradients moving slowly across a clean background", duration: 6, resolution: "768P", prompt_optimizer: true };
   } else if (source === "runninghub") {
     submitPath = profile.endpoint;
     queryPath = profile.queryEndpoint || "/openapi/v2/query";
     if (!submitPath) return { label: "video", ok: false, error: "real_provider_config_video_endpoint_missing" };
     const isHailuoH3 = /hailuo|h3/iu.test(`${profile.model ?? ""} ${submitPath}`);
-    body = { prompt: "A short desktop provider smoke video of a yellow cube on a white table", resolution: isHailuoH3 ? "2K" : "720p", duration: "5", ratio: isHailuoH3 ? "16:9" : "adaptive", generateAudio: false };
+    body = { prompt: "A short abstract animation of soft blue and white geometric gradients moving slowly across a clean background", resolution: isHailuoH3 ? "2K" : "720p", duration: "5", ratio: isHailuoH3 ? "16:9" : "adaptive", generateAudio: false };
   } else {
     return { label: "video", ok: false, error: `real_provider_video_source_unsupported:${source || "missing"}` };
   }
