@@ -1114,12 +1114,21 @@ export function App() {
   useEffect(() => { activeRunRef.current = activeRunId; }, [activeRunId]);
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
 
-  const updateModel = (model: string) => setConfig((current) => {
+  const persistProviderSelection = (update: (current: DesktopConfig) => DesktopConfig) => {
+    const nextConfig = update(configRef.current);
+    configRef.current = nextConfig;
+    setConfig(nextConfig);
+    void tauriBridge.invoke("write_config", { value: nextConfig }).catch((error) => {
+      if (error instanceof Error && error.message === "tauri_bridge_unavailable") return;
+      setRunStatus(error instanceof Error ? error.message : (locale === "zh" ? "模型设置保存失败" : "Unable to persist model settings"));
+    });
+  };
+  const updateModel = (model: string) => persistProviderSelection((current) => {
     const profileId = current.defaults?.[activeCapability];
     if (profileId && current.providers?.[profileId]) return { ...current, providers: { ...current.providers, [profileId]: { ...current.providers[profileId], model } } };
     return { ...current, provider: { ...current.provider, model } };
   });
-  const updateReasoning = (reasoning: string) => setConfig((current) => {
+  const updateReasoning = (reasoning: string) => persistProviderSelection((current) => {
     const profileId = current.defaults?.[activeCapability];
     if (profileId && current.providers?.[profileId]) return { ...current, providers: { ...current.providers, [profileId]: { ...current.providers[profileId], reasoningEffort: reasoning } } };
     return { ...current, provider: { ...current.provider, reasoningEffort: reasoning } };

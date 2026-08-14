@@ -50,6 +50,15 @@ test("desktop workflow and media entry points expose the configured model select
   assert.match(appSource, /hostWorkflowDefinition = bindWorkflowProviderDefaults\(rawWorkflowDefinition, config\)/);
 });
 
+test("workspace model and reasoning changes persist to the selected capability profile", () => {
+  const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  assert.match(appSource, /const persistProviderSelection = \(update: \(current: DesktopConfig\) => DesktopConfig\)/);
+  assert.match(appSource, /configRef\.current = nextConfig/);
+  assert.match(appSource, /tauriBridge\.invoke\("write_config", \{ value: nextConfig \}\)/);
+  assert.match(appSource, /const profileId = current\.defaults\?\.\[activeCapability\]/);
+  assert.match(appSource, /reasoningEffort: reasoning/);
+});
+
 test("desktop usage records the model reported by the active Provider event", () => {
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
   assert.match(appSource, /event\.model\?\.trim\(\) \|\| configRef\.current\.provider\.model \|\| "unknown"/);
