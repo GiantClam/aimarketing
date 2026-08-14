@@ -80,6 +80,7 @@ async function runRequest({ label, endpoint, headers, body, timeoutMs }) {
     return {
       label,
       ok: response.ok,
+      schemaOk: response.ok && candidates.length > 0,
       status: response.status,
       elapsedMs: Date.now() - startedAt,
       imageCount: candidates.length,
@@ -96,6 +97,7 @@ async function runRequest({ label, endpoint, headers, body, timeoutMs }) {
     return {
       label,
       ok: false,
+      schemaOk: false,
       status: null,
       elapsedMs: Date.now() - startedAt,
       imageCount: 0,
@@ -196,6 +198,6 @@ if (mode === "proxy" || mode === "both") {
   results.push(proxyResult)
 }
 
-const success = results.some((result) => result.ok === true)
+const success = results.some((result) => result.schemaOk === true)
 console.log(JSON.stringify({ success, attempted: results.length, model, imageSize }))
 if (!success) process.exitCode = 1

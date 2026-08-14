@@ -87,6 +87,31 @@ test("PPTOKEN connectivity smoke fails when the selected model returns an upstre
   }
 })
 
+test("PPTOKEN connectivity smoke requires image data in an otherwise successful response", async () => {
+  const server = createServer((request, response) => {
+    if (request.method !== "POST" || request.url !== "/v1/images/generations") {
+      response.writeHead(404)
+      response.end()
+      return
+    }
+    response.writeHead(200, { "content-type": "application/json" })
+    response.end(JSON.stringify({ data: [] }))
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  const port = server.address().port
+  try {
+    const result = await runConnectivity(`http://127.0.0.1:${port}/v1`)
+    assert.equal(result.code, 1, `${result.stdout}\n${result.stderr}`)
+    assert.match(result.stdout, /"ok":true/u)
+    assert.match(result.stdout, /"schemaOk":false/u)
+    assert.match(result.stdout, /"success":false/u)
+  } finally {
+    server.close()
+    await once(server, "close").catch(() => undefined)
+  }
+})
+
 test("PPTOKEN connectivity smoke rejects unsupported image sizes before requesting", async () => {
   let requestCount = 0
   const server = createServer((request, response) => {
