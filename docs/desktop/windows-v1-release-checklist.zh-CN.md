@@ -46,7 +46,7 @@
 - 已修复 Windows PowerShell 对中文路径字面量的编码歧义，最新输出确认真实 `中文 用户` 路径（103 字符）通过启动探针；仍不替代干净 VM。
 - 真实生产 Writer：URL research、完整修订、图片恢复、质量盲测、生产 OpenCode Skill release/digest、billing idempotency 尚未完成；本机 fixture 浏览器 E2E 已通过但不替代生产验证。
 - 网络边界：本机 bundle boundary 已通过；仍需在干净 VM 和真实 Provider 配置下确认除 runtime 源与用户 Provider 外无额外请求。
-- PPTOKEN 图片 provider：当前凭据下 `gpt-image-2` 的低分辨率重验没有成功响应（代理 401、直连超时）；更新/确认凭据后必须重新运行专用 smoke，且仍只需一个成功模型即可恢复该 gate。
+- PPTOKEN 图片 provider：当前凭据下 `/v1/models` 可见 `gpt-image-2`（HTTP 200），但低分辨率生成重验没有成功响应（代理 401、直连超时）；更新/确认凭据后必须重新运行专用 smoke，且仍只需一个成功模型即可恢复该 gate。
 - 按要求不执行 Seedance 视频生成测试；非 Seedance 视频能力已用真实 RunningHub MiniMax-Hailuo-H3 smoke 覆盖，视频任务提交/轮询失败仍会 fail-closed。
 
 签名、VM 和生产 smoke 证据补齐后，重新运行 `pnpm desktop:release-audit -PnpmAuditJson <approved-audit.json>`，并在此清单追加签名状态、测试矩阵和最终发布 hash。
