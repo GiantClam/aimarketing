@@ -88,6 +88,8 @@
     "test:writer:assets-runtime": "tsx --test lib/writer/assets-runtime.regression.test.ts",
     "writer:cutover:check": "node scripts/verify-writer-cutover.mjs",
     "test:writer:cutover": "node --test scripts/verify-writer-cutover.test.mjs",
+    "writer:quality:compare": "node scripts/compare-writer-quality.mjs",
+    "test:writer:quality": "node --test scripts/compare-writer-quality.test.mjs",
     "test:writer:revisions": "tsx --test lib/writer/revision-history.test.ts",
     "test:writer:ui": "tsx --test components/writer/writer-workspace-state.test.ts",
     "test:billing": "tsx --test lib/billing/*.test.ts",
