@@ -56,3 +56,21 @@ test("runtime manifest signing CLI writes a required signature and verifies it",
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("runtime manifest CLI accepts the UTF-8 BOM emitted by Windows PowerShell", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const root = await mkdtemp(join(tmpdir(), "aimarketing-manifest-bom-"));
+  const manifestPath = join(root, "manifest.json");
+  const keyPath = join(root, "private.pem");
+  const signedPath = join(root, "signed.json");
+  const publicPath = join(root, "public.pem");
+  try {
+    await writeFile(manifestPath, `\uFEFF${JSON.stringify(fixtureManifest())}\n`, "utf8");
+    await writeFile(keyPath, privateKey.export({ type: "pkcs8", format: "pem" }), "utf8");
+    await writeFile(publicPath, publicKey.export({ type: "spki", format: "pem" }), "utf8");
+    await execFileAsync(process.execPath, [helper, "sign", manifestPath, keyPath, signedPath], { windowsHide: true });
+    await execFileAsync(process.execPath, [helper, "verify", signedPath, publicPath], { windowsHide: true });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

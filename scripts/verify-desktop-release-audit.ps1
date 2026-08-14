@@ -127,8 +127,8 @@ function Audit-Authenticode([string]$path) {
   $candidates = @(
     (Join-Path $full "ai-marketing.exe"),
     (Get-ChildItem -LiteralPath $full -File -Filter "*.dll" | Select-Object -ExpandProperty FullName),
-    (Join-Path $full "_up\dist-runtime\runtime\node\node.exe"),
-    (Join-Path $full "_up\dist-runtime\runtime\opencode\opencode.exe")
+    (Join-Path $full "_up_\dist-runtime\runtime\node\node.exe"),
+    (Join-Path $full "_up_\dist-runtime\runtime\opencode\opencode.exe")
   ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -Unique
   try {
     $files = @($candidates | ForEach-Object {

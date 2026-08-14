@@ -27,10 +27,14 @@ export function verifyManifest(manifest, signature, publicKeyPem = RUNTIME_MANIF
   return verify(null, canonicalManifest(manifest), createPublicKey(publicKeyPem), Buffer.from(signature, "base64"));
 }
 
+function parseManifestJson(value) {
+  return JSON.parse(String(value).replace(/^\uFEFF/u, ""));
+}
+
 async function main() {
   const [command, manifestPath, keyPath, outputPath] = process.argv.slice(2);
   if (!command || !manifestPath) throw new Error("usage: runtime-manifest-crypto.mjs <sign|verify> <manifest> [key] [output]");
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const manifest = parseManifestJson(await readFile(manifestPath, "utf8"));
   if (command === "sign") {
     if (!keyPath || !outputPath) throw new Error("runtime_manifest_signing_key_required");
     const signature = signManifest(manifest, await readFile(keyPath, "utf8"));
