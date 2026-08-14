@@ -4,7 +4,7 @@
 - [x] 1.3a Local chat service contract exposes only host-mediated OpenCode execution; no direct text-model fallback is registered.
 
 - [x] 1.1 验证三个上游 change 的完成状态和接口版本
-  - [x] 2026-08-14 upstream status is rechecked: `extract-shared-application-core` 66/66, `establish-desktop-foundation` 86/87 (archive marker only), and `add-writing-ppt-and-obsidian-rag` 79/80 (archive marker only). Shared interfaces are runtime contract v1, workflow schema v2 (legacy v1 migration retained), and package version 0.1.0; current Desktop 130/130 and build gates pass.
+  - [x] 2026-08-14 upstream status is rechecked: `extract-shared-application-core` 66/66, `establish-desktop-foundation` 86/87 (archive marker only), and `add-writing-ppt-and-obsidian-rag` 79/80 (archive marker only). Shared interfaces are runtime contract v1, workflow schema v2 (legacy v1 migration retained), and package version 0.1.0; current Desktop 131/131 and build gates pass.
 - [x] 1.2 添加 architecture tests，禁止 workbench 导入 Next API、SaaS auth/billing、R2、Railway、Cloudflare、Dify 或 RAGFlow
   - [x] 2026-08-13 `apps/desktop/test/architecture-boundaries.test.ts` scans desktop source/runtime for Next, SaaS infrastructure, `ai-sdk-native`, and direct chat-completions imports.
 - [x] 1.3 添加失败测试，证明普通桌面对话不能选择 `ai-sdk-native` 或直接文本 Provider runtime
@@ -68,7 +68,7 @@
 - [x] 4.1 组合共享 message parts、prompt input、conversation sidebar 和 stream UI — 2026-08-14 `DesktopConversationWorkspace`/shared Workbench UI composition and route regressions are covered by the existing desktop suite.
 - [x] 4.2 添加模型/Skill selector、artifact view、usage、settings 和 diagnostics routes — 2026-08-14 configured model/Skill controls, artifact/task/usage surfaces, settings warnings, and diagnostics actions are covered by WorkbenchClient and route tests.
 - [x] 4.3 删除 desktop bundle 中 login、registration、tenant、role、balance、subscription、Agent publishing、market 和 enterprise preset affordances
-  - Evidence (2026-08-14): `apps/desktop/test/routes.test.ts` scans the desktop source and shared route manifest for account/billing/publishing/enterprise-preset markers; the 130-test Desktop suite passes and `pnpm desktop:verify-bundle` reports zero violations across the built UI/host/knowledge bundles.
+  - Evidence (2026-08-14): `apps/desktop/test/routes.test.ts` scans the desktop source and shared route manifest for account/billing/publishing/enterprise-preset markers; the 131-test Desktop suite passes and `pnpm desktop:verify-bundle` reports zero violations across the built UI/host/knowledge bundles.
 - [x] 4.4 展示 Full Access 风险，但不展示权限模式选择或逐命令确认
 - [x] 4.4a UI displays Full Access and plaintext config risk without exposing a permission-mode selector.
 - [x] 4.2a Desktop home/chat inputs expose model, reasoning and local Skill selectors; task center exposes persisted usage/run state.
@@ -79,7 +79,7 @@
   - [x] 2026-08-13 Obsidian index/rebuild and search now also use typed `WorkbenchClient.knowledge.index/search` adapters, including host-start, response correlation, timeout and normalized citation mapping.
 - [x] 4.5 实时展示文本/工具步骤和 emergency stop — 2026-08-14 WorkbenchClient event tests and the live desktop run path cover streamed text/tool events, cancellation, and terminal state rendering.
 - [x] 4.5a 2026-08-13 `workbench-client.test.ts` drives the real Desktop WorkbenchClient adapter with malformed frames, text deltas, tool events, usage, workflow/media cancellation and terminal completion; the adapter emits normalized events and ignores malformed payloads.
-- [x] 4.6 添加 streaming、长工具输出、取消、重启、artifact 和缺配置 UI tests — 2026-08-14 `apps/desktop/test/workbench-client.test.ts`, `opencode-serve.test.ts`, `routes.test.ts`, `rpc.test.ts`, and `media-runtime.test.ts` cover streamed text/tool output, oversized frames, cancellation, crash/restart recovery, artifact routing, and configuration-required UI states; the current Desktop suite passes 130/130.
+- [x] 4.6 添加 streaming、长工具输出、取消、重启、artifact 和缺配置 UI tests — 2026-08-14 `apps/desktop/test/workbench-client.test.ts`, `opencode-serve.test.ts`, `routes.test.ts`, `rpc.test.ts`, and `media-runtime.test.ts` cover streamed text/tool output, oversized frames, cancellation, crash/restart recovery, artifact routing, and configuration-required UI states; the current Desktop suite passes 131/131.
 - [x] 4.6a 2026-08-13 WorkbenchClient event tests cover streaming/cancel/error boundaries; existing RPC 8 MiB frame tests, fake OpenCode crash/restart E2E, artifact routing and missing-Provider UI regressions cover the remaining adapter contracts without video real-provider calls.
 
 **Quality Gate:**
@@ -132,9 +132,9 @@
 - [x] 6.4 扫描 bundle 和网络日志，确认无排除的 SaaS 模块/端点
   - [x] 2026-08-13 `desktop:verify-bundle` scans Vite assets and the bundled workflow host for excluded SaaS routes/capability markers and cloud-only integrations; the scanner intentionally permits the approved Full Access warning copy.
 - [x] 6.5 运行共享 tests、desktop TS/Rust tests/build、root lint、Next build 和 SaaS regressions
-  - [x] 2026-08-14 current verification passed all 15 shared package test files, Desktop 130/130 tests, desktop typecheck/build, Rust `cargo check`, shared boundary/provenance scans, root lint, media Provider parity, and Next production build (425/425 routes). Clean VM, full browser E2E and current image Provider recovery remain release-hardening evidence rather than this local workbench gate.
+  - [x] 2026-08-14 current verification passed all 15 shared package test files, Desktop 131/131 tests, desktop typecheck/build, Rust `cargo check`, shared boundary/provenance scans, root lint, media Provider parity, and Next production build (425/425 routes). Clean VM, full browser E2E and current image Provider recovery remain release-hardening evidence rather than this local workbench gate.
 
 **Completion Quality Gate:**
 - [x] 三个 capability specs 全部满足 — local OpenCode-only routing, WorkbenchClient UI, session recovery, artifacts and usage persistence are covered by the Desktop contract suite and browser regression.
-- [x] 测试和诊断证据完整 — Desktop 130/130, OpenCode serve/session/RPC, boundary/provenance, typecheck/build, and Writer browser fixture/provider-missing evidence are recorded; clean VM and production live-provider gates remain in hardening.
+- [x] 测试和诊断证据完整 — Desktop 131/131, OpenCode serve/session/RPC, boundary/provenance, typecheck/build, and Writer browser fixture/provider-missing evidence are recorded; clean VM and production live-provider gates remain in hardening.
 - [ ] Ready for `openspec-archive add-local-opencode-workbench`

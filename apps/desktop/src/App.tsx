@@ -198,17 +198,18 @@ function outputInputPort(value: string) {
   return value === "asset" ? "assets" : value === "image" ? "images" : value === "video" ? "videos" : value === "audio" ? "audios" : value === "ppt" ? "presentations" : "text";
 }
 
-function buildWorkflowDefinition(prompt: string, actionId: WorkflowAction, provider: Pick<DesktopProviderConfig, "id" | "model" | "baseUrl">, extraConfig: Record<string, unknown> = {}): WorkflowDefinitionEnvelope {
+export function buildWorkflowDefinition(prompt: string, actionId: WorkflowAction, provider: Pick<DesktopProviderConfig, "id" | "model" | "baseUrl">, extraConfig: Record<string, unknown> = {}, locale: "zh" | "en" = "zh"): WorkflowDefinitionEnvelope {
   const action = workflowActions.find((item) => item.id === actionId) ?? workflowActions[0];
+  const title = locale === "en" ? workflowActionEnglish[action.id] ?? action.label : action.label;
   const capabilityConfig = { prompt, script: prompt, text: prompt, provider: provider.id, model: provider.model, baseUrl: provider.baseUrl, ...extraConfig };
   return {
     schemaVersion: 2,
     revision: 1,
     definitionHash: "",
     nodes: [
-      { nodeKey: "input", type: "text_input", nodeVersion: 1, title: "输入任务", positionX: 0, positionY: 0, config: { text: prompt } },
-      { nodeKey: "capability", type: actionId, nodeVersion: 1, title: action.label, positionX: 240, positionY: 0, config: capabilityConfig },
-      { nodeKey: "output", type: "output", nodeVersion: 1, title: "本地产物", positionX: 480, positionY: 0, config: {} },
+      { nodeKey: "input", type: "text_input", nodeVersion: 1, title: locale === "en" ? "Input task" : "输入任务", positionX: 0, positionY: 0, config: { text: prompt } },
+      { nodeKey: "capability", type: actionId, nodeVersion: 1, title, positionX: 240, positionY: 0, config: capabilityConfig },
+      { nodeKey: "output", type: "output", nodeVersion: 1, title: locale === "en" ? "Local artifact" : "本地产物", positionX: 480, positionY: 0, config: {} },
     ],
     edges: [
       { edgeKey: "input-capability", sourceNodeKey: "input", sourcePortId: "text", targetNodeKey: "capability", targetPortId: workflowNodeRegistry.get(actionId)?.inputs[0]?.id ?? "text" },
@@ -595,7 +596,7 @@ function DesktopWorkflowCanvas({
 
 function DesktopWorkflowWorkspace({ route, prompt, onPromptChange, runStatus, activeRunId, onRun, onCancel, savedWorkflows, workflowAction, onWorkflowAction, definition, onDefinitionChange, onSave, onExport, onImport, model, models, reasoningEffort, skillId, onModelChange, onReasoningChange, onSkillChange, providerConfiguredForNode, locale }: DesktopWorkflowWorkspaceProps & { locale: "zh" | "en" }) {
   const [selectedNodeKey, setSelectedNodeKey] = useState("capability");
-  const [localDefinition, setLocalDefinition] = useState<WorkflowDefinitionEnvelope>(() => definition ?? buildWorkflowDefinition(prompt, workflowAction, { id: "local", model: "" }));
+  const [localDefinition, setLocalDefinition] = useState<WorkflowDefinitionEnvelope>(() => definition ?? buildWorkflowDefinition(prompt, workflowAction, { id: "local", model: "" }, {}, locale));
   const workflowActions = workflowActionsBase.map((item) => ({ ...item, label: locale === "en" ? workflowActionEnglish[item.id] ?? item.label : item.label }));
   useEffect(() => { if (definition) setLocalDefinition(definition); }, [definition]);
   const selectedNode = localDefinition.nodes.find((node) => node.nodeKey === selectedNodeKey) ?? localDefinition.nodes[0];
@@ -1518,7 +1519,7 @@ export function App() {
   }
 
   function currentWorkflowDefinition() {
-    const base = workflowDefinition ?? buildWorkflowDefinition(prompt, workflowAction, config.provider);
+    const base = workflowDefinition ?? buildWorkflowDefinition(prompt, workflowAction, config.provider, {}, locale);
     return sanitizeWorkflowDefinitionForStorage({ ...base, nodes: base.nodes.map((node) => {
       const title = node.nodeKey === "input" ? (locale === "en" ? "Input task" : "输入任务") : node.nodeKey === "output" ? (locale === "en" ? "Local artifact" : "本地产物") : (locale === "en" ? workflowActionEnglish[node.type] ?? node.title : node.title);
       const nodeProvider = providerForCapability(config, capabilityForWorkflowAction(node.type));
@@ -1610,7 +1611,7 @@ export function App() {
         ...(actionId === "knowledge_retrieve" && config.obsidianIndexPath ? { indexPath: config.obsidianIndexPath, query: userPrompt, embeddingMode: embeddingPayload(config).mode, embeddingBaseUrl: embeddingPayload(config).baseUrl, embeddingModel: embeddingPayload(config).model, embeddingApiKey: embeddingPayload(config).apiKey } : {}),
         ...(actionId === "knowledge_write" && config.obsidianVaultPath ? { vaultPath: config.obsidianVaultPath } : {}),
       };
-       const rawWorkflowDefinition = isWorkflowDefinition(workflowOverride) ? workflowOverride : selected.path === "/dashboard/workflows" ? currentWorkflowDefinition() : buildWorkflowDefinition(userPrompt, actionId, selectedProvider, capabilityConfig);
+       const rawWorkflowDefinition = isWorkflowDefinition(workflowOverride) ? workflowOverride : selected.path === "/dashboard/workflows" ? currentWorkflowDefinition() : buildWorkflowDefinition(userPrompt, actionId, selectedProvider, capabilityConfig, locale);
        const workflowDefinition = sanitizeWorkflowDefinitionForStorage(rawWorkflowDefinition);
        const hostWorkflowDefinition = bindWorkflowProviderDefaults(rawWorkflowDefinition, config);
       const mediaNodes = hostWorkflowDefinition.nodes.filter((node) => isMediaWorkflowNodeType(node.type));

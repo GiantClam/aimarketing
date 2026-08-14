@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { WORKBENCH_HOME_GROUPS, WORKBENCH_MEDIA_FEATURES, WORKBENCH_ROUTE_MANIFEST } from "@aimarketing/workbench-ui";
 import { desktopCopy, desktopWriterCopy, detectDesktopLocale, homeGroupLabels, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaPlaceholderEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale } from "../src/i18n";
-import { localizeRuntimeStatus, parseImageInputs } from "../src/App";
+import { buildWorkflowDefinition, localizeRuntimeStatus, parseImageInputs } from "../src/App";
 
 test("desktop locale follows Windows/WebView language by default", () => {
   assert.equal(detectDesktopLocale("zh-CN"), "zh");
@@ -166,4 +166,12 @@ test("image prompt metadata parses both localized label forms", () => {
     n: 4,
     referenceImages: "本地产物.png",
   });
+});
+
+test("new workflow definitions use the active locale for persisted node titles", () => {
+  const provider = { id: "local", model: "demo", baseUrl: "http://127.0.0.1:11434" };
+  const english = buildWorkflowDefinition("draft", "writer", provider, {}, "en");
+  const chinese = buildWorkflowDefinition("撰写", "writer", provider, {}, "zh");
+  assert.deepEqual(english.nodes.map((node) => node.title), ["Input task", "Content writing", "Local artifact"]);
+  assert.deepEqual(chinese.nodes.map((node) => node.title), ["输入任务", "内容写作", "本地产物"]);
 });
