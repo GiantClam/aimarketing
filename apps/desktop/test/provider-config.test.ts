@@ -46,11 +46,27 @@ test("configured model lists are canonical and prefer the first configured model
 test("same-capability provider profiles keep independent model catalogs and defaults", () => {
   const imageFast: DesktopProviderConfig = { id: "image-fast", source: "openai-compatible", model: "retired", models: ["image/fast", "image/quality"], baseUrl: "https://fast.test/v1" };
   const imageQuality: DesktopProviderConfig = { id: "image-quality", source: "bailian", model: "image/hd", models: ["image/hd", "image/4k"], baseUrl: "https://quality.test/v1" };
-  const config = { provider: text, providers: { "image-fast": imageFast, "image-quality": imageQuality }, defaults: { image: "image-quality" as const } };
+  const audioFast: DesktopProviderConfig = { id: "audio-fast", source: "minimax", model: "audio/fast", models: ["audio/fast", "audio/quality"], baseUrl: "https://audio-fast.test/v1" };
+  const audioQuality: DesktopProviderConfig = { id: "audio-quality", source: "minimax", model: "audio/hd", models: ["audio/hd", "audio/studio"], baseUrl: "https://audio-quality.test/v1" };
+  const videoFast: DesktopProviderConfig = { id: "video-fast", source: "runninghub", model: "video/fast", models: ["video/fast", "video/quality"], baseUrl: "https://video-fast.test/v1" };
+  const videoQuality: DesktopProviderConfig = { id: "video-quality", source: "runninghub", model: "video/hd", models: ["video/hd", "video/cinema"], baseUrl: "https://video-quality.test/v1" };
+  const config = {
+    provider: text,
+    providers: { "image-fast": imageFast, "image-quality": imageQuality, "audio-fast": audioFast, "audio-quality": audioQuality, "video-fast": videoFast, "video-quality": videoQuality },
+    defaults: { image: "image-quality" as const, audio: "audio-quality" as const, video: "video-quality" as const },
+  };
   const selected = providerForCapability(config, "image");
   assert.equal(selected.id, "image-quality");
   assert.equal(selected.model, "image/hd");
   assert.deepEqual(modelOptionsForProvider(config, selected), ["image/hd", "image/4k"]);
   assert.equal(providerForId(config, "image-fast").model, "image/fast");
   assert.deepEqual(modelOptionsForProvider(config, providerForId(config, "image-fast")), ["image/fast", "image/quality"]);
+  assert.equal(providerForCapability(config, "audio").id, "audio-quality");
+  assert.equal(providerForCapability(config, "audio").model, "audio/hd");
+  assert.deepEqual(modelOptionsForProvider(config, providerForCapability(config, "audio")), ["audio/hd", "audio/studio"]);
+  assert.equal(providerForId(config, "audio-fast").model, "audio/fast");
+  assert.equal(providerForCapability(config, "video").id, "video-quality");
+  assert.equal(providerForCapability(config, "video").model, "video/hd");
+  assert.deepEqual(modelOptionsForProvider(config, providerForCapability(config, "video")), ["video/hd", "video/cinema"]);
+  assert.equal(providerForId(config, "video-fast").model, "video/fast");
 });
