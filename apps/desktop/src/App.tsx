@@ -254,6 +254,7 @@ const desktopCapabilities: Array<{ id: WorkflowAction; title: string; descriptio
   { id: "video_generate", title: "AI 视频", description: "调用视频 Provider 生成视频，并把异步任务与文件保存在本地。", route: "/dashboard/video", kind: "media" },
   { id: "digital_human", title: "数字人", description: "使用媒体工作流中的数字人能力生成本地视频结果。", route: "/dashboard/video", kind: "media" },
   { id: "music_generate", title: "AI 音乐", description: "生成音乐并在本地产物库中管理音频文件。", route: "/dashboard/video", kind: "media" },
+  { id: "voice_clone", title: "声音克隆", description: "使用参考音频创建可复用音色，并在媒体工作区预览结果。", route: "/dashboard/video", kind: "media" },
   { id: "voice_synthesis", title: "语音合成", description: "把文本转换为语音，产物直接写入本地项目目录。", route: "/dashboard/video", kind: "media" },
   { id: "audio_generate", title: "通用音频", description: "使用已配置 Provider 生成通用音频内容。", route: "/dashboard/video", kind: "media" },
   { id: "knowledge_retrieve", title: "Obsidian 知识库", description: "在本地 Vault 索引中检索笔记，并从结果打开原文。", route: "/dashboard/knowledge-base", kind: "knowledge" },

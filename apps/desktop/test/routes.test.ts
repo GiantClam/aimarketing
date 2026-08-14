@@ -318,6 +318,7 @@ test("desktop capabilities route keeps the shared library directory surface", ()
   assert.doesNotMatch(appSource, /selected\.path === "\/dashboard\/capabilities" \? <DesktopMediaWorkspace/);
   assert.match(appSource, /const isCapabilities = route\.path === "\/dashboard\/capabilities"/);
   assert.match(appSource, /isCapabilities \? <div className="capability-directory-grid">/);
+  assert.match(appSource, /id: "voice_clone", title: "声音克隆"/);
   assert.match(appSource, /const immersivePage = selected\.mode === "chat"/);
 });
 
