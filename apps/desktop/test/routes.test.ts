@@ -45,6 +45,7 @@ test("desktop workflow and media entry points expose the configured model select
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
   const selector = /<ModelControls locale=\{locale\} model=\{model\} models=\{models\} reasoningEffort=\{reasoningEffort\} skillId=\{skillId\} showSkill=\{false\}/g;
   assert.ok((appSource.match(selector) ?? []).length >= 3);
+  assert.match(appSource, /function DesktopWriterCloudWorkspace\([\s\S]*?const \{[^}]*model, models,[\s\S]*?<ModelControls locale=\{locale\} model=\{model\} models=\{models\}/);
   assert.match(appSource, /<DesktopWorkflowWorkspace[\s\S]*?model=\{activeModel\} models=\{activeModels\}[\s\S]*?onModelChange=\{updateModel\}/);
   assert.match(appSource, /<DesktopMediaWorkspace[\s\S]*?model=\{activeModel\} models=\{activeModels\}[\s\S]*?onModelChange=\{updateModel\}/);
   assert.match(appSource, /currentWorkflowDefinition\(\)[\s\S]*?const nodeProvider = providerForCapability\(config, capabilityForWorkflowAction\(node\.type\)\)/);

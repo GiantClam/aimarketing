@@ -126,6 +126,7 @@
   - [x] 2026-08-14 `pnpm test:e2e:ai-entry:model-selection:with-server` passed the shared online model-selection smoke: `/api/ai/models` returned the configured catalog, the selected model was tried first (`fallbackAttemptCount=0`), and `/api/ai/chat` returned `smoke test passed.` with provider model `deepseek-v4-pro`.
   - [x] 2026-08-14 Desktop i18n regression expanded to unknown Windows/WebView locales (`fr-FR`, `pt-BR`, empty language) and every shared route English label/description; all non-`zh-*` inputs resolve to English and the full Desktop suite passes 120/120.
   - [x] 2026-08-14 Desktop media route action regressions: the shared `/dashboard/video` surface preserves selected audio capabilities, while `/dashboard/ai` and Home reset stale media actions to text; launcher/body feature selection stays synchronized; `routes.test.ts` passes 43/43 and desktop typecheck/build pass.
+  - [x] 2026-08-14 model-selector audit: active chat, Writer, workflow, media, Home, and retained Writer migration surfaces all pass the configured model catalog into `ModelControls`; `provider-config.test.ts` and `routes.test.ts` cover configured-model priority, same-capability profiles, and stale-selection fallback.
 - [x] 5.7 发布人工 ZIP 升级说明和已知限制，不启用应用内自动更新
   - [x] 普通/便携 ZIP README 均说明关闭应用后手动替换；便携模式先备份 `data/`；不自动下载或替换自身，并明确外部 Vault、系统 WebView2 和明文 API Key 边界。
 
