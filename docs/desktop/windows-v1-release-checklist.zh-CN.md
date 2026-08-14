@@ -9,10 +9,10 @@
 
 | 产物 | 字节数 | SHA-256 | 状态 |
 | --- | ---: | --- | --- |
-| 普通 ZIP `.artifacts/desktop-release/AI-Marketing-Windows-x64-normal.zip` | 269,787,584 | `46c249ed8e3fa5205f847778213646f0c11c1dc2f5347324b1685195d677cd17` | 已生成 |
-| 便携 ZIP `.artifacts/desktop-release/AI-Marketing-Windows-x64-portable.zip` | 269,851,340 | `295eb7a60d0a65c80f78cf331b63e175aa46f70d8a6f675d396c235be589f036` | 已生成 |
+| 普通 ZIP `.artifacts/desktop-release/AI-Marketing-Windows-x64-normal.zip` | 269,787,833 | `e517b1608f54d7c888eca6326ebfb7531a3f682b9686e329c1727e742dc1a8ab` | 已生成 |
+| 便携 ZIP `.artifacts/desktop-release/AI-Marketing-Windows-x64-portable.zip` | 269,851,589 | `c8cd16ec3b8175201639315cf03ba99b97121a1bb6477ff4cfa05eab87a948e0` | 已生成 |
 | Runtime ZIP `.artifacts/desktop-runtime-release-retry/AIMarketing-Runtime-x64.zip` | 411,848,658 | `37b08668bef57370588ab941129f76a63b6950404a211560a5fd77adde4b1030` | 已生成 |
-| Release EXE `apps/desktop/src-tauri/target/release/ai-marketing.exe` | 12,649,984 | `d735ebcf391e5f36924e991628ad0ba4561c6341bd14adacfb7906ebc0b26ad7` | 未签名开发构建 |
+| Release EXE `apps/desktop/src-tauri/target/release/ai-marketing.exe` | 12,649,984 | `c756092e1cd5821ddc991c40c67c067d4f7d2cd1c80c128fddd6a2f5d1389d17` | 未签名开发构建 |
 | NSIS `apps/desktop/src-tauri/target/release/bundle/nsis/AI Marketing_0.1.0_x64-setup.exe` | 180,130,496 | `8e0abb127964e664dd497c0bfd85687ea8a92028006d20aded4dec2baa71b688` | 未签名开发构建 |
 
 ## 已通过矩阵
