@@ -66,6 +66,20 @@ function resolveImageSmokeModel(profile) {
   return providerSource(profile) === "pptoken" ? "gpt-image-2" : profile.model;
 }
 
+function buildImageSmokeBody(model, imageSize) {
+  return {
+    model,
+    prompt: "A simple yellow square on a white background, no text",
+    size: imageSize,
+    n: 1,
+    quality: "auto",
+    background: "auto",
+    output_format: "png",
+    moderation: "auto",
+    response_format: "url",
+  };
+}
+
 function taskIdFromResponse(response) {
   const data = response?.data && typeof response.data === "object" ? response.data : undefined;
   const output = response?.output && typeof response.output === "object" ? response.output : undefined;
@@ -193,13 +207,7 @@ const results = includeVideo && !configuredVideoProfile
   : videoOnly
     ? []
   : imageOnly
-    ? [await request("image", endpoint(config.image.baseUrl, "images/generations"), config.image.apiKey, {
-        model: imageSmokeModel,
-        prompt: "A simple yellow square on a white background, no text",
-        size: imageSize,
-        n: 1,
-        response_format: "url",
-      })]
+    ? [await request("image", endpoint(config.image.baseUrl, "images/generations"), config.image.apiKey, buildImageSmokeBody(imageSmokeModel, imageSize))]
   : audioOnly
     ? [await requestAudio(configuredAudioProfile(config))]
   : musicOnly
@@ -211,13 +219,7 @@ const results = includeVideo && !configuredVideoProfile
         max_tokens: 32,
         temperature: 0,
       }),
-      await request("image", endpoint(config.image.baseUrl, "images/generations"), config.image.apiKey, {
-        model: imageSmokeModel,
-        prompt: "A simple yellow square on a white background, no text",
-        size: imageSize,
-        n: 1,
-        response_format: "url",
-      }),
+      await request("image", endpoint(config.image.baseUrl, "images/generations"), config.image.apiKey, buildImageSmokeBody(imageSmokeModel, imageSize)),
       await requestAudio(configuredAudioProfile(config)),
     ];
 

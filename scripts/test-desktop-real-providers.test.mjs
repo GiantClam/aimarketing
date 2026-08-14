@@ -45,6 +45,7 @@ function runSmoke(configPath, port, extraArgs = [], extraEnv = {}) {
 test("real provider smoke executes a configured non-Seedance video profile", async () => {
   const imageSizes = [];
   const imageModels = [];
+  const imageBodies = [];
   const musicModels = [];
   const server = createServer((request, response) => {
     if (request.method === "POST" && request.url === "/v1/chat/completions") return json(response, { model: "chat", choices: [{ message: { content: "ok" } }], usage: {} });
@@ -54,6 +55,7 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
       request.on("data", (chunk) => { body += chunk; });
       request.on("end", () => {
         const parsed = JSON.parse(body);
+        imageBodies.push(parsed);
         imageSizes.push(parsed.size);
         imageModels.push(parsed.model);
         json(response, { data: [{ url: "http://127.0.0.1/image.png" }] });
@@ -104,6 +106,17 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
     assert.deepEqual(defaultReport.results.map((item) => item.label), ["llm", "image", "audio"]);
     assert.deepEqual(imageSizes.slice(0, 1), ["256x256"]);
     assert.deepEqual(imageModels.slice(0, 1), ["gpt-image-2"]);
+    assert.deepEqual(imageBodies[0], {
+      model: "gpt-image-2",
+      prompt: "A simple yellow square on a white background, no text",
+      size: "256x256",
+      n: 1,
+      quality: "auto",
+      background: "auto",
+      output_format: "png",
+      moderation: "auto",
+      response_format: "url",
+    });
     assert.equal(defaultResult.stdout.includes("video-1"), false);
 
     const imageOnlyResult = await runSmoke(configPath, port, ["--image-only"]);
