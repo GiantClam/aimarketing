@@ -150,6 +150,20 @@ export function resolveNonSeedanceVideoProfile(config) {
   return undefined;
 }
 
+/**
+ * RunningHub Hailuo/H3 tasks are commonly much slower than the generic
+ * provider fixture. Keep the real smoke bounded, but give the configured H3
+ * profile enough time to reach a terminal result without requiring an
+ * undocumented environment override.
+ */
+export function defaultVideoPollBudget(profile, source) {
+  const normalizedSource = String(source ?? profile?.source ?? profile?.provider ?? "").trim().toLowerCase();
+  const identity = [profile?.model, profile?.endpoint, profile?.queryEndpoint]
+    .filter((value) => typeof value === "string")
+    .join(" ");
+  return normalizedSource === "runninghub" && /hailuo|h3/iu.test(identity) ? 240 : 12;
+}
+
 export function buildRealProviderSmokeScope({ includeVideo = false, videoOnly = false, audioOnly = false, imageOnly = false } = {}) {
   const executesVideo = includeVideo || videoOnly;
   return Object.freeze({

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertRealProviderConfig, buildRealProviderSmokeScope, hasExpectedSmokeResponse, resolveNonSeedanceVideoProfile } from "./real-provider-config.mjs";
+import { assertRealProviderConfig, buildRealProviderSmokeScope, defaultVideoPollBudget, hasExpectedSmokeResponse, resolveNonSeedanceVideoProfile } from "./real-provider-config.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const configPath = resolve(process.env.AIMARKETING_REAL_PROVIDER_CONFIG ?? resolve(repoRoot, "apps/desktop/real-providers.test.local.json"));
@@ -56,7 +56,7 @@ function taskIdFromResponse(response) {
 }
 
 async function pollVideo(label, profile, taskId, source, queryPath) {
-  const maxPolls = Math.max(1, Number(process.env.AIMARKETING_PROVIDER_VIDEO_POLLS ?? 12));
+  const maxPolls = Math.max(1, Number(process.env.AIMARKETING_PROVIDER_VIDEO_POLLS ?? defaultVideoPollBudget(profile, source)));
   const delayMs = Math.max(0, Number(process.env.AIMARKETING_PROVIDER_VIDEO_POLL_DELAY_MS ?? 1500));
   let query;
   for (let attempt = 1; attempt <= maxPolls; attempt += 1) {

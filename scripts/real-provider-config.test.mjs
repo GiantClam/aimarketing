@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assertRealProviderConfig, buildRealProviderSmokeScope, hasExpectedSmokeResponse, REAL_PROVIDER_SMOKE_SCOPE, resolveNonSeedanceVideoProfile, validateRealProviderConfig } from "./real-provider-config.mjs";
+import { assertRealProviderConfig, buildRealProviderSmokeScope, defaultVideoPollBudget, hasExpectedSmokeResponse, REAL_PROVIDER_SMOKE_SCOPE, resolveNonSeedanceVideoProfile, validateRealProviderConfig } from "./real-provider-config.mjs";
 
 const audioCredentialFixture = "fixture-key";
 const valid = {
@@ -60,4 +60,10 @@ test("non-Seedance video profile resolution skips the excluded model", () => {
   assert.equal(resolveNonSeedanceVideoProfile(config)?.id, "h3");
   assert.equal(resolveNonSeedanceVideoProfile({ providers: { audio: { id: "audio", source: "minimax", model: "speech-2.8-turbo", baseUrl: "https://audio.example", apiKey: "secret" } }, defaults: { video: "audio" } }), undefined);
   assert.equal(resolveNonSeedanceVideoProfile({ ...config, providers: { seedance: config.providers.seedance }, defaults: { video: "seedance" } }), undefined);
+});
+
+test("slow RunningHub H3 smoke receives a bounded long-poll budget", () => {
+  assert.equal(defaultVideoPollBudget({ model: "MiniMax-Hailuo-H3", endpoint: "/h3" }, "runninghub"), 240);
+  assert.equal(defaultVideoPollBudget({ model: "generic-video", endpoint: "/video" }, "runninghub"), 12);
+  assert.equal(defaultVideoPollBudget({ model: "MiniMax-Hailuo-H3" }, "minimax"), 12);
 });
