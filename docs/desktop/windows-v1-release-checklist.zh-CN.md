@@ -26,10 +26,11 @@
 | 绿色 Runtime 安装/签名/离线回滚 | `pnpm test:desktop-runtime-installer`：19/19；真实 411,848,658-byte Runtime ZIP 在当前 Windows 主机离线完整安装/重复安装均返回 `status=ok`；完整 preflight 在未签名 manifest 处按预期 fail-closed |
 | Tauri Rust | `pnpm desktop:tauri:check` |
 | SaaS 生产构建 | `pnpm build`：425/425 routes |
-| 真实 Provider | 默认 smoke：LLM/image HTTP 200/schema 通过；一次音频任务 48 次轮询仍为 `Processing` 并 fail-closed，随后 `test:real-providers:audio` 独立重试在第 4 次轮询 `Success`。`test:real-providers:video`：RunningHub MiniMax-Hailuo-H3 HTTP 200、76 次轮询后 `SUCCESS`；Seedance 明确未执行 |
+| 真实 Provider | 最新默认 smoke（`apps/desktop/real-providers.test.local.json`）：LLM HTTP 200/schema（1 次）、image HTTP 200/schema（1 次）、MiniMax audio HTTP 200/schema（第 4 次轮询 `Success`）；脱敏输出为 `scope.executed=[llm,image,audio]`、`scope.excluded=[seedance]`。非 Seedance 视频历史 smoke：RunningHub MiniMax-Hailuo-H3 HTTP 200、76 次轮询后 `SUCCESS`；Seedance 明确未执行 |
 | Provider 配置契约 | `pnpm test:desktop-real-provider-config`；多 profile、能力默认值、模型列表通过 |
 | 依赖/许可证 | 官方 npm registry audit：0 critical、0 high、0 moderate、0 low；三个归档各 28/28 license evidence |
 | Writer Skill 矩阵 | `pnpm test:writer:skills`：20/20；十平台 fixture clarification/revision 已覆盖 |
+| Writer 浏览器 fixture E2E | `pnpm test:e2e:writer:new-features`：fixture-enabled 场景完成 workspace/session/cursor/new-session/生成 turn，provider-missing 场景正确返回 `enabled=false` 与 `llm_api_key_missing`；不等同于生产 Provider smoke |
 
 ## 未测组合与发布阻塞
 
@@ -40,7 +41,7 @@
 - 最新重打包 portable ZIP 以 4 秒有界启动探针重跑四种路径（Unicode、空格、184 字符长路径、OneDrive 形态）均通过并清理进程；仍标记 `cleanVm=false`。
 - 最新 release EXE 重打包的 portable ZIP 以 8 秒有界启动探针重跑四种路径，均 `alive_then_stopped`；当前报告仍标记 `cleanVm=false`。
 - 已修复 Windows PowerShell 对中文路径字面量的编码歧义，最新输出确认真实 `中文 用户` 路径（103 字符）通过启动探针；仍不替代干净 VM。
-- 真实生产 Writer：URL research、完整修订、图片恢复、质量盲测、生产 OpenCode Skill release/digest、billing idempotency 尚未完成。
+- 真实生产 Writer：URL research、完整修订、图片恢复、质量盲测、生产 OpenCode Skill release/digest、billing idempotency 尚未完成；本机 fixture 浏览器 E2E 已通过但不替代生产验证。
 - 网络边界：本机 bundle boundary 已通过；仍需在干净 VM 和真实 Provider 配置下确认除 runtime 源与用户 Provider 外无额外请求。
 - 按要求不执行 Seedance 视频生成测试；非 Seedance 视频能力已用真实 RunningHub MiniMax-Hailuo-H3 smoke 覆盖，视频任务提交/轮询失败仍会 fail-closed。
 
