@@ -5,7 +5,7 @@ import type { WorkbenchArtifact, WorkbenchKnowledgeResult, WorkbenchRun, Workben
 import { tauriBridge } from "./tauri";
 import { createDesktopWorkbenchClient } from "./workbench-client";
 import { capabilityEnglish, desktopCopy, desktopWriterCopy, homeGroupLabels, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaPlaceholderEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale, workflowActionEnglish, writerContentTypeEnglish, writerLanguageEnglish, writerModeEnglish, writerPlatformEnglish, type DesktopLocalePreference } from "./i18n";
-import { capabilityForWorkflowAction, configuredModelOptions, isMediaProviderConfigured, modelOptionsForProvider, preferredConfiguredModel, providerForCapability, providerForId, requiresConfiguredProviderForWorkflowAction, type DesktopProviderConfig, type DesktopProviderDefaults, type DesktopProviderProfiles } from "./provider-config";
+import { capabilityForWorkflowAction, configuredModelOptions, isMediaProviderConfigured, modelOptionsForProvider, preferredConfiguredModel, providerForCapability, providerForId, requiresConfiguredProviderForWorkflowAction, supportsProviderCapability, type DesktopProviderConfig, type DesktopProviderDefaults, type DesktopProviderProfiles } from "./provider-config";
 import { bindWorkflowProviderDefaults, isMediaWorkflowNodeType } from "./workflow-provider-binding";
 import { applyConfiguredMediaModels } from "./media-model-options";
 import { createSessionRecoverySnapshot } from "./session-recovery";
@@ -999,6 +999,11 @@ function DesktopSettingsPanel({
     } catch { /* keep editing until the JSON is complete */ }
   };
   const profileIds = Object.keys(config.providers ?? {});
+  const profileIdsFor = (capability: keyof DesktopProviderDefaults) => {
+    const compatible = profileIds.filter((id) => supportsProviderCapability(config.providers?.[id] ?? {}, capability));
+    const selected = config.defaults?.[capability];
+    return selected && !compatible.includes(selected) ? [selected, ...compatible] : compatible;
+  };
   const updateDefault = (capability: keyof DesktopProviderDefaults, value: string) => {
     const defaults = { ...(config.defaults ?? {}) };
     if (value) defaults[capability] = value;
@@ -1015,10 +1020,10 @@ function DesktopSettingsPanel({
     <label>{ui.provider}<input value={config.provider.id} onChange={(event) => updateProvider({ id: event.target.value })} /></label>
     <label>{ui.profiles}<textarea value={profilesText} onChange={(event) => updateProfiles(event.target.value)} spellCheck={false} /></label>
     <p className="settings-inline-hint">{ui.profilesHint}</p>
-    <label>{ui.textDefault}<select value={config.defaults?.text ?? ""} onChange={(event) => updateDefault("text", event.target.value)}><option value="">{config.provider.id}（fallback）</option>{profileIds.map((id) => <option key={`text-${id}`} value={id}>{id}</option>)}</select></label>
-    <label>{ui.imageDefault}<select value={config.defaults?.image ?? ""} onChange={(event) => updateDefault("image", event.target.value)}><option value="">{config.provider.id}（fallback）</option>{profileIds.map((id) => <option key={`image-${id}`} value={id}>{id}</option>)}</select></label>
-    <label>{ui.videoDefault}<select value={config.defaults?.video ?? ""} onChange={(event) => updateDefault("video", event.target.value)}><option value="">{config.provider.id}（fallback）</option>{profileIds.map((id) => <option key={`video-${id}`} value={id}>{id}</option>)}</select></label>
-    <label>{ui.audioDefault}<select value={config.defaults?.audio ?? ""} onChange={(event) => updateDefault("audio", event.target.value)}><option value="">{config.provider.id}（fallback）</option>{profileIds.map((id) => <option key={`audio-${id}`} value={id}>{id}</option>)}</select></label>
+    <label>{ui.textDefault}<select value={config.defaults?.text ?? ""} onChange={(event) => updateDefault("text", event.target.value)}><option value="">{config.provider.id}（fallback）</option>{profileIdsFor("text").map((id) => <option key={`text-${id}`} value={id}>{id}</option>)}</select></label>
+    <label>{ui.imageDefault}<select value={config.defaults?.image ?? ""} onChange={(event) => updateDefault("image", event.target.value)}><option value="">{config.provider.id}（fallback）</option>{profileIdsFor("image").map((id) => <option key={`image-${id}`} value={id}>{id}</option>)}</select></label>
+    <label>{ui.videoDefault}<select value={config.defaults?.video ?? ""} onChange={(event) => updateDefault("video", event.target.value)}><option value="">{config.provider.id}（fallback）</option>{profileIdsFor("video").map((id) => <option key={`video-${id}`} value={id}>{id}</option>)}</select></label>
+    <label>{ui.audioDefault}<select value={config.defaults?.audio ?? ""} onChange={(event) => updateDefault("audio", event.target.value)}><option value="">{config.provider.id}（fallback）</option>{profileIdsFor("audio").map((id) => <option key={`audio-${id}`} value={id}>{id}</option>)}</select></label>
     <label>{locale === "zh" ? "默认 Skill" : "Default Skill"}<select value={selectedSkill} onChange={(event) => setSelectedSkill(event.target.value as SkillId)}><option value="auto">{locale === "zh" ? "自动" : "Auto"}</option><option value="content-writing">{locale === "zh" ? "内容写作" : "Content writing"}</option><option value="marketing-analysis">{locale === "zh" ? "营销分析" : "Marketing analysis"}</option><option value="ppt-master">ppt-master</option><option value="obsidian-rag">Obsidian RAG</option></select></label>
     <label>{locale === "zh" ? "已配置模型（逗号或换行分隔）" : "Configured models (comma or newline separated)"}<textarea value={(config.provider.models ?? [config.provider.model]).join("\n")} onChange={(event) => { const models = configuredModelOptions({ models: event.target.value.split(/[\n,]/u) }); updateProvider({ models, model: preferredConfiguredModel({ ...config.provider, models }) }); }} placeholder={ui.modelPlaceholder} /></label>
     <label>{ui.model}<select value={config.provider.model} onChange={(event) => updateProvider({ model: event.target.value })}>{(configuredModelOptions(config.provider).length ? configuredModelOptions(config.provider) : [config.provider.model]).map((model) => <option key={model} value={model}>{model}</option>)}</select></label>

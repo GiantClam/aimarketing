@@ -9,6 +9,7 @@ export type DesktopProviderConfig = {
   readonly skillId?: string;
   readonly endpoint?: string;
   readonly queryEndpoint?: string;
+  readonly capabilities?: readonly ProviderCapability[];
 };
 
 export type ProviderCapability = "text" | "image" | "video" | "audio";
@@ -65,6 +66,32 @@ export function capabilityForWorkflowAction(action: string): ProviderCapability 
   if (["video_generate", "digital_human"].includes(action)) return "video";
   if (["music_generate", "voice_synthesis", "voice_clone", "audio_generate"].includes(action)) return "audio";
   return "text";
+}
+
+/**
+ * Keep the settings capability defaults aligned with the runtime adapter
+ * boundary. Explicit capabilities win; older profiles are inferred from
+ * their source/model identity and unknown profiles remain selectable for
+ * backwards compatibility.
+ */
+export function supportsProviderCapability(provider: DesktopProviderConfig, capability: ProviderCapability) {
+  const explicit = Array.isArray(provider.capabilities)
+    ? provider.capabilities.map((value) => String(value).trim().toLowerCase()).filter(Boolean)
+    : [];
+  if (explicit.length) return explicit.includes(capability);
+  const source = (provider.source ?? provider.id ?? "").trim().toLowerCase();
+  const identity = [provider.id, provider.model, provider.endpoint, provider.queryEndpoint]
+    .filter((value) => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+  if (/image|vision|text2image|images/iu.test(identity)) return capability === "image";
+  if (/video|hailuo|seedance|wanx|digital[-_ ]?human/iu.test(identity)) return capability === "video";
+  if (/audio|speech|music|voice|tts/iu.test(identity)) return capability === "audio";
+  if (source === "runninghub") return capability === "video";
+  if (source === "minimax") return capability === "audio";
+  if (source === "bailian" || source === "dashscope") return capability === "image";
+  if (["openai", "openai-compatible", "pptoken", "deepseek", "openrouter"].includes(source)) return capability === "text";
+  return true;
 }
 
 /**

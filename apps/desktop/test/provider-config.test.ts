@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { configuredModelOptions, modelOptionsForProvider, preferredConfiguredModel, providerForCapability, providerForId, type DesktopProviderConfig } from "../src/provider-config";
+import { configuredModelOptions, modelOptionsForProvider, preferredConfiguredModel, providerForCapability, providerForId, supportsProviderCapability, type DesktopProviderConfig } from "../src/provider-config";
 
 const text: DesktopProviderConfig = { id: "text", model: "text/model", baseUrl: "https://text.test/v1" };
 const image: DesktopProviderConfig = { id: "image", model: "image/model", baseUrl: "https://image.test/v1" };
@@ -69,4 +69,15 @@ test("same-capability provider profiles keep independent model catalogs and defa
   assert.equal(providerForCapability(config, "video").model, "video/hd");
   assert.deepEqual(modelOptionsForProvider(config, providerForCapability(config, "video")), ["video/hd", "video/cinema"]);
   assert.equal(providerForId(config, "video-fast").model, "video/fast");
+});
+
+test("settings can filter known profiles by capability without breaking legacy profiles", () => {
+  assert.equal(supportsProviderCapability({ source: "openai-compatible", model: "gpt-5.4" }, "text"), true);
+  assert.equal(supportsProviderCapability({ source: "openai-compatible", model: "gpt-image-2" }, "image"), true);
+  assert.equal(supportsProviderCapability({ source: "openai-compatible", model: "gpt-image-2" }, "text"), false);
+  assert.equal(supportsProviderCapability({ source: "minimax", model: "MiniMax-Hailuo-H3" }, "video"), true);
+  assert.equal(supportsProviderCapability({ source: "minimax", model: "speech-2.8-turbo" }, "audio"), true);
+  assert.equal(supportsProviderCapability({ capabilities: ["image"] }, "image"), true);
+  assert.equal(supportsProviderCapability({ capabilities: ["image"] }, "audio"), false);
+  assert.equal(supportsProviderCapability({ id: "custom", model: "custom-model" }, "text"), true);
 });
