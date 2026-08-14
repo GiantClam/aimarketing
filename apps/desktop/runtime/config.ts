@@ -1,7 +1,7 @@
 import { copyFile, mkdir, open, readFile, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { DesktopPaths } from "./paths";
-import type { DesktopProviderConfig, DesktopProviderDefaults, DesktopProviderProfiles } from "../src/provider-config";
+import type { DesktopProviderConfig, DesktopProviderDefaults, DesktopProviderProfiles, ProviderCapability } from "../src/provider-config";
 
 export interface DesktopConfig {
   readonly schemaVersion: 1;
@@ -42,6 +42,7 @@ function parseConfig(raw: string): DesktopConfig {
   const models = normalizeConfiguredModels(value.provider.models);
   const requestedModel = String(value.provider.model ?? "").trim();
   const model = models.includes(requestedModel) ? requestedModel : (models[0] ?? requestedModel);
+  const capabilities = normalizeProviderCapabilities(value.provider.capabilities);
   return {
     schemaVersion: 1,
     locale: value.locale === "zh" || value.locale === "en" ? value.locale : "auto",
@@ -49,7 +50,7 @@ function parseConfig(raw: string): DesktopConfig {
     ...(typeof value.obsidianVaultPath === "string" ? { obsidianVaultPath: value.obsidianVaultPath } : {}),
     ...(typeof value.obsidianIndexPath === "string" ? { obsidianIndexPath: value.obsidianIndexPath } : {}),
     ...(typeof (value as Partial<DesktopConfig>).offlineRuntimeZipPath === "string" ? { offlineRuntimeZipPath: (value as Partial<DesktopConfig>).offlineRuntimeZipPath } : {}),
-    provider: { id: String(value.provider.id ?? "local"), model, ...(models.length ? { models } : {}), ...(value.provider.source ? { source: String(value.provider.source) } : {}), ...(value.provider.baseUrl ? { baseUrl: String(value.provider.baseUrl) } : {}), ...(value.provider.apiKey ? { apiKey: String(value.provider.apiKey) } : {}), ...(value.provider.reasoningEffort ? { reasoningEffort: String(value.provider.reasoningEffort) } : {}), ...(typeof value.provider.skillId === "string" && value.provider.skillId.trim() ? { skillId: value.provider.skillId.trim() } : {}), ...(value.provider.endpoint ? { endpoint: String(value.provider.endpoint) } : {}), ...(value.provider.queryEndpoint ? { queryEndpoint: String(value.provider.queryEndpoint) } : {}) },
+    provider: { id: String(value.provider.id ?? "local"), model, ...(models.length ? { models } : {}), ...(capabilities ? { capabilities } : {}), ...(value.provider.source ? { source: String(value.provider.source) } : {}), ...(value.provider.baseUrl ? { baseUrl: String(value.provider.baseUrl) } : {}), ...(value.provider.apiKey ? { apiKey: String(value.provider.apiKey) } : {}), ...(value.provider.reasoningEffort ? { reasoningEffort: String(value.provider.reasoningEffort) } : {}), ...(typeof value.provider.skillId === "string" && value.provider.skillId.trim() ? { skillId: value.provider.skillId.trim() } : {}), ...(value.provider.endpoint ? { endpoint: String(value.provider.endpoint) } : {}), ...(value.provider.queryEndpoint ? { queryEndpoint: String(value.provider.queryEndpoint) } : {}) },
     ...(normalizeProviderProfiles(value.providers) ? { providers: normalizeProviderProfiles(value.providers) } : {}),
     ...(normalizeProviderDefaults(value.defaults) ? { defaults: normalizeProviderDefaults(value.defaults) } : {}),
     runtime: {
@@ -76,11 +77,13 @@ function normalizeProviderProfiles(value: unknown): DesktopProviderProfiles | un
     const id = typeof record.id === "string" && record.id.trim() ? record.id.trim() : key.trim();
     if (!id) continue;
     const models = normalizeConfiguredModels(record.models);
+    const capabilities = normalizeProviderCapabilities(record.capabilities);
     profiles[key] = {
       id,
       ...(typeof record.source === "string" && record.source.trim() ? { source: record.source.trim() } : {}),
       ...(typeof record.model === "string" ? { model: models.includes(record.model.trim()) ? record.model.trim() : (models[0] ?? record.model.trim()) } : models.length ? { model: models[0] } : {}),
       ...(models.length ? { models } : {}),
+      ...(capabilities ? { capabilities } : {}),
       ...(typeof record.baseUrl === "string" && record.baseUrl.trim() ? { baseUrl: record.baseUrl.trim() } : {}),
       ...(typeof record.apiKey === "string" && record.apiKey ? { apiKey: record.apiKey } : {}),
       ...(typeof record.reasoningEffort === "string" && record.reasoningEffort.trim() ? { reasoningEffort: record.reasoningEffort.trim() } : {}),
@@ -105,6 +108,17 @@ function normalizeProviderDefaults(value: unknown): DesktopProviderDefaults | un
 function normalizeConfiguredModels(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.filter((model): model is string => typeof model === "string").map((model) => model.trim()).filter(Boolean))];
+}
+
+function normalizeProviderCapabilities(value: unknown): ProviderCapability[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const allowed = new Set<ProviderCapability>(["text", "image", "video", "audio"]);
+  const normalized = value
+    .filter((capability): capability is string => typeof capability === "string")
+    .map((capability) => capability.trim().toLowerCase())
+    .filter((capability): capability is ProviderCapability => allowed.has(capability as ProviderCapability));
+  const capabilities = [...new Set(normalized)];
+  return capabilities.length ? capabilities : undefined;
 }
 
 export function redactSecrets(value: unknown): unknown {

@@ -68,9 +68,9 @@ test("config preserves provider profiles and capability defaults", async () => {
     const initial = defaultDesktopConfig(paths);
     const fixtureCredentials = { text: "fixture-text-key", image: "fixture-image-key", video: "fixture-video-key" };
     const profiles = {
-      text: { id: "text", model: "text/model", baseUrl: "https://text.test/v1", apiKey: fixtureCredentials.text },
-      image: { id: "image", model: "image/model", baseUrl: "https://image.test/v1", apiKey: fixtureCredentials.image },
-      video: { id: "video", model: "video/model", baseUrl: "https://video.test/v1", apiKey: fixtureCredentials.video, endpoint: "/videos" },
+      text: { id: "text", model: "text/model", baseUrl: "https://text.test/v1", apiKey: fixtureCredentials.text, capabilities: ["text"] as const },
+      image: { id: "image", model: "image/model", baseUrl: "https://image.test/v1", apiKey: fixtureCredentials.image, capabilities: ["image"] as const },
+      video: { id: "video", model: "video/model", baseUrl: "https://video.test/v1", apiKey: fixtureCredentials.video, endpoint: "/videos", capabilities: ["video"] as const },
     };
     const configured = { ...initial, provider: profiles.text, providers: profiles, defaults: { text: "text", image: "image", video: "video" } };
     await writeDesktopConfig(paths, configured);
