@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { WORKBENCH_HOME_GROUPS, WORKBENCH_MEDIA_FEATURES } from "@aimarketing/workbench-ui";
+import { WORKBENCH_HOME_GROUPS, WORKBENCH_MEDIA_FEATURES, WORKBENCH_ROUTE_MANIFEST } from "@aimarketing/workbench-ui";
 import { desktopCopy, desktopWriterCopy, detectDesktopLocale, homeGroupLabels, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaPlaceholderEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale } from "../src/i18n";
 import { localizeRuntimeStatus } from "../src/App";
 
@@ -10,6 +10,9 @@ test("desktop locale follows Windows/WebView language by default", () => {
   assert.equal(detectDesktopLocale("zh-CN"), "zh");
   assert.equal(detectDesktopLocale("zh-TW"), "zh");
   assert.equal(detectDesktopLocale("ja-JP"), "en");
+  assert.equal(detectDesktopLocale("fr-FR"), "en");
+  assert.equal(detectDesktopLocale("pt-BR"), "en");
+  assert.equal(detectDesktopLocale(""), "en");
   assert.equal(resolveDesktopLocale("auto", "de-DE"), "en");
 });
 
@@ -70,6 +73,17 @@ test("desktop home group headings have explicit Chinese and English labels", () 
   }
   assert.equal(homeGroupLabels["AI TEAM"].zh, "AI 团队");
   assert.equal(homeGroupLabels["CONTENT CREATION"].zh, "内容创作");
+});
+
+test("every shared route has an English presentation without Chinese fallback text", () => {
+  const containsChinese = (value: string | undefined) => Boolean(value && /[\u4e00-\u9fff]/u.test(value));
+  for (const route of WORKBENCH_ROUTE_MANIFEST) {
+    assert.ok(route.label.en, `missing English route label: ${route.path}`);
+    assert.ok(route.description.en, `missing English route description: ${route.path}`);
+    assert.equal(containsChinese(route.label.en), false, `Chinese route label leaked: ${route.path}`);
+    assert.equal(containsChinese(route.description.en), false, `Chinese route description leaked: ${route.path}`);
+    if (route.section?.en) assert.equal(containsChinese(route.section.en), false, `Chinese route section leaked: ${route.path}`);
+  }
 });
 
 test("runtime repair failures are fully localized in the English shell", () => {
