@@ -32,7 +32,7 @@
 
 ## 未测组合与发布阻塞
 
-- Authenticode：当前主机可以加载 `Microsoft.PowerShell.Security`；release audit 实测 Tauri EXE/DLL 为 `NotSigned`，捆绑 Node/OpenCode 为 `Valid`，整体状态 `incomplete`，没有发布证书仍不能宣称通过。
+- Authenticode：release audit 优先使用 `Get-AuthenticodeSignature`，并在 `Microsoft.PowerShell.Security` 无法加载时回退 Windows SDK `signtool.exe`；当前实测 Tauri EXE/DLL 为 `NotSigned`，捆绑 Node/OpenCode 为 `Valid`，整体状态 `incomplete`，没有发布证书仍不能宣称通过。
 - Runtime manifest：当前为 `development_unsigned`，没有发布签名私钥，不能宣称通过。
 - Win10 22H2/Win11 x64 干净 VM：中文用户名、空格、长路径、OneDrive、缺失 WebView2、离线安装尚未完成。
 - 当前开发机路径矩阵已通过：便携包在中文、空格、长路径和 OneDrive 形态目录均可启动并保持 8 秒；该结果标记为 `cleanVm=false`，不替代 Win10/Win11 干净 VM。

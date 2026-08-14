@@ -121,6 +121,47 @@ function Audit-Archive([string]$path, [string]$source) {
   } finally { $archive.Dispose() }
 }
 
+function Resolve-SignTool() {
+  $configured = [Environment]::GetEnvironmentVariable("AIMARKETING_SIGNTOOL_PATH")
+  if (-not [string]::IsNullOrWhiteSpace($configured) -and (Test-Path -LiteralPath $configured -PathType Leaf)) { return [IO.Path]::GetFullPath($configured) }
+  $command = Get-Command signtool.exe -ErrorAction SilentlyContinue
+  if ($command -and (Test-Path -LiteralPath $command.Source -PathType Leaf)) { return $command.Source }
+  $programFilesX86 = ${env:ProgramFiles(x86)}
+  if ([string]::IsNullOrWhiteSpace($programFilesX86)) { return $null }
+  $kitBin = Join-Path $programFilesX86 "Windows Kits\10\bin"
+  if (Test-Path -LiteralPath $kitBin -PathType Container) {
+    $versions = Get-ChildItem -LiteralPath $kitBin -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending
+    foreach ($version in $versions) {
+      foreach ($architecture in @("x64", "x86")) {
+        $candidate = Join-Path $version.FullName "$architecture\signtool.exe"
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+      }
+    }
+  }
+  $appCertificationTool = Join-Path $programFilesX86 "Windows Kits\10\App Certification Kit\signtool.exe"
+  if (Test-Path -LiteralPath $appCertificationTool -PathType Leaf) { return $appCertificationTool }
+  return $null
+}
+
+function Audit-AuthenticodeWithSignTool([string[]]$candidates, [string]$full) {
+  $signTool = Resolve-SignTool
+  if ([string]::IsNullOrWhiteSpace($signTool)) { return $null }
+  $files = @($candidates | ForEach-Object {
+    $previousErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+      $output = @(& $signTool verify /pa /all $_ 2>&1)
+      $exitCode = $LASTEXITCODE
+    } finally {
+      $ErrorActionPreference = $previousErrorAction
+    }
+    $joined = ($output | Out-String).Trim()
+    $status = if ($exitCode -eq 0) { "Valid" } elseif ($joined -match "(?i)(no signature|not signed|0x800B0100)") { "NotSigned" } else { "UnknownError" }
+    [ordered]@{ path = $_; status = $status; signer = $null; verifier = "signtool"; detail = if ($status -eq "UnknownError") { $joined } else { $null } }
+  })
+  return [ordered]@{ status = if ($files.Count -gt 0 -and @($files | Where-Object { $_.status -eq "Valid" }).Count -eq $files.Count) { "pass" } else { "incomplete" }; path = $full; files = $files; verifier = "signtool"; verifierPath = $signTool }
+}
+
 function Audit-Authenticode([string]$path) {
   $full = Resolve-RepoPath $path
   if (-not (Test-Path -LiteralPath $full -PathType Container)) { return [ordered]@{ status = "not_available"; path = $full; files = @() } }
@@ -136,6 +177,8 @@ function Audit-Authenticode([string]$path) {
       [ordered]@{ path = $_; status = [string]$signature.Status; signer = if ($signature.SignerCertificate) { [string]$signature.SignerCertificate.Subject } else { $null } }
     })
   } catch {
+    $fallback = Audit-AuthenticodeWithSignTool $candidates $full
+    if ($null -ne $fallback) { return $fallback }
     return [ordered]@{ status = "not_available"; path = $full; files = @(); reason = "authenticode_unavailable:$($_.Exception.Message)" }
   }
   return [ordered]@{ status = if ($files.Count -gt 0 -and @($files | Where-Object { $_.status -eq "Valid" }).Count -eq $files.Count) { "pass" } else { "incomplete" }; path = $full; files = $files }
