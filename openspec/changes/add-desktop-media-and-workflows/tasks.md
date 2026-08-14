@@ -137,7 +137,7 @@
 
 ## Completion Checklist
 
-- [x] 所有阶段与质量门禁通过 — 2026-08-14 Desktop 120/120, desktop build, bundle-boundary scan, root TypeScript and lint pass; real-provider scope remains LLM/image/audio plus the separately verified non-Seedance video profile, with Seedance intentionally excluded.
+- [x] 所有阶段与质量门禁通过 — 2026-08-14 Desktop 124/124, desktop build, bundle-boundary scan, root TypeScript and lint pass; real-provider scope remains LLM/image/audio plus the separately verified non-Seedance video profile, with Seedance intentionally excluded.
 - [x] 三个 capability specs 全部满足 — local media/workflow/portability contract tests cover direct Provider routing, recovery/idempotency, local artifacts, cancellation/retry, and credential-free JSON import/export.
 - [x] 每类真实 Provider smoke 结果已记录
   - 2026-08-13：使用 `apps/desktop/real-providers.test.local.json` 顺序 smoke（LLM → image → audio，未执行 video/seedance）；LLM HTTP 200 且 schema 通过，音频 profile `audio-minimax/speech-2.8-turbo` 提交 HTTP 200 并在第 8 次查询返回 `Success`，图片请求连续 3 次 HTTP 502（上游 `upstream_error`，非本地适配器失败）。脱敏输出明确记录 `scope.executed=[llm,image,audio]` 与 `scope.excluded=[video,seedance]`，API key 不进入结果。
