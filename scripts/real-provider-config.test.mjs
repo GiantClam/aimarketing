@@ -43,6 +43,7 @@ test("real provider smoke response checks are capability-specific and exclude vi
   assert.equal(hasExpectedSmokeResponse("video", { status: "RUNNING", results: [] }), false);
   assert.deepEqual(REAL_PROVIDER_SMOKE_SCOPE, { executed: ["llm", "image", "audio"], excluded: ["video", "seedance"] });
   assert.deepEqual(buildRealProviderSmokeScope({ includeVideo: true }), { executed: ["llm", "image", "audio", "video"], excluded: ["seedance"] });
+  assert.deepEqual(buildRealProviderSmokeScope({ videoOnly: true }), { executed: ["video"], excluded: ["seedance"] });
 });
 
 test("non-Seedance video profile resolution skips the excluded model", () => {

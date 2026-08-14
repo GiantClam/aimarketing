@@ -75,7 +75,7 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
     const report = JSON.parse(result.stdout);
     assert.deepEqual(report.scope, { executed: ["llm", "image", "audio", "video"], excluded: ["seedance"] });
     const video = report.results.find((item) => item.label === "video");
-    assert.deepEqual(video, { label: "video", status: 200, ok: true, schemaOk: true, attempts: 1, profileId: "video", providerStatus: "SUCCESS", responseKeys: ["data"] });
+    assert.deepEqual(video, { label: "video", status: 200, ok: true, schemaOk: true, attempts: 1, profileId: "video", providerTaskId: "video-1", providerStatus: "SUCCESS", responseKeys: ["data"] });
     assert.equal(result.stdout.includes(fixtureCredential), false);
   } finally {
     await rm(tempRoot, { recursive: true, force: true });

@@ -14,7 +14,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test test/**/*.test.ts",
     "test:real-providers": "node ../../scripts/test-desktop-real-providers.mjs",
-    "test:real-providers:video": "node ../../scripts/test-desktop-real-providers.mjs --include-video",
+    "test:real-providers:video": "node ../../scripts/test-desktop-real-providers.mjs --video-only",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },

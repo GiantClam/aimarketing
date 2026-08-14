@@ -6,8 +6,9 @@ import { assertRealProviderConfig, buildRealProviderSmokeScope, hasExpectedSmoke
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const configPath = resolve(process.env.AIMARKETING_REAL_PROVIDER_CONFIG ?? resolve(repoRoot, "apps/desktop/real-providers.test.local.json"));
 const config = assertRealProviderConfig(JSON.parse(await readFile(configPath, "utf8")));
-const includeVideo = process.argv.includes("--include-video") || process.env.AIMARKETING_PROVIDER_SMOKE_INCLUDE_VIDEO === "1";
-const smokeScope = buildRealProviderSmokeScope({ includeVideo });
+const videoOnly = process.argv.includes("--video-only") || process.env.AIMARKETING_PROVIDER_SMOKE_VIDEO_ONLY === "1";
+const includeVideo = videoOnly || process.argv.includes("--include-video") || process.env.AIMARKETING_PROVIDER_SMOKE_INCLUDE_VIDEO === "1";
+const smokeScope = buildRealProviderSmokeScope({ includeVideo, videoOnly });
 
 function endpoint(baseUrl, path) {
   return `${String(baseUrl).replace(/\/+$/u, "")}/${String(path).replace(/^\/+/, "")}`;
@@ -60,6 +61,7 @@ async function pollVideo(label, profile, taskId, source, queryPath) {
       : endpoint(profile.baseUrl, `${queryPath}${queryPath.includes("?") ? "&" : "?"}task_id=${encodeURIComponent(String(taskId))}`);
     query = await request(label, url, profile.apiKey, isRunningHub ? { taskId: String(taskId) } : undefined, { method: isRunningHub ? "POST" : "GET" });
     query.attempt = attempt;
+    query.providerTaskId = String(taskId);
     const status = String(query.response?.status ?? query.response?.taskStatus ?? query.response?.data?.status ?? query.response?.data?.taskStatus ?? query.response?.output?.status ?? query.response?.output?.taskStatus ?? query.response?.output?.task_status ?? "").toLowerCase();
     if (!query.ok || ["success", "succeeded", "completed", "done", "failed", "error"].includes(status) || hasExpectedSmokeResponse("video", query.response)) return query;
     if (attempt < maxPolls) await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -87,7 +89,8 @@ async function requestVideo(profileEntry) {
     submitPath = profile.endpoint;
     queryPath = profile.queryEndpoint || "/openapi/v2/query";
     if (!submitPath) return { label: "video", ok: false, error: "real_provider_config_video_endpoint_missing" };
-    body = { prompt: "A short desktop provider smoke video of a yellow cube on a white table", resolution: "720p", duration: "5", ratio: "adaptive", generateAudio: false };
+    const isHailuoH3 = /hailuo|h3/iu.test(`${profile.model ?? ""} ${submitPath}`);
+    body = { prompt: "A short desktop provider smoke video of a yellow cube on a white table", resolution: isHailuoH3 ? "2K" : "720p", duration: "5", ratio: isHailuoH3 ? "16:9" : "adaptive", generateAudio: false };
   } else {
     return { label: "video", ok: false, error: `real_provider_video_source_unsupported:${source || "missing"}` };
   }
@@ -143,6 +146,8 @@ function configuredAudioProfile(value) {
 const configuredVideoProfile = includeVideo ? resolveNonSeedanceVideoProfile(config) : undefined;
 const results = includeVideo && !configuredVideoProfile
   ? [{ label: "video", ok: false, error: "real_provider_config_non_seedance_video_profile_missing" }]
+  : videoOnly
+    ? []
   : [
       await request("llm", endpoint(config.llm.baseUrl, "chat/completions"), config.llm.apiKey, {
         model: config.llm.model,
@@ -173,8 +178,12 @@ const sanitized = results.map((result) => ({
   schemaOk: result.ok === true && hasExpectedSmokeResponse(result.label, result.response),
   ...(typeof result.attempt === "number" ? { attempts: result.attempt } : {}),
   ...(typeof result.profileId === "string" ? { profileId: result.profileId } : {}),
-  ...((typeof result.response?.status === "string" && result.response.status.trim()) ? { providerStatus: result.response.status } : {}),
-  ...((typeof result.response?.data?.status === "string" && result.response.data.status.trim()) ? { providerStatus: result.response.data.status } : {}),
+  ...(typeof result.providerTaskId === "string" ? { providerTaskId: result.providerTaskId } : {}),
+  ...((result.response?.status !== undefined) ? { providerStatus: String(result.response.status).slice(0, 80) } : {}),
+  ...((result.response?.data?.status !== undefined) ? { providerStatus: String(result.response.data.status).slice(0, 80) } : {}),
+  ...((result.response?.errorCode !== undefined) ? { providerErrorCode: String(result.response.errorCode).slice(0, 120) } : {}),
+  ...((result.response?.errorMessage !== undefined) ? { providerErrorMessage: String(result.response.errorMessage).replace(/(?:api[-_ ]?key|token|authorization)[^\s:=]*[\s:=]+[^\s,;]+/giu, "[REDACTED]").slice(0, 300) } : {}),
+  ...((result.response?.failedReason !== undefined) ? { failedReason: String(result.response.failedReason).replace(/(?:api[-_ ]?key|token|authorization)[^\s:=]*[\s:=]+[^\s,;]+/giu, "[REDACTED]").slice(0, 300) } : {}),
   ...(result.response && typeof result.response === "object" ? { responseKeys: Object.keys(result.response) } : {}),
   ...(result.error ? { error: result.error } : {}),
 }));
