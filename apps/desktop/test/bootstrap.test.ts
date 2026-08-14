@@ -28,7 +28,10 @@ test("each damaged runtime fixture blocks the repair gate until the repeated pro
 
 test("runtime repair uses the same real PPTX capability shape as the native gate", () => {
   const source = readFileSync(resolve(process.cwd(), "../../scripts/install-desktop-runtime.ps1"), "utf8");
-  assert.match(source, /AIMarketing 中文 PPT probe/);
+  // Keep the PowerShell source ASCII-safe so legacy Windows PowerShell cannot
+  // reinterpret the probe text before Python receives it.
+  assert.match(source, /AIMarketing \\u4e2d\\u6587 PPT probe/u);
+  assert.doesNotMatch(source, /AIMarketing 中文 PPT probe/u);
   assert.match(source, /ppt\/slides\/slide1\.xml/);
   assert.match(source, /Microsoft YaHei/);
 });
