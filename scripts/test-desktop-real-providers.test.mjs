@@ -27,6 +27,8 @@ function runSmoke(configPath, port, extraArgs = [], extraEnv = {}) {
         AIMARKETING_PROVIDER_TIMEOUT_MS: "5000",
         AIMARKETING_PROVIDER_VIDEO_POLLS: "2",
         AIMARKETING_PROVIDER_VIDEO_POLL_DELAY_MS: "0",
+        AIMARKETING_PROVIDER_AUDIO_POLLS: "8",
+        AIMARKETING_PROVIDER_AUDIO_POLL_DELAY_MS: "0",
         ...extraEnv,
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -108,6 +110,60 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
     const video = report.results.find((item) => item.label === "video");
     assert.deepEqual(video, { label: "video", status: 200, ok: true, schemaOk: true, attempts: 1, profileId: "video", providerTaskId: "video-1", providerStatus: "SUCCESS", responseKeys: ["data"] });
     assert.equal(result.stdout.includes(fixtureCredential), false);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+    server.close();
+    await once(server, "close").catch(() => undefined);
+  }
+});
+
+test("real provider audio smoke honors a bounded polling budget", async () => {
+  let pollCount = 0;
+  const server = createServer((request, response) => {
+    if (request.method === "POST" && request.url === "/v1/t2a_async_v2") return json(response, { task_id: 7 });
+    if (request.method === "GET" && request.url?.startsWith("/v1/query/t2a_async_query_v2")) {
+      pollCount += 1;
+      return json(response, {
+        task_id: 7,
+        status: pollCount >= 3 ? "Success" : "Processing",
+        base_resp: { status_code: 0 },
+      });
+    }
+    response.writeHead(404);
+    response.end();
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const port = server.address().port;
+  const rootUrl = `http://127.0.0.1:${port}`;
+  const tempRoot = await mkdtemp(join(tmpdir(), "aimarketing-provider-audio-smoke-"));
+  const configPath = join(tempRoot, "providers.json");
+  const profile = (id, source, model, baseUrl) => ({ id, source, model, baseUrl, [credentialField]: fixtureCredential });
+  await writeFile(configPath, JSON.stringify({
+    schemaVersion: 1,
+    llm: { provider: "fixture", baseUrl: `${rootUrl}/v1`, [credentialField]: fixtureCredential, model: "chat" },
+    image: { provider: "fixture", baseUrl: `${rootUrl}/v1`, [credentialField]: fixtureCredential, model: "image" },
+    providers: {
+      text: profile("text", "openai-compatible", "chat", `${rootUrl}/v1`),
+      image: profile("image", "openai-compatible", "image", `${rootUrl}/v1`),
+      audio: profile("audio", "minimax", "speech-2.8-turbo", `${rootUrl}/v1`),
+    },
+    defaults: { text: "text", image: "image", audio: "audio" },
+  }), "utf8");
+  try {
+    const bounded = await runSmoke(configPath, port, ["--audio-only"], {
+      AIMARKETING_PROVIDER_AUDIO_POLLS: "2",
+      AIMARKETING_PROVIDER_AUDIO_POLL_DELAY_MS: "0",
+    });
+    assert.equal(bounded.code, 1, `${bounded.stdout}\n${bounded.stderr}`);
+    assert.equal(JSON.parse(bounded.stdout).results[0].attempts, 2);
+    pollCount = 0;
+    const completed = await runSmoke(configPath, port, ["--audio-only"], {
+      AIMARKETING_PROVIDER_AUDIO_POLLS: "3",
+      AIMARKETING_PROVIDER_AUDIO_POLL_DELAY_MS: "0",
+    });
+    assert.equal(completed.code, 0, `${completed.stdout}\n${completed.stderr}`);
+    assert.equal(JSON.parse(completed.stdout).results[0].attempts, 3);
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
     server.close();

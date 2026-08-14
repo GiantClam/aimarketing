@@ -19,6 +19,18 @@ function endpoint(baseUrl, path) {
   return `${String(baseUrl).replace(/\/+$/u, "")}/${String(path).replace(/^\/+/, "")}`;
 }
 
+function boundedPositiveInt(value, fallback, maximum = Number.MAX_SAFE_INTEGER) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, maximum);
+}
+
+function boundedNonNegativeInt(value, fallback, maximum = Number.MAX_SAFE_INTEGER) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return Math.min(parsed, maximum);
+}
+
 async function request(label, url, apiKey, body, { method = "POST", headers = {} } = {}) {
   const retries = Math.max(0, Number(process.env.AIMARKETING_PROVIDER_RETRIES ?? 2));
   const transientStatuses = new Set([408, 425, 429, 500, 502, 503, 504]);
@@ -118,8 +130,18 @@ async function requestAudio(profile) {
   if (!submit.ok || submittedTaskId === undefined || submittedTaskId === null || submittedTaskId === 0) return submit;
   const retries = Math.max(0, Number(process.env.AIMARKETING_PROVIDER_RETRIES ?? 2));
   const attempts = Math.max(3, retries + 1);
+  const maxPolls = boundedPositiveInt(
+    process.env.AIMARKETING_PROVIDER_AUDIO_POLLS,
+    attempts * 8,
+    240,
+  );
+  const pollDelayMs = boundedNonNegativeInt(
+    process.env.AIMARKETING_PROVIDER_AUDIO_POLL_DELAY_MS,
+    1500,
+    60_000,
+  );
   let query;
-  for (let attempt = 1; attempt <= attempts * 8; attempt += 1) {
+  for (let attempt = 1; attempt <= maxPolls; attempt += 1) {
     const response = await fetch(endpoint(profile.baseUrl, "query/t2a_async_query_v2") + `?task_id=${encodeURIComponent(String(submittedTaskId))}`, {
       headers: { authorization: `Bearer ${profile.apiKey}` },
       signal: AbortSignal.timeout(Number(process.env.AIMARKETING_PROVIDER_TIMEOUT_MS ?? 120000)),
@@ -130,7 +152,7 @@ async function requestAudio(profile) {
     query = { label: "audio", status: response.status, ok: response.ok, attempt, response: parsed };
     const taskStatus = String(parsed?.status ?? "");
     if (["Success", "Succeeded", "Failed", "Fail"].includes(taskStatus) || !response.ok) return query;
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    if (attempt < maxPolls) await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
   }
   return query ?? { label: "audio", ok: false, error: "audio_provider_smoke_no_query_result" };
 }
