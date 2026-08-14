@@ -22,7 +22,8 @@ export function scanDesktopNetworkBoundary(files) {
 export async function verifyDesktopNetworkBoundary(root = repoRoot) {
   const filePaths = await collectDesktopBundleFiles(root);
   if (!filePaths.length) throw new Error("desktop_bundle_missing_build_first");
-  const files = await Promise.all(filePaths.map(async (filePath) => ({ filePath, source: await readFile(filePath, "utf8") })));
+  const files = [];
+  for (const filePath of filePaths) files.push({ filePath, source: await readFile(filePath, "utf8") });
   const violations = scanDesktopNetworkBoundary(files);
   return {
     files: filePaths,

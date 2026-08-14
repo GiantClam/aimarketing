@@ -124,7 +124,7 @@
 **Quality Gate:**
 - [ ] 全新 VM 可完成首个对话、PPT、媒体、工作流和 Vault 检索
 - [ ] 除 runtime 源和用户 Provider 外无其他网络请求
-  - [x] 2026-08-14 `desktop:verify-network-boundary` scans the built UI/host/knowledge bundles (743,542 UTF-8 bytes) and reports zero hardcoded external endpoints; local loopback and runtime-configured Provider indirection remain allowed. Clean-VM dynamic egress verification remains open.
+  - [x] 2026-08-14 `desktop:verify-network-boundary` scans the built UI text assets (`index.html`, JS and CSS), host/knowledge bundles, runtime manifest tooling and Skill catalog (821,270 UTF-8 bytes) and reports zero hardcoded external endpoints; local loopback and runtime-configured Provider indirection remain allowed. Clean-VM dynamic egress verification remains open.
   - [x] 2026-08-14 built `dist-runtime/host.mjs` completed a local file workflow under a Node network guard that rejects fetch/http/https/net/tls/dns egress; the run reached `done` with empty stderr. This proves the local no-Provider workflow path is offline-safe; clean-VM dynamic egress and configured user-Provider requests remain separate release evidence.
 - [x] Desktop bundle 排除 Lead Hunter、auth、enterprise、billing、R2、Railway、Cloudflare、Dify/RAGFlow
   - [x] 2026-08-13 desktop architecture scan and shared-boundary/provenance tests reject these imports/routes; release EXE startup remained alive for 8 seconds and exited cleanly.

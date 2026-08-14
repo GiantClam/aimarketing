@@ -10,6 +10,8 @@ export const FORBIDDEN_BUNDLE_MARKERS = [
   { label: "cloud-only integration", pattern: /\b(?:railway|cloudflare|ragflow|dify)\b/iu },
 ];
 
+export const DESKTOP_BUNDLE_TEXT_EXTENSIONS = new Set([".css", ".html", ".js", ".json", ".mjs", ".svg"]);
+
 async function exists(path) {
   try {
     await access(path);
@@ -19,15 +21,29 @@ async function exists(path) {
   }
 }
 
+async function collectTextFiles(directory, { recursive = true } = {}) {
+  if (!(await exists(directory))) return [];
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const filePath = join(directory, entry.name);
+    if (entry.isDirectory() && recursive) {
+      files.push(...await collectTextFiles(filePath));
+      continue;
+    }
+    const extension = entry.name.slice(entry.name.lastIndexOf(".")).toLowerCase();
+    if (DESKTOP_BUNDLE_TEXT_EXTENSIONS.has(extension)) files.push(filePath);
+  }
+  return files;
+}
+
 export async function collectDesktopBundleFiles(root = repoRoot) {
-  const assetDirectory = join(root, "apps", "desktop", "dist", "assets");
-  const assetEntries = await readdir(assetDirectory, { withFileTypes: true }).catch(() => []);
-  const assetFiles = assetEntries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".js"))
-    .map((entry) => join(assetDirectory, entry.name));
-  const hostBundle = join(root, "apps", "desktop", "dist-runtime", "host.mjs");
-  const knowledgeBundle = join(root, "apps", "desktop", "dist-runtime", "knowledge.mjs");
-  return [...assetFiles, ...(await exists(hostBundle) ? [hostBundle] : []), ...(await exists(knowledgeBundle) ? [knowledgeBundle] : [])];
+  const uiFiles = await collectTextFiles(join(root, "apps", "desktop", "dist"));
+  // Runtime skills include thousands of SVG/template assets; only scan the
+  // executable bundles and manifests at the runtime root to keep the audit
+  // bounded and avoid exhausting Windows file handles.
+  const runtimeFiles = await collectTextFiles(join(root, "apps", "desktop", "dist-runtime"), { recursive: false });
+  return [...uiFiles, ...runtimeFiles];
 }
 
 export function scanDesktopBundle(files) {
@@ -37,7 +53,8 @@ export function scanDesktopBundle(files) {
 export async function verifyDesktopBundle(root = repoRoot) {
   const filePaths = await collectDesktopBundleFiles(root);
   if (!filePaths.length) throw new Error("desktop_bundle_missing_build_first");
-  const files = await Promise.all(filePaths.map(async (filePath) => ({ filePath, source: await readFile(filePath, "utf8") })));
+  const files = [];
+  for (const filePath of filePaths) files.push({ filePath, source: await readFile(filePath, "utf8") });
   const violations = scanDesktopBundle(files);
   return {
     files: filePaths.map((filePath) => relative(root, filePath).replaceAll("\\", "/")),

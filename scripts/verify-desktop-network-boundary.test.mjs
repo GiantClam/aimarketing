@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { scanDesktopNetworkBoundary } from "./verify-desktop-network-boundary.mjs";
+import { DESKTOP_BUNDLE_TEXT_EXTENSIONS } from "./verify-desktop-bundle-boundaries.mjs";
 
 test("desktop network boundary accepts local runtime and user-provider indirection", () => {
   assert.deepEqual(scanDesktopNetworkBoundary([
@@ -20,4 +21,11 @@ test("desktop network boundary ignores library documentation and XML namespace U
   assert.deepEqual(scanDesktopNetworkBoundary([
     { filePath: "fixture.js", source: "https://react.dev/errors/1 https://github.com/org/repo http://www.w3.org/2000/svg" },
   ]), []);
+});
+
+test("desktop bundle collection includes shipped text resources beyond JavaScript assets", () => {
+  for (const extension of [".css", ".html", ".json", ".js", ".mjs", ".svg"]) {
+    assert.equal(DESKTOP_BUNDLE_TEXT_EXTENSIONS.has(extension), true);
+  }
+  assert.equal(DESKTOP_BUNDLE_TEXT_EXTENSIONS.has(".exe"), false);
 });
