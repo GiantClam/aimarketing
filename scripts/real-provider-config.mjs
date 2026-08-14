@@ -150,10 +150,10 @@ export function resolveNonSeedanceVideoProfile(config) {
   return undefined;
 }
 
-export function buildRealProviderSmokeScope({ includeVideo = false, videoOnly = false, audioOnly = false } = {}) {
+export function buildRealProviderSmokeScope({ includeVideo = false, videoOnly = false, audioOnly = false, imageOnly = false } = {}) {
   const executesVideo = includeVideo || videoOnly;
   return Object.freeze({
-    executed: Object.freeze(videoOnly ? ["video"] : audioOnly ? ["audio"] : includeVideo ? ["llm", "image", "audio", "video"] : ["llm", "image", "audio"]),
+    executed: Object.freeze(videoOnly ? ["video"] : imageOnly ? ["image"] : audioOnly ? ["audio"] : includeVideo ? ["llm", "image", "audio", "video"] : ["llm", "image", "audio"]),
     excluded: Object.freeze(executesVideo ? ["seedance"] : ["video", "seedance"]),
   });
 }

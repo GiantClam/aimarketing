@@ -8,8 +8,9 @@ const configPath = resolve(process.env.AIMARKETING_REAL_PROVIDER_CONFIG ?? resol
 const config = assertRealProviderConfig(JSON.parse(await readFile(configPath, "utf8")));
 const videoOnly = process.argv.includes("--video-only") || process.env.AIMARKETING_PROVIDER_SMOKE_VIDEO_ONLY === "1";
 const audioOnly = process.argv.includes("--audio-only") || process.env.AIMARKETING_PROVIDER_SMOKE_AUDIO_ONLY === "1";
+const imageOnly = process.argv.includes("--image-only") || process.env.AIMARKETING_PROVIDER_SMOKE_IMAGE_ONLY === "1";
 const includeVideo = videoOnly || process.argv.includes("--include-video") || process.env.AIMARKETING_PROVIDER_SMOKE_INCLUDE_VIDEO === "1";
-const smokeScope = buildRealProviderSmokeScope({ includeVideo, videoOnly, audioOnly });
+const smokeScope = buildRealProviderSmokeScope({ includeVideo, videoOnly, audioOnly, imageOnly });
 
 function endpoint(baseUrl, path) {
   return `${String(baseUrl).replace(/\/+$/u, "")}/${String(path).replace(/^\/+/, "")}`;
@@ -149,6 +150,14 @@ const results = includeVideo && !configuredVideoProfile
   ? [{ label: "video", ok: false, error: "real_provider_config_non_seedance_video_profile_missing" }]
   : videoOnly
     ? []
+  : imageOnly
+    ? [await request("image", endpoint(config.image.baseUrl, "images/generations"), config.image.apiKey, {
+        model: config.image.model,
+        prompt: "A simple yellow square on a white background, no text",
+        size: "1024x1024",
+        n: 1,
+        response_format: "url",
+      })]
   : audioOnly
     ? [await requestAudio(configuredAudioProfile(config))]
   : [

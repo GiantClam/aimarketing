@@ -31,6 +31,7 @@
     "test:desktop-real-provider-config": "node --test scripts/real-provider-config.test.mjs",
     "test:desktop-real-provider-smoke": "node --test scripts/test-desktop-real-providers.test.mjs",
     "test:desktop-real-providers-video": "pnpm --filter @aimarketing/desktop test:real-providers:video",
+    "test:desktop-real-providers-image": "pnpm --filter @aimarketing/desktop test:real-providers:image",
     "test:desktop-bundle-boundaries": "node --test scripts/verify-desktop-bundle-boundaries.test.mjs",
     "test:desktop-network-boundary": "node --test scripts/verify-desktop-network-boundary.test.mjs",
     "test:desktop-packages": "node --test scripts/verify-desktop-packages.test.mjs",

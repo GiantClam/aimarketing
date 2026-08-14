@@ -77,6 +77,12 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
     assert.deepEqual(defaultReport.results.map((item) => item.label), ["llm", "image", "audio"]);
     assert.equal(defaultResult.stdout.includes("video-1"), false);
 
+    const imageOnlyResult = await runSmoke(configPath, port, ["--image-only"]);
+    assert.equal(imageOnlyResult.code, 0, `${imageOnlyResult.stdout}\n${imageOnlyResult.stderr}`);
+    const imageOnlyReport = JSON.parse(imageOnlyResult.stdout);
+    assert.deepEqual(imageOnlyReport.scope, { executed: ["image"], excluded: ["video", "seedance"] });
+    assert.deepEqual(imageOnlyReport.results.map((item) => item.label), ["image"]);
+
     const result = await runSmoke(configPath, port, ["--include-video"]);
     assert.equal(result.code, 0, `${result.stdout}\n${result.stderr}`);
     const report = JSON.parse(result.stdout);

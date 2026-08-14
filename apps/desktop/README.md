@@ -90,6 +90,6 @@ LanceDB 使用动态加载：主绿色包不携带约 283 MiB 的平台原生 `.
 
 工作流通过普通 `.workflow.json` 文件共享。导出内容不包含 API Key、Provider/模型绑定、数据库内部 ID、运行历史或绝对本机路径；在另一台机器导入时会迁移 schema、生成新的本地 workflow ID，并使用该机当前 Provider、项目目录、Vault 和索引路径。`app.db` 与每个 Vault 的 LanceDB 都是单机状态，不支持通过同步盘共享或并发打开；第二个实例会被单实例锁拒绝。
 
-真实 Provider 默认 smoke 使用 LLM/image/audio，并按验收要求排除 Seedance；当配置包含非 Seedance 视频 profile（例如上例的 RunningHub MiniMax-H3）时，可运行 `pnpm --filter @aimarketing/desktop test:real-providers:video` 验证真实视频提交、轮询与结果 schema。没有非 Seedance profile 时该命令会在发起任何 Provider 请求前 fail-closed。
+真实 Provider 默认 smoke 使用 LLM/image/audio，并按验收要求排除 Seedance；图片 Provider 也可用 `pnpm --filter @aimarketing/desktop test:real-providers:image` 单独复验，便于隔离上游可用性。当前 PPTOKEN 配置的 `/images/generations` 若返回 502，命令会在 3 次有界重试后 fail-closed，不会伪报成功。当配置包含非 Seedance 视频 profile（例如上例的 RunningHub MiniMax-H3）时，可运行 `pnpm --filter @aimarketing/desktop test:real-providers:video` 验证真实视频提交、轮询与结果 schema。没有非 Seedance profile 时该命令会在发起任何 Provider 请求前 fail-closed。
 
 仍需后续验收：真实 OpenCode+官方 ppt-master 端到端产物、LanceDB 独立运行时分发、首启原生安装门禁/干净 Win10/Win11 矩阵、完整 Workbench streaming UI 与线上 parity fixtures。当前未将这些诊断缺口误标为 v1 已完成。
