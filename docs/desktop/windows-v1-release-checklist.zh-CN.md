@@ -44,7 +44,7 @@
 - 最新 release EXE 重打包的 portable ZIP 以 8 秒有界启动探针重跑四种路径，均 `alive_then_stopped`；当前报告仍标记 `cleanVm=false`。
 - 路径矩阵现在用 `tar.exe` 快速解包，并在每个变体复制根文件、junction 公共 `_up_` 载荷；完整物理复制仍由 portable-copy verifier 的 SHA-256 指纹门禁覆盖。
 - 已修复 Windows PowerShell 对中文路径字面量的编码歧义，最新输出确认真实 `中文 用户` 路径（103 字符）通过启动探针；仍不替代干净 VM。
-- 真实生产 Writer：URL research、完整修订、图片恢复、质量盲测、生产 OpenCode Skill release/digest、billing idempotency 尚未完成；本机 fixture 浏览器 E2E 已通过但不替代生产验证。
+- 真实生产 Writer：URL research、完整修订、图片恢复、质量盲测、生产 OpenCode Skill release/digest、billing idempotency 尚未完成；本机 fixture 浏览器 E2E 已通过但不替代生产验证。2026-08-14 真实验证尝试已完成本地生产构建（425/425 routes）和 demo 登录，但 `/api/writer/availability` 返回 `enabled=false`、`reason=llm_api_key_missing`；当前环境没有 Railway OpenCode runtime/R2 生产配置，未伪报通过。
 - 网络边界：本机 bundle boundary 已通过；仍需在干净 VM 和真实 Provider 配置下确认除 runtime 源与用户 Provider 外无额外请求。
 - PPTOKEN 图片 provider：当前凭据下 `/v1/models` 返回 HTTP 200、共 15 个模型并包含 `gpt-image-2`。最新专用 `--mode=both` smoke 固定只请求 `gpt-image-2`、优先 `256x256`：直连生成返回 HTTP 200/schema、`imageCount=1`（约 29.9s），代理路径仍返回 `401 Invalid token`；随后桌面 `test:real-providers:image` 在同一低分辨率配置下首个请求 HTTP 200/schema。因任一路径成功即满足 gate，当前图片 provider 可用。后续若更换凭据仍需重跑该专用 smoke，且不需要验证目录中的其他图片模型。
 - MiniMax 音频 provider：`speech-2.8-hd` 与 `speech-2.8-turbo` 均在本地模型列表中；smoke 已补齐官方异步请求字段，当前 HD 音频与默认 LLM/image/audio smoke 均已达到 `Success`。保留历史 `Processing` 记录用于说明上游队列波动，但当前音频 gate 已通过。
