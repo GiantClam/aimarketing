@@ -17,6 +17,8 @@ test("runtime installer keeps the approved mirror order", async () => {
   const source = await readFile(scriptPath, "utf8");
   const mirrorOrder = ["$mirrors = @(\"aliyun\", \"tencent\", \"tsinghua\", \"official\")"];
   assert.ok(source.includes(mirrorOrder[0]));
+  assert.match(source, /AIMarketing \\u4e2d\\u6587 PPT probe/u);
+  assert.doesNotMatch(source, /AIMarketing 中文 PPT probe/u);
   assert.match(source, /Install-OpenCodePackage\s+-Offline:\(\[bool\]\$OfflineZip\)/u);
   assert.match(source, /offline_opencode_missing/u);
 });

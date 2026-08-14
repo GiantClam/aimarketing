@@ -275,7 +275,7 @@ presentation.slide_height = Inches(7.5)
 slide = presentation.slides.add_slide(presentation.slide_layouts[6])
 shape = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(10), Inches(1.2))
 run = shape.text_frame.paragraphs[0].add_run()
-run.text = "AIMarketing 中文 PPT probe"
+run.text = "AIMarketing \u4e2d\u6587 PPT probe"
 run.font.name = "Microsoft YaHei"
 descriptor, output = tempfile.mkstemp(suffix=".pptx")
 os.close(descriptor)

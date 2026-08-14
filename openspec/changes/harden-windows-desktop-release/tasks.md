@@ -23,6 +23,7 @@
 - [x] 2.1 定义 component/source/compatibility/hash/size/signature manifest schema
   - [x] `stage-desktop-runtime.ps1` 生成 Windows x64 manifest 元数据（manifestId、platform、architecture、compatibility、sha256/size、mirror sources、Ed25519 signature algorithm slot）；`install-desktop-runtime.ps1` 在任何下载、解压或替换前 fail-closed 校验 schema、目标架构、hash、size、来源和安全相对路径。
   - [x] 2026-08-14 `pnpm test:desktop-runtime-installer` 通过 18/18（含 `-ValidateOnly` 不触碰 install root、镜像逐级回退、last-known-good 回滚、离线 manifest 一致性和签名篡改拒绝）；PowerShell parser 检查 installer/stager 通过；真实生成 manifest 验证 `aimarketing-runtime-windows-x64-v1`、Windows/x64、sha256 和 ed25519 元数据。
+  - [x] 2026-08-14 the embedded PPT probe now uses Python Unicode escapes for its Chinese text, avoiding legacy PowerShell ANSI reinterpretation; the full 18/18 runtime installer suite and explicit PowerShell parser check pass.
 - [x] 2.2 实现阿里云 → 腾讯云 → 清华适用源 → 官方源路由
   - [x] 2026-08-13 `install-desktop-runtime.ps1` keeps the ordered source list for each manifest asset and continues to the next source after a bounded download/hash failure; installer regression asserts the exact order and all source URLs remain manifest-controlled.
 - [x] 2.3 实现断点续传、代理、磁盘检查、临时目录和原子安装
