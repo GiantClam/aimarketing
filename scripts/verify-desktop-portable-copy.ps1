@@ -36,7 +36,7 @@ try {
   $packageRoot = Get-ChildItem -LiteralPath $source -Directory | Select-Object -First 1
   if ($null -eq $packageRoot) { throw "desktop_portable_copy_package_root_missing" }
   Assert-File (Join-Path $packageRoot.FullName "portable.flag") "portable.flag"
-  foreach ($relative in @("AI Marketing.exe", "README.txt", "_up_/dist-runtime/host.mjs", "_up_/dist-runtime/knowledge.mjs", "_up_/dist-runtime/runtime/runtime-manifest.json", "_up_/dist-runtime/skills/ppt-master/SKILL.md")) {
+  foreach ($relative in @("AI Marketing.exe", "README.txt", "_up_/dist-runtime/host.mjs", "_up_/dist-runtime/knowledge.mjs", "_up_/dist-runtime/runtime/runtime-manifest.json", "_up_/dist-runtime/install-desktop-runtime.ps1", "_up_/dist-runtime/runtime-manifest-crypto.mjs", "_up_/dist-runtime/skills/ppt-master/SKILL.md")) {
     Assert-File (Join-Path $packageRoot.FullName ($relative -replace '/', '\')) $relative
   }
   Copy-Item -LiteralPath $packageRoot.FullName -Destination $target -Recurse -Force
@@ -44,7 +44,7 @@ try {
   Assert-File (Join-Path $copiedRoot "portable.flag") "copied portable.flag"
   $dataPath = Join-Path $copiedRoot "data"
   New-Item -ItemType Directory -Force -Path $dataPath | Out-Null
-  $runtimeEntries = @("_up_/dist-runtime/host.mjs", "_up_/dist-runtime/knowledge.mjs", "_up_/dist-runtime/runtime/runtime-manifest.json", "_up_/dist-runtime/skills/ppt-master/SKILL.md")
+  $runtimeEntries = @("_up_/dist-runtime/host.mjs", "_up_/dist-runtime/knowledge.mjs", "_up_/dist-runtime/runtime/runtime-manifest.json", "_up_/dist-runtime/install-desktop-runtime.ps1", "_up_/dist-runtime/runtime-manifest-crypto.mjs", "_up_/dist-runtime/skills/ppt-master/SKILL.md")
   $fingerprints = [ordered]@{}
   foreach ($relative in $runtimeEntries) {
     $sourcePath = Join-Path $packageRoot.FullName ($relative -replace '/', '\')
