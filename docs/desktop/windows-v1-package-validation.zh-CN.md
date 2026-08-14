@@ -71,14 +71,14 @@
 ## 启动冒烟
 
 - 从便携 ZIP 解压后确认 `portable.flag`、主 exe、host 资源和安装脚本均存在。
-- 从便携 ZIP 临时解压目录启动验证：`portable_flag=true`、`data_root_created=true`、`startup_alive=true`，本轮 PID 29060；内置 Node、OpenCode、LanceDB、字体和 embedding 描述文件均随包存在，进程保持存活 10 秒后显式停止。当前开发机仍会因缺少完整 Python PPT 依赖停留在窗口前安装器，未将其误报为端到端 PPT 通过。
+- 从便携 ZIP 临时解压目录启动验证：`portable_flag=true`、`data_root_created=true`、`startup_alive=true`；内置 Node、OpenCode、LanceDB、字体和 embedding 描述文件均随包存在，进程保持存活后显式停止。完整 Python/PPT 依赖由独立 Runtime ZIP 安装器补齐，并已通过真实 `ppt-master` OpenCode/PPTX/PowerPoint 验证；该开发机启动结果仍不替代干净 VM。
 - 从普通 ZIP 清单确认 `runtime/lancedb/node_modules/@lancedb/lancedb/dist/index.js`、`lancedb-win32-x64-msvc.node` 和离线 `runtime/embedding/local-hash-384-v1.json` 均存在，并以 staged runtime 完成真实写入/近邻查询。
 - 新 release 主 exe 启动 8 秒保持存活（`startup_alive=true`，本轮 PID 41092，随后显式停止），并通过窗口前的运行时门禁完成资源探针；停止后无残留桌面主进程。
 
 ## 回归命令
 
 - `pnpm --filter @aimarketing/desktop typecheck`
-- `pnpm --filter @aimarketing/desktop test`：54/54 通过（含首页云端 `home-shell → home-page-shell` 骨架、跨端共享图标渲染、SaaS-only 入口排除、能力中心目录/视频分组卡、launcher tab、设置深链单一面板、Obsidian `.gitignore`/隐藏路径过滤、资产库筛选/视图切换、任务中心聚合表、媒体终态 attempt、Provider source 配置状态、workflow host 崩溃重启、云端消息外层和侧栏几何契约、OpenCode 多轮 assistant 基线，以及本地 Skill 配置持久化）
+- `pnpm desktop:test`：127/127 通过（含首页/路由 parity、双语 i18n、模型列表优先级、多 Provider 隔离、媒体终态与恢复、OpenCode 多轮与崩溃恢复、Obsidian RAG、工作流导入导出、PPT/Writer 本地产物、离线网络边界和运行时门禁）
 - `pnpm --filter @aimarketing/workflow-core test`：12/12 通过（含 DAG 并行、节点失败事件、foreach 汇总）
 - `pnpm --filter @aimarketing/media-runtime test`：13/13 通过（含提交后取消、持久任务续 poll、流式下载原子落盘、媒体大小/MIME 校验）
 - `pnpm --filter @aimarketing/desktop exec cargo test --manifest-path src-tauri/Cargo.toml`：10/10 通过（含实例锁、窗口前运行时门禁与 WebView2 bootstrap 预检辅助测试）
@@ -87,4 +87,4 @@
 
 ## 当前限制
 
-证据来自非干净 Windows 11 开发机；未代替 Win10 22H2/干净 Win11、缺失 WebView2、真实 Provider、真实 OpenCode+ppt-master 端到端产物和 Authenticode 签名验收。工作流画布已补齐桌面侧的拖拽、平移、缩放、适配和连线可视化，但仍需在干净系统上做逐像素视觉回归，不能宣称与线上每个像素完全相同；本地文本模型依赖用户已有/配置的 loopback 服务，绿色包不携带大模型权重。LanceDB Windows native binding 使压缩包约 269 MB，属于本地语义 RAG 的固定运行时成本。MSI 不作为首版绿色发布目标，避免可选 WiX 工具阻断 NSIS/ZIP 发布。
+证据来自非干净 Windows 11 开发机；仍未代替 Win10 22H2/干净 Win11、真实缺失 WebView2、AuthentiCode/manifest 签名和生产 Writer runtime/R2 smoke 验收。真实 Provider 与真实 OpenCode+ppt-master 端到端产物已有独立证据；工作流画布已补齐桌面侧的拖拽、平移、缩放、适配和连线可视化，但仍需在干净系统上做逐像素视觉回归，不能宣称与线上每个像素完全相同；本地文本模型依赖用户已有/配置的 loopback 服务，绿色包不携带大模型权重。LanceDB Windows native binding 使压缩包约 269 MB，属于本地语义 RAG 的固定运行时成本。MSI 不作为首版绿色发布目标，避免可选 WiX 工具阻断 NSIS/ZIP 发布。
