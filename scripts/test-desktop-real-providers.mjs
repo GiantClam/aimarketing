@@ -11,6 +11,9 @@ const audioOnly = process.argv.includes("--audio-only") || process.env.AIMARKETI
 const imageOnly = process.argv.includes("--image-only") || process.env.AIMARKETING_PROVIDER_SMOKE_IMAGE_ONLY === "1";
 const includeVideo = videoOnly || process.argv.includes("--include-video") || process.env.AIMARKETING_PROVIDER_SMOKE_INCLUDE_VIDEO === "1";
 const smokeScope = buildRealProviderSmokeScope({ includeVideo, videoOnly, audioOnly, imageOnly });
+const imageSize = String(process.env.AIMARKETING_PROVIDER_IMAGE_SIZE ?? "256x256").trim();
+const supportedImageSizes = new Set(["256x256", "512x512", "1024x1024", "1536x1024", "1024x1536"]);
+if (!supportedImageSizes.has(imageSize)) throw new Error(`real_provider_image_size_unsupported:${imageSize}`);
 
 function endpoint(baseUrl, path) {
   return `${String(baseUrl).replace(/\/+$/u, "")}/${String(path).replace(/^\/+/, "")}`;
@@ -154,7 +157,7 @@ const results = includeVideo && !configuredVideoProfile
     ? [await request("image", endpoint(config.image.baseUrl, "images/generations"), config.image.apiKey, {
         model: config.image.model,
         prompt: "A simple yellow square on a white background, no text",
-        size: "1024x1024",
+        size: imageSize,
         n: 1,
         response_format: "url",
       })]
@@ -170,7 +173,7 @@ const results = includeVideo && !configuredVideoProfile
       await request("image", endpoint(config.image.baseUrl, "images/generations"), config.image.apiKey, {
         model: config.image.model,
         prompt: "A simple yellow square on a white background, no text",
-        size: "1024x1024",
+        size: imageSize,
         n: 1,
         response_format: "url",
       }),
