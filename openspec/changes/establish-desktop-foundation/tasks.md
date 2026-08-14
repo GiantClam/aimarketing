@@ -17,7 +17,7 @@
 - [x] 1.4 添加当前 Windows 开发/CI 环境的 shell build smoke，并产出可供 release matrix 复用的测试入口（Vite、Cargo、NSIS/MSI 已验证）
 
 **Quality Gate:**
-- [x] Desktop shell test、typecheck、static build 和 Rust build 通过 — 2026-08-14 desktop 96/96、TypeScript typecheck、Vite production build 和 Tauri Rust tests 32/32 通过。
+- [x] Desktop shell test、typecheck、static build 和 Rust build 通过 — 2026-08-14 current Desktop 113/113、TypeScript typecheck、Vite production build 和 Tauri Rust tests 39/39 通过。
 - [x] Desktop host 不导入 Next route、SaaS auth/billing 或云 clients — architecture/boundary tests remain green.
 
 ## 2. Implement paths, config and single-instance state
