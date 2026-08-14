@@ -50,6 +50,8 @@ test("desktop workflow and media entry points expose the configured model select
   assert.match(appSource, /<DesktopMediaWorkspace[\s\S]*?model=\{activeModel\} models=\{activeModels\}[\s\S]*?onModelChange=\{updateModel\}/);
   assert.match(appSource, /currentWorkflowDefinition\(\)[\s\S]*?const nodeProvider = providerForCapability\(config, capabilityForWorkflowAction\(node\.type\)\)/);
   assert.match(appSource, /hostWorkflowDefinition = bindWorkflowProviderDefaults\(rawWorkflowDefinition, config\)/);
+  assert.match(appSource, /selected\.path === "\/dashboard\/video" \|\| selected\.path === "\/dashboard\/workflows" \? workflowAction/);
+  assert.match(appSource, /const selectNode = \(nodeKey: string\)[\s\S]*?onWorkflowAction\(node\.type as WorkflowAction\)/);
 });
 
 test("model controls never reuse another capability profile's catalog", () => {
