@@ -67,6 +67,11 @@ test("video catalog runs the selected audio feature instead of the route default
   assert.equal(resolveDesktopRunAction("/dashboard/image-assistant", "image_generate", "writer"), "image_generate");
 });
 
+test("closing the active media tab keeps the next tab and capability profile aligned", () => {
+  const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  assert.match(appSource, /const closeFeature = \(featureId: MediaFeatureId\)[\s\S]*?const nextActive = next\.at\(-1\) \?\? null[\s\S]*?setActiveFeatureId\(nextActive\)[\s\S]*?const nextAction = nextActive \? actionByFeature\[nextActive\] : undefined[\s\S]*?if \(nextAction\) onWorkflowAction\(nextAction\)/u);
+});
+
 test("ordinary AI and home routes do not inherit a stale media action", () => {
   assert.equal(resolveDesktopRunAction("/dashboard/ai", null, "voice_synthesis"), "llm_generate");
   assert.equal(resolveDesktopRunAction("/dashboard/ai?entry=consulting-advisor", null, "video_generate"), "llm_generate");
