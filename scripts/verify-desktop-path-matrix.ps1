@@ -18,6 +18,25 @@ function Assert-File([string]$path, [string]$label) {
   if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "desktop_path_matrix_missing:${label}:$path" }
 }
 
+function Copy-PackageTree([string]$source, [string]$destination) {
+  # The portable-copy verifier already exercises a full physical copy. The
+  # path matrix only needs each EXE to resolve its payload through the tested
+  # Unicode/space/long/OneDrive-shaped path. Junctioning the common `_up_`
+  # payload keeps this matrix bounded instead of copying 270 MB four times;
+  # root files remain real copies in every variant.
+  New-Item -ItemType Directory -Force -Path $destination | Out-Null
+  foreach ($item in (Get-ChildItem -LiteralPath $source -Force)) {
+    $target = Join-Path $destination $item.Name
+    if ($item.PSIsContainer -and $item.Name -eq "_up_") {
+      New-Item -ItemType Junction -Path $target -Target $item.FullName | Out-Null
+    } elseif ($item.PSIsContainer) {
+      Copy-Item -LiteralPath $item.FullName -Destination $target -Recurse -Force
+    } else {
+      Copy-Item -LiteralPath $item.FullName -Destination $target -Force
+    }
+  }
+}
+
 function Stop-ProcessTree([int]$processId) {
   $children = Get-CimInstance Win32_Process | Where-Object { [int]$_.ParentProcessId -eq $processId }
   foreach ($child in $children) { Stop-ProcessTree ([int]$child.ProcessId) }
@@ -28,7 +47,13 @@ try {
   $source = Join-Path $work "source"
   $matrixRoot = Join-Path $work "matrix"
   New-Item -ItemType Directory -Force -Path $source, $matrixRoot | Out-Null
-  Expand-Archive -LiteralPath $zipPath -DestinationPath $source -Force
+  $tarCommand = Get-Command tar.exe -ErrorAction SilentlyContinue
+  if ($tarCommand) {
+    & $tarCommand.Source -xf $zipPath -C $source
+    if ($LASTEXITCODE -ne 0) { throw "desktop_path_matrix_extract_failed:${LASTEXITCODE}" }
+  } else {
+    Expand-Archive -LiteralPath $zipPath -DestinationPath $source -Force
+  }
   $packageRoot = Get-ChildItem -LiteralPath $source -Directory | Select-Object -First 1
   if ($null -eq $packageRoot) { throw "desktop_path_matrix_package_root_missing" }
   $variants = @(
@@ -42,7 +67,7 @@ try {
   $results = @()
   foreach ($variant in $variants) {
     $target = Join-Path $matrixRoot $variant.directory
-    Copy-Item -LiteralPath $packageRoot.FullName -Destination $target -Recurse -Force
+    Copy-PackageTree $packageRoot.FullName $target
     $executable = Join-Path $target "AI Marketing.exe"
     Assert-File $executable "${variant.id}:executable"
     Assert-File (Join-Path $target "portable.flag") "${variant.id}:portable_flag"

@@ -31,16 +31,30 @@ function File-Fingerprint([string]$path) {
   [ordered]@{ bytes = [int64]$item.Length; sha256 = $digest }
 }
 
+function Copy-PackageTree([string]$source, [string]$destination) {
+  # Keep this verifier a real physical copy, but use Windows' native parallel
+  # copier so the 270 MB portable archive remains bounded on large runtimes.
+  & robocopy $source $destination /E /R:0 /W:0 /MT:32 /NFL /NDL /NJH /NJS /NP | Out-Null
+  if ($LASTEXITCODE -ge 8) { throw "desktop_portable_copy_failed:${LASTEXITCODE}:$destination" }
+}
+
 try {
-  Expand-Archive -LiteralPath $zipPath -DestinationPath $source -Force
+  $tarCommand = Get-Command tar.exe -ErrorAction SilentlyContinue
+  if ($tarCommand) {
+    & $tarCommand.Source -xf $zipPath -C $source
+    if ($LASTEXITCODE -ne 0) { throw "desktop_portable_copy_extract_failed:${LASTEXITCODE}" }
+  } else {
+    Expand-Archive -LiteralPath $zipPath -DestinationPath $source -Force
+  }
   $packageRoot = Get-ChildItem -LiteralPath $source -Directory | Select-Object -First 1
   if ($null -eq $packageRoot) { throw "desktop_portable_copy_package_root_missing" }
   Assert-File (Join-Path $packageRoot.FullName "portable.flag") "portable.flag"
   foreach ($relative in @("AI Marketing.exe", "README.txt", "_up_/dist-runtime/host.mjs", "_up_/dist-runtime/knowledge.mjs", "_up_/dist-runtime/runtime/runtime-manifest.json", "_up_/dist-runtime/install-desktop-runtime.ps1", "_up_/dist-runtime/runtime-manifest-crypto.mjs", "_up_/dist-runtime/skills/ppt-master/SKILL.md")) {
     Assert-File (Join-Path $packageRoot.FullName ($relative -replace '/', '\')) $relative
   }
-  Copy-Item -LiteralPath $packageRoot.FullName -Destination $target -Recurse -Force
   $copiedRoot = Join-Path $target $packageRoot.Name
+  New-Item -ItemType Directory -Force -Path $copiedRoot | Out-Null
+  Copy-PackageTree $packageRoot.FullName $copiedRoot
   Assert-File (Join-Path $copiedRoot "portable.flag") "copied portable.flag"
   $dataPath = Join-Path $copiedRoot "data"
   New-Item -ItemType Directory -Force -Path $dataPath | Out-Null
