@@ -57,6 +57,12 @@ test("video catalog runs the selected audio feature instead of the route default
   assert.equal(resolveDesktopRunAction("/dashboard/image-assistant", "image_generate", "writer"), "image_generate");
 });
 
+test("ordinary AI and home routes do not inherit a stale media action", () => {
+  assert.equal(resolveDesktopRunAction("/dashboard/ai", null, "voice_synthesis"), "llm_generate");
+  assert.equal(resolveDesktopRunAction("/dashboard/ai?entry=consulting-advisor", null, "video_generate"), "llm_generate");
+  assert.equal(resolveDesktopRunAction("/dashboard", null, "music_generate"), "llm_generate");
+});
+
 test("workspace model and reasoning changes persist to the selected capability profile", () => {
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
   assert.match(appSource, /const persistProviderSelection = \(update: \(current: DesktopConfig\) => DesktopConfig\)/);

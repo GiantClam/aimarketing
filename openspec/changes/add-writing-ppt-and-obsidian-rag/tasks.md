@@ -39,7 +39,7 @@
 - [x] 中文、图片、16:9、可编辑文本 PPT smoke 通过
   - [x] 2026-08-14 Skill checker/export passed; independent `pptx-structure.json` passed with 3 slides, 56 editable text shapes, 435 editable CJK characters, one grouped picture, embedded media and Microsoft YaHei; PowerPoint 16.0 opened the deck and rendered 3 previews.
 - [x] 连续两轮修改保持同一项目/session 上下文
-  - [x] 2026-08-14 persisted OpenCode session IDs now flow through the shared `WorkbenchConversation` contract, Desktop Tauri conversation adapter, startup state restoration, and subsequent `session.create`; route/workbench regressions plus current `pnpm desktop:test` (118/118) and `pnpm desktop:build` pass.
+  - [x] 2026-08-14 persisted OpenCode session IDs now flow through the shared `WorkbenchConversation` contract, Desktop Tauri conversation adapter, startup state restoration, and subsequent `session.create`; route/workbench regressions plus current `pnpm desktop:test` (119/119) and `pnpm desktop:build` pass.
 - [x] Python 或字体损坏时启动门禁可自动修复
   - 2026-08-14 native bootstrap and Tauri `runtime_probe` now validate both the shared PPT Python capability probe and the `msyh.ttc` TrueType Collection/OpenType header plus table-count shape; corrupt font files fail readiness and route through the existing UTF-8 installer/repair path. `cargo check`, targeted Rust font-probe test, and the desktop runtime tests pass.
 
@@ -101,7 +101,7 @@
 - [x] 内置写入端口的并发冲突测试通过 — 2026-08-14 `apps/desktop/test/obsidian.test.ts` races two writes against the same base hash; the target-scoped write lock allows one commit and returns `obsidian_write_conflict` for the stale writer.
 - [x] Full Access 风险文案与实时工具事件均可见
   - [x] 2026-08-13 route regression covers the warning copy; existing host-session fixtures cover streamed tool events and emergency stop evidence.
-- [x] 全部新增测试、SaaS build 和 desktop build 通过 — 2026-08-14 current Desktop 118/118, desktop typecheck/build, root lint, root typecheck, and Next production build all passed.
+- [x] 全部新增测试、SaaS build 和 desktop build 通过 — 2026-08-14 current Desktop 119/119, desktop typecheck/build, root lint, root typecheck, and Next production build all passed.
 
 ## Completion Checklist
 

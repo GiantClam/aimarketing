@@ -7,5 +7,6 @@
  */
 export function resolveDesktopRunAction(path: string, routeAction: string | null, selectedAction: string): string {
   if (path === "/dashboard/video") return selectedAction;
+  if (path === "/dashboard" || path.startsWith("/dashboard/ai")) return "llm_generate";
   return routeAction ?? selectedAction;
 }
