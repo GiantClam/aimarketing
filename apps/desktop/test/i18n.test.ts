@@ -111,3 +111,12 @@ test("active Writer preview uses the bilingual copy contract", () => {
   assert.match(activeWriter, /writerCopy\.edit/u);
   assert.doesNotMatch(activeWriter, /label="AI RESPONSE"/u);
 });
+
+test("active conversation responses localize the assistant label", () => {
+  const source = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  const start = source.indexOf("function DesktopConversationWorkspace(");
+  const end = source.indexOf("type DesktopWriterCloudWorkspaceProps", start);
+  assert.ok(start >= 0 && end > start, "active conversation workspace source must be present");
+  const activeConversation = source.slice(start, end);
+  assert.match(activeConversation, /locale === "zh" \? "AI 回复" : "AI RESPONSE"/u);
+});
