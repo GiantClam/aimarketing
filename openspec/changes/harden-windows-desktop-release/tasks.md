@@ -123,6 +123,7 @@
   - [x] 2026-08-14 latest normal/portable ZIP preflight repeats the package, size and portable-copy stages and stops at `desktop_release_audit_manifest_signature_required`; unsigned release artifacts still produce no pass result.
   - [x] 2026-08-14 latest shared-core rerun: Writer Skill matrix 20/20, Writer asset runtime 5/5, Writer UI 6/6, cutover contract 2/2, shared boundary/provenance 8/8, media Provider parity 2/2, AI model catalog 21/21, AI routing 23/23, root `pnpm lint`, and production `pnpm build` (425/425 routes) all passed. Browser E2E, live SaaS regression, and production Writer smoke remain open.
   - [x] 2026-08-14 `pnpm test:e2e:writer:new-features` passed the local browser matrix: fixture-enabled Writer workspace readiness/session switching/cursor pagination/new session and generated turn completed, while the provider-missing scenario correctly reported `enabled=false` with `reason=llm_api_key_missing`; the run used no production Provider. Live SaaS regression and production Writer smoke remain open.
+  - [x] 2026-08-14 `pnpm test:e2e:ai-entry:model-selection:with-server` passed the shared online model-selection smoke: `/api/ai/models` returned the configured catalog, the selected model was tried first (`fallbackAttemptCount=0`), and `/api/ai/chat` returned `smoke test passed.` with provider model `deepseek-v4-pro`.
 - [x] 5.7 发布人工 ZIP 升级说明和已知限制，不启用应用内自动更新
   - [x] 普通/便携 ZIP README 均说明关闭应用后手动替换；便携模式先备份 `data/`；不自动下载或替换自身，并明确外部 Vault、系统 WebView2 和明文 API Key 边界。
 
