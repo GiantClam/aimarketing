@@ -240,6 +240,13 @@ export function parseImageInputs(prompt: string): Record<string, unknown> {
   };
 }
 
+export function localizedSkillInstruction(skillId: SkillId, locale: "zh" | "en") {
+  if (skillId === "auto") return "";
+  return locale === "zh"
+    ? `\n\n请使用本地 ${skillId} Skill 完成本轮任务，并保持所有产物写入当前项目目录。`
+    : `\n\nUse the local ${skillId} Skill for this task and keep all artifacts in the current project directory.`;
+}
+
 const desktopCapabilities: Array<{ id: WorkflowAction; title: string; description: string; route: string; kind: "text" | "media" | "knowledge" }> = [
   { id: "writer", title: "内容写作", description: "通过本地 OpenCode 与 Writer Skill 生成、改写和整理营销内容。", route: "/dashboard/writer", kind: "text" },
   { id: "ppt_generate", title: "AI PPT", description: "使用 OpenCode + ppt-master Skill 在项目目录生成可编辑 PPTX。", route: "/dashboard/ai?agent=executive-ppt", kind: "text" },
@@ -1626,7 +1633,7 @@ export function App() {
       }));
       const usesOpenCodeConversation = mode === "chat" || mode === "writer" || selected.path === "/dashboard";
       if (usesOpenCodeConversation) {
-        const skillInstruction = effectiveSkillId === "auto" ? "" : `\n\n请使用本地 ${effectiveSkillId} Skill 完成本轮任务，并保持所有产物写入当前项目目录。`;
+         const skillInstruction = localizedSkillInstruction(effectiveSkillId, locale);
         const openCodePrompt = `${runtimePrompt}${skillInstruction}`;
         const existingSessionId = conversations.find((item) => item.id === conversationId)?.opencode_session_id ?? undefined;
          const sessionResponse = await sendHostMessage({ version: 1, requestId: `${conversationId}:session`, type: "session.create", payload: { conversationId, ...(existingSessionId ? { sessionId: existingSessionId } : {}), workspacePath: config.workspacePath, model: selectedProvider.model, provider: selectedProvider } });

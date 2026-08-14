@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { WORKBENCH_HOME_GROUPS, WORKBENCH_MEDIA_FEATURES, WORKBENCH_ROUTE_MANIFEST } from "@aimarketing/workbench-ui";
 import { desktopCopy, desktopWriterCopy, detectDesktopLocale, homeGroupLabels, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaPlaceholderEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale } from "../src/i18n";
-import { buildWorkflowDefinition, localizeRuntimeStatus, parseImageInputs } from "../src/App";
+import { buildWorkflowDefinition, localizeRuntimeStatus, localizedSkillInstruction, parseImageInputs } from "../src/App";
 
 test("desktop locale follows Windows/WebView language by default", () => {
   assert.equal(detectDesktopLocale("zh-CN"), "zh");
@@ -174,4 +174,11 @@ test("new workflow definitions use the active locale for persisted node titles",
   const chinese = buildWorkflowDefinition("撰写", "writer", provider, {}, "zh");
   assert.deepEqual(english.nodes.map((node) => node.title), ["Input task", "Content writing", "Local artifact"]);
   assert.deepEqual(chinese.nodes.map((node) => node.title), ["输入任务", "内容写作", "本地产物"]);
+});
+
+test("OpenCode Skill instructions follow the active locale", () => {
+  assert.equal(localizedSkillInstruction("auto", "en"), "");
+  assert.equal(localizedSkillInstruction("content-writing", "zh"), "\n\n请使用本地 content-writing Skill 完成本轮任务，并保持所有产物写入当前项目目录。");
+  assert.equal(localizedSkillInstruction("content-writing", "en"), "\n\nUse the local content-writing Skill for this task and keep all artifacts in the current project directory.");
+  assert.doesNotMatch(localizedSkillInstruction("ppt-master", "en"), /[\u4e00-\u9fff]/u);
 });
