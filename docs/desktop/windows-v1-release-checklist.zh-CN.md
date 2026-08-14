@@ -26,7 +26,7 @@
 | 绿色 Runtime 安装/签名/离线回滚 | `pnpm test:desktop-runtime-installer`：19/19；真实 411,848,658-byte Runtime ZIP 在当前 Windows 主机离线完整安装/重复安装均返回 `status=ok`；完整 preflight 在未签名 manifest 处按预期 fail-closed |
 | Tauri Rust | `pnpm desktop:tauri:check` |
 | SaaS 生产构建 | `pnpm build`：425/425 routes |
-| 真实 Provider（当前状态） | LLM HTTP 200/schema；本地音频 profile 当前优先 `speech-2.8-hd`、同时保留 `speech-2.8-turbo` 可切换；补齐 MiniMax 官方异步请求字段后，audio-only HTTP 200/schema、88 次轮询 `Success`，默认非视频 smoke 同时通过 LLM/image/audio（音频第 63 次轮询成功）；MiniMax music-only `/music_generation` HTTP 200/schema（首个请求）；最新 video-only 非 Seedance `video-minimax-h3` 第 164 次轮询 RunningHub `SUCCESS`。PPTOKEN `/v1/models` HTTP 200 列出 15 个模型，专用 smoke 只验证 `gpt-image-2` 的低分辨率 `256x256`：直连生成 HTTP 200/schema、1 张图片（约 29.9s），代理路径仍为 `401 Invalid token`；随后桌面 `test:real-providers:image` 重试同样 HTTP 200/schema、首个请求成功。Seedance 未执行 |
+| 真实 Provider（当前状态） | 最新本机重跑（配置 `apps/desktop/real-providers.test.local.json`）：默认非视频 smoke 的 LLM/image/audio 均 HTTP 200/schema，MiniMax `speech-2.8-hd` 最终 `Success`；专用图片 smoke 固定只请求 PPTOKEN `gpt-image-2`、优先 `256x256`，HTTP 200/schema、首个请求成功。历史 music-only 与非 Seedance `video-minimax-h3` RunningHub smoke 仍保留为独立证据；Seedance 未执行。 |
 | Provider 配置契约 | `pnpm test:desktop-real-provider-config`；多 profile、能力默认值、模型列表通过 |
 | 依赖/许可证 | 官方 npm registry audit：0 critical、0 high、0 moderate、0 low；三个归档各 28/28 license evidence |
 | Writer Skill 矩阵 | `pnpm test:writer:skills`：20/20；十平台 fixture clarification/revision 已覆盖 |
