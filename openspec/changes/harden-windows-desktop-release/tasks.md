@@ -107,12 +107,14 @@
   - [x] 2026-08-14 `pnpm audit --registry=https://registry.npmjs.org` plus generated overrides now reports 0 critical, 0 high, 0 moderate and 0 low vulnerabilities; the release audit records dependency status `pass` and license evidence remains 28/28 packages per archive. Authenticode is still `not_available` on this host and manifests remain `development_unsigned`, so `-RequireAuthenticode` and `-RequireSignedManifest` continue to fail closed for release CI.
 - [ ] 5.6 执行 desktop 全量 E2E 与 SaaS lint/build/regression
   - [x] 2026-08-14 current Windows rerun passed Desktop tests 109/109, root `pnpm lint`, TypeScript, shared boundary/provenance, Provider parity, AI-entry regressions, desktop build/bundle/Tauri checks, and Next production build (425/425 routes). Full browser E2E and live SaaS regression remain open.
+  - [x] 2026-08-14 `desktop:release-preflight` now composes package, size, portable-copy, release-audit, signing, bundle-boundary and network-boundary gates; it fails closed on unsigned artifacts before any release result is emitted.
 - [x] 5.7 发布人工 ZIP 升级说明和已知限制，不启用应用内自动更新
   - [x] 普通/便携 ZIP README 均说明关闭应用后手动替换；便携模式先备份 `data/`；不自动下载或替换自身，并明确外部 Vault、系统 WebView2 和明文 API Key 边界。
 
 **Quality Gate:**
 - [ ] 全新 VM 可完成首个对话、PPT、媒体、工作流和 Vault 检索
 - [ ] 除 runtime 源和用户 Provider 外无其他网络请求
+  - [x] 2026-08-14 `desktop:verify-network-boundary` scans the built UI/host/knowledge bundles (742,989 UTF-8 bytes) and reports zero hardcoded external endpoints; local loopback and runtime-configured Provider indirection remain allowed. Clean-VM dynamic egress verification remains open.
 - [x] Desktop bundle 排除 Lead Hunter、auth、enterprise、billing、R2、Railway、Cloudflare、Dify/RAGFlow
   - [x] 2026-08-13 desktop architecture scan and shared-boundary/provenance tests reject these imports/routes; release EXE startup remained alive for 8 seconds and exited cleanly.
 
