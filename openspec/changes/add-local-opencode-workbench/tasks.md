@@ -68,7 +68,7 @@
 - [x] 4.1 组合共享 message parts、prompt input、conversation sidebar 和 stream UI — 2026-08-14 `DesktopConversationWorkspace`/shared Workbench UI composition and route regressions are covered by the existing desktop suite.
 - [x] 4.2 添加模型/Skill selector、artifact view、usage、settings 和 diagnostics routes — 2026-08-14 configured model/Skill controls, artifact/task/usage surfaces, settings warnings, and diagnostics actions are covered by WorkbenchClient and route tests.
 - [x] 4.3 删除 desktop bundle 中 login、registration、tenant、role、balance、subscription、Agent publishing、market 和 enterprise preset affordances
-  - Evidence (2026-08-14): `apps/desktop/test/routes.test.ts` scans the desktop source and shared route manifest for account/billing/publishing/enterprise-preset markers; the 108-test Desktop suite passes and `pnpm desktop:verify-bundle` reports zero violations across the built UI/host/knowledge bundles.
+  - Evidence (2026-08-14): `apps/desktop/test/routes.test.ts` scans the desktop source and shared route manifest for account/billing/publishing/enterprise-preset markers; the 113-test Desktop suite passes and `pnpm desktop:verify-bundle` reports zero violations across the built UI/host/knowledge bundles.
 - [x] 4.4 展示 Full Access 风险，但不展示权限模式选择或逐命令确认
 - [x] 4.4a UI displays Full Access and plaintext config risk without exposing a permission-mode selector.
 - [x] 4.2a Desktop home/chat inputs expose model, reasoning and local Skill selectors; task center exposes persisted usage/run state.
