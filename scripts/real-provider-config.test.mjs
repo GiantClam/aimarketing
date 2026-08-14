@@ -38,6 +38,8 @@ test("real provider smoke response checks are capability-specific and exclude vi
   assert.equal(hasExpectedSmokeResponse("image", { data: [{ url: "https://example.test/image.png" }] }), true);
   assert.equal(hasExpectedSmokeResponse("audio", { task_id: 42, status: "Success", base_resp: { status_code: 0 } }), true);
   assert.equal(hasExpectedSmokeResponse("audio", { task_id: 42, status: "Processing", base_resp: { status_code: 0 } }), false);
+  assert.equal(hasExpectedSmokeResponse("music", { data: { audio: "https://example.test/music.mp3" } }), true);
+  assert.equal(hasExpectedSmokeResponse("music", { data: { status: "Success" } }), false);
   assert.equal(hasExpectedSmokeResponse("video", { status: "SUCCESS", results: [{ url: "https://example.test/video.mp4" }] }), true);
   assert.equal(hasExpectedSmokeResponse("video", { output: { task_status: "SUCCEEDED", video_url: "https://example.test/video.mp4" } }), true);
   assert.equal(hasExpectedSmokeResponse("video", { status: "RUNNING", results: [] }), false);
@@ -46,6 +48,7 @@ test("real provider smoke response checks are capability-specific and exclude vi
   assert.deepEqual(buildRealProviderSmokeScope({ includeVideo: true }), { executed: ["llm", "image", "audio", "video"], excluded: ["seedance"] });
   assert.deepEqual(buildRealProviderSmokeScope({ videoOnly: true }), { executed: ["video"], excluded: ["seedance"] });
   assert.deepEqual(buildRealProviderSmokeScope({ audioOnly: true }), { executed: ["audio"], excluded: ["video", "seedance"] });
+  assert.deepEqual(buildRealProviderSmokeScope({ musicOnly: true }), { executed: ["music"], excluded: ["video", "seedance"] });
   assert.deepEqual(buildRealProviderSmokeScope({ imageOnly: true }), { executed: ["image"], excluded: ["video", "seedance"] });
 });
 

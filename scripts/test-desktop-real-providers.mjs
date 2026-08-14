@@ -9,8 +9,9 @@ const config = assertRealProviderConfig(JSON.parse(await readFile(configPath, "u
 const videoOnly = process.argv.includes("--video-only") || process.env.AIMARKETING_PROVIDER_SMOKE_VIDEO_ONLY === "1";
 const audioOnly = process.argv.includes("--audio-only") || process.env.AIMARKETING_PROVIDER_SMOKE_AUDIO_ONLY === "1";
 const imageOnly = process.argv.includes("--image-only") || process.env.AIMARKETING_PROVIDER_SMOKE_IMAGE_ONLY === "1";
+const musicOnly = process.argv.includes("--music-only") || process.env.AIMARKETING_PROVIDER_SMOKE_MUSIC_ONLY === "1";
 const includeVideo = videoOnly || process.argv.includes("--include-video") || process.env.AIMARKETING_PROVIDER_SMOKE_INCLUDE_VIDEO === "1";
-const smokeScope = buildRealProviderSmokeScope({ includeVideo, videoOnly, audioOnly, imageOnly });
+const smokeScope = buildRealProviderSmokeScope({ includeVideo, videoOnly, audioOnly, imageOnly, musicOnly });
 const imageSize = String(process.env.AIMARKETING_PROVIDER_IMAGE_SIZE ?? "256x256").trim();
 const supportedImageSizes = new Set(["256x256", "512x512", "1024x1024", "1536x1024", "1024x1536"]);
 if (!supportedImageSizes.has(imageSize)) throw new Error(`real_provider_image_size_unsupported:${imageSize}`);
@@ -161,6 +162,17 @@ async function requestAudio(profile) {
   return query ?? { label: "audio", ok: false, error: "audio_provider_smoke_no_query_result" };
 }
 
+async function requestMusic(profile) {
+  return request("music", endpoint(profile.baseUrl, "music_generation"), profile.apiKey, {
+    model: "music-2.6",
+    prompt: "A short upbeat instrumental desktop smoke track",
+    lyrics: "Bright morning light,\nA new idea takes flight",
+    output_format: "url",
+    audio_setting: { sample_rate: 44100, bitrate: 256000, format: "mp3" },
+    aigc_watermark: false,
+  });
+}
+
 function configuredAudioProfile(value) {
   const profileId = value?.defaults?.audio;
   const profile = profileId && value?.providers?.[profileId];
@@ -190,6 +202,8 @@ const results = includeVideo && !configuredVideoProfile
       })]
   : audioOnly
     ? [await requestAudio(configuredAudioProfile(config))]
+  : musicOnly
+    ? [await requestMusic(configuredAudioProfile(config))]
   : [
       await request("llm", endpoint(config.llm.baseUrl, "chat/completions"), config.llm.apiKey, {
         model: config.llm.model,

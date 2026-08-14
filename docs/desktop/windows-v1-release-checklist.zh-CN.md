@@ -26,7 +26,7 @@
 | 绿色 Runtime 安装/签名/离线回滚 | `pnpm test:desktop-runtime-installer`：19/19；真实 411,848,658-byte Runtime ZIP 在当前 Windows 主机离线完整安装/重复安装均返回 `status=ok`；完整 preflight 在未签名 manifest 处按预期 fail-closed |
 | Tauri Rust | `pnpm desktop:tauri:check` |
 | SaaS 生产构建 | `pnpm build`：425/425 routes |
-| 真实 Provider（当前状态） | LLM 历史 smoke HTTP 200/schema；音频-only smoke 使用 `audio-minimax/speech-2.8-turbo` 在第 12 次轮询达到 `Success`；最新 video-only smoke 使用 `video-minimax-h3` 在第 106 次轮询达到 RunningHub `SUCCESS`。图片 `gpt-image-2`、`256x256` 仍超时，PPTOKEN 代理专用检查返回 `401 Invalid token`；Seedance 未执行 |
+| 真实 Provider（当前状态） | LLM 历史 smoke HTTP 200/schema；音频-only smoke 第 12 次轮询 `Success`；MiniMax music-only `/music_generation` HTTP 200/schema（首个请求）；video-only `video-minimax-h3` 第 106 次轮询 RunningHub `SUCCESS`。图片 `gpt-image-2`、`256x256` 仍超时，PPTOKEN 代理专用检查返回 `401 Invalid token`；Seedance 未执行 |
 | Provider 配置契约 | `pnpm test:desktop-real-provider-config`；多 profile、能力默认值、模型列表通过 |
 | 依赖/许可证 | 官方 npm registry audit：0 critical、0 high、0 moderate、0 low；三个归档各 28/28 license evidence |
 | Writer Skill 矩阵 | `pnpm test:writer:skills`：20/20；十平台 fixture clarification/revision 已覆盖 |

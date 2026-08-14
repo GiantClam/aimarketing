@@ -89,6 +89,9 @@ export function hasExpectedSmokeResponse(label, response) {
     const statusCode = response.base_resp && typeof response.base_resp === "object" ? response.base_resp.status_code : undefined;
     return (requiredString(String(response.task_id ?? "")) && statusCode === 0 && ["Success", "Succeeded"].includes(String(response.status ?? ""))) || (isRecord(response.data) && requiredString(String(response.data.audio ?? "")));
   }
+  if (label === "music") {
+    return isRecord(response.data) && requiredString(String(response.data.audio ?? ""));
+  }
   if (label === "video") {
     const nestedData = isRecord(response.data) ? response.data : undefined;
     const output = isRecord(response.output) ? response.output : undefined;
@@ -164,10 +167,10 @@ export function defaultVideoPollBudget(profile, source) {
   return normalizedSource === "runninghub" && /hailuo|h3/iu.test(identity) ? 240 : 12;
 }
 
-export function buildRealProviderSmokeScope({ includeVideo = false, videoOnly = false, audioOnly = false, imageOnly = false } = {}) {
+export function buildRealProviderSmokeScope({ includeVideo = false, videoOnly = false, audioOnly = false, imageOnly = false, musicOnly = false } = {}) {
   const executesVideo = includeVideo || videoOnly;
   return Object.freeze({
-    executed: Object.freeze(videoOnly ? ["video"] : imageOnly ? ["image"] : audioOnly ? ["audio"] : includeVideo ? ["llm", "image", "audio", "video"] : ["llm", "image", "audio"]),
+    executed: Object.freeze(videoOnly ? ["video"] : imageOnly ? ["image"] : audioOnly ? ["audio"] : musicOnly ? ["music"] : includeVideo ? ["llm", "image", "audio", "video"] : ["llm", "image", "audio"]),
     excluded: Object.freeze(executesVideo ? ["seedance"] : ["video", "seedance"]),
   });
 }

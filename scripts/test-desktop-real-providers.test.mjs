@@ -45,6 +45,7 @@ function runSmoke(configPath, port, extraArgs = [], extraEnv = {}) {
 test("real provider smoke executes a configured non-Seedance video profile", async () => {
   const imageSizes = [];
   const imageModels = [];
+  const musicModels = [];
   const server = createServer((request, response) => {
     if (request.method === "POST" && request.url === "/v1/chat/completions") return json(response, { model: "chat", choices: [{ message: { content: "ok" } }], usage: {} });
     if (request.method === "POST" && request.url === "/v1/images/generations") {
@@ -61,6 +62,16 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
     }
     if (request.method === "POST" && request.url === "/v1/t2a_async_v2") return json(response, { task_id: 11 });
     if (request.method === "GET" && request.url?.startsWith("/v1/query/t2a_async_query_v2")) return json(response, { task_id: 11, status: "Success", base_resp: { status_code: 0 } });
+    if (request.method === "POST" && request.url === "/v1/music_generation") {
+      let body = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk) => { body += chunk; });
+      request.on("end", () => {
+        musicModels.push(JSON.parse(body).model);
+        json(response, { data: { audio: "https://127.0.0.1/audio.mp3", status: "Success" } });
+      });
+      return;
+    }
     if (request.method === "POST" && request.url === "/video") return json(response, { data: { taskId: "video-1", status: "QUEUED" } });
     if (request.method === "POST" && request.url === "/query") return json(response, { data: { taskId: "video-1", status: "SUCCESS", results: [{ url: "http://127.0.0.1/video.mp4" }] } });
     response.writeHead(404);
@@ -102,6 +113,12 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
     assert.deepEqual(imageOnlyReport.results.map((item) => item.label), ["image"]);
     assert.deepEqual(imageSizes.slice(1, 2), ["256x256"]);
     assert.deepEqual(imageModels.slice(1, 2), ["gpt-image-2"]);
+
+    const musicOnlyResult = await runSmoke(configPath, port, ["--music-only"]);
+    assert.equal(musicOnlyResult.code, 0, `${musicOnlyResult.stdout}\n${musicOnlyResult.stderr}`);
+    const musicOnlyReport = JSON.parse(musicOnlyResult.stdout);
+    assert.deepEqual(musicOnlyReport.scope, { executed: ["music"], excluded: ["video", "seedance"] });
+    assert.deepEqual(musicModels, ["music-2.6"]);
 
     const invalidSizeResult = await runSmoke(configPath, port, ["--image-only"], { AIMARKETING_PROVIDER_IMAGE_SIZE: "2048x2048" });
     assert.equal(invalidSizeResult.code, 1);

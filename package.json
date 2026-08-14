@@ -33,6 +33,7 @@
     "test:pptoken-image-connectivity": "node --test scripts/test-pptoken-image-connectivity.test.mjs",
     "test:desktop-real-providers-video": "pnpm --filter @aimarketing/desktop test:real-providers:video",
     "test:desktop-real-providers-image": "pnpm --filter @aimarketing/desktop test:real-providers:image",
+    "test:desktop-real-providers-music": "pnpm --filter @aimarketing/desktop test:real-providers:music",
     "test:desktop-bundle-boundaries": "node --test scripts/verify-desktop-bundle-boundaries.test.mjs",
     "test:desktop-network-boundary": "node --test scripts/verify-desktop-network-boundary.test.mjs",
     "test:desktop-packages": "node --test scripts/verify-desktop-packages.test.mjs",
