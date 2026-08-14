@@ -19,7 +19,7 @@
 
 | 范围 | 证据 |
 | --- | --- |
-| Desktop 单元/集成回归 | `pnpm desktop:test`：117/117 |
+| Desktop 单元/集成回归 | `pnpm desktop:test`：122/122 |
 | Desktop TypeScript、ESLint | `pnpm --filter @aimarketing/desktop typecheck`、根 `pnpm lint` |
 | Desktop Vite/runtime/Skill bundle | `pnpm desktop:build`、`pnpm desktop:verify-bundle` |
 | Runtime verifier/package contract | 最新 `_up_/dist-runtime` 和普通/便携 ZIP 均包含 `install-desktop-runtime.ps1`（22,816 bytes）与 `runtime-manifest-crypto.mjs`（2,651 bytes） |
