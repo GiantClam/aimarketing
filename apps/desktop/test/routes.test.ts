@@ -232,8 +232,8 @@ test("query-string Agent routes highlight the exact cloud navigation item", () =
 
 test("desktop writer and media surfaces retain the online control contract", () => {
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
-  assert.match(appSource, /平台：\$\{WORKBENCH_WRITER_PLATFORMS/);
-  assert.match(appSource, /内容类型/);
+  assert.match(appSource, /writerCopy\.platform/);
+  assert.match(appSource, /writerCopy\.content/);
   assert.match(appSource, /WORKBENCH_WRITER_PLATFORMS/);
   assert.match(appSource, /WORKBENCH_WRITER_CONTENT_TYPES/);
   assert.match(appSource, /WRITER RESPONSE/);

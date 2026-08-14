@@ -112,6 +112,12 @@ test("active Writer preview uses the bilingual copy contract", () => {
   assert.doesNotMatch(activeWriter, /label="AI RESPONSE"/u);
 });
 
+test("unreachable legacy Writer fallbacks cannot reintroduce untranslated UI", () => {
+  const source = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  assert.doesNotMatch(source, /function DesktopWriterWorkspace\(/u);
+  assert.doesNotMatch(source, /function DesktopWriterCloudWorkspaceLegacy\(/u);
+});
+
 test("active conversation responses localize the assistant label", () => {
   const source = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
   const start = source.indexOf("function DesktopConversationWorkspace(");
