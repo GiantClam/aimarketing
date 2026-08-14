@@ -17,7 +17,7 @@
 - [x] 1.4 添加当前 Windows 开发/CI 环境的 shell build smoke，并产出可供 release matrix 复用的测试入口（Vite、Cargo、NSIS/MSI 已验证）
 
 **Quality Gate:**
-- [x] Desktop shell test、typecheck、static build 和 Rust build 通过 — 2026-08-14 current Desktop 128/128、TypeScript typecheck、Vite production build 和 Tauri Rust tests 39/39 通过。
+- [x] Desktop shell test、typecheck、static build 和 Rust build 通过 — 2026-08-14 current Desktop 129/129、TypeScript typecheck、Vite production build 和 Tauri Rust tests 39/39 通过。
 - [x] Desktop host 不导入 Next route、SaaS auth/billing 或云 clients — architecture/boundary tests remain green.
 
 ## 2. Implement paths, config and single-instance state
@@ -102,7 +102,7 @@
 ## 6. Implement workflow-host RPC and process supervision
 
 - [x] 6.1 为 framing、correlation、反向请求、events、取消、最大消息和坏消息写 tests
-- Evidence (2026-08-14): Desktop RPC framing, host-session reverse-service, cancellation/event, oversized-frame and malformed-frame suites pass; the current Rust suite is 39/39 and Desktop suite is 128/128.
+- Evidence (2026-08-14): Desktop RPC framing, host-session reverse-service, cancellation/event, oversized-frame and malformed-frame suites pass; the current Rust suite is 39/39 and Desktop suite is 129/129.
   - [x] 6.1a Node workflow-host framing tests 覆盖 UTF-8 byte length、严格数字前缀、8 MiB 上限、坏 frame 后继续处理下一条合法请求；Rust host 额外覆盖 stdout 长度/UTF-8/JSON/v1 response schema 和超长行丢弃。
   - [x] 2026-08-14 reverse-RPC framing now has a separate `service_request`/`service_response` schema, Rust validation coverage, and a desktop source-level delegation regression.
   - [x] 2026-08-14 workflow repository create/status, ordered event append, and artifact registration now use typed reverse-service methods; direct Node-host workflow integration tests include a mock framed service responder.
@@ -117,7 +117,7 @@
 - [x] 6.6 验证 stdout 仅承载 framed RPC，日志使用 stderr→JSONL。✓ 2026-08-13 — Rust host 只转发长度、UTF-8、JSON 均验证且不超过 8 MiB 的 stdout frame；无效或超长行被丢弃并以结构化 runtime log 记录，stderr 仍单独写入 redacted per-run JSONL。
 
 **Quality Gate:**
-- [x] 并发/反向 RPC 与取消 tests 通过 — 2026-08-14 current Desktop 128/128, Rust 39/39, and workflow/foreach host integration paths passed with framed service responses.
+- [x] 并发/反向 RPC 与取消 tests 通过 — 2026-08-14 current Desktop 129/129, Rust 39/39, and workflow/foreach host integration paths passed with framed service responses.
 - [x] 主进程强杀后无孤儿子进程 — 2026-08-14 Windows Job Object regression terminates an assigned child tree and asserts the child cannot complete normally after job termination.
 - [x] workflow-host 未打开 SQLite/LanceDB — 2026-08-14 `runtime/host.ts` no longer imports RAG/Obsidian/LanceDB; the isolated `knowledge.mjs` service owns those modules and is supervised by a dedicated Job Object.
 
@@ -127,7 +127,7 @@
 - [x] 7.3a normal/portable 路径、配置恢复、单实例锁和已打包 EXE 启动 smoke 已在当前 Windows 环境验证。
 
 - [x] 7.1 运行 desktop unit/typecheck/build、Rust tests 和 bootstrap integration
-  - Evidence (2026-08-14): current Windows verification passed Desktop 128/128, desktop typecheck, desktop build, bootstrap integration 4/4, runtime installer/manifest 17/17, and Rust cargo tests 39/39. Clean Win10/Win11 VM coverage remains explicitly scoped to release hardening rather than this developer-machine gate.
+  - Evidence (2026-08-14): current Windows verification passed Desktop 129/129, desktop typecheck, desktop build, bootstrap integration 4/4, runtime installer/manifest 17/17, and Rust cargo tests 39/39. Clean Win10/Win11 VM coverage remains explicitly scoped to release hardening rather than this developer-machine gate.
 - [x] 7.2 运行共享 contract tests、Next lint/build 和 SaaS parity regression
   - [x] 2026-08-14 shared package contracts, boundary/provenance checks, root lint, Rust cargo check, Desktop build/typecheck, media Provider parity and Next production build (425/425 routes) all pass on Windows; SaaS behavior remains covered by the shared adapter and parity suites.
   - [x] 2026-08-13 shared boundary/provenance tests, workbench-client/SaaS adapter tests, media-runtime tests, root lint, root `tsc --noEmit` and Next production build passed; full SaaS parity and browser E2E remain open.

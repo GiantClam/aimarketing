@@ -781,7 +781,7 @@ function DesktopMediaWorkspaceBody({
     });
     return [activeFeature.title, prompt.trim(), ...configuredFields].filter(Boolean).join("\n");
   };
-  const buildImagePrompt = () => [prompt.trim(), imageSettings.referenceImages ? `参考素材：${imageSettings.referenceImages}` : "", `图片质量：${imageSettings.quality}`, `图片尺寸：${imageSettings.size}`, `生成数量：${imageSettings.count}`].filter(Boolean).join("\n");
+  const buildImagePrompt = () => [prompt.trim(), imageSettings.referenceImages ? `${mediaUi.references}: ${imageSettings.referenceImages}` : "", `${mediaUi.quality}: ${imageSettings.quality}`, `${mediaUi.size}: ${imageSettings.size}`, `${mediaUi.count}: ${imageSettings.count}`].filter(Boolean).join("\n");
   const localAttachmentPaths = (attachments ?? []).map((item) => item.relativePath ?? item.name);
   const videoFeatures = localizedFeatureCatalog.filter((feature) => feature.group === "video");
   const audioFeatures = localizedFeatureCatalog.filter((feature) => feature.group === "audio");

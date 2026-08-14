@@ -140,3 +140,15 @@ test("active media workspace keeps voice controls bilingual", () => {
   assert.doesNotMatch(activeMedia, />Default Chinese voice<\/button>/u);
   assert.doesNotMatch(activeMedia, />Default English voice<\/button>/u);
 });
+
+test("image prompt metadata follows the active media locale", () => {
+  const source = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  const start = source.indexOf("function DesktopMediaWorkspaceBody(");
+  const end = source.indexOf("type DesktopMediaWorkspaceProps", start);
+  assert.ok(start >= 0 && end > start, "active media workspace source must be present");
+  const activeMedia = source.slice(start, end);
+  assert.match(activeMedia, /\$\{mediaUi\.references\}: \$\{imageSettings\.referenceImages\}/u);
+  assert.match(activeMedia, /\$\{mediaUi\.quality\}: \$\{imageSettings\.quality\}/u);
+  assert.doesNotMatch(activeMedia, /参考素材：\$\{imageSettings\.referenceImages\}/u);
+  assert.doesNotMatch(activeMedia, /图片质量：\$\{imageSettings\.quality\}/u);
+});

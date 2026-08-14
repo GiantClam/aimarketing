@@ -78,7 +78,7 @@
 ## 回归命令
 
 - `pnpm --filter @aimarketing/desktop typecheck`
-- `pnpm desktop:test`：128/128 通过（含首页/路由 parity、双语 i18n、模型列表优先级、多 Provider 隔离、媒体终态与恢复、OpenCode 多轮与崩溃恢复、Obsidian RAG、工作流导入导出、PPT/Writer 本地产物、离线网络边界和运行时门禁）
+- `pnpm desktop:test`：129/129 通过（含首页/路由 parity、双语 i18n、模型列表优先级、多 Provider 隔离、媒体终态与恢复、OpenCode 多轮与崩溃恢复、Obsidian RAG、工作流导入导出、PPT/Writer 本地产物、离线网络边界和运行时门禁）
 - `pnpm --filter @aimarketing/workflow-core test`：12/12 通过（含 DAG 并行、节点失败事件、foreach 汇总）
 - `pnpm --filter @aimarketing/media-runtime test`：13/13 通过（含提交后取消、持久任务续 poll、流式下载原子落盘、媒体大小/MIME 校验）
 - `pnpm --filter @aimarketing/desktop exec cargo test --manifest-path src-tauri/Cargo.toml`：10/10 通过（含实例锁、窗口前运行时门禁与 WebView2 bootstrap 预检辅助测试）
