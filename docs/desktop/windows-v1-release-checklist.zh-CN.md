@@ -46,7 +46,7 @@
 - 已修复 Windows PowerShell 对中文路径字面量的编码歧义，最新输出确认真实 `中文 用户` 路径（103 字符）通过启动探针；仍不替代干净 VM。
 - 真实生产 Writer：URL research、完整修订、图片恢复、质量盲测、生产 OpenCode Skill release/digest、billing idempotency 尚未完成；本机 fixture 浏览器 E2E 已通过但不替代生产验证。
 - 网络边界：本机 bundle boundary 已通过；仍需在干净 VM 和真实 Provider 配置下确认除 runtime 源与用户 Provider 外无额外请求。
-- PPTOKEN 图片 provider：当前凭据下 `/v1/models` 可见 `gpt-image-2`（HTTP 200），但低分辨率生成重验没有成功响应（代理 401、Node/curl 直连均超时；curl 60 秒内 0 bytes）；更新/确认凭据后必须重新运行专用 smoke，且仍只需一个成功模型即可恢复该 gate。
+- PPTOKEN 图片 provider：当前凭据下 `/v1/models` 可见 `gpt-image-2`（HTTP 200），但低分辨率生成重验没有成功响应（代理 401、Node/curl 直连均超时；curl 60 秒内 0 bytes）；最新 `--image-only`、`256x256`、零重试、15 秒有界请求仍返回 `ok=false/schemaOk=false` 超时。更新/确认凭据后必须重新运行专用 smoke，且仍只需一个成功模型即可恢复该 gate。
 - MiniMax 音频 provider：完整 smoke 曾因 24 次预算结束于 `Processing`，但最新 audio-only smoke 将预算显式提高到 60 次后在第 12 次达到 `Success`；默认完整 smoke 可按需采用该有界预算重跑。
 - 按要求不执行 Seedance 视频生成测试；非 Seedance 视频能力已用真实 RunningHub MiniMax-Hailuo-H3 smoke 覆盖，视频任务提交/轮询失败仍会 fail-closed。
 - 最新非 Seedance video-only 结果：`video-minimax-h3` HTTP 200/schema、106 次轮询后 `SUCCESS`；Seedance 仍明确排除。
