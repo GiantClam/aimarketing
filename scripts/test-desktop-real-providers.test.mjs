@@ -44,6 +44,7 @@ function runSmoke(configPath, port, extraArgs = [], extraEnv = {}) {
 
 test("real provider smoke executes a configured non-Seedance video profile", async () => {
   const imageSizes = [];
+  const imageModels = [];
   const server = createServer((request, response) => {
     if (request.method === "POST" && request.url === "/v1/chat/completions") return json(response, { model: "chat", choices: [{ message: { content: "ok" } }], usage: {} });
     if (request.method === "POST" && request.url === "/v1/images/generations") {
@@ -51,7 +52,9 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
       request.setEncoding("utf8");
       request.on("data", (chunk) => { body += chunk; });
       request.on("end", () => {
-        imageSizes.push(JSON.parse(body).size);
+        const parsed = JSON.parse(body);
+        imageSizes.push(parsed.size);
+        imageModels.push(parsed.model);
         json(response, { data: [{ url: "http://127.0.0.1/image.png" }] });
       });
       return;
@@ -73,7 +76,7 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
   await writeFile(configPath, JSON.stringify({
     schemaVersion: 1,
     llm: { provider: "fixture", baseUrl: `${rootUrl}/v1`, [credentialField]: fixtureCredential, model: "chat" },
-    image: { provider: "fixture", baseUrl: `${rootUrl}/v1`, [credentialField]: fixtureCredential, model: "image" },
+    image: { provider: "pptoken", baseUrl: `${rootUrl}/v1`, [credentialField]: fixtureCredential, model: "catalog-listed-other-model" },
     providers: {
       text: profile("text", "openai-compatible", "chat", `${rootUrl}/v1`),
       image: profile("image", "openai-compatible", "image", `${rootUrl}/v1`),
@@ -89,6 +92,7 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
     assert.deepEqual(defaultReport.scope, { executed: ["llm", "image", "audio"], excluded: ["video", "seedance"] });
     assert.deepEqual(defaultReport.results.map((item) => item.label), ["llm", "image", "audio"]);
     assert.deepEqual(imageSizes.slice(0, 1), ["256x256"]);
+    assert.deepEqual(imageModels.slice(0, 1), ["gpt-image-2"]);
     assert.equal(defaultResult.stdout.includes("video-1"), false);
 
     const imageOnlyResult = await runSmoke(configPath, port, ["--image-only"]);
@@ -97,6 +101,7 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
     assert.deepEqual(imageOnlyReport.scope, { executed: ["image"], excluded: ["video", "seedance"] });
     assert.deepEqual(imageOnlyReport.results.map((item) => item.label), ["image"]);
     assert.deepEqual(imageSizes.slice(1, 2), ["256x256"]);
+    assert.deepEqual(imageModels.slice(1, 2), ["gpt-image-2"]);
 
     const invalidSizeResult = await runSmoke(configPath, port, ["--image-only"], { AIMARKETING_PROVIDER_IMAGE_SIZE: "2048x2048" });
     assert.equal(invalidSizeResult.code, 1);

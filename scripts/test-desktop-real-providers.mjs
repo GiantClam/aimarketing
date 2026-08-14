@@ -61,6 +61,10 @@ function providerSource(profile) {
   return String(profile.source ?? profile.provider ?? "").trim().toLowerCase();
 }
 
+function resolveImageSmokeModel(profile) {
+  return providerSource(profile) === "pptoken" ? "gpt-image-2" : profile.model;
+}
+
 function taskIdFromResponse(response) {
   const data = response?.data && typeof response.data === "object" ? response.data : undefined;
   const output = response?.output && typeof response.output === "object" ? response.output : undefined;
@@ -171,13 +175,14 @@ function configuredAudioProfile(value) {
 // bounded number of times. The default scope excludes video/Seedance; the
 // explicit --include-video path only selects a configured non-Seedance profile.
 const configuredVideoProfile = includeVideo ? resolveNonSeedanceVideoProfile(config) : undefined;
+const imageSmokeModel = resolveImageSmokeModel(config.image);
 const results = includeVideo && !configuredVideoProfile
   ? [{ label: "video", ok: false, error: "real_provider_config_non_seedance_video_profile_missing" }]
   : videoOnly
     ? []
   : imageOnly
     ? [await request("image", endpoint(config.image.baseUrl, "images/generations"), config.image.apiKey, {
-        model: config.image.model,
+        model: imageSmokeModel,
         prompt: "A simple yellow square on a white background, no text",
         size: imageSize,
         n: 1,
@@ -193,7 +198,7 @@ const results = includeVideo && !configuredVideoProfile
         temperature: 0,
       }),
       await request("image", endpoint(config.image.baseUrl, "images/generations"), config.image.apiKey, {
-        model: config.image.model,
+        model: imageSmokeModel,
         prompt: "A simple yellow square on a white background, no text",
         size: imageSize,
         n: 1,
