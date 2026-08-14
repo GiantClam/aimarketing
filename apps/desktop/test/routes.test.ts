@@ -52,6 +52,13 @@ test("desktop workflow and media entry points expose the configured model select
   assert.match(appSource, /hostWorkflowDefinition = bindWorkflowProviderDefaults\(rawWorkflowDefinition, config\)/);
 });
 
+test("model controls never reuse another capability profile's catalog", () => {
+  const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  assert.match(appSource, /configuredModelOptions\(\{ model, models \}\)/u);
+  assert.doesNotMatch(appSource, /models \?\? activeProviderModels/u);
+  assert.doesNotMatch(appSource, /activeProviderModels/u);
+});
+
 test("video catalog runs the selected audio feature instead of the route default", () => {
   assert.equal(resolveDesktopRunAction("/dashboard/video", "video_generate", "voice_synthesis"), "voice_synthesis");
   assert.equal(resolveDesktopRunAction("/dashboard/video", "video_generate", "music_generate"), "music_generate");

@@ -19,7 +19,6 @@ type WorkflowAction = "upload" | "text_input" | "file_create" | "writer" | "llm_
 type MediaFeatureId = WorkbenchMediaFeatureId;
 type EmbeddingConfig = { mode: "local" | "remote"; baseUrl?: string; model?: string; apiKey?: string };
 type DesktopConfig = { schemaVersion: 1; locale?: DesktopLocalePreference; workspacePath: string; obsidianVaultPath?: string; obsidianIndexPath?: string; embedding?: EmbeddingConfig; provider: DesktopProviderConfig & { model: string; skillId?: SkillId }; providers?: DesktopProviderProfiles; defaults?: DesktopProviderDefaults; runtime: { source: "system" | "private"; nodePath?: string; opencodePath?: string; pythonPath?: string; hostPath?: string; skillsPath?: string; fontsPath?: string; lancedbPath?: string; embeddingPath?: string }; offlineRuntimeZipPath?: string };
-let activeProviderModels: readonly string[] = [];
 let activeMediaProviderConfigured = false;
 let openWorkflowProviderSettings = () => undefined;
 function embeddingPayload(config: DesktopConfig): EmbeddingConfig {
@@ -93,7 +92,7 @@ function ModelControls({
   const activeLocale = locale === "zh" && typeof document !== "undefined" && document.documentElement.lang === "en" ? "en" : locale;
   const copy = activeLocale === "en" ? { aria: "Model and reasoning settings", automatic: "Auto", writing: "Content writing", analysis: "Marketing analysis", model: showSkill ? "Model" : "Standard", skill: "Skill", reasoning: "Reasoning", unconfigured: "Model not configured", low: "Low", medium: "Medium", high: "High" } : { aria: "模型与推理设置", automatic: "自动", writing: "内容写作", analysis: "营销分析", model: showSkill ? "模型" : "标准", skill: "Skill", reasoning: "推理", unconfigured: "未配置模型", low: "低", medium: "中", high: "高" };
   const providerLabel = providerSource && providerSource !== "local" ? providerSource : formatWorkbenchModelLabel(model, { zh: "本地模型", en: "Local model" }, activeLocale);
-  const configuredModels = configuredModelOptions({ model, models: models ?? activeProviderModels });
+  const configuredModels = configuredModelOptions({ model, models });
   const modelOptions = configuredModels.length ? configuredModels : (model ? [model] : []);
   return <div className="model-controls" aria-label={copy.aria}>
     {showSkill ? <label className="model-select-control"><span>{copy.skill}</span><select value={skillId} onChange={(event) => onSkillChange(event.target.value as SkillId)}><option value="auto">{copy.automatic}</option><option value="content-writing">{copy.writing}</option><option value="marketing-analysis">{copy.analysis}</option><option value="ppt-master">ppt-master</option><option value="obsidian-rag">Obsidian RAG</option></select></label> : null}
@@ -1112,14 +1111,9 @@ export function App() {
 
   useEffect(() => { configRef.current = config; }, [config]);
   useEffect(() => { activePathRef.current = activePath; }, [activePath]);
-  // Legacy/retained surfaces consume ModelControls indirectly. Refresh once
-  // after a configured list changes so they all observe the same catalog.
-  const [, setModelCatalogRevision] = useState(0);
   useEffect(() => {
-    activeProviderModels = activeModels ?? [];
     activeMediaProviderConfigured = ["image", "video", "audio"].some((capability) => isMediaProviderConfigured(providerForCapability(config, capability as "image" | "video" | "audio")));
-    setModelCatalogRevision((revision) => revision + 1);
-  }, [activeModels, config.provider, config.providers, config.defaults]);
+  }, [config.provider, config.providers, config.defaults]);
   useEffect(() => { activeRunRef.current = activeRunId; }, [activeRunId]);
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
 
