@@ -146,6 +146,7 @@ const directBody = {
   background: "auto",
   output_format: "png",
   moderation: "auto",
+  response_format: "url",
 }
 
 const proxyBody = {

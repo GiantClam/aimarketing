@@ -54,6 +54,7 @@ test("PPTOKEN connectivity smoke uses gpt-image-2 at low resolution", async () =
     assert.equal(result.code, 0, `${result.stdout}\n${result.stderr}`)
     assert.equal(requestBody.model, "gpt-image-2")
     assert.equal(requestBody.size, "256x256")
+    assert.equal(requestBody.response_format, "url")
     assert.match(result.stdout, /"imageSize":"256x256"/u)
     assert.match(result.stdout, /"success":true/u)
     assert.equal(result.stdout.includes("fixture-pptoken-key"), false)
