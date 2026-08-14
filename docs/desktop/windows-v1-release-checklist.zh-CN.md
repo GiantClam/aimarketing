@@ -26,7 +26,7 @@
 | 绿色 Runtime 安装/签名/离线回滚 | `pnpm test:desktop-runtime-installer`：19/19；真实 411,848,658-byte Runtime ZIP 在当前 Windows 主机离线完整安装/重复安装均返回 `status=ok`；完整 preflight 在未签名 manifest 处按预期 fail-closed |
 | Tauri Rust | `pnpm desktop:tauri:check` |
 | SaaS 生产构建 | `pnpm build`：425/425 routes |
-| 真实 Provider | 最新默认 smoke（`apps/desktop/real-providers.test.local.json`，图片优先 `256x256`）：LLM HTTP 200/schema（1 次）、`gpt-image-2` HTTP 200/schema（1 次）、MiniMax audio HTTP 200/schema（第 3 次轮询 `Success`）；脱敏输出为 `scope.executed=[llm,image,audio]`、`scope.excluded=[video,seedance]`。最终 video-only smoke 仅选择非 Seedance `video-minimax-h3`，RunningHub HTTP 200/schema、122 次轮询后 `SUCCESS`；Seedance 明确未执行 |
+| 真实 Provider（当前状态） | 文本与音频历史 smoke 曾通过；最新 PPTOKEN-only 重验仅调用 `gpt-image-2`、`256x256`，代理返回 HTTP 401 `Invalid token`，直连超时且无 HTTP 响应，因此当前图片 gate 为 fail-closed/未通过。其他图片模型、视频和 Seedance 未执行；非 Seedance `video-minimax-h3` 的历史成功证据仍保留 |
 | Provider 配置契约 | `pnpm test:desktop-real-provider-config`；多 profile、能力默认值、模型列表通过 |
 | 依赖/许可证 | 官方 npm registry audit：0 critical、0 high、0 moderate、0 low；三个归档各 28/28 license evidence |
 | Writer Skill 矩阵 | `pnpm test:writer:skills`：20/20；十平台 fixture clarification/revision 已覆盖 |
@@ -46,6 +46,7 @@
 - 已修复 Windows PowerShell 对中文路径字面量的编码歧义，最新输出确认真实 `中文 用户` 路径（103 字符）通过启动探针；仍不替代干净 VM。
 - 真实生产 Writer：URL research、完整修订、图片恢复、质量盲测、生产 OpenCode Skill release/digest、billing idempotency 尚未完成；本机 fixture 浏览器 E2E 已通过但不替代生产验证。
 - 网络边界：本机 bundle boundary 已通过；仍需在干净 VM 和真实 Provider 配置下确认除 runtime 源与用户 Provider 外无额外请求。
+- PPTOKEN 图片 provider：当前凭据下 `gpt-image-2` 的低分辨率重验没有成功响应（代理 401、直连超时）；更新/确认凭据后必须重新运行专用 smoke，且仍只需一个成功模型即可恢复该 gate。
 - 按要求不执行 Seedance 视频生成测试；非 Seedance 视频能力已用真实 RunningHub MiniMax-Hailuo-H3 smoke 覆盖，视频任务提交/轮询失败仍会 fail-closed。
 
 签名、VM 和生产 smoke 证据补齐后，重新运行 `pnpm desktop:release-audit -PnpmAuditJson <approved-audit.json>`，并在此清单追加签名状态、测试矩阵和最终发布 hash。
