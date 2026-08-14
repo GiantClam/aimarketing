@@ -120,3 +120,17 @@ test("active conversation responses localize the assistant label", () => {
   const activeConversation = source.slice(start, end);
   assert.match(activeConversation, /locale === "zh" \? "AI 回复" : "AI RESPONSE"/u);
 });
+
+test("active media workspace keeps voice controls bilingual", () => {
+  const source = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  const start = source.indexOf("function DesktopMediaWorkspaceBody(");
+  const end = source.indexOf("type DesktopMediaWorkspaceProps", start);
+  assert.ok(start >= 0 && end > start, "active media workspace source must be present");
+  const activeMedia = source.slice(start, end);
+  assert.match(activeMedia, /eyebrow: "CONTENT CREATION"/u);
+  assert.match(activeMedia, /eyebrow: "内容创作"/u);
+  assert.match(activeMedia, /defaultChineseVoice: "默认中文音色"/u);
+  assert.match(activeMedia, /defaultEnglishVoice: "默认英文音色"/u);
+  assert.doesNotMatch(activeMedia, />Default Chinese voice<\/button>/u);
+  assert.doesNotMatch(activeMedia, />Default English voice<\/button>/u);
+});
