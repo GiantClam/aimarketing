@@ -11,6 +11,7 @@ import { applyConfiguredMediaModels } from "./media-model-options";
 import { createSessionRecoverySnapshot } from "./session-recovery";
 import { sanitizeWorkflowDefinitionForStorage } from "./workflow-storage";
 import { parseWorkflowImportText, serializeWorkflowExport } from "./workflow-portability";
+import { resolveDesktopRunAction } from "./route-actions";
 
 type WorkspaceMode = "chat" | "writer" | "workflow" | "library";
 type SkillId = "auto" | "content-writing" | "marketing-analysis" | "ppt-master" | "obsidian-rag";
@@ -1634,7 +1635,7 @@ export function App() {
     const userPrompt = `${basePrompt || (locale === "zh" ? "请处理我提供的本地附件" : "Please process the local attachments I provided")}${attachmentContext}`;
     if (!userPrompt) return;
     const runtimePrompt = `${userPrompt}${knowledgeContext}`;
-    const actionId = routeAction ?? workflowAction;
+    const actionId = resolveDesktopRunAction(selected.path, routeAction, workflowAction) as WorkflowAction;
     const resolvedMediaInputs = mediaInputs ?? (actionId === "image_generate" ? parseImageInputs(userPrompt) : undefined);
     const runId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
     const conversationId = activeConversationId ?? `conversation-${runId}`;

@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { formatWorkbenchModelLabel, WORKBENCH_CHAT_QUICK_PROMPTS, WORKBENCH_HOME_COPY, WORKBENCH_HOME_GROUPS, WORKBENCH_ROUTE_MANIFEST, WORKBENCH_WRITER_QUICK_PROMPTS } from "@aimarketing/workbench-ui";
 import { configuredModelOptions, isMediaProviderConfigured, preferredConfiguredModel, requiresConfiguredProviderForWorkflowAction } from "../src/provider-config";
+import { resolveDesktopRunAction } from "../src/route-actions";
 
 test("desktop routes consume the retained online dashboard manifest", () => {
   const paths = WORKBENCH_ROUTE_MANIFEST.map((route) => route.path);
@@ -48,6 +49,12 @@ test("desktop workflow and media entry points expose the configured model select
   assert.match(appSource, /<DesktopMediaWorkspace[\s\S]*?model=\{activeModel\} models=\{activeModels\}[\s\S]*?onModelChange=\{updateModel\}/);
   assert.match(appSource, /currentWorkflowDefinition\(\)[\s\S]*?const nodeProvider = providerForCapability\(config, capabilityForWorkflowAction\(node\.type\)\)/);
   assert.match(appSource, /hostWorkflowDefinition = bindWorkflowProviderDefaults\(rawWorkflowDefinition, config\)/);
+});
+
+test("video catalog runs the selected audio feature instead of the route default", () => {
+  assert.equal(resolveDesktopRunAction("/dashboard/video", "video_generate", "voice_synthesis"), "voice_synthesis");
+  assert.equal(resolveDesktopRunAction("/dashboard/video", "video_generate", "music_generate"), "music_generate");
+  assert.equal(resolveDesktopRunAction("/dashboard/image-assistant", "image_generate", "writer"), "image_generate");
 });
 
 test("workspace model and reasoning changes persist to the selected capability profile", () => {

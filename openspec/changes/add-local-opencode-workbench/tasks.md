@@ -4,7 +4,7 @@
 - [x] 1.3a Local chat service contract exposes only host-mediated OpenCode execution; no direct text-model fallback is registered.
 
 - [x] 1.1 验证三个上游 change 的完成状态和接口版本
-  - [x] 2026-08-14 upstream status is rechecked: `extract-shared-application-core` 66/66, `establish-desktop-foundation` 86/87 (archive marker only), and `add-writing-ppt-and-obsidian-rag` 79/80 (archive marker only). Shared interfaces are runtime contract v1, workflow schema v2 (legacy v1 migration retained), and package version 0.1.0; current Desktop 117/117 and build gates pass.
+  - [x] 2026-08-14 upstream status is rechecked: `extract-shared-application-core` 66/66, `establish-desktop-foundation` 86/87 (archive marker only), and `add-writing-ppt-and-obsidian-rag` 79/80 (archive marker only). Shared interfaces are runtime contract v1, workflow schema v2 (legacy v1 migration retained), and package version 0.1.0; current Desktop 118/118 and build gates pass.
 - [x] 1.2 添加 architecture tests，禁止 workbench 导入 Next API、SaaS auth/billing、R2、Railway、Cloudflare、Dify 或 RAGFlow
   - [x] 2026-08-13 `apps/desktop/test/architecture-boundaries.test.ts` scans desktop source/runtime for Next, SaaS infrastructure, `ai-sdk-native`, and direct chat-completions imports.
 - [x] 1.3 添加失败测试，证明普通桌面对话不能选择 `ai-sdk-native` 或直接文本 Provider runtime
@@ -79,7 +79,7 @@
   - [x] 2026-08-13 Obsidian index/rebuild and search now also use typed `WorkbenchClient.knowledge.index/search` adapters, including host-start, response correlation, timeout and normalized citation mapping.
 - [x] 4.5 实时展示文本/工具步骤和 emergency stop — 2026-08-14 WorkbenchClient event tests and the live desktop run path cover streamed text/tool events, cancellation, and terminal state rendering.
 - [x] 4.5a 2026-08-13 `workbench-client.test.ts` drives the real Desktop WorkbenchClient adapter with malformed frames, text deltas, tool events, usage, workflow/media cancellation and terminal completion; the adapter emits normalized events and ignores malformed payloads.
-- [x] 4.6 添加 streaming、长工具输出、取消、重启、artifact 和缺配置 UI tests — 2026-08-14 `apps/desktop/test/workbench-client.test.ts`, `opencode-serve.test.ts`, `routes.test.ts`, `rpc.test.ts`, and `media-runtime.test.ts` cover streamed text/tool output, oversized frames, cancellation, crash/restart recovery, artifact routing, and configuration-required UI states; the current Desktop suite passes 117/117.
+- [x] 4.6 添加 streaming、长工具输出、取消、重启、artifact 和缺配置 UI tests — 2026-08-14 `apps/desktop/test/workbench-client.test.ts`, `opencode-serve.test.ts`, `routes.test.ts`, `rpc.test.ts`, and `media-runtime.test.ts` cover streamed text/tool output, oversized frames, cancellation, crash/restart recovery, artifact routing, and configuration-required UI states; the current Desktop suite passes 118/118.
 - [x] 4.6a 2026-08-13 WorkbenchClient event tests cover streaming/cancel/error boundaries; existing RPC 8 MiB frame tests, fake OpenCode crash/restart E2E, artifact routing and missing-Provider UI regressions cover the remaining adapter contracts without video real-provider calls.
 
 **Quality Gate:**
@@ -122,9 +122,9 @@
 - [x] 6.4 扫描 bundle 和网络日志，确认无排除的 SaaS 模块/端点
   - [x] 2026-08-13 `desktop:verify-bundle` scans Vite assets and the bundled workflow host for excluded SaaS routes/capability markers and cloud-only integrations; the scanner intentionally permits the approved Full Access warning copy.
 - [x] 6.5 运行共享 tests、desktop TS/Rust tests/build、root lint、Next build 和 SaaS regressions
-  - [x] 2026-08-14 current verification passed all 15 shared package test files, Desktop 117/117 tests, desktop typecheck/build, Rust `cargo check`, shared boundary/provenance scans, root lint, media Provider parity, and Next production build (425/425 routes). Clean VM, full browser E2E and current image Provider recovery remain release-hardening evidence rather than this local workbench gate.
+  - [x] 2026-08-14 current verification passed all 15 shared package test files, Desktop 118/118 tests, desktop typecheck/build, Rust `cargo check`, shared boundary/provenance scans, root lint, media Provider parity, and Next production build (425/425 routes). Clean VM, full browser E2E and current image Provider recovery remain release-hardening evidence rather than this local workbench gate.
 
 **Completion Quality Gate:**
 - [x] 三个 capability specs 全部满足 — local OpenCode-only routing, WorkbenchClient UI, session recovery, artifacts and usage persistence are covered by the Desktop contract suite and browser regression.
-- [x] 测试和诊断证据完整 — Desktop 117/117, OpenCode serve/session/RPC, boundary/provenance, typecheck/build, and Writer browser fixture/provider-missing evidence are recorded; clean VM and production live-provider gates remain in hardening.
+- [x] 测试和诊断证据完整 — Desktop 118/118, OpenCode serve/session/RPC, boundary/provenance, typecheck/build, and Writer browser fixture/provider-missing evidence are recorded; clean VM and production live-provider gates remain in hardening.
 - [ ] Ready for `openspec-archive add-local-opencode-workbench`
