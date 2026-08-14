@@ -26,7 +26,7 @@
 | 绿色 Runtime 安装/签名/离线回滚 | `pnpm test:desktop-runtime-installer`：19/19；真实 411,848,658-byte Runtime ZIP 在当前 Windows 主机离线完整安装/重复安装均返回 `status=ok`；完整 preflight 在未签名 manifest 处按预期 fail-closed |
 | Tauri Rust | `pnpm desktop:tauri:check` |
 | SaaS 生产构建 | `pnpm build`：425/425 routes |
-| 真实 Provider（当前状态） | LLM 历史 smoke HTTP 200/schema；最新音频-only smoke 使用 `audio-minimax/speech-2.8-turbo` 在第 12 次轮询达到 `Success`。图片 `gpt-image-2`、`256x256` 仍超时，PPTOKEN 代理专用检查返回 `401 Invalid token`；其他图片模型、视频和 Seedance 未执行；非 Seedance `video-minimax-h3` 的历史成功证据仍保留 |
+| 真实 Provider（当前状态） | LLM 历史 smoke HTTP 200/schema；音频-only smoke 使用 `audio-minimax/speech-2.8-turbo` 在第 12 次轮询达到 `Success`；最新 video-only smoke 使用 `video-minimax-h3` 在第 106 次轮询达到 RunningHub `SUCCESS`。图片 `gpt-image-2`、`256x256` 仍超时，PPTOKEN 代理专用检查返回 `401 Invalid token`；Seedance 未执行 |
 | Provider 配置契约 | `pnpm test:desktop-real-provider-config`；多 profile、能力默认值、模型列表通过 |
 | 依赖/许可证 | 官方 npm registry audit：0 critical、0 high、0 moderate、0 low；三个归档各 28/28 license evidence |
 | Writer Skill 矩阵 | `pnpm test:writer:skills`：20/20；十平台 fixture clarification/revision 已覆盖 |
@@ -49,5 +49,6 @@
 - PPTOKEN 图片 provider：当前凭据下 `/v1/models` 可见 `gpt-image-2`（HTTP 200），但低分辨率生成重验没有成功响应（代理 401、直连超时）；更新/确认凭据后必须重新运行专用 smoke，且仍只需一个成功模型即可恢复该 gate。
 - MiniMax 音频 provider：完整 smoke 曾因 24 次预算结束于 `Processing`，但最新 audio-only smoke 将预算显式提高到 60 次后在第 12 次达到 `Success`；默认完整 smoke 可按需采用该有界预算重跑。
 - 按要求不执行 Seedance 视频生成测试；非 Seedance 视频能力已用真实 RunningHub MiniMax-Hailuo-H3 smoke 覆盖，视频任务提交/轮询失败仍会 fail-closed。
+- 最新非 Seedance video-only 结果：`video-minimax-h3` HTTP 200/schema、106 次轮询后 `SUCCESS`；Seedance 仍明确排除。
 
 签名、VM 和生产 smoke 证据补齐后，重新运行 `pnpm desktop:release-audit -PnpmAuditJson <approved-audit.json>`，并在此清单追加签名状态、测试矩阵和最终发布 hash。
