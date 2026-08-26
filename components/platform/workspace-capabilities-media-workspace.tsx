@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   AudioLines,
-  ChevronRight,
   Download,
   Loader2,
   Mic,
@@ -12,9 +11,9 @@ import {
   Square,
   Upload,
   Video,
-  X,
 } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { WorkbenchCapabilityCenter, type WorkbenchCapabilityCenterGroup } from "@aimarketing/workbench-ui"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -78,7 +77,7 @@ type MediaTaskResult = {
   title?: string | null
 }
 
-type MediaTaskQuery = {
+export type MediaTaskQuery = {
   runId?: number
   capabilitySlug?: string
   featureId?: string
@@ -501,6 +500,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
   capabilityStates,
   assetOptions,
   initialFeatureId,
+  initialTask,
   showHero = true,
 }: {
   locale: "zh" | "en"
@@ -509,6 +509,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
   capabilityStates: Record<"ai-video" | "ai-music", WorkspaceCapabilityState | null>
   assetOptions: WorkspaceAssetOption[]
   initialFeatureId?: CapabilityMediaWorkspaceFeatureId | null
+  initialTask?: MediaTaskQuery | null
   showHero?: boolean
 }) {
   const copy = useMemo(() => getCopy(locale), [locale])
@@ -520,8 +521,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
   const [voiceOptions, setVoiceOptions] = useState<WorkspaceVoiceOption[]>([])
   const [isLoadingVoices, setIsLoadingVoices] = useState(false)
   const [voicesError, setVoicesError] = useState<string | null>(null)
-  const workspaceRef = useRef<HTMLElement | null>(null)
-  const activeTabRef = useRef<HTMLButtonElement | null>(null)
+  const workspaceRef = useRef<HTMLDivElement | null>(null)
   const sourceFileInputRef = useRef<HTMLInputElement | null>(null)
   const promptAudioFileInputRef = useRef<HTMLInputElement | null>(null)
   const assetFileInputRef = useRef<HTMLInputElement | null>(null)
@@ -726,24 +726,25 @@ export function WorkspaceCapabilitiesMediaWorkspace({
     }
   }, [stopWaveRecording])
 
+  const initialTaskFeatureId = initialTask?.featureId && featureMap[initialTask.featureId as CapabilityMediaWorkspaceFeatureId]
+    ? (initialTask.featureId as CapabilityMediaWorkspaceFeatureId)
+    : null
+  const resolvedInitialFeatureId = initialTaskFeatureId || initialFeatureId || null
+
   useEffect(() => {
-    if (!initialFeatureId || !featureMap[initialFeatureId]) return
+    if (!resolvedInitialFeatureId || !featureMap[resolvedInitialFeatureId]) return
 
     setTabs((current) => {
-      if (current.some((tab) => tab.id === initialFeatureId)) return current
-      return [...current, createTabState(featureMap[initialFeatureId])]
+      const existing = current.find((tab) => tab.id === resolvedInitialFeatureId)
+      if (existing) {
+        if (!initialTask || existing.task) return current
+        return current.map((tab) => (tab.id === resolvedInitialFeatureId ? { ...tab, task: initialTask } : tab))
+      }
+      const tab = createTabState(featureMap[resolvedInitialFeatureId])
+      return [...current, initialTask ? { ...tab, task: initialTask } : tab]
     })
-    setActiveTabId(initialFeatureId)
-  }, [featureMap, initialFeatureId])
-
-  useEffect(() => {
-    if (!activeTabRef.current) return
-    activeTabRef.current.scrollIntoView({
-      behavior: "smooth",
-      inline: "center",
-      block: "nearest",
-    })
-  }, [activeTabId, tabs.length])
+    setActiveTabId(resolvedInitialFeatureId)
+  }, [featureMap, initialTask, resolvedInitialFeatureId])
 
   const groupedFeatures = useMemo(
     () =>
@@ -753,6 +754,24 @@ export function WorkspaceCapabilitiesMediaWorkspace({
       })),
     [features, groups],
   )
+  const capabilityCenterGroups = useMemo<WorkbenchCapabilityCenterGroup[]>(() => groupedFeatures.map((group) => ({
+    id: group.id,
+    title: group.title,
+    description: group.description,
+    kind: group.id === "audio-processing" ? "audio" : "video",
+    features: group.features.map((feature) => {
+      const state = capabilityStates[feature.capabilitySlug]
+      const available = isFeatureAvailable(state)
+      return {
+        id: feature.id,
+        title: feature.title,
+        summary: feature.summary,
+        kind: feature.previewKind === "audio" ? "audio" : "video",
+        disabled: !available,
+        ...(!available ? { disabledReason: locale === "zh" ? "当前账号或运行时尚未配置" : "Account or runtime configuration required" } : {}),
+      }
+    }),
+  })), [capabilityStates, groupedFeatures, locale])
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null
   const activeFeature = activeTab ? featureMap[activeTab.featureId] : null
@@ -1208,105 +1227,29 @@ export function WorkspaceCapabilitiesMediaWorkspace({
         }}
       />
 
-      <div className="mx-auto max-w-[1440px] space-y-6">
-        {showHero ? (
-          <header className="capabilities-header">
-            <div className="capabilities-eyebrow">{copy.eyebrow}</div>
-            <h1 className="capabilities-title">{copy.title}</h1>
-            <div className="header-accent" />
-            <p className="capabilities-subtitle">{copy.description}</p>
-          </header>
-        ) : null}
-
-        <div className="grid gap-6 xl:grid-cols-2">
-          {groupedFeatures.map((group) => (
-            <article key={group.id} className="capability-group-card">
-              <div className="flex items-start gap-4">
-                <div className="category-icon">
-                  {group.id === "audio-processing" ? <AudioLines className="size-4" /> : <Video className="size-4" />}
-                </div>
-                <div className="min-w-0">
-                  <div className="category-title">{group.title}</div>
-                  <p className="category-description mt-1">{group.description}</p>
-                </div>
-              </div>
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                {group.features.map((feature) => {
-                  const opened = tabs.some((tab) => tab.id === feature.id)
-                  const state = capabilityStates[feature.capabilitySlug]
-                  const available = isFeatureAvailable(state)
-                  return (
-                    <button
-                      key={feature.id}
-                      type="button"
-                      onClick={() => openFeatureTab(feature.id)}
-                      className={`capability-tile ${opened ? "active" : ""} ${!available ? "is-muted" : ""}`}
-                    >
-                      <div className="capability-tile-icon">
-                        {feature.previewKind === "audio" ? <AudioLines className="size-4" /> : <Video className="size-4" />}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="capability-tile-title">{feature.title}</div>
-                        <div className="capability-tile-description">{feature.summary}</div>
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            </article>
-          ))}
-        </div>
-
-        <article ref={workspaceRef} className="launcher-workspace">
-          <div className="launcher-bar">
-            <div className="flex flex-col gap-1">
-              <div className="launcher-label">{copy.workspace} / {copy.launchers}</div>
-              <div className="text-sm font-medium text-[#777]">{tabs.length === 0 ? copy.openFirst : `${tabs.length} ${copy.tabsOpen}`}</div>
-            </div>
-            <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
-              <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1">
-                {tabs.map((tab) => {
-                  const feature = featureMap[tab.featureId]
-                  const active = tab.id === activeTabId
-                  return (
-                    <div
-                      key={tab.id}
-                      className={`launcher-tab ${active ? "active" : ""}`}
-                    >
-                      <button
-                        ref={active ? activeTabRef : null}
-                        type="button"
-                        onClick={() => {
-                          setActiveTabId(tab.id)
-                          syncFeatureQuery(tab.id)
-                        }}
-                        className="flex min-w-0 items-center gap-2 text-left"
-                      >
-                        {feature.previewKind === "audio" ? <AudioLines className="size-4" /> : <Video className="size-4" />}
-                        <span className="whitespace-nowrap">{feature.title}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          closeFeatureTab(tab.id)
-                        }}
-                        className="inline-flex size-5 items-center justify-center rounded-full text-[#777] hover:bg-[#efefea] hover:text-[#111]"
-                        aria-label={`close-${tab.id}`}
-                      >
-                        <X className="size-3.5" />
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-              <Button type="button" className="secondary-btn shrink-0">
-                {copy.allTasks}
-                <ChevronRight className="size-4" />
-              </Button>
-            </div>
-          </div>
-
+      <WorkbenchCapabilityCenter
+        eyebrow={copy.eyebrow}
+        title={copy.title}
+        description={copy.description}
+        groups={capabilityCenterGroups}
+        openFeatureIds={tabs.map((tab) => tab.id)}
+        activeFeatureId={activeTabId}
+        onFeatureOpen={(featureId) => openFeatureTab(featureId as CapabilityMediaWorkspaceFeatureId)}
+        onFeatureActivate={(featureId) => {
+          const nextId = featureId as CapabilityMediaWorkspaceFeatureId
+          setActiveTabId(nextId)
+          syncFeatureQuery(nextId)
+        }}
+        onFeatureClose={(featureId) => closeFeatureTab(featureId as CapabilityMediaWorkspaceFeatureId)}
+        workspaceLabel={copy.workspace}
+        launchersLabel={copy.launchers}
+        openFirstLabel={copy.openFirst}
+        openTabsLabel={(count) => `${count} ${copy.tabsOpen}`}
+        allTasksLabel={copy.allTasks}
+        onOpenTasks={() => router.push("/dashboard/tasks")}
+        showHero={showHero}
+      >
+        <div ref={workspaceRef}>
           {activeTab && activeFeature ? (
             <div className="task-workbench">
               <article className="configuration-panel">
@@ -1593,8 +1536,8 @@ export function WorkspaceCapabilitiesMediaWorkspace({
               {copy.openFirst}
             </div>
           )}
-        </article>
-      </div>
+        </div>
+      </WorkbenchCapabilityCenter>
     </section>
   )
 }

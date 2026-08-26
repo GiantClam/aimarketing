@@ -74,6 +74,20 @@ function readInlineArtifactTextContent(
   }
 }
 
+function readSerializedArtifactResponseContent(
+  artifact: Awaited<ReturnType<typeof getPlatformArtifact>>,
+): { bytes: Uint8Array; contentType: string } | null {
+  if (!artifact?.payload || typeof artifact.payload !== "object") return null
+
+  const payload = artifact.payload as Record<string, unknown>
+  if (payload.response === undefined || payload.response === null) return null
+
+  return {
+    bytes: toUint8Array(Buffer.from(JSON.stringify(payload.response, null, 2), "utf8")),
+    contentType: "application/json; charset=utf-8",
+  }
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ artifactId: string }> },
@@ -158,7 +172,10 @@ export async function GET(
       }
     }
 
-    const localContent = readEmbeddedArtifactContent(artifact) ?? readInlineArtifactTextContent(artifact)
+    const localContent =
+      readEmbeddedArtifactContent(artifact) ??
+      readInlineArtifactTextContent(artifact) ??
+      readSerializedArtifactResponseContent(artifact)
     if (!localContent) {
       return NextResponse.json({ error: "artifact_source_unavailable" }, { status: 404 })
     }

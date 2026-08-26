@@ -1,3 +1,5 @@
+import { WORKBENCH_PROVIDER_CATALOG } from "@aimarketing/workbench-ui"
+
 export type EnterpriseModelCategory =
   | "text_generation"
   | "image_generation"
@@ -81,117 +83,7 @@ export type SupportedModelDescriptor = {
   models: string[]
 }
 
-const SUPPORTED_MODEL_CARDS: Record<EnterpriseModelCategory, SupportedModelDescriptor[]> = {
-  text_generation: [
-    {
-      providerId: "openai_compatible",
-      providerLabel: "OpenAI Compatible",
-      integrationLabel: "Compatible API",
-      models: ["PPToken", "硅基流动", "OpenRouter（通过 OpenAI Compatible 配置）"],
-    },
-    {
-      providerId: "qwen_official",
-      providerLabel: "Qwen",
-      integrationLabel: "Official API",
-      models: ["Qwen 系列模型"],
-    },
-    {
-      providerId: "minimax_official",
-      providerLabel: "MiniMax",
-      integrationLabel: "Official API",
-      models: ["MiniMax 文本模型"],
-    },
-    {
-      providerId: "glm_official",
-      providerLabel: "GLM",
-      integrationLabel: "Official API",
-      models: ["GLM / ChatGLM 系列"],
-    },
-    {
-      providerId: "volcengine_official",
-      providerLabel: "火山引擎",
-      integrationLabel: "Volcengine Ark API",
-      models: ["Doubao 系列", "DeepSeek 系列"],
-    },
-  ],
-  image_generation: [
-    {
-      providerId: "bailian_official",
-      providerLabel: "阿里云百炼",
-      integrationLabel: "Bailian Singapore API",
-      models: ["qwen-image-3.0-pro", "qwen-image-2.7"],
-    },
-    {
-      providerId: "google_official",
-      providerLabel: "Google",
-      integrationLabel: "Official API",
-      models: ["Nanobanana2"],
-    },
-    {
-      providerId: "openai_official",
-      providerLabel: "OpenAI",
-      integrationLabel: "Official API",
-      models: ["gpt-image-2"],
-    },
-    {
-      providerId: "openai_compatible",
-      providerLabel: "OpenAI Compatible",
-      integrationLabel: "Compatible API",
-      models: ["兼容图片生成接口的 OpenAI 风格服务"],
-    },
-    {
-      providerId: "runninghub",
-      providerLabel: "RunningHub",
-      integrationLabel: "RunningHub API",
-      models: ["seedream-v5-text-to-image", "seedream-v5-image-to-image"],
-    },
-  ],
-  video_generation: [
-    {
-      providerId: "bailian_official",
-      providerLabel: "阿里云百炼",
-      integrationLabel: "Bailian API",
-      models: [
-        "happyhorse-1.1-t2v",
-        "happyhorse-1.1-i2v",
-        "happyhorse-1.1-r2v",
-        "happyhorse-1.0-video-edit",
-      ],
-    },
-    {
-      providerId: "minimax_official",
-      providerLabel: "MiniMax 海螺",
-      integrationLabel: "Official API",
-      models: ["MiniMax-Hailuo-2.3", "MiniMax-Hailuo-2.3-Fast"],
-    },
-    {
-      providerId: "gemini_official",
-      providerLabel: "Gemini",
-      integrationLabel: "Official API",
-      models: ["Veo 3.1"],
-    },
-    {
-      providerId: "runninghub",
-      providerLabel: "RunningHub",
-      integrationLabel: "RunningHub API",
-      models: [
-        "Seedance Pro Text to Video",
-        "Seedance Pro Image to Video",
-        "Seedance Fast",
-        "Seedance Mini",
-        "MiniMax-H3 多模态参考生视频",
-      ],
-    },
-  ],
-  audio_generation: [
-    {
-      providerId: "minimax_official",
-      providerLabel: "MiniMax Audio",
-      integrationLabel: "Official API",
-      models: ["speech-2.8", "music-2.6", "voice-clone"],
-    },
-  ],
-}
+const SUPPORTED_MODEL_CARDS = WORKBENCH_PROVIDER_CATALOG as unknown as Record<EnterpriseModelCategory, SupportedModelDescriptor[]>
 
 const DEFAULT_PROVIDER_BY_CATEGORY: Record<EnterpriseModelCategory, EnterpriseModelProviderId> = {
   text_generation: "openai_compatible",

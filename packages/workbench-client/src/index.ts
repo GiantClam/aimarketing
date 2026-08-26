@@ -1,3 +1,5 @@
+import type { DesktopUIMessage } from "./uimessage";
+
 export interface NavigationAdapter {
   readonly go: (href: string) => void;
   readonly replace: (href: string) => void;
@@ -7,12 +9,50 @@ export interface NavigationAdapter {
 export type WorkbenchRole = "system" | "user" | "assistant" | "tool";
 export type WorkbenchRunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted";
 
+export const WORKBENCH_MESSAGE_PARTS_VERSION = 2 as const;
+
+export type WorkbenchPartStatus = "queued" | "running" | "completed" | "succeeded" | "failed" | "cancelled" | "blocked" | "waiting";
+
+export type WorkbenchPlanStep = {
+  readonly id: string;
+  readonly title: string;
+  readonly status: WorkbenchPartStatus;
+  readonly detail?: string;
+};
+
+export type WorkbenchTaskStep = WorkbenchPlanStep & { readonly toolName?: string };
+
+export type WorkbenchMessagePartBase = {
+  readonly id: string;
+  readonly sequence?: number;
+  readonly createdAt?: string;
+};
+
+export type WorkbenchMessagePart =
+  | (WorkbenchMessagePartBase & { readonly type: "text"; readonly text: string })
+  | (WorkbenchMessagePartBase & { readonly type: "reasoning"; readonly text: string; readonly status: "running" | "completed" | "failed" })
+  | (WorkbenchMessagePartBase & { readonly type: "plan"; readonly title?: string; readonly steps: readonly WorkbenchPlanStep[]; readonly status: WorkbenchPartStatus })
+  | (WorkbenchMessagePartBase & { readonly type: "task"; readonly taskId?: string; readonly title: string; readonly steps?: readonly WorkbenchTaskStep[]; readonly status: WorkbenchPartStatus })
+  | (WorkbenchMessagePartBase & { readonly type: "tool-call"; readonly toolName: string; readonly toolCallId: string; readonly input?: unknown; readonly output?: unknown; readonly error?: string; readonly status: WorkbenchPartStatus })
+  | (WorkbenchMessagePartBase & { readonly type: "attachment"; readonly name: string; readonly mediaType: string; readonly uri?: string; readonly status?: "queued" | "uploading" | "ready" | "failed" })
+  | (WorkbenchMessagePartBase & { readonly type: "warning"; readonly message: string })
+  | (WorkbenchMessagePartBase & { readonly type: "tool"; readonly tool: string; readonly status: "queued" | "running" | "completed" | "failed"; readonly message?: string })
+  | (WorkbenchMessagePartBase & { readonly type: "status"; readonly status: WorkbenchRunStatus; readonly message?: string })
+  | (WorkbenchMessagePartBase & { readonly type: "usage"; readonly usage: WorkbenchUsage })
+  | (WorkbenchMessagePartBase & { readonly type: "artifact"; readonly artifact: WorkbenchArtifact })
+  | (WorkbenchMessagePartBase & { readonly type: "source"; readonly title: string; readonly href?: string; readonly excerpt?: string })
+  | (WorkbenchMessagePartBase & { readonly type: "media"; readonly media: { readonly artifactId: string; readonly kind: "image" | "video" | "audio" | "document"; readonly mimeType: string; readonly title: string; readonly relativePath?: string; readonly previewable?: boolean } })
+  | (WorkbenchMessagePartBase & { readonly type: "report"; readonly title: string; readonly body?: string; readonly artifact?: WorkbenchArtifact });
+
 export interface WorkbenchMessage {
   readonly id: string;
   readonly conversationId: string;
   readonly role: WorkbenchRole;
   readonly content: string;
   readonly createdAt: string;
+  readonly status?: WorkbenchRunStatus;
+  readonly partsVersion?: typeof WORKBENCH_MESSAGE_PARTS_VERSION;
+  readonly parts?: readonly WorkbenchMessagePart[];
 }
 
 export interface WorkbenchConversation {
@@ -22,6 +62,8 @@ export interface WorkbenchConversation {
   readonly messageCount: number;
   /** Persisted local OpenCode session used to continue a conversation after restart. */
   readonly opencodeSessionId?: string;
+  /** Agent profile selected when this conversation was created. */
+  readonly agentId?: string;
 }
 
 export interface WorkbenchRun {
@@ -82,16 +124,28 @@ export interface WorkbenchWorkflowInput {
   readonly definition: WorkbenchWorkflowDefinition;
 }
 
-export type WorkbenchRunEvent =
+export type WorkbenchRunEventMetadata = { readonly sequence?: number; readonly createdAt?: string };
+
+export type WorkbenchRunEvent = WorkbenchRunEventMetadata & (
   | { readonly type: "text"; readonly delta: string }
+  | { readonly type: "reasoning"; readonly delta: string }
+  | { readonly type: "plan"; readonly plan: { readonly id: string; readonly title?: string; readonly steps: readonly WorkbenchPlanStep[]; readonly status: WorkbenchPartStatus } }
+  | { readonly type: "task"; readonly task: { readonly id: string; readonly taskId?: string; readonly title: string; readonly steps?: readonly WorkbenchTaskStep[]; readonly status: WorkbenchPartStatus } }
+  | { readonly type: "tool_call"; readonly toolName: string; readonly toolCallId: string; readonly phase: "started" | "completed" | "failed" | "blocked"; readonly input?: unknown; readonly output?: unknown; readonly error?: string }
+  | { readonly type: "attachment"; readonly attachment: { readonly id: string; readonly name: string; readonly mediaType: string; readonly uri?: string; readonly status?: "queued" | "uploading" | "ready" | "failed" } }
+  | { readonly type: "warning"; readonly code: string; readonly message: string }
   | { readonly type: "tool"; readonly tool: string; readonly phase: "started" | "completed" | "failed"; readonly message?: string }
   | { readonly type: "usage"; readonly usage: WorkbenchUsage }
   | { readonly type: "artifact"; readonly artifact: WorkbenchArtifact }
-  | { readonly type: "status"; readonly status: WorkbenchRunStatus };
+  | { readonly type: "status"; readonly status: WorkbenchRunStatus }
+  | { readonly type: "source"; readonly source: { readonly id: string; readonly title: string; readonly href?: string; readonly excerpt?: string } }
+  | { readonly type: "media"; readonly media: { readonly artifactId: string; readonly kind: "image" | "video" | "audio" | "document"; readonly mimeType: string; readonly title: string; readonly relativePath?: string; readonly previewable?: boolean } }
+);
 
 export interface WorkbenchRunRequest {
   readonly id?: string;
-  readonly conversationId: string;
+  /** Null for standalone media/workflow tasks that must not create a chat session. */
+  readonly conversationId: string | null;
   readonly prompt: string;
   readonly model?: string;
   readonly skillId?: string;
@@ -101,6 +155,8 @@ export interface WorkbenchRunRequest {
 export interface FileActionsAdapter {
   readonly open: (relativePath: string, mimeType?: string) => Promise<void>;
   readonly reveal: (relativePath: string, mimeType?: string) => Promise<void>;
+  readonly openFolder?: (relativePath: string, mimeType?: string) => Promise<void>;
+  readonly openWith?: (relativePath: string, mimeType?: string) => Promise<void>;
 }
 
 export interface ArtifactActionsAdapter {
@@ -149,10 +205,12 @@ export interface WorkbenchClient {
     readonly list: () => Promise<readonly WorkbenchConversation[]>;
     readonly create: (title?: string) => Promise<WorkbenchConversation>;
     readonly messages: (conversationId: string) => Promise<readonly WorkbenchMessage[]>;
+    readonly uiMessages: (conversationId: string) => Promise<readonly DesktopUIMessage[]>;
   };
   readonly workflows: {
     readonly list: () => Promise<readonly WorkbenchWorkflow[]>;
     readonly save: (input: WorkbenchWorkflowInput) => Promise<WorkbenchWorkflow>;
+    readonly remove: (workflowId: string) => Promise<void>;
   };
   readonly runs: {
     readonly start: (request: WorkbenchRunRequest) => Promise<WorkbenchRun>;
@@ -166,3 +224,6 @@ export interface WorkbenchClient {
     readonly list: (conversationId?: string) => Promise<readonly WorkbenchUsage[]>;
   };
 }
+
+export * from "./message-parts";
+export * from "./uimessage";

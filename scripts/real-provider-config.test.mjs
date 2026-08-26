@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assertRealProviderConfig, buildRealProviderSmokeScope, defaultVideoPollBudget, hasExpectedSmokeResponse, REAL_PROVIDER_SMOKE_SCOPE, resolveNonSeedanceVideoProfile, validateRealProviderConfig } from "./real-provider-config.mjs";
+import { assertRealProviderConfig, buildRealProviderSmokeScope, defaultVideoPollBudget, hasExpectedSmokeResponse, REAL_PROVIDER_SMOKE_SCOPE, resolveCapabilityProviderProfile, resolveNonSeedanceVideoProfile, validateRealProviderConfig } from "./real-provider-config.mjs";
 
 const audioCredentialFixture = "fixture-key";
 const valid = {
@@ -30,6 +30,19 @@ test("real provider profiles and capability defaults remain independently addres
   assert.deepEqual(validateRealProviderConfig(configured), []);
   assert.deepEqual(validateRealProviderConfig({ ...configured, defaults: { audio: "missing" } }), ["default_audio_unknown_provider"]);
   assert.deepEqual(validateRealProviderConfig({ ...configured, providers: { broken: { id: "other", provider: "minimax", baseUrl: "https://example.test/v1", apiKey: audioCredentialFixture, model: "speech" } }, defaults: { audio: "broken" } }), ["provider_broken_id_mismatch"]);
+});
+
+test("real provider smoke resolves the same default image profile as the desktop", () => {
+  const configured = {
+    ...valid,
+    image: { provider: "legacy", baseUrl: "https://legacy.example/v1", apiKey: "legacy-secret", model: "legacy-image" },
+    providers: {
+      "image-main": { id: "image-main", source: "openai-compatible", baseUrl: "https://api.pptoken.cc/v1", apiKey: "current-secret", model: "gpt-image-2" },
+    },
+    defaults: { image: "image-main" },
+  };
+  assert.deepEqual(resolveCapabilityProviderProfile(configured, "image", "image"), configured.providers["image-main"]);
+  assert.deepEqual(resolveCapabilityProviderProfile(valid, "image", "image"), valid.image);
 });
 
 test("real provider smoke response checks are capability-specific and exclude video", () => {

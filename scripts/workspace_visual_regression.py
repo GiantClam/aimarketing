@@ -213,15 +213,28 @@ def summarize(run_data: dict[str, Any]) -> dict[str, Any]:
 def main() -> int:
     ensure_run_dir()
 
-    desktop = run_suite("desktop", {"width": 1600, "height": 1200})
-    mobile = run_suite("mobile", {"width": 430, "height": 932}, is_mobile=True)
+    configured_viewports = os.environ.get("VISUAL_REGRESSION_VIEWPORTS", "").strip()
+    if configured_viewports:
+        viewports: list[tuple[str, dict[str, int], bool]] = []
+        for item in configured_viewports.split(","):
+            width_text, _, height_text = item.strip().lower().partition("x")
+            if not width_text.isdigit() or not height_text.isdigit():
+                raise ValueError(f"Invalid VISUAL_REGRESSION_VIEWPORTS item: {item}")
+            width = int(width_text)
+            height = int(height_text)
+            viewports.append((f"viewport-{width}x{height}", {"width": width, "height": height}, width <= 768))
+    else:
+        viewports = [
+            ("desktop", {"width": 1600, "height": 1200}, False),
+            ("mobile", {"width": 430, "height": 932}, True),
+        ]
 
     report = {
         "baseUrl": BASE_URL,
         "runDir": str(RUN_DIR),
-        "runs": [desktop, mobile],
-        "summary": [summarize(desktop), summarize(mobile)],
+        "runs": [run_suite(label, viewport, is_mobile=is_mobile) for label, viewport, is_mobile in viewports],
     }
+    report["summary"] = [summarize(run) for run in report["runs"]]
 
     report_path = RUN_DIR / "report.json"
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")

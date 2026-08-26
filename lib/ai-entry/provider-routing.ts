@@ -11,6 +11,7 @@ export type AiEntryProviderId =
   | "enterprise-minimax-official"
   | "enterprise-glm-official"
   | "enterprise-volcengine-official"
+  | "desktop-configured"
 
 export type AiEntryProviderConfig = {
   id: AiEntryProviderId

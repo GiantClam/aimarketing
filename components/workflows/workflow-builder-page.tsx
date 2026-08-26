@@ -397,8 +397,8 @@ function buildNode(
     nodeKey: buildNodeKey(type, nodes),
     type,
     title: titleOverride?.trim() || defaultNodeTitle,
-    positionX: position?.x ?? 96 + column * 320,
-    positionY: position?.y ?? 96 + row * 420,
+    positionX: position?.x ?? 96 + column * 408,
+    positionY: position?.y ?? 96 + row * 520,
     config:
       type === "text_input"
         ? { text: "" }

@@ -99,10 +99,10 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
   await writeFile(configPath, JSON.stringify({
     schemaVersion: 1,
     llm: { provider: "fixture", baseUrl: `${rootUrl}/v1`, [credentialField]: fixtureCredential, model: "chat" },
-    image: { provider: "pptoken", baseUrl: `${rootUrl}/v1`, [credentialField]: fixtureCredential, model: "catalog-listed-other-model" },
+    image: { provider: "pptoken", baseUrl: `${rootUrl}/legacy`, [credentialField]: fixtureCredential, model: "catalog-listed-other-model" },
     providers: {
       text: profile("text", "openai-compatible", "chat", `${rootUrl}/v1`),
-      image: profile("image", "openai-compatible", "image", `${rootUrl}/v1`),
+      image: profile("image", "openai-compatible", "gpt-image-2", `${rootUrl}/v1`),
       video: profile("video", "runninghub", "minimax-h3", rootUrl, { endpoint: "/video", queryEndpoint: "/query" }),
       audio: profile("audio", "minimax", "speech-2.8-turbo", `${rootUrl}/v1`),
     },

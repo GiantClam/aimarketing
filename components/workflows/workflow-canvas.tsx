@@ -39,6 +39,7 @@ import {
   type WorkflowNodeType,
   type WorkflowValueKind,
 } from "@/lib/workflows/schema"
+import { WorkbenchWorkflowCanvas, type WorkflowCanvasNode as SharedWorkflowCanvasNode } from "@aimarketing/workbench-ui"
 
 const NODE_WIDTH = 336
 const PORT_PANEL_TOP = 52
@@ -265,7 +266,63 @@ function shouldIgnoreCanvasPanTarget(target: EventTarget | null) {
   )
 }
 
-export function WorkflowCanvas({
+export function WorkflowCanvas(props: WorkflowCanvasProps) {
+  const sharedEdges = props.edges.map((edge, index) => ({
+    edgeKey: edge.edgeKey || `${edge.sourceNodeKey}:${edge.targetNodeKey}:${edge.sourcePortId || "output"}:${edge.targetPortId || "input"}:${index}`,
+    sourceNodeKey: edge.sourceNodeKey,
+    sourcePortId: edge.sourcePortId || "output",
+    targetNodeKey: edge.targetNodeKey,
+    targetPortId: edge.targetPortId || "input",
+    inputName: edge.inputName,
+  }))
+  return (
+    <WorkbenchWorkflowCanvas
+      className={props.className}
+      locale={props.locale}
+      nodes={props.nodes as SharedWorkflowCanvasNode[]}
+      edges={sharedEdges}
+      selectedNodeKey={props.selectedNodeKey}
+      pendingConnectionSourceKey={props.pendingConnectionSourceKey}
+      initialViewport={{ x: 300, y: 80, scale: 0.62 }}
+      nodeExecutionSnapshots={props.nodeExecutionSnapshots}
+      onSelectNode={props.onSelectNode}
+      onMoveNode={props.onMoveNode}
+      onDeleteNode={props.onDeleteNode}
+      onDeleteEdge={(edge) => props.onDeleteEdge(edge.sourceNodeKey, edge.targetNodeKey, edge.sourcePortId, edge.targetPortId)}
+      onDuplicateNode={props.onDuplicateNode}
+      onStartConnection={props.onStartConnection}
+      onConnect={props.onConnect}
+      onCancelConnection={props.onCancelConnection}
+      onAddNodeAtPoint={props.onAddNodeAtPoint}
+      onUpdateNode={(nodeKey, patch) => props.onUpdateNode(nodeKey, patch as Partial<WorkflowDefinitionNode>)}
+      renderNodeEditor={(node) => (
+        <WorkflowNodeEditorFields
+          locale={props.locale}
+          node={node as WorkflowDefinitionNode}
+          assets={props.assets}
+          llmModelCatalog={props.llmModelCatalog}
+          workflowImageProviderOptions={props.workflowImageProviderOptions}
+          voiceOptions={props.voiceOptions}
+          builtinAgents={props.builtinAgents}
+          customAgents={props.customAgents}
+          uploadPending={props.uploadPending}
+          onUpdateNode={props.onUpdateNode}
+          onUploadFiles={props.onUploadFiles}
+        />
+      )}
+      renderNodeOutput={(node, snapshot) => (
+        <WorkflowNodeOutputPreview
+          locale={props.locale}
+          status={snapshot.status}
+          outputPayload={sanitizeWorkflowNodeOutputPayloadForDisplay(node.type as WorkflowNodeType, snapshot.outputPayload ?? null)}
+          errorMessage={snapshot.errorMessage}
+        />
+      )}
+    />
+  )
+}
+
+export function LegacyWorkflowCanvas({
   className,
   locale,
   features,

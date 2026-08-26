@@ -10,27 +10,34 @@ pub fn default_config(workspace_path: &Path) -> Value {
         "schemaVersion": 1,
         "locale": "auto",
         "workspacePath": workspace_path.join("projects"),
-        "provider": { "id": "local", "source": "local", "model": "ollama/qwen3:8b", "models": ["ollama/qwen3:8b"], "baseUrl": "http://127.0.0.1:11434/v1", "apiKey": "" },
+        "provider": { "id": "local", "source": "local", "model": "", "baseUrl": "http://127.0.0.1:11434/v1", "apiKey": "" },
         "runtime": { "source": "system" }
     })
 }
 
 pub fn read(path: &Path, workspace_path: &Path) -> Result<Value, String> {
     match fs::read_to_string(path) {
-        Ok(raw) => serde_json::from_str(&raw).map_err(|error| format!("invalid_config_json: {error}")),
+        Ok(raw) => {
+            let json = raw.strip_prefix('\u{feff}').unwrap_or(&raw);
+            let mut value: Value = serde_json::from_str(json).map_err(|error| format!("invalid_config_json: {error}"))?;
+            remove_development_runninghub_workflow_ids(&mut value);
+            Ok(value)
+        },
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(default_config(workspace_path)),
         Err(error) => Err(error.to_string()),
     }
 }
 
 pub fn write(path: &Path, value: &Value) -> Result<(), String> {
-    validate(value)?;
+    let mut normalized = value.clone();
+    remove_development_runninghub_workflow_ids(&mut normalized);
+    validate(&normalized)?;
     let parent = path.parent().ok_or_else(|| "config_parent_missing".to_string())?;
     fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     let backup = parent.join("config.backup.json");
     if path.exists() { let _ = fs::copy(path, &backup); }
     let tmp = parent.join("config.json.tmp");
-    let bytes = serde_json::to_vec_pretty(value).map_err(|error| error.to_string())?;
+    let bytes = serde_json::to_vec_pretty(&normalized).map_err(|error| error.to_string())?;
     let mut file = OpenOptions::new().create(true).truncate(true).write(true).open(&tmp).map_err(|error| error.to_string())?;
     file.write_all(&bytes).map_err(|error| error.to_string())?;
     file.write_all(b"\n").map_err(|error| error.to_string())?;
@@ -38,6 +45,27 @@ pub fn write(path: &Path, value: &Value) -> Result<(), String> {
     drop(file);
     fs::rename(&tmp, path).map_err(|error| error.to_string())?;
     sync_parent(parent)
+}
+
+/// Older desktop test configurations contained workflow IDs owned by the
+/// development RunningHub account. Retain user profiles while removing only
+/// those known private IDs at the native config seam.
+fn remove_development_runninghub_workflow_ids(value: &mut Value) {
+    fn remove_from_profile(profile: &mut Value) {
+        const DEVELOPMENT_IDS: [&str; 2] = ["2019410250268418050", "2064172986302812162"];
+        if let Some(object) = profile.as_object_mut() {
+            for field in ["workflowId", "digitalHumanWorkflowId", "videoEnhanceWorkflowId"] {
+                let remove = object.get(field).and_then(Value::as_str).map(|id| DEVELOPMENT_IDS.contains(&id.trim())).unwrap_or(false);
+                if remove { object.remove(field); }
+            }
+        }
+    }
+    if let Some(object) = value.as_object_mut() {
+        if let Some(provider) = object.get_mut("provider") { remove_from_profile(provider); }
+        if let Some(providers) = object.get_mut("providers").and_then(Value::as_object_mut) {
+            for profile in providers.values_mut() { remove_from_profile(profile); }
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -69,5 +97,34 @@ mod tests {
         write(&path, &value).unwrap(); assert_eq!(read(&path, &root).unwrap()["schemaVersion"], 1);
         assert!(write(&path, &json!({"schemaVersion": 2})).is_err());
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn config_read_accepts_a_utf8_bom() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-config-bom-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root); fs::create_dir_all(&root).unwrap();
+        let path = root.join("config.json");
+        let mut bytes = vec![0xEF, 0xBB, 0xBF];
+        bytes.extend(serde_json::to_vec(&default_config(&root)).unwrap());
+        fs::write(&path, bytes).unwrap();
+        assert_eq!(read(&path, &root).unwrap()["schemaVersion"], 1);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn removes_development_runninghub_workflows_but_keeps_user_workflows() {
+        let mut value = json!({
+            "provider": { "digitalHumanWorkflowId": "2019410250268418050" },
+            "providers": {
+                "video": {
+                    "digitalHumanWorkflowId": "user-workflow-42",
+                    "videoEnhanceWorkflowId": "2064172986302812162"
+                }
+            }
+        });
+        remove_development_runninghub_workflow_ids(&mut value);
+        assert!(value["provider"].get("digitalHumanWorkflowId").is_none());
+        assert_eq!(value["providers"]["video"]["digitalHumanWorkflowId"], "user-workflow-42");
+        assert!(value["providers"]["video"].get("videoEnhanceWorkflowId").is_none());
     }
 }

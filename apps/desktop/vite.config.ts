@@ -4,7 +4,10 @@ import { resolve } from "node:path";
 
 export default defineConfig({
   plugins: [react()],
-  resolve: { alias: { "@aimarketing/workbench-ui": resolve(__dirname, "../../packages/workbench-ui/src/index.ts") } },
+  resolve: { alias: [
+    { find: "@aimarketing/workbench-ui/styles.css", replacement: resolve(__dirname, "../../packages/workbench-ui/src/styles.css") },
+    { find: "@aimarketing/workbench-ui", replacement: resolve(__dirname, "../../packages/workbench-ui/src/index.ts") },
+  ] },
   clearScreen: false,
   server: { strictPort: true, port: 1420 },
   build: { outDir: "dist", emptyOutDir: true },

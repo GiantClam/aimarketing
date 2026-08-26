@@ -42,6 +42,7 @@ import { Button } from "@/components/ui/button"
 import { DashboardFilterToolbar } from "@/components/ui/dashboard-filter-toolbar"
 import type { EnterpriseUnifiedAssetLibraryItem } from "@/lib/platform/assets"
 import { cn } from "@/lib/utils"
+import { Artifact } from "@aimarketing/workbench-ui"
 
 type WorkspaceAssetLibraryItem = EnterpriseUnifiedAssetLibraryItem
 type AssetViewMode = "grid" | "table"
@@ -1513,8 +1514,10 @@ export function WorkspaceAssetLibrary({
                   const tags = buildAssetTags(item, locale)
 
                   return (
-                    <article
+                    <Artifact
                       key={item.artifactId}
+                      title={item.title}
+                      description={`${typeMeta.label} · ${formatDateTime(item.createdAt, locale)}`}
                       className="overflow-hidden rounded-[14px] border border-[#e7e7df] bg-white shadow-[0_10px_28px_rgba(0,0,0,0.045)]"
                     >
                       <div className="relative aspect-[16/10] bg-[#f3f3ef]">
@@ -1547,14 +1550,7 @@ export function WorkspaceAssetLibrary({
 
                       <div className="p-[14px]">
                         <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <h3 className="line-clamp-2 text-sm font-extrabold leading-6 text-[#111]" title={item.title}>
-                              {item.title}
-                            </h3>
-                            <div className="mt-1 text-xs text-[#777]">
-                              {formatDateTime(item.createdAt, locale)}
-                            </div>
-                          </div>
+                          <div className="min-w-0" aria-hidden="true" />
                           <button
                             type="button"
                             onClick={() => void handleCopyLink(item)}
@@ -1642,7 +1638,7 @@ export function WorkspaceAssetLibrary({
                           </button>
                         </div>
                       </div>
-                    </article>
+                    </Artifact>
                   )
                 })}
               </div>

@@ -17,6 +17,12 @@ test("desktop network boundary rejects hardcoded external endpoints", () => {
   assert.deepEqual(violations.map((item) => item.label), ["hardcoded external URL"]);
 });
 
+test("desktop network boundary allows the approved provider catalog default", () => {
+  assert.deepEqual(scanDesktopNetworkBoundary([
+    { filePath: "provider-catalog.js", source: "const defaultBaseUrl = 'https://api.siliconflow.cn/'" },
+  ]), []);
+});
+
 test("desktop network boundary ignores library documentation and XML namespace URLs", () => {
   assert.deepEqual(scanDesktopNetworkBoundary([
     { filePath: "fixture.js", source: "https://react.dev/errors/1 https://github.com/org/repo http://www.w3.org/2000/svg" },

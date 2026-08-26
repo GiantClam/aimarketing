@@ -16,8 +16,8 @@ PRAGMA busy_timeout = 5000;
 CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS identity (id INTEGER PRIMARY KEY CHECK (id = 1), device_id TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, root_path TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, project_id TEXT REFERENCES projects(id), title TEXT NOT NULL, opencode_session_id TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id), role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, project_id TEXT REFERENCES projects(id), title TEXT NOT NULL, opencode_session_id TEXT, agent_id TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id), role TEXT NOT NULL, content TEXT NOT NULL, parts_json TEXT, metadata_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, conversation_id TEXT REFERENCES conversations(id), status TEXT NOT NULL, model TEXT, started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, finished_at TEXT);
 CREATE TABLE IF NOT EXISTS run_events (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id), sequence INTEGER NOT NULL, event_type TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(run_id, sequence));
 CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, project_id TEXT REFERENCES projects(id), relative_path TEXT NOT NULL, mime_type TEXT NOT NULL, byte_length INTEGER NOT NULL, sha256 TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
@@ -61,6 +61,13 @@ fn initialize_schema(path: &Path) -> Result<()> {
     connection.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (3)", [])?;
     connection.execute("CREATE TABLE IF NOT EXISTS run_checkpoints (run_id TEXT NOT NULL REFERENCES runs(id), checkpoint_key TEXT NOT NULL, sequence INTEGER NOT NULL, output_json TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(run_id, checkpoint_key))", [])?;
     connection.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (4)", [])?;
+    let _ = connection.execute("ALTER TABLE messages ADD COLUMN parts_json TEXT", []);
+    connection.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (5)", [])?;
+    let _ = connection.execute("ALTER TABLE conversations ADD COLUMN agent_id TEXT", []);
+    connection.execute("CREATE INDEX IF NOT EXISTS conversations_agent_updated_idx ON conversations(agent_id, updated_at DESC)", [])?;
+    connection.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (6)", [])?;
+    let _ = connection.execute("ALTER TABLE messages ADD COLUMN metadata_json TEXT", []);
+    connection.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (7)", [])?;
     Ok(())
 }
 
@@ -144,7 +151,6 @@ fn restore_latest_consistent_backup(path: &Path) -> Result<()> {
 /// Marks non-terminal runs as interrupted during startup. A crash must never
 /// make an unfinished OpenCode/provider request look successful.
 pub fn recover_interrupted(path: &Path) -> Result<i64> {
-    initialize(path)?;
     let connection = open(path)?;
     let changed = connection.execute("UPDATE runs SET status='interrupted', finished_at=CURRENT_TIMESTAMP WHERE status IN ('running', 'queued', 'started')", [])?;
     connection.execute("UPDATE run_nodes SET status='interrupted', updated_at=CURRENT_TIMESTAMP WHERE status IN ('queued', 'running', 'started') AND run_id IN (SELECT id FROM runs WHERE status='interrupted')", [])?;
@@ -166,6 +172,13 @@ pub fn integrity(path: &Path) -> Result<bool> {
 
 pub fn migrations_ready(path: &Path) -> Result<bool> {
     initialize(path)?;
+    migrations_ready_without_initialization(path)
+}
+
+/// Check the migration marker after the caller has already initialized the
+/// database. This avoids repeating schema creation and backup work during
+/// the desktop startup probe.
+pub fn migrations_ready_without_initialization(path: &Path) -> Result<bool> {
     let connection = open(path)?;
     let latest: i64 = connection.query_row("SELECT COALESCE(MAX(version), 0) FROM schema_migrations", [], |row| row.get(0))?;
     Ok(latest >= 2)
@@ -190,9 +203,17 @@ fn redact_json_value(value: &mut Value) {
         Value::Object(fields) => {
             for (key, nested) in fields.iter_mut() {
                 let normalized = key.chars().filter(|character| character.is_ascii_alphanumeric()).collect::<String>().to_ascii_lowercase();
+                // Workflow identity fields such as `nodeKey` and `edgeKey`
+                // are structural data, not credentials. Redacting every key
+                // ending with "key" corrupts saved workflow graphs.
                 if normalized == "apikey"
                     || normalized == "key"
-                    || normalized.ends_with("key")
+                    || normalized == "privatekey"
+                    || normalized == "secretkey"
+                    || normalized == "clientsecret"
+                    || normalized == "accesstoken"
+                    || normalized == "refreshtoken"
+                    || normalized == "idtoken"
                     || normalized == "token"
                     || normalized.ends_with("token")
                     || normalized == "secret"
@@ -215,13 +236,13 @@ fn redact_json_value(value: &mut Value) {
 }
 
 #[derive(Debug, Serialize)]
-pub struct ConversationRow { pub id: String, pub title: String, pub opencode_session_id: Option<String>, pub updated_at: String }
+pub struct ConversationRow { pub id: String, pub title: String, pub opencode_session_id: Option<String>, pub agent_id: Option<String>, pub updated_at: String }
 
 #[derive(Debug, Serialize)]
 pub struct ArtifactRow { pub id: String, pub project_id: Option<String>, pub relative_path: String, pub mime_type: String, pub byte_length: i64, pub sha256: String, pub created_at: String, pub available: bool }
 
 #[derive(Debug, Serialize)]
-pub struct MessageRow { pub id: String, pub conversation_id: String, pub role: String, pub content: String, pub created_at: String }
+pub struct MessageRow { pub id: String, pub conversation_id: String, pub role: String, pub content: String, pub parts_json: Option<String>, pub metadata_json: Option<String>, pub created_at: String }
 
 #[derive(Debug, Serialize)]
 pub struct RunRow { pub id: String, pub conversation_id: Option<String>, pub status: String, pub model: Option<String>, pub started_at: String, pub finished_at: Option<String> }
@@ -247,11 +268,11 @@ pub struct WorkflowRow { pub id: String, pub project_id: Option<String>, pub nam
 #[derive(Debug, Serialize)]
 pub struct UsageSummary { pub runs: i64, pub input_tokens: i64, pub output_tokens: i64, pub provider_cost: Option<f64>, pub estimated_cost: Option<f64>, pub artifacts: i64 }
 
-pub fn create_conversation(path: &Path, id: &str, title: &str, project_id: Option<&str>) -> Result<ConversationRow> {
+pub fn create_conversation(path: &Path, id: &str, title: &str, project_id: Option<&str>, agent_id: Option<&str>) -> Result<ConversationRow> {
     initialize(path)?;
     let connection = open(path)?;
-    connection.execute("INSERT INTO conversations(id, project_id, title) VALUES (?1, ?2, ?3) ON CONFLICT(id) DO UPDATE SET title=excluded.title, updated_at=CURRENT_TIMESTAMP", params![id, project_id, title])?;
-    connection.query_row("SELECT id, title, opencode_session_id, updated_at FROM conversations WHERE id=?1", [id], |row| Ok(ConversationRow { id: row.get(0)?, title: row.get(1)?, opencode_session_id: row.get(2)?, updated_at: row.get(3)? }))
+    connection.execute("INSERT INTO conversations(id, project_id, title, agent_id) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(id) DO UPDATE SET title=excluded.title, agent_id=COALESCE(excluded.agent_id, conversations.agent_id), updated_at=CURRENT_TIMESTAMP", params![id, project_id, title, agent_id])?;
+    connection.query_row("SELECT id, title, opencode_session_id, agent_id, updated_at FROM conversations WHERE id=?1", [id], |row| Ok(ConversationRow { id: row.get(0)?, title: row.get(1)?, opencode_session_id: row.get(2)?, agent_id: row.get(3)?, updated_at: row.get(4)? }))
 }
 
 pub fn upsert_project(path: &Path, root_path: &str, name: &str) -> Result<String> {
@@ -269,10 +290,10 @@ pub fn set_session_id(path: &Path, conversation_id: &str, session_id: &str) -> R
     Ok(())
 }
 
-pub fn append_message(path: &Path, id: &str, conversation_id: &str, role: &str, content: &str) -> Result<()> {
+pub fn append_message(path: &Path, id: &str, conversation_id: &str, role: &str, content: &str, parts_json: Option<&str>, metadata_json: Option<&str>, created_at: Option<&str>) -> Result<()> {
     initialize(path)?;
     let connection = open(path)?;
-    connection.execute("INSERT INTO messages(id, conversation_id, role, content) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(id) DO NOTHING", params![id, conversation_id, role, content])?;
+    connection.execute("INSERT INTO messages(id, conversation_id, role, content, parts_json, metadata_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, COALESCE(?7, CURRENT_TIMESTAMP)) ON CONFLICT(id) DO NOTHING", params![id, conversation_id, role, content, parts_json, metadata_json, created_at])?;
     connection.execute("UPDATE conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?1", [conversation_id])?;
     Ok(())
 }
@@ -358,8 +379,8 @@ pub fn upsert_vault_mapping(path: &Path, vault_path: &str, index_path: &str, emb
 pub fn list_conversations(path: &Path) -> Result<Vec<ConversationRow>> {
     initialize(path)?;
     let connection = open(path)?;
-    let mut statement = connection.prepare("SELECT id, title, opencode_session_id, updated_at FROM conversations ORDER BY updated_at DESC")?;
-    let rows = statement.query_map([], |row| Ok(ConversationRow { id: row.get(0)?, title: row.get(1)?, opencode_session_id: row.get(2)?, updated_at: row.get(3)? }))?.collect::<Result<Vec<_>, _>>()?;
+    let mut statement = connection.prepare("SELECT id, title, opencode_session_id, agent_id, updated_at FROM conversations ORDER BY updated_at DESC")?;
+    let rows = statement.query_map([], |row| Ok(ConversationRow { id: row.get(0)?, title: row.get(1)?, opencode_session_id: row.get(2)?, agent_id: row.get(3)?, updated_at: row.get(4)? }))?.collect::<Result<Vec<_>, _>>()?;
     Ok(rows)
 }
 
@@ -381,8 +402,8 @@ pub fn remove_artifact(path: &Path, artifact_id: &str) -> Result<()> {
 pub fn list_messages(path: &Path, conversation_id: &str) -> Result<Vec<MessageRow>> {
     initialize(path)?;
     let connection = open(path)?;
-    let mut statement = connection.prepare("SELECT id, conversation_id, role, content, created_at FROM messages WHERE conversation_id=?1 ORDER BY created_at ASC, id ASC")?;
-    let rows = statement.query_map([conversation_id], |row| Ok(MessageRow { id: row.get(0)?, conversation_id: row.get(1)?, role: row.get(2)?, content: row.get(3)?, created_at: row.get(4)? }))?.collect::<Result<Vec<_>, _>>()?;
+    let mut statement = connection.prepare("SELECT id, conversation_id, role, content, parts_json, metadata_json, created_at FROM messages WHERE conversation_id=?1 ORDER BY created_at ASC, id ASC")?;
+    let rows = statement.query_map([conversation_id], |row| Ok(MessageRow { id: row.get(0)?, conversation_id: row.get(1)?, role: row.get(2)?, content: row.get(3)?, parts_json: row.get(4)?, metadata_json: row.get(5)?, created_at: row.get(6)? }))?.collect::<Result<Vec<_>, _>>()?;
     Ok(rows)
 }
 
@@ -407,7 +428,10 @@ pub fn inspect_run(path: &Path, run_id: &str) -> Result<RunDetail> {
 pub fn list_recoverable_attempts(path: &Path) -> Result<Vec<RunAttemptRow>> {
     initialize(path)?;
     let connection = open(path)?;
-    let mut statement = connection.prepare("SELECT idempotency_key, run_id, node_key, provider, provider_task_id, status, payload_json, updated_at FROM run_attempts WHERE status IN ('queued', 'running', 'submitted', 'download_failed') AND provider_task_id IS NOT NULL ORDER BY updated_at ASC")?;
+    // Only active or interrupted runs are eligible for automatic recovery.
+    // A terminal failed run must stay visible as evidence, but must not cause
+    // the desktop shell to resubmit or poll the same provider task forever.
+    let mut statement = connection.prepare("SELECT attempts.idempotency_key, attempts.run_id, attempts.node_key, attempts.provider, attempts.provider_task_id, attempts.status, attempts.payload_json, attempts.updated_at FROM run_attempts attempts JOIN runs ON runs.id = attempts.run_id WHERE runs.status IN ('running', 'interrupted') AND attempts.status IN ('queued', 'running', 'submitted', 'download_failed') AND attempts.provider_task_id IS NOT NULL ORDER BY attempts.updated_at ASC")?;
     let rows = statement.query_map([], |row| Ok(RunAttemptRow {
         idempotency_key: row.get(0)?,
         run_id: row.get(1)?,
@@ -441,6 +465,16 @@ pub fn list_workflows(path: &Path) -> Result<Vec<WorkflowRow>> {
     Ok(rows)
 }
 
+pub fn remove_workflow(path: &Path, workflow_id: &str) -> Result<()> {
+    initialize(path)?;
+    let mut connection = open(path)?;
+    let transaction = connection.transaction()?;
+    transaction.execute("DELETE FROM workflow_revisions WHERE workflow_id=?1", [workflow_id])?;
+    transaction.execute("DELETE FROM workflows WHERE id=?1", [workflow_id])?;
+    transaction.commit()?;
+    Ok(())
+}
+
 pub fn usage_summary(path: &Path) -> Result<UsageSummary> {
     initialize(path)?;
     let connection = open(path)?;
@@ -461,10 +495,13 @@ mod tests {
         let root = std::env::temp_dir().join(format!("ai-marketing-storage-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("app.db");
-        let row = create_conversation(&path, "conversation-1", "本地会话", None).unwrap();
+        let row = create_conversation(&path, "conversation-1", "本地会话", None, Some("executive-brand")).unwrap();
         assert_eq!(row.title, "本地会话");
-        append_message(&path, "message-1", "conversation-1", "user", "你好").unwrap();
-        append_message(&path, "message-1", "conversation-1", "user", "重复不会覆盖").unwrap();
+        assert_eq!(row.agent_id.as_deref(), Some("executive-brand"));
+        let parts = r#"[{"id":"message-1:text","type":"text","text":"你好"}]"#;
+        let metadata = r#"{"conversationId":"conversation-1","providerId":"deepseek","modelId":"deepseek-v4-flash"}"#;
+        append_message(&path, "message-1", "conversation-1", "user", "你好", Some(parts), Some(metadata), Some("2026-08-12T00:00:00Z")).unwrap();
+        append_message(&path, "message-1", "conversation-1", "user", "重复不会覆盖", None, None, None).unwrap();
         set_session_id(&path, "conversation-1", "lost-session").unwrap();
         set_session_id(&path, "conversation-1", "recovered-session").unwrap();
         create_run(&path, "run-1", Some("conversation-1"), Some("local-model")).unwrap();
@@ -478,7 +515,11 @@ mod tests {
         finish_run(&path, "run-1", "succeeded").unwrap();
         assert_eq!(list_conversations(&path).unwrap().len(), 1);
         assert_eq!(list_conversations(&path).unwrap()[0].opencode_session_id.as_deref(), Some("recovered-session"));
+        assert_eq!(list_conversations(&path).unwrap()[0].agent_id.as_deref(), Some("executive-brand"));
         assert_eq!(list_messages(&path, "conversation-1").unwrap()[0].content, "你好");
+        assert_eq!(list_messages(&path, "conversation-1").unwrap()[0].parts_json.as_deref(), Some(parts));
+        assert_eq!(list_messages(&path, "conversation-1").unwrap()[0].metadata_json.as_deref(), Some(metadata));
+        assert_eq!(list_messages(&path, "conversation-1").unwrap()[0].created_at, "2026-08-12T00:00:00Z");
         assert_eq!(list_runs(&path).unwrap().len(), 1);
         let connection = open(&path).unwrap();
         assert_eq!(connection.query_row("SELECT status FROM run_nodes WHERE run_id='run-1' AND node_key='writer'", [], |row| row.get::<_, String>(0)).unwrap(), "succeeded");
@@ -487,6 +528,7 @@ mod tests {
         assert_eq!(connection.query_row("SELECT provider_task_id FROM run_attempts WHERE idempotency_key='run-1:media:1'", [], |row| row.get::<_, String>(0)).unwrap(), "provider-task-1");
         let detail = inspect_run(&path, "run-1").unwrap();
         assert_eq!(detail.run.status, "succeeded");
+        assert!(list_recoverable_attempts(&path).unwrap().is_empty());
         assert_eq!(detail.nodes.iter().find(|node| node.node_key == "writer").and_then(|node| node.output_json.as_deref()), Some(r#"{"text":"完成"}"#));
         assert_eq!(detail.events.len(), 1);
         assert_eq!(detail.events[0].event_type, "text_delta");
@@ -501,7 +543,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!("ai-marketing-storage-concurrency-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("app.db");
-        create_conversation(&path, "conversation-concurrency", "并发读写", None).unwrap();
+        create_conversation(&path, "conversation-concurrency", "并发读写", None, None).unwrap();
 
         let barrier = Arc::new(Barrier::new(5));
         let writer_path = path.clone();
@@ -515,6 +557,9 @@ mod tests {
                     "conversation-concurrency",
                     "user",
                     &format!("消息 {index}"),
+                    None,
+                    None,
+                    None,
                 )
                 .unwrap();
             }
@@ -596,6 +641,22 @@ mod tests {
     }
 
     #[test]
+    fn removing_workflow_also_removes_its_revisions() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-workflow-remove-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let path = root.join("app.db");
+        save_workflow(&path, "wf-remove", "待删除工作流", None, r#"{"version":1,"nodes":[]}"#).unwrap();
+        save_workflow(&path, "wf-remove", "待删除工作流", None, r#"{"version":1,"nodes":[{"type":"text_input"}]}"#).unwrap();
+
+        remove_workflow(&path, "wf-remove").unwrap();
+
+        assert!(list_workflows(&path).unwrap().is_empty());
+        let revisions: i64 = open(&path).unwrap().query_row("SELECT COUNT(*) FROM workflow_revisions WHERE workflow_id='wf-remove'", [], |row| row.get(0)).unwrap();
+        assert_eq!(revisions, 0);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn upgrades_legacy_usage_records_with_provider_cost_columns() {
         let root = std::env::temp_dir().join(format!("ai-marketing-usage-migration-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
@@ -655,11 +716,28 @@ mod tests {
     }
 
     #[test]
+    fn workflow_storage_keeps_graph_identity_keys_while_redacting_credentials() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-workflow-identity-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let path = root.join("app.db");
+        let definition = r#"{"nodes":[{"nodeKey":"avatar-image","config":{"apiKey":"secret"}}],"edges":[{"edgeKey":"avatar-to-human","sourceNodeKey":"avatar-image","targetNodeKey":"digital-human"}]}"#;
+
+        save_workflow(&path, "workflow-identity", "Identity", None, definition).unwrap();
+
+        let stored: String = open(&path).unwrap().query_row("SELECT definition_json FROM workflows WHERE id='workflow-identity'", [], |row| row.get(0)).unwrap();
+        assert!(stored.contains("avatar-image"));
+        assert!(stored.contains("avatar-to-human"));
+        assert!(!stored.contains("\"apiKey\":\"secret\""));
+        assert!(stored.contains(REDACTED));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn restores_a_corrupt_database_from_the_latest_consistent_backup() {
         let root = std::env::temp_dir().join(format!("ai-marketing-storage-backup-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("app.db");
-        create_conversation(&path, "conversation-backup", "恢复会话", None).unwrap();
+        create_conversation(&path, "conversation-backup", "恢复会话", None, None).unwrap();
         create_consistent_backup(&path).unwrap();
 
         std::fs::write(sibling_path(&path, "-wal"), b"stale WAL sidecar").unwrap();

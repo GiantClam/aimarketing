@@ -3,8 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "typecheck": "tsc -p tsconfig.json --noEmit", "test": "node --test", "build": "tsc -p tsconfig.json --noEmit" },
-  "dependencies": { "lucide-react": "^0.454.0", "react-markdown": "^10.1.0", "remark-gfm": "^4.0.1" },
-  "peerDependencies": { "react": ">=18" }
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles.css": "./src/styles.css"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test test/**/*.test.tsx",
+    "build": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@aimarketing/workbench-client": "workspace:*",
+    "@aimarketing/workflow-core": "workspace:*",
+    "lucide-react": "^0.454.0",
+    "media-chrome": "^4.19.2",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "streamdown": "^2.6.0"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  }
 }

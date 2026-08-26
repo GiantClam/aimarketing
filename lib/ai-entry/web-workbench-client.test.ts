@@ -37,11 +37,11 @@ test("web WorkbenchClient adapts SaaS conversations, messages and chat SSE", asy
   const events: string[] = []
   await new Promise<void>((resolve) => {
     client.runs.subscribe(run.id, (event) => {
-      events.push(event.type === "tool" ? `${event.type}:${event.phase}` : event.type)
+      events.push(event.type)
       if (event.type === "status" && event.status === "succeeded") resolve()
     })
   })
-  assert.deepEqual(events, ["status", "text", "tool:started", "tool:completed", "artifact", "status"])
+  assert.deepEqual(events, ["status", "text", "tool_call", "tool_call", "artifact", "status"])
   const chatCall = calls.find((call) => call.url.endsWith("/chat"))
   assert.deepEqual(JSON.parse(String(chatCall?.init?.body)), { stream: true, conversationId: "42", messages: [{ role: "user", content: "Research" }], modelConfig: { modelId: "provider/fast", reasoningEffort: "high" }, skillConfig: { enabled: true, enabledSkillIds: ["research"] } })
 })

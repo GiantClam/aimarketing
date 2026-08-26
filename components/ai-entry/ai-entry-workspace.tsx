@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import type { NavigationAdapter, WorkbenchClient } from "@aimarketing/workbench-client"
-import { WorkbenchCloudMessageShell } from "@aimarketing/workbench-ui"
+import { WorkbenchCloudMessageShell, WorkbenchMessageTimeline } from "@aimarketing/workbench-ui"
 import {
   ArrowRight,
   Check,
@@ -43,7 +43,7 @@ import {
   PromptInputAction,
   PromptInputActions,
   PromptInputTextarea,
-} from "@/components/ai-entry/prompt-kit/prompt-input"
+} from "@aimarketing/workbench-ui"
 import { useI18n } from "@/components/locale-provider"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
@@ -4281,7 +4281,18 @@ export function AiEntryWorkspace({
                 </article>
               ) : null}
 
-              {displayMessages.map((message, index) => {
+              <WorkbenchMessageTimeline
+                className="contents"
+                messages={displayMessages.map((message) => ({
+                  id: message.id,
+                  conversationId: conversationId ?? "new",
+                  role: message.role,
+                  content: message.content,
+                  createdAt: new Date(message.createdAt ?? Date.now()).toISOString(),
+                  sourceMessage: message,
+                }))}
+                renderMessage={(timelineMessage, index) => {
+                const message = timelineMessage.sourceMessage
                 const isAssistant = message.role === "assistant"
                 const copied = copiedMessageId === message.id
                 const isPendingAssistant =
@@ -4449,7 +4460,7 @@ export function AiEntryWorkspace({
                     <MessageContent bare role="user" className="p-0 text-sm leading-7 text-white">{message.content}</MessageContent>
                   </WorkbenchCloudMessageShell>
                 )
-              })}
+              }} />
 
               {errorMessage ? <div className="rounded-2xl border-2 border-destructive/30 bg-destructive/10 px-4 py-2 text-xs text-destructive">{errorMessage}</div> : null}
               <div ref={scrollAnchorRef} className="h-px w-full shrink-0 scroll-mt-4" aria-hidden="true" />

@@ -31,12 +31,32 @@ test("v1 registry matches the approved capability boundary", () => {
   for (const excluded of ["lead_hunter", "publish_as_agent", "workflow_marketplace", "enterprise_preset"]) assert.equal(types.has(excluded as never), false, excluded);
 });
 
+test("local file nodes expose type-specific output ports for media workflows", () => {
+  const upload = workflowNodeRegistry.require("upload");
+  assert.deepEqual(upload.outputs.map((port) => port.id), ["asset", "image", "video", "audio"]);
+  assert.equal(areWorkflowPortsCompatible(upload.outputs.find((port) => port.id === "image")!, workflowNodeRegistry.require("video_generate").inputs.find((port) => port.id === "images")!), true);
+  assert.equal(areWorkflowPortsCompatible(upload.outputs.find((port) => port.id === "audio")!, workflowNodeRegistry.require("voice_clone").inputs.find((port) => port.id === "audios")!), true);
+});
+
 test("preserves SaaS control-node defaults in the shared definition catalog", () => {
   const collect = workflowNodeRegistry.require("collect");
   const output = workflowNodeRegistry.require("output");
   assert.equal(collect.defaultConfig.includeFailures, false);
   assert.equal(output.defaultConfig.allowEmpty, false);
   assert.equal(output.defaultConfig.requireAllSucceeded, true);
+});
+
+test("shares the online editor parameter contract for desktop workflow nodes", () => {
+  const writer = workflowNodeRegistry.require("writer");
+  const image = workflowNodeRegistry.require("image_generate");
+  const video = workflowNodeRegistry.require("video_generate");
+  const ppt = workflowNodeRegistry.require("ppt_generate");
+  const fieldIds = (definition: typeof writer) => new Set(definition.configSchema.map((field) => field.id));
+
+  for (const id of ["selectedProviderId", "selectedModelId", "platform", "mode", "language"]) assert.equal(fieldIds(writer).has(id), true, id);
+  for (const id of ["imageSize", "imageQuality", "imageBackground", "imageOutputFormat", "imageModeration"]) assert.equal(fieldIds(image).has(id), true, id);
+  for (const id of ["model", "mode", "duration", "ratio", "sound"]) assert.equal(fieldIds(video).has(id), true, id);
+  for (const id of ["previewRuntime", "model", "pageCount", "templateId", "language", "scenario"]) assert.equal(fieldIds(ppt).has(id), true, id);
 });
 
 test("accepts generic assets for media inputs but not text-only nodes", () => {

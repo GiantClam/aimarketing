@@ -24,7 +24,8 @@ import {
 } from "@/lib/writer/prompt-similarity"
 import { writerFetch } from "@/lib/writer/network"
 import { updateWriterConversationMeta } from "@/lib/writer/repository"
-import { isWriterR2Available, parseWriterDataUrl, uploadWriterImageToR2 } from "@/lib/writer/r2"
+import { persistWriterGeneratedImage } from "@/lib/writer/platform-artifacts"
+import { parseWriterDataUrl } from "@/lib/writer/r2"
 
 export const runtime = "nodejs"
 export const maxDuration = 300
@@ -72,6 +73,7 @@ type WriterGeneratedAsset = WriterPlannedAsset & {
   provider: WriterImageProvider | "error"
   storageKey?: string
   contentType?: string
+  artifactId?: number
   error?: string
 }
 
@@ -507,6 +509,8 @@ async function generateWriterAssetsBatch(input: {
   platform: ReturnType<typeof normalizeWriterPlatform>
   conversationId: string | null
   userId: number
+  enterpriseId: number
+  runId: string
   providerPlan: WriterImageProvider[]
   onAsset?: (
     event: { index: number; total: number; asset: WriterGeneratedAsset; assets: WriterGeneratedAsset[] },
@@ -568,10 +572,15 @@ async function generateWriterAssetsBatch(input: {
         provider: generated.provider,
         dataUrlLength: generated.dataUrl.length,
       })
-      const uploaded = await uploadWriterImageToR2({
+      const uploaded = await persistWriterGeneratedImage({
         userId: input.userId,
+        enterpriseId: input.enterpriseId,
         conversationId: input.conversationId,
+        runId: input.runId,
         assetId: asset.id,
+        title: asset.title || asset.label || asset.id,
+        prompt: promptGuard.prompt,
+        provider: generated.provider,
         dataUrl: generated.dataUrl,
       })
       const nextAsset: WriterGeneratedAsset = {
@@ -579,6 +588,7 @@ async function generateWriterAssetsBatch(input: {
         url: uploaded.url,
         storageKey: uploaded.storageKey,
         contentType: uploaded.contentType,
+        artifactId: uploaded.artifactId,
         status: "ready" as const,
         provider: generated.provider,
       }
@@ -613,6 +623,10 @@ export async function POST(request: NextRequest) {
     if ("response" in auth) {
       return auth.response
     }
+    if (!auth.user.enterpriseId) {
+      return NextResponse.json({ error: "enterprise_context_required" }, { status: 403 })
+    }
+    const enterpriseId = auth.user.enterpriseId
 
     const body = await request.json()
     const streamMode = body?.stream === true || body?.stream === "true"
@@ -640,7 +654,7 @@ export async function POST(request: NextRequest) {
           workflowName: "writer_assets",
           payload: {
             kind: "writer_assets",
-            enterpriseId: auth.user.enterpriseId,
+            enterpriseId,
             conversationId,
             markdown,
             platform,
@@ -669,42 +683,6 @@ export async function POST(request: NextRequest) {
 
     if (baseProviderPlan.length === 0) {
       const errorMessage = "Configure at least one writer image provider: pptoken, aiberm, crazyroute."
-      const failedAssets = ensureWriterAssetOrder(markWriterAssetsFailed(plannedAssets, errorMessage), platform, mode)
-      await updateWriterAssetConversationStatus({ userId: auth.user.id, conversationId, status: "failed" })
-      if (streamMode) {
-        return createWriterAssetSseResponse(async (emit) => {
-          emit({ event: "start", total: failedAssets.length })
-          for (let index = 0; index < failedAssets.length; index += 1) {
-            emit({ event: "asset", index: index + 1, total: failedAssets.length, asset: failedAssets[index], assets: failedAssets.slice(0, index + 1) })
-          }
-          emit({
-            event: "done",
-            ok: false,
-            error: errorMessage,
-            data: {
-              provider: getPreferredWriterImageProvider(),
-              model: getPreferredWriterImageModel(),
-              assets: failedAssets,
-            },
-          })
-        })
-      }
-
-      return NextResponse.json(
-        {
-          data: {
-            provider: getPreferredWriterImageProvider(),
-            model: getPreferredWriterImageModel(),
-            assets: failedAssets,
-          },
-          error: errorMessage,
-        },
-        { status: 503 },
-      )
-    }
-
-    if (!isWriterR2Available()) {
-      const errorMessage = "writer_r2_config_missing"
       const failedAssets = ensureWriterAssetOrder(markWriterAssetsFailed(plannedAssets, errorMessage), platform, mode)
       await updateWriterAssetConversationStatus({ userId: auth.user.id, conversationId, status: "failed" })
       if (streamMode) {
@@ -784,6 +762,8 @@ export async function POST(request: NextRequest) {
             platform,
             conversationId,
             userId: auth.user.id,
+            enterpriseId,
+            runId: requestKey,
             providerPlan: baseProviderPlan,
             onAsset: ({ index, total, asset, assets }) => {
               emit({
@@ -893,6 +873,8 @@ export async function POST(request: NextRequest) {
       platform,
       conversationId,
       userId: auth.user.id,
+      enterpriseId,
+      runId: requestKey,
       providerPlan: baseProviderPlan,
     })
     const orderedAssets = ensureWriterAssetOrder(generatedAssets, platform, mode)

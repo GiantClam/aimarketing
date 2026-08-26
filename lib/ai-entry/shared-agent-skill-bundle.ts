@@ -54,6 +54,9 @@ async function collectFiles(root: string, relative = "") : Promise<Array<{ path:
   const entries = await readdir(path.join(root, relative), { withFileTypes: true })
   const files: Array<{ path: "SKILL.md" | `references/${string}`; content: string }> = []
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    // Finder and editor metadata (for example `.DS_Store`) is not part of a
+    // governed Skill bundle and must not be treated as a candidate document.
+    if (entry.name.startsWith(".")) continue
     const nextRelative = relative ? `${relative}/${entry.name}` : entry.name
     if (entry.isDirectory()) {
       if (relative === "" && entry.name !== "references") continue

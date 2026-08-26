@@ -10,7 +10,7 @@ const definition: WorkflowDefinitionEnvelope = {
   definitionHash: "hash",
   nodes: [
     { nodeKey: "text", type: "text_input", nodeVersion: 1, title: "Text", positionX: 0, positionY: 0, config: { text: "hello" } },
-    { nodeKey: "image", type: "image_generate", nodeVersion: 1, title: "Image", positionX: 1, positionY: 0, config: { provider: "stale", model: "stale/image" } },
+    { nodeKey: "image", type: "image_generate", nodeVersion: 1, title: "Image", positionX: 1, positionY: 0, config: { provider: "stale", model: "stale/image", apiKey: "stale-secret" } },
     { nodeKey: "video", type: "video_generate", nodeVersion: 1, title: "Video", positionX: 2, positionY: 0, config: {} },
     { nodeKey: "audio", type: "music_generate", nodeVersion: 1, title: "Audio", positionX: 3, positionY: 0, config: {} },
   ],
@@ -44,4 +44,28 @@ test("provider binding leaves text/input nodes unchanged and does not introduce 
   const portable = sanitizeWorkflowDefinitionForStorage(bound);
   assert.equal("provider" in (portable.nodes.find((node) => node.nodeKey === "image")?.config ?? {}), false);
   assert.equal("model" in (portable.nodes.find((node) => node.nodeKey === "image")?.config ?? {}), false);
+});
+
+test("provider binding keeps an explicitly selected music model", () => {
+  const musicDefinition: WorkflowDefinitionEnvelope = {
+    ...definition,
+    nodes: definition.nodes.map((node) => node.nodeKey === "audio" ? { ...node, config: { model: "music-2.6" } } : node),
+  };
+  const bound = bindWorkflowProviderDefaults(musicDefinition, {
+    provider: { id: "text-main", model: "text/default" },
+    providers: { audio: { id: "audio", source: "minimax", model: "speech-2.8-hd", baseUrl: "https://audio.example.test" } },
+    defaults: { audio: "audio" },
+  });
+  assert.equal(bound.nodes.find((node) => node.nodeKey === "audio")?.config.model, "music-2.6");
+});
+
+test("provider binding keeps account-owned RunningHub workflow IDs in the local profile only", () => {
+  const digitalDefinition: WorkflowDefinitionEnvelope = { ...definition, nodes: [...definition.nodes, { nodeKey: "human", type: "digital_human", nodeVersion: 1, title: "Human", positionX: 4, positionY: 0, config: {} }] };
+  const bound = bindWorkflowProviderDefaults(digitalDefinition, {
+    provider: { id: "text", model: "text/default" },
+    providers: { video: { id: "video", source: "runninghub", model: "workflow", baseUrl: "https://video.example.test", digitalHumanWorkflowId: "human-workflow" } },
+    defaults: { video: "video" },
+  });
+  assert.deepEqual(bound.nodes.find((node) => node.nodeKey === "human")?.config, { provider: "video", model: "workflow", baseUrl: "https://video.example.test" });
+  assert.equal("digitalHumanWorkflowId" in (sanitizeWorkflowDefinitionForStorage(bound).nodes.find((node) => node.nodeKey === "human")?.config ?? {}), false);
 });

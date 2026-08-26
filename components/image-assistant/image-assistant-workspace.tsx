@@ -31,6 +31,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { WorkspaceComposerPanel, WorkspacePromptChips, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
+import { PromptInput, PromptInputTextarea } from "@aimarketing/workbench-ui"
 import {
   WorkspaceConversationSkeleton,
   WorkspaceLoadingMessage,
@@ -5505,6 +5506,26 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                   </div>
                   {mode !== "canvas" ? (
                   <div className="border-t border-border/70 bg-[#f7f7f7] px-3 py-2.5 lg:px-4 lg:py-3">
+                    <PromptInput
+                      value={prompt}
+                      onValueChange={(value) => {
+                        setPrompt(value)
+                        if (jobError) setJobError(null)
+                      }}
+                      onSubmit={() => {
+                        if (canSubmit) void runJob(primaryRunKind)
+                      }}
+                      attachments={pendingAttachments.map((attachment) => ({
+                        id: attachment.id,
+                        name: attachment.file.name,
+                        mediaType: attachment.file.type || "image/*",
+                      }))}
+                      onAddAttachments={(files) => void uploadFiles(files)}
+                      onRemoveAttachment={removePendingAttachment}
+                      onStop={() => activeJobAbortRef.current?.abort()}
+                      disabled={isBusy || isPendingTurnRunning}
+                      className="relative"
+                    >
                     <WorkspaceComposerPanel
                       data-testid="image-composer-dropzone"
                       className={cn(
@@ -5773,7 +5794,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                       ) : null}
 
                       <div className="mt-2">
-                        <Textarea
+                        <PromptInputTextarea
                           data-testid="image-prompt-input"
                           value={prompt}
                           onChange={(event) => {
@@ -5797,6 +5818,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                         ) : null}
                       </div>
                     </WorkspaceComposerPanel>
+                    </PromptInput>
                   </div>
                   ) : null}
                 </div>

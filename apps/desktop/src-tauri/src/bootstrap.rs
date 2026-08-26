@@ -28,29 +28,37 @@ fn webview_repair_progress_messages_for(chinese: bool) -> [&'static str; 3] {
     }
 }
 
-fn runtime_repair_progress_messages_for(chinese: bool) -> [&'static str; 3] {
-    if chinese {
-        [
-            "检查本地运行环境…",
-            "正在安装或修复本地运行环境…",
-            "正在重新探测本地运行环境…",
-        ]
-    } else {
-        [
-            "Checking the local runtime…",
-            "Installing or repairing the local runtime…",
-            "Probing the local runtime again…",
-        ]
+pub(crate) enum StartupStage {
+    Starting,
+    WebView,
+    Runtime,
+    Workbench,
+}
+
+impl StartupStage {
+    fn message(self, chinese: bool) -> &'static str {
+        match (self, chinese) {
+            (Self::Starting, true) => "正在启动 AI Marketing…",
+            (Self::Starting, false) => "Starting AI Marketing…",
+            (Self::WebView, true) => "正在检查 WebView2 运行时…",
+            (Self::WebView, false) => "Checking the WebView2 runtime…",
+            (Self::Runtime, true) => "正在准备本地运行环境…",
+            (Self::Runtime, false) => "Preparing the local runtime…",
+            (Self::Workbench, true) => "正在打开工作台…",
+            (Self::Workbench, false) => "Opening the workbench…",
+        }
     }
 }
 
-struct StartupProgress {
+pub(crate) struct StartupProgress {
     #[cfg(windows)]
     hwnd: windows_sys::Win32::Foundation::HWND,
+    chinese: bool,
 }
 
 impl StartupProgress {
-    fn new(message: &str, chinese: bool) -> Self {
+    pub(crate) fn new(stage: StartupStage) -> Self {
+        let chinese = startup_is_chinese();
         #[cfg(windows)]
         {
             use std::ptr::{null, null_mut};
@@ -60,7 +68,7 @@ impl StartupProgress {
             };
 
             let class = wide("STATIC");
-            let title = wide(if chinese { "AI Marketing 环境修复" } else { "AI Marketing environment repair" });
+            let title = wide(if chinese { "AI Marketing 启动中" } else { "AI Marketing starting" });
             let hwnd = unsafe {
                 CreateWindowExW(
                     WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
@@ -77,22 +85,26 @@ impl StartupProgress {
                     null(),
                 )
             };
-            let progress = Self { hwnd };
+            let progress = Self { hwnd, chinese };
             if !progress.hwnd.is_null() {
                 unsafe { ShowWindow(progress.hwnd, SW_SHOW); }
             }
-            progress.update(message);
+            progress.show_stage(stage);
             progress
         }
         #[cfg(not(windows))]
         {
-            let _ = chinese;
-            eprintln!("NATIVE_STATUS: {message}");
-            Self {}
+            let progress = Self { chinese };
+            progress.show_stage(stage);
+            progress
         }
     }
 
-    fn update(&self, message: &str) {
+    pub(crate) fn show_stage(&self, stage: StartupStage) {
+        self.update(stage.message(self.chinese));
+    }
+
+    pub(crate) fn update(&self, message: &str) {
         #[cfg(windows)]
         {
             if self.hwnd.is_null() { return; }
@@ -124,11 +136,11 @@ fn wide(value: &str) -> Vec<u16> {
     OsStr::new(value).encode_wide().chain(Some(0)).collect()
 }
 
-pub fn ensure_webview2() -> Result<(), String> {
+pub fn ensure_webview2(progress: &StartupProgress) -> Result<(), String> {
     if webview2_installed() { return Ok(()); }
     let chinese = startup_is_chinese();
     let progress_messages = webview_repair_progress_messages_for(chinese);
-    let progress = StartupProgress::new(progress_messages[0], chinese);
+    progress.update(progress_messages[0]);
     let bootstrapper = bundled_bootstrapper().unwrap_or_else(|| std::env::temp_dir().join("AI-Marketing-WebView2Bootstrapper.exe"));
     if !bootstrapper.is_file() {
         progress.update(progress_messages[1]);
@@ -165,129 +177,6 @@ fn startup_is_chinese() -> bool {
     }
 }
 
-/// Run the runtime gate before Tauri creates the WebView. The React bootstrap
-/// screen remains a diagnostic fallback, but it must not be the first place
-/// that repairs a missing green-runtime component.
-pub fn ensure_runtime_before_window() -> Result<(), String> {
-    let executable = std::env::current_exe().map_err(|error| format!("runtime_exe_unavailable: {error}"))?;
-    let executable_dir = executable.parent().ok_or_else(|| "runtime_exe_dir_unavailable".to_string())?;
-    let resource_roots = [
-        executable_dir.to_path_buf(),
-        executable_dir.join("resources"),
-        executable_dir.join("dist-runtime"),
-        executable_dir.join("_up_").join("dist-runtime"),
-        std::env::current_dir().unwrap_or_default().join("apps").join("desktop").join("dist-runtime"),
-    ];
-    let manifest = resource_roots.iter().flat_map(|root| [
-        root.join("runtime-manifest.json"),
-        root.join("runtime").join("runtime-manifest.json"),
-        root.join("dist-runtime").join("runtime").join("runtime-manifest.json"),
-    ]).find(|path| path.is_file()).ok_or_else(|| "runtime_manifest_missing".to_string())?;
-    let script = resource_roots.iter().flat_map(|root| [
-        root.join("install-desktop-runtime.ps1"),
-        root.join("dist-runtime").join("install-desktop-runtime.ps1"),
-    ]).find(|path| path.is_file()).ok_or_else(|| "runtime_installer_missing".to_string())?;
-    let portable = executable_dir.join("portable.flag").is_file();
-    let install_root = if portable {
-        executable_dir.join("data")
-    } else {
-        std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(|| executable_dir.join("data")).join("AIMarketing")
-    };
-    if runtime_ready(&resource_roots, &install_root) { return Ok(()); }
-    let offline_zip = configured_offline_runtime_zip(&install_root);
-    let chinese = startup_is_chinese();
-    let progress_messages = runtime_repair_progress_messages_for(chinese);
-    let progress = StartupProgress::new(progress_messages[0], chinese);
-    progress.update(progress_messages[1]);
-    let mut command = Command::new("powershell.exe");
-    command
-        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
-        .arg(&script)
-        .args(["-ManifestPath"])
-        .arg(&manifest)
-        .args(["-InstallRoot"])
-        .arg(&install_root);
-    if let Some(offline_zip) = offline_zip.as_ref() { command.args(["-OfflineZip"]).arg(offline_zip); }
-    let output = command
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .map_err(|error| format!("runtime_installer_spawn_failed: {error}"))?;
-    if !output.status.success() {
-        let detail = String::from_utf8_lossy(&output.stderr)
-            .lines()
-            .chain(String::from_utf8_lossy(&output.stdout).lines())
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .take(3)
-            .collect::<Vec<_>>()
-            .join(" | ");
-        let detail = detail.chars().take(512).collect::<String>();
-        return Err(format!(
-            "runtime_install_failed:{}{}",
-            output.status.code().unwrap_or(-1),
-            if detail.is_empty() { String::new() } else { format!(":{detail}") }
-        ));
-    }
-    progress.update(progress_messages[2]);
-    if runtime_ready(&resource_roots, &install_root) { Ok(()) } else { Err("runtime_install_incomplete".to_string()) }
-}
-
-fn runtime_ready(resource_roots: &[PathBuf], install_root: &Path) -> bool {
-    let node = configured_runtime_path(install_root, "nodePath")
-        .into_iter()
-        .flat_map(crate::resolve_windows_command_shim)
-        .chain([install_root.join("runtime").join("node").join("node.exe"), install_root.join("node").join("node.exe")])
-        .find(|path| path.is_file() && executable_works(path, &["--version"]))
-        .or_else(|| system_executable("node"))
-        .is_some();
-    let opencode = configured_runtime_path(install_root, "opencodePath")
-        .into_iter()
-        .flat_map(crate::resolve_windows_command_shim)
-        .chain([install_root.join("runtime").join("opencode").join("opencode.exe"), install_root.join("opencode").join("opencode.exe")])
-        .find(|path| path.is_file() && executable_works(path, &["--version"]))
-        .or_else(|| system_executable("opencode"))
-        .is_some();
-    let python = configured_runtime_path(install_root, "pythonPath")
-        .into_iter()
-        .chain([install_root.join("runtime").join("python").join("python.exe"), install_root.join("python").join("python.exe")])
-        .find(|path| path.is_file() && python_works(path))
-        .or_else(|| system_executable("python").filter(|path| python_works(path)))
-        .is_some();
-    let host = configured_runtime_path(install_root, "hostPath").is_some_and(|path| path.is_file())
-        || resource_roots.iter().any(|root| root.join("host.mjs").is_file() || root.join("dist-runtime").join("host.mjs").is_file());
-    let knowledge = configured_runtime_path(install_root, "knowledgePath").is_some_and(|path| path.is_file())
-        || resource_roots.iter().any(|root| root.join("knowledge.mjs").is_file() || root.join("dist-runtime").join("knowledge.mjs").is_file());
-    let skills = configured_runtime_path(install_root, "skillsPath").is_some_and(|path| path.join("ppt-master").join("SKILL.md").is_file() && path.join("ppt-master.manifest.json").is_file())
-        || resource_roots.iter().any(|root| {
-            let path = if root.join("skills").join("ppt-master").join("SKILL.md").is_file() { root.join("skills") } else { root.join("dist-runtime").join("skills") };
-            path.join("ppt-master").join("SKILL.md").is_file() && path.join("ppt-master.manifest.json").is_file()
-        });
-    let fonts = configured_runtime_path(install_root, "fontsPath").is_some_and(|path| font_asset_works(&path.join("msyh.ttc")))
-        || resource_roots.iter().any(|root| font_asset_works(&root.join("fonts").join("msyh.ttc")) || font_asset_works(&root.join("runtime").join("fonts").join("msyh.ttc")) || font_asset_works(&root.join("dist-runtime").join("runtime").join("fonts").join("msyh.ttc")));
-    let lancedb = configured_runtime_path(install_root, "lancedbPath").is_some_and(|path| lancedb_ready(&path))
-        || [install_root.join("runtime").join("lancedb"), install_root.join("lancedb")].into_iter().any(|path| lancedb_ready(&path))
-        || resource_roots.iter().any(|root| lancedb_ready(&root.join("lancedb")) || lancedb_ready(&root.join("runtime").join("lancedb")));
-    let embedding = configured_runtime_path(install_root, "embeddingPath").is_some_and(|path| path.is_file())
-        || [install_root.join("runtime").join("embedding").join("local-hash-384-v1.json"), install_root.join("embedding").join("local-hash-384-v1.json")].into_iter().any(|path| path.is_file())
-        || resource_roots.iter().any(|root| root.join("embedding").join("local-hash-384-v1.json").is_file() || root.join("runtime").join("embedding").join("local-hash-384-v1.json").is_file());
-    let database = install_root.join("app.db");
-    let migrations = crate::storage::initialize(&database).is_ok() && crate::storage::migrations_ready(&database).unwrap_or(false);
-    node && opencode && python && host && knowledge && skills && fonts && lancedb && embedding && migrations
-}
-
-fn configured_runtime_path(install_root: &Path, key: &str) -> Option<PathBuf> {
-    let value = crate::config::read(&install_root.join("config.json"), install_root).ok()?;
-    let configured = value.get("runtime")?.get(key)?.as_str()?;
-    std::fs::canonicalize(configured).ok().map(powershell_compatible_path)
-}
-
-fn configured_offline_runtime_zip(install_root: &Path) -> Option<PathBuf> {
-    let value = crate::config::read(&install_root.join("config.json"), install_root).ok()?;
-    let configured = value.get("offlineRuntimeZipPath")?.as_str()?;
-    let path = std::fs::canonicalize(configured).ok()?;
-    path.is_file().then_some(powershell_compatible_path(path))
-}
-
 pub(crate) fn powershell_compatible_path(path: PathBuf) -> PathBuf {
     let value = path.to_string_lossy();
     if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
@@ -297,10 +186,6 @@ pub(crate) fn powershell_compatible_path(path: PathBuf) -> PathBuf {
         return PathBuf::from(rest);
     }
     path
-}
-
-fn lancedb_ready(root: &Path) -> bool {
-    root.join("node_modules").join("@lancedb").join("lancedb").join("dist").join("index.js").is_file()
 }
 
 pub(crate) fn font_asset_works(path: &Path) -> bool {
@@ -314,20 +199,6 @@ pub(crate) fn font_asset_works(path: &Path) -> bool {
         b"OTTO" | [0, 1, 0, 0] => u16::from_be_bytes(header[4..6].try_into().unwrap_or_default()) > 0,
         _ => false,
     }
-}
-
-fn executable_works(path: &Path, args: &[&str]) -> bool {
-    Command::new(path).args(args).creation_flags(CREATE_NO_WINDOW).output().map(|output| output.status.success()).unwrap_or(false)
-}
-
-fn python_works(path: &Path) -> bool {
-    Command::new(path).args(["-c", crate::PPT_PYTHON_PROBE]).creation_flags(CREATE_NO_WINDOW).output().map(|output| output.status.success()).unwrap_or(false)
-}
-
-fn system_executable(command: &str) -> Option<PathBuf> {
-    let output = Command::new("where.exe").arg(command).creation_flags(CREATE_NO_WINDOW).output().ok()?;
-    if !output.status.success() { return None; }
-    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).flat_map(crate::resolve_windows_command_shim).find(|path| path.is_file() && executable_works(path, &["--version"]))
 }
 
 pub fn show_startup_error(error: &str) {
@@ -427,69 +298,9 @@ mod tests {
     }
 
     #[test]
-    fn runtime_gate_is_explicitly_pre_window() {
-        let source = include_str!("bootstrap.rs");
-        assert!(source.contains("ensure_runtime_before_window"));
-        assert!(source.contains("runtime_install_incomplete"));
-    }
-
-    #[test]
-    fn healthy_runtime_returns_before_spawning_the_installer() {
-        let source = include_str!("bootstrap.rs");
-        let ready_check = source.find("if runtime_ready(&resource_roots, &install_root) { return Ok(()); }").unwrap();
-        let installer_spawn = source.find("Command::new(\"powershell.exe\")").unwrap();
-        assert!(ready_check < installer_spawn, "healthy runtime must bypass repair before PowerShell is spawned");
-    }
-
-    #[test]
-    fn pre_window_python_gate_uses_the_shared_ppt_probe() {
-        let source = include_str!("bootstrap.rs");
-        assert!(source.contains("crate::PPT_PYTHON_PROBE"));
-    }
-
-    #[test]
-    fn pre_window_gate_includes_sqlite_migrations() {
-        let source = include_str!("bootstrap.rs");
-        assert!(source.contains("migrations_ready"));
-    }
-
-    #[test]
-    fn pre_window_gate_reuses_a_configured_offline_runtime_zip() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-bootstrap-offline-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
-        let zip = root.join("runtime bundle.zip");
-        std::fs::write(&zip, b"fixture").unwrap();
-        let mut value = crate::config::default_config(&root);
-        value["offlineRuntimeZipPath"] = serde_json::Value::String(zip.to_string_lossy().into_owned());
-        crate::config::write(&root.join("config.json"), &value).unwrap();
-
-        assert_eq!(configured_offline_runtime_zip(&root), Some(powershell_compatible_path(std::fs::canonicalize(zip).unwrap())));
-        let source = include_str!("bootstrap.rs");
-        assert!(source.contains("-OfflineZip"));
-        let _ = std::fs::remove_dir_all(root);
-    }
-
-    #[test]
     fn powershell_path_strips_windows_extended_prefixes() {
         assert_eq!(powershell_compatible_path(PathBuf::from(r"\\?\C:\runtime.zip")), PathBuf::from(r"C:\runtime.zip"));
         assert_eq!(powershell_compatible_path(PathBuf::from(r"\\?\UNC\server\share\runtime.zip")), PathBuf::from(r"\\server\share\runtime.zip"));
-    }
-
-    #[test]
-    fn pre_window_gate_reuses_a_persisted_runtime_path() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-bootstrap-path-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
-        let fixture = root.join("node.exe");
-        std::fs::write(&fixture, b"fixture").unwrap();
-        let canonical = std::fs::canonicalize(&fixture).unwrap();
-        let mut value = crate::config::default_config(&root);
-        value["runtime"]["nodePath"] = serde_json::Value::String(canonical.to_string_lossy().into_owned());
-        crate::config::write(&root.join("config.json"), &value).unwrap();
-
-        assert_eq!(configured_runtime_path(&root, "nodePath"), Some(canonical));
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
@@ -525,26 +336,6 @@ mod tests {
                 "Checking the WebView2 runtime…",
                 "Downloading the WebView2 repair package…",
                 "Installing WebView2 and probing again…",
-            ]
-        );
-    }
-
-    #[test]
-    fn runtime_repair_progress_has_visible_ordered_stages() {
-        assert_eq!(
-            runtime_repair_progress_messages_for(true),
-            [
-                "检查本地运行环境…",
-                "正在安装或修复本地运行环境…",
-                "正在重新探测本地运行环境…",
-            ]
-        );
-        assert_eq!(
-            runtime_repair_progress_messages_for(false),
-            [
-                "Checking the local runtime…",
-                "Installing or repairing the local runtime…",
-                "Probing the local runtime again…",
             ]
         );
     }

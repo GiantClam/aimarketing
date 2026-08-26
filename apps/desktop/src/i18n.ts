@@ -13,9 +13,8 @@ export function resolveDesktopLocale(preference: DesktopLocalePreference, system
 
 export const desktopCopy = {
   zh: {
-    localWorkspace: "",
+    localWorkspace: "本地工作区 · FULL ACCESS",
     runtimeReady: "运行环境已就绪",
-    modelSettings: "模型与工作区设置",
     welcome: "欢迎回来，伙伴",
     welcomeSubtitle: "你的营销工作台已准备好。今天想创建什么？",
     homePlaceholder: "输入你的问题...",
@@ -27,9 +26,8 @@ export const desktopCopy = {
     languageEn: "English",
   },
   en: {
-    localWorkspace: "",
+    localWorkspace: "LOCAL WORKSPACE · FULL ACCESS",
     runtimeReady: "Runtime ready",
-    modelSettings: "Model & workspace settings",
     // The cloud home uses the same fallback display name when no account is
     // present; keep the local account-free adapter text identical.
     welcome: "Welcome back, there",
@@ -99,7 +97,7 @@ export const mediaSummaryEnglish: Record<string, string> = {
 };
 export const mediaSubmitEnglish: Record<string, string> = { "ai-music": "Generate audio", "audio-generate": "Generate audio", "voice-clone": "Clone voice", "voice-synthesis": "Synthesize speech", "text-to-video": "Generate video", "image-to-video": "Generate video", "reference-to-video": "Generate video", "video-edit": "Edit video", "digital-human": "Generate avatar video", "video-enhance": "Start enhancement" };
 export const mediaFieldEnglish: Record<string, string> = {
-  "风格 / 情绪 / 场景": "Style / mood / scene", "歌词来源": "Lyrics source", "歌词": "Lyrics", "AI 写词提示": "AI lyric prompt", "音频提示词": "Audio prompt", "时长（秒）": "Duration (seconds)", "格式": "Format", "新音色 ID": "New voice ID", "试听文本": "Preview text", "示例音频文本": "Sample audio text", "降噪": "Noise reduction", "文本内容": "Text content", "音色": "Voice", "模型": "Model", "语言增强": "Language boost", "语速": "Speed", "音量": "Volume", "音高": "Pitch", "视频提示词": "Video prompt", "首帧图片": "First-frame image", "动作提示": "Motion prompt", "参考图片": "Reference images", "场景提示": "Scene prompt", "源视频": "Source video", "编辑指令": "Edit instruction", "音频": "Audio", "人物图片": "Avatar image", "口播文案": "Spoken copy", "增强目标": "Enhancement target", "处理时长上限（秒）": "Maximum duration (seconds)", Seed: "Seed",
+  "风格 / 情绪 / 场景": "Style / mood / scene", "歌词来源": "Lyrics source", "歌词": "Lyrics", "AI 写词提示": "AI lyric prompt", "音频提示词": "Audio prompt", "翻唱源音频 URL": "Cover source audio URL", "时长（秒）": "Duration (seconds)", "格式": "Format", "新音色 ID": "New voice ID", "试听文本": "Preview text", "示例音频文本": "Sample audio text", "降噪": "Noise reduction", "文本内容": "Text content", "音色": "Voice", "模型": "Model", "语言增强": "Language boost", "语速": "Speed", "音量": "Volume", "音高": "Pitch", "视频提示词": "Video prompt", "提示词": "Prompt", "首帧图片": "First-frame image", "尾帧图片地址": "Last frame URL", "附加图片地址": "Additional image URLs", "动作提示": "Motion prompt", "参考图片": "Reference images", "参考图片地址": "Reference image URLs", "参考视频地址": "Reference video URL", "参考音频地址": "Reference audio URL", "场景提示": "Scene prompt", "源视频": "Source video", "源视频地址": "Source video URL", "源视频 URL": "Source video URL", "编辑指令": "Edit instruction", "音频": "Audio", "音频 URL": "Audio URL", "音频设置": "Audio", "人物图片": "Avatar image", "人物图片 URL": "Avatar image URL", "口播文案": "Spoken copy", "分辨率": "Resolution", "画面比例": "Aspect ratio", "时长": "Duration", "水印": "Watermark", "生成音频": "Generate audio", "联网搜索": "Web search", "返回尾帧": "Return last frame", "真人模式": "Real person mode", "增强目标": "Enhancement target", "处理时长上限（秒）": "Maximum duration (seconds)", Seed: "Seed",
 };
 /** Placeholders are part of the shared media feature catalog, so translate
  * them at the desktop boundary instead of leaking Chinese copy into English
@@ -108,6 +106,7 @@ export const mediaPlaceholderEnglish: Record<string, string> = {
   "例如：独立电子流行，适合 AI 产品发布片头。": "For example: indie electronic pop for an AI product launch intro.",
   "手动填写歌词，或在结果区回显 AI 生成歌词。": "Enter lyrics manually, or show AI-generated lyrics in the result.",
   "例如：写一首关于新品牌发布夜的中文流行歌。": "For example: write a Chinese pop song about a new brand launch night.",
+  "仅 music-cover 需要：原曲或参考音频的可访问 URL": "Music cover only: accessible URL for the original or reference audio.",
   "例如：生成一段适合科技产品发布会转场的短音效。": "For example: create a short transition sound for a technology product launch.",
   "留空则自动生成，例如 voice_brand_host": "Leave blank to generate one automatically, e.g. voice_brand_host.",
   "例如：欢迎来到 AI Marketing 新品发布会。": "For example: welcome to the AI Marketing product launch.",
@@ -124,11 +123,14 @@ export const mediaPlaceholderEnglish: Record<string, string> = {
   "选择本地视频产物或粘贴路径": "Choose a local video artifact or paste its path.",
   "选择本地音频产物或粘贴路径": "Choose a local audio artifact or paste its path.",
   "选择本地人物图片或粘贴路径": "Choose a local avatar image or paste its path.",
+  "上传音频后会自动填入，也可以粘贴素材库音频地址": "Uploading audio fills this automatically, or paste an existing asset URL.",
+  "上传图片后会自动填入，也可以粘贴素材库图片地址": "Uploading an image fills this automatically, or paste an existing asset URL.",
+  "上传视频后会自动填入，也可以粘贴素材库视频地址": "Uploading a video fills this automatically, or paste an existing asset URL.",
   "未上传音频时，这段文案会走 TTS 合成。": "Without uploaded audio, this script will be synthesized with TTS.",
-  "例如：模特正在做产品展示": "For example: a model is demonstrating the product.",
-  "例如：提升细节、修复压缩模糊": "For example: enhance detail and repair compression blur.",
+  "例如：模特正在做产品展示，进行电商直播带货": "For example: a presenter is demonstrating a product in a live commerce setting.",
+  "例如：提升细节、修复压缩模糊、强化人物边缘": "For example: recover detail, reduce compression blur, and sharpen subject edges.",
 };
-export const mediaOptionEnglish: Record<string, string> = { "手动填写": "Enter manually", "AI 自动生成": "Generate with AI", "关闭": "Off", "开启": "On", "自动": "Auto", "中文": "Chinese", "英文": "English", 标准: "Standard", 高清: "HD", "横版 · 1536×1024": "Landscape · 1536×1024", "竖版 · 1024×1536": "Portrait · 1024×1536" };
+export const mediaOptionEnglish: Record<string, string> = { "手动填写": "Enter manually", "AI 自动生成": "Generate with AI", "关闭": "Off", "开启": "On", "自动": "Auto", "原始音频": "Original audio", "中文": "Chinese", "英文": "English", 标准: "Standard", 高清: "HD", "横版 · 1536×1024": "Landscape · 1536×1024", "竖版 · 1024×1536": "Portrait · 1024×1536" };
 
 export const writerPlatformEnglish: Record<string, string> = {
   wechat: "WeChat Official Account", xiaohongshu: "Xiaohongshu", weibo: "Weibo", douyin: "Douyin", x: "X", linkedin: "LinkedIn", instagram: "Instagram", tiktok: "TikTok", facebook: "Facebook", reddit: "Reddit", generic: "General content",

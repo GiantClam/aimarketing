@@ -9,12 +9,31 @@ const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 export const STATIC_REMOTE_URL = /\bhttps?:\/\/[a-z0-9][a-z0-9.-]*(?::\d+)?(?:[/?#'"`)]|$)/giu;
 
 const DOCUMENTATION_URL = /^(?:https?:\/\/www\.w3\.org\/|https:\/\/(?:react\.dev|github\.com)\/)/iu;
+// Provider catalog defaults are displayed as configuration suggestions. They
+// are not contacted by the bundled UI; actual requests still flow through the
+// host/provider adapter and user configuration.
+const APPROVED_PROVIDER_CATALOG_URLS = new Set([
+  "https://api.siliconflow.cn/",
+  "https://openrouter.ai/",
+  "https://api.minimaxi.com/",
+  "https://api.openai.com/",
+  "https://ark.cn-beijing.volces.com/",
+  "https://dashscope.aliyuncs.com/",
+  "https://generativelanguage.googleapis.com/",
+  "https://open.bigmodel.cn/",
+  "https://www.runninghub.cn/",
+  "https://www.runninghub.ai/",
+]);
 
 export function scanDesktopNetworkBoundary(files) {
   return files.flatMap(({ filePath, source }) => {
     STATIC_REMOTE_URL.lastIndex = 0;
     const urls = [...source.matchAll(STATIC_REMOTE_URL)].map((match) => match[0]);
-    const external = urls.find((url) => !/^(?:https?:\/\/)(?:127\.0\.0\.1|localhost)(?::\d+)?(?:[/?#'"`)]|$)/iu.test(url) && !DOCUMENTATION_URL.test(url));
+    const external = urls.find((url) => {
+      const normalizedUrl = url.replace(/[\\"'`)]/gu, "");
+      const approvedProviderUrl = APPROVED_PROVIDER_CATALOG_URLS.has(normalizedUrl) || APPROVED_PROVIDER_CATALOG_URLS.has(`${normalizedUrl}/`);
+      return !/^(?:https?:\/\/)(?:127\.0\.0\.1|localhost)(?::\d+)?(?:[/?#'"`)]|$)/iu.test(url) && !DOCUMENTATION_URL.test(url) && !approvedProviderUrl;
+    });
     return external ? [{ filePath, label: "hardcoded external URL", url: external }] : [];
   });
 }

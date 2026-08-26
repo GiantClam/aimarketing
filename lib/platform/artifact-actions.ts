@@ -76,12 +76,24 @@ export function hasPlatformArtifactAccessibleContent(
     return true
   }
 
+  if (payload.response !== undefined && payload.response !== null) {
+    return true
+  }
+
   return typeof payload.text === "string" && payload.text.trim().length > 0
 }
 
 export function isPlatformArtifactAssetLibraryEligible(
   artifact: Pick<PlatformArtifactRecord, "externalUrl" | "storageKey" | "payload">,
 ) {
+  if (
+    artifact.payload &&
+    typeof artifact.payload === "object" &&
+    (artifact.payload as Record<string, unknown>).assetLibraryEligible === false
+  ) {
+    return false
+  }
+
   if (resolvePlatformArtifactSourceUrl(artifact as PlatformArtifactRecord)) {
     return true
   }
@@ -91,7 +103,10 @@ export function isPlatformArtifactAssetLibraryEligible(
   }
 
   const payload = artifact.payload as Record<string, unknown>
-  return typeof payload.embeddedContentBase64 === "string" && payload.embeddedContentBase64.trim().length > 0
+  return (
+    (typeof payload.embeddedContentBase64 === "string" && payload.embeddedContentBase64.trim().length > 0) ||
+    (payload.response !== undefined && payload.response !== null)
+  )
 }
 
 export function getPlatformArtifactPreviewKind(artifact: Pick<PlatformArtifactRecord, "mimeType" | "kind">) {

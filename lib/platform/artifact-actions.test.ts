@@ -68,6 +68,15 @@ test("artifact accessible content accepts embedded payload and inline text fallb
     } as Parameters<typeof hasPlatformArtifactAccessibleContent>[0]),
     false,
   )
+
+  assert.equal(
+    hasPlatformArtifactAccessibleContent({
+      externalUrl: null,
+      storageKey: null,
+      payload: { response: { slides: [{ title: "Q3 launch" }] } },
+    } as Parameters<typeof hasPlatformArtifactAccessibleContent>[0]),
+    true,
+  )
 })
 
 test("asset library eligibility only accepts file-backed artifact content", () => {
@@ -90,6 +99,15 @@ test("asset library eligibility only accepts file-backed artifact content", () =
         embeddedContentBase64: "dGVzdA==",
         text: "workflow file output",
       },
+    } as Parameters<typeof isPlatformArtifactAssetLibraryEligible>[0]),
+    true,
+  )
+
+  assert.equal(
+    isPlatformArtifactAssetLibraryEligible({
+      externalUrl: null,
+      storageKey: null,
+      payload: { response: { slides: [{ title: "Q3 launch" }] } },
     } as Parameters<typeof isPlatformArtifactAssetLibraryEligible>[0]),
     true,
   )

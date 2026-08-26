@@ -162,13 +162,17 @@ fn opencode_executable(app: &AppHandle) -> Result<Option<String>, String> {
 }
 
 fn system_executable(command: &str) -> Option<PathBuf> {
-    let output = Command::new("where.exe").arg(command).output().ok()?;
+    let mut where_command = Command::new("where.exe");
+    where_command.creation_flags(0x08000000);
+    let output = where_command.arg(command).output().ok()?;
     if !output.status.success() { return None; }
     String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).flat_map(crate::resolve_windows_command_shim).filter(|path| path.is_file() && executable_works(path, &["--version"])).find_map(|path| std::fs::canonicalize(path).ok().map(crate::bootstrap::powershell_compatible_path))
 }
 
 fn executable_works(path: &std::path::Path, args: &[&str]) -> bool {
-    Command::new(path).args(args).output().map(|output| output.status.success()).unwrap_or(false)
+    let mut command = Command::new(path);
+    command.creation_flags(0x08000000);
+    command.args(args).output().map(|output| output.status.success()).unwrap_or(false)
 }
 
 fn configured_runtime_path(app: &AppHandle, key: &str) -> Option<PathBuf> {
@@ -195,7 +199,9 @@ fn python_executable(app: &AppHandle) -> Result<Option<String>, String> {
 }
 
 fn python_capable(path: &std::path::Path) -> bool {
-    Command::new(path).args(["-c", crate::PPT_PYTHON_PROBE]).output().map(|output| output.status.success()).unwrap_or(false)
+    let mut command = Command::new(path);
+    command.creation_flags(0x08000000);
+    command.args(["-c", crate::PPT_PYTHON_PROBE]).output().map(|output| output.status.success()).unwrap_or(false)
 }
 
 fn lancedb_runtime_directory(app: &AppHandle) -> Result<Option<String>, String> {
@@ -350,6 +356,9 @@ pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), Str
     let script = host_script(&app)?;
     let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
     let skills = configured_runtime_path(&app, "skillsPath").filter(|path| path.is_dir()).or_else(|| [resource.join("dist-runtime").join("skills"), resource.join("_up_").join("dist-runtime").join("skills"), resource.join("skills")].into_iter().find(|path| path.exists()));
+    let agents = [crate::data_dir(&app)?.join("agents"), resource.join("dist-runtime").join("agents"), resource.join("_up_").join("dist-runtime").join("agents"), resource.join("agents"), std::env::current_dir().map_err(|error| error.to_string())?.join("apps").join("desktop").join("dist-runtime").join("agents")]
+        .into_iter()
+        .find(|path| path.is_dir());
     let python = python_executable(&app)?;
     let mut child = Command::new(node_executable(&app)?)
         .arg(script)
@@ -358,6 +367,7 @@ pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), Str
         .stderr(Stdio::piped())
         .creation_flags(if cfg!(windows) { 0x08000000 } else { 0 })
         .envs(skills.as_ref().map(|path| [("AIMARKETING_SKILLS_DIR", path.to_string_lossy().to_string())]).into_iter().flatten())
+        .envs(agents.as_ref().map(|path| [("AIMARKETING_AGENTS_DIR", path.to_string_lossy().to_string())]).into_iter().flatten())
         .envs(opencode_executable(&app)?.map(|path| [("AIMARKETING_OPENCODE_PATH", path)]).into_iter().flatten())
         .envs(python.map(|path| [("AIMARKETING_PYTHON_PATH", path)]).into_iter().flatten())
         .envs(lancedb_runtime_directory(&app)?.map(|path| [("AIMARKETING_LANCEDB_DIR", path)]).into_iter().flatten())

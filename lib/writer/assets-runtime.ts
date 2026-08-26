@@ -20,7 +20,8 @@ import { writerFetch } from "@/lib/writer/network"
 import { ensureWriterPromptDiversity, extractWriterPromptFocus } from "@/lib/writer/prompt-similarity"
 import { updateWriterConversationMeta } from "@/lib/writer/repository"
 import { persistWriterAssetProgress } from "@/lib/writer/revisions"
-import { isWriterR2Available, parseWriterDataUrl, uploadWriterImageToR2 } from "@/lib/writer/r2"
+import { persistWriterGeneratedImage } from "@/lib/writer/platform-artifacts"
+import { parseWriterDataUrl } from "@/lib/writer/r2"
 
 export type WriterImageProvider = OpenAiCompatibleImageProviderId
 
@@ -29,6 +30,7 @@ export type WriterGeneratedAsset = WriterAsset & {
   provider: WriterImageProvider | "error"
   storageKey?: string
   contentType?: string
+  artifactId?: number
 }
 
 export type WriterAssetGenerationResult = {
@@ -203,6 +205,8 @@ async function generateWriterAssetsBatch(input: {
   platform: ReturnType<typeof normalizeWriterPlatform>
   conversationId: string | null
   userId: number
+  enterpriseId: number
+  taskId: number | string
   providerPlan: WriterImageProvider[]
   onAsset?: (
     asset: WriterGeneratedAsset,
@@ -232,10 +236,16 @@ async function generateWriterAssetsBatch(input: {
         WRITER_PLATFORM_CONFIG[input.platform].imageAspectRatio,
         preferredProviderPlan.length > 0 ? preferredProviderPlan : input.providerPlan,
       )
-      const uploaded = await uploadWriterImageToR2({
+      if (!input.enterpriseId) throw new Error("writer_asset_enterprise_required")
+      const uploaded = await persistWriterGeneratedImage({
         userId: input.userId,
+        enterpriseId: input.enterpriseId,
         conversationId: input.conversationId,
+        runId: input.taskId,
         assetId: asset.id,
+        title: asset.title || asset.label || asset.id,
+        prompt: promptGuard.prompt,
+        provider: generated.provider,
         dataUrl: generated.dataUrl,
       })
       const nextAsset: WriterGeneratedAsset = {
@@ -243,6 +253,7 @@ async function generateWriterAssetsBatch(input: {
         url: uploaded.url,
         storageKey: uploaded.storageKey,
         contentType: uploaded.contentType,
+        artifactId: uploaded.artifactId,
         status: "ready" as const,
         provider: generated.provider,
       }
@@ -362,19 +373,20 @@ export async function generateWriterAssetsForTask(input: {
     return { ok: false, assets, status: "failed", provider: preferredProvider, model: getPreferredWriterImageModel(), error }
   }
 
-  if (!isWriterR2Available()) {
-    const error = "writer_r2_config_missing"
+  if (!input.enterpriseId) {
+    const error = "enterprise_context_required"
     const assets = ensureWriterAssetOrder([...retainedAssets, ...markWriterAssetsFailed(plannedAssets, error)], input.platform, input.mode) as WriterGeneratedAsset[]
     await updateWriterAssetConversationStatus({ userId: input.userId, conversationId: input.conversationId, status: "failed" })
     return { ok: false, assets, status: "failed", provider: preferredProvider, model: getPreferredWriterImageModel(), error }
   }
+  const enterpriseId = input.enterpriseId
 
   let reservation: BillingReservation | null = null
   try {
     if (plannedAssets.length > 0) {
       reservation = await reserveWriterImageCredits({
         userId: input.userId,
-        enterpriseId: input.enterpriseId,
+        enterpriseId,
         provider: preferredProvider,
         imageCount: plannedAssets.length,
         conversationId: input.conversationId,
@@ -387,6 +399,8 @@ export async function generateWriterAssetsForTask(input: {
       platform: input.platform,
       conversationId: input.conversationId,
       userId: input.userId,
+      enterpriseId,
+      taskId: input.taskId,
       providerPlan,
       onAsset: async (asset, index, total, assets) => {
         if (input.expectedRevision !== null && input.expectedRevision !== undefined && assets.length > 0) {

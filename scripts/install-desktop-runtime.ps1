@@ -9,6 +9,32 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Convert-ToPowerShellCompatiblePath([string]$value) {
+  if ([string]::IsNullOrWhiteSpace($value)) {
+    return $value
+  }
+
+  if ($value.StartsWith("\\?\UNC\", [StringComparison]::OrdinalIgnoreCase)) {
+    return "\\$($value.Substring(8))"
+  }
+
+  if ($value.StartsWith("\\?\", [StringComparison]::OrdinalIgnoreCase)) {
+    return $value.Substring(4)
+  }
+
+  return $value
+}
+
+$ManifestPath = Convert-ToPowerShellCompatiblePath $ManifestPath
+$InstallRoot = Convert-ToPowerShellCompatiblePath $InstallRoot
+if (-not [string]::IsNullOrWhiteSpace($OfflineZip)) {
+  $OfflineZip = Convert-ToPowerShellCompatiblePath $OfflineZip
+}
+
+function Write-RuntimeProgress([string]$message) {
+  Write-Output "RUNTIME_PROGRESS:$message"
+}
+
 # Some stripped-down Windows PowerShell installations do not load the
 # Microsoft.PowerShell.Utility module under the desktop bootstrap environment.
 # Keep the installer self-contained with the .NET implementation in that case.
@@ -28,6 +54,7 @@ if ($null -eq (Get-Command Get-FileHash -ErrorAction SilentlyContinue)) {
 
 $mirrors = @("aliyun", "tencent", "tsinghua", "official")
 $manifest = Get-Content -Raw -Encoding UTF8 $ManifestPath | ConvertFrom-Json
+Write-RuntimeProgress "manifest_loaded"
 $installRootResolved = [IO.Path]::GetFullPath([string]$InstallRoot)
 $stageRoot = Join-Path ([IO.Path]::GetTempPath()) ("aimarketing-runtime-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
@@ -210,6 +237,9 @@ function Seed-BundledRuntime() {
   }
   $bundledSkills = Join-Path $bundledRoot "skills"
   if (Test-Path -LiteralPath $bundledSkills -PathType Container) { Copy-Item -LiteralPath $bundledSkills -Destination (Join-Path $stageRoot "skills") -Recurse -Force }
+  $bundledAgents = Join-Path $bundledRoot "agents"
+  if (Test-Path -LiteralPath $bundledAgents -PathType Container) { Copy-Item -LiteralPath $bundledAgents -Destination (Join-Path $stageRoot "agents") -Recurse -Force }
+  Write-RuntimeProgress "bundled_runtime_seeded"
 }
 
 function Assert-Asset([object]$asset, [string]$root) {
@@ -235,6 +265,7 @@ function Expand-ArchiveAssets() {
       Test-Path -LiteralPath (Join-Path $stageRoot "runtime/python/python.exe") -PathType Leaf
     } else { $false }
     if ($alreadyExtracted) { continue }
+    Write-RuntimeProgress "extracting:$($asset.id)"
     if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
       # A compatible bundled/system runtime may have satisfied this asset
       # before download. In that case there is nothing left to extract.
@@ -247,11 +278,14 @@ function Expand-ArchiveAssets() {
   $nestedNode = Get-ChildItem -LiteralPath $nodeRoot -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "node.exe") -PathType Leaf } | Select-Object -First 1
   if ($nestedNode) {
     Get-ChildItem -LiteralPath $nestedNode.FullName -Force | Move-Item -Destination $nodeRoot -Force
-    Remove-Item -LiteralPath $nestedNode.FullName -Recurse -Force
+    # Move-Item may remove the now-empty source directory as part of the move.
+    # Cleanup must therefore be idempotent on both PowerShell versions.
+    try { Remove-Item -LiteralPath $nestedNode.FullName -Recurse -Force -ErrorAction Stop } catch { }
   }
 }
 
 function Install-OpenCodePackage([switch]$Offline) {
+  Write-RuntimeProgress "opencode_check"
   $target = Join-Path $stageRoot "runtime/opencode/opencode.exe"
   if (Test-Path -LiteralPath $target -PathType Leaf) { return }
   if ($Offline) { throw "offline_opencode_missing" }
@@ -293,6 +327,7 @@ function Enable-EmbeddedPythonSitePackages() {
 }
 
 function Install-PythonPptxDependencies([switch]$Offline) {
+  Write-RuntimeProgress "python_dependencies_check"
   $python = Join-Path $stageRoot "runtime/python/python.exe"
   if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw "embedded Python executable missing" }
   $proxyArgs = if ([string]::IsNullOrWhiteSpace($Proxy)) { @() } else { @("--proxy", $Proxy) }
@@ -365,6 +400,7 @@ finally:
 function Install-VerifiedAsset([object]$asset) {
   $target = Join-Path $stageRoot $asset.relativePath
   if ($asset.id -eq "node-embed-amd64" -and (Test-Path -LiteralPath (Join-Path $stageRoot "runtime/node/node.exe") -PathType Leaf)) { return }
+  Write-RuntimeProgress "downloading:$($asset.id)"
   $targetDir = Split-Path -Parent $target
   New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
   $tmp = "$target.download"
@@ -400,7 +436,7 @@ function Activate-StagedRuntime() {
       # state (config, database, logs and projects) while replacing only the
       # green runtime payload; otherwise every repair would erase settings.
       foreach ($existing in Get-ChildItem -LiteralPath $installRootResolved -Force) {
-        if ($existing.Name -in @("runtime", "skills")) { continue }
+        if ($existing.Name -in @("runtime", "skills", "agents")) { continue }
         Copy-Item -LiteralPath $existing.FullName -Destination (Join-Path $stageRoot $existing.Name) -Recurse -Force
       }
       if (Test-Path -LiteralPath $backupRoot) { Remove-Item -LiteralPath $backupRoot -Recurse -Force }
@@ -424,17 +460,23 @@ try {
   # runtime/skills into staging before extracting the same bytes again.
   if (-not $OfflineZip) { Seed-BundledRuntime }
   if ($OfflineZip) {
+    Write-RuntimeProgress "offline_archive_loaded"
     Expand-SafeZip ([IO.Path]::GetFullPath($OfflineZip)) $stageRoot
   } else {
+    Write-RuntimeProgress "downloading_missing_runtime"
     foreach ($asset in $manifest.assets) { Install-VerifiedAsset $asset }
   }
   Expand-ArchiveAssets
   Install-OpenCodePackage -Offline:([bool]$OfflineZip)
   Install-PythonPptxDependencies -Offline:([bool]$OfflineZip)
   foreach ($asset in $manifest.assets) { Assert-Asset $asset $stageRoot }
+  Write-RuntimeProgress "activating_runtime"
   Activate-StagedRuntime
+  Write-RuntimeProgress "completed"
   Write-Output (ConvertTo-Json @{ status = "ok"; installed = $manifest.assets.id; source = if ($OfflineZip) { "offline" } else { "mirrors" } } -Compress)
 } catch {
-  if (Test-Path -LiteralPath $stageRoot) { Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue }
+  if (Test-Path -LiteralPath $stageRoot) {
+    try { Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction Stop } catch { }
+  }
   throw
 }

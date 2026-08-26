@@ -26,6 +26,8 @@ export interface MediaTask {
   readonly providerTaskId: string;
   readonly status: MediaTaskStatus;
   readonly providerStatus?: string;
+  /** Bounded provider diagnostic retained for node status and retry decisions. */
+  readonly error?: string;
   readonly outputs: readonly Record<string, unknown>[];
   readonly usage?: MediaUsage;
 }
@@ -62,6 +64,7 @@ export interface MediaHttpAdapterOptions {
   readonly cancelPath?: (providerTaskId: string) => string;
   readonly fetchImpl?: typeof fetch;
   readonly headers?: Readonly<Record<string, string>>;
+  readonly requestTimeoutMs?: number;
 }
 
 function isHttpEndpoint(value: string | undefined) {
@@ -86,41 +89,67 @@ function requireInjectedProviderConfig(
 /** OpenAI-compatible and simple async JSON provider adapter. No SaaS transport is involved. */
 export function createHttpMediaAdapter(options: MediaHttpAdapterOptions): MediaProviderAdapter {
   const fetchImpl = options.fetchImpl ?? fetch;
+  const resolveUrl = (path: string) => {
+    const relativePath = path.replace(/^\/+/u, "");
+    const baseUrl = options.baseUrl.endsWith("/") ? options.baseUrl : `${options.baseUrl}/`;
+    return new URL(relativePath, baseUrl).toString();
+  };
   const request = async (path: string, init: RequestInit, cancellation: CancellationPort) => {
     requireInjectedProviderConfig(options, "media");
     cancellation.throwIfCancelled();
-    const response = await fetchImpl(new URL(path, options.baseUrl).toString(), {
-      ...init,
-      headers: {
-        accept: "application/json",
-        ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
-        ...options.headers,
-        ...(init.headers ?? {}),
-      },
-      signal: cancellation.signal,
-    });
-    const body = await response.text();
+    const requestAbort = requestAbortSignal(cancellation.signal, options.requestTimeoutMs);
+    let response: Response;
+    let body: string;
+    try {
+      response = await fetchImpl(resolveUrl(path), {
+        ...init,
+        headers: {
+          accept: "application/json",
+          ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
+          ...options.headers,
+          ...(init.headers ?? {}),
+        },
+        signal: requestAbort.signal,
+      });
+      body = await response.text();
+    } catch (error) {
+      if (requestAbort.didTimeout()) throw new Error("media_provider_request_timeout");
+      if (cancellation.signal?.aborted) cancellation.throwIfCancelled();
+      throw error;
+    } finally {
+      requestAbort.cleanup();
+    }
     let parsed: unknown = null;
     try { parsed = body ? JSON.parse(body) : null; } catch { throw new Error("media_provider_invalid_response"); }
-    if (!response.ok) throw new Error(`media_provider_http_${response.status}`);
+    if (!response.ok) {
+      const error = parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {};
+      const nested = error.error && typeof error.error === "object" ? error.error as Record<string, unknown> : undefined;
+      const detail = text(nested?.message ?? nested?.msg ?? error.message ?? error.msg ?? error.code).slice(0, 180);
+      throw new Error(`media_provider_http_${response.status}${detail ? `:${detail}` : ""}`);
+    }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("media_provider_invalid_response");
     return parsed as Record<string, unknown>;
   };
-  const toTask = (value: Record<string, unknown>): MediaTask => {
-    const providerTaskId = String(value.id ?? value.task_id ?? value.taskId ?? `sync-${Date.now()}`);
-    const statusText = String(value.status ?? value.state ?? "succeeded").toLowerCase();
-    const status: MediaTaskStatus = statusText.includes("fail") || statusText.includes("error") ? "failed" : statusText.includes("queue") ? "queued" : statusText.includes("run") || statusText.includes("process") ? "running" : "succeeded";
+  const toTask = (value: Record<string, unknown>, fallbackId?: string): MediaTask => {
+    const providerTaskId = String(value.id ?? value.request_id ?? value.requestId ?? value.task_id ?? value.taskId ?? fallbackId ?? `sync-${Date.now()}`);
+    const statusText = String(value.status ?? value.state ?? (value.request_id || value.requestId ? "queued" : "succeeded")).toLowerCase();
+    const status: MediaTaskStatus = statusText.includes("fail") || statusText.includes("error") ? "failed" : statusText.includes("queue") || statusText.includes("pending") || statusText.includes("submitted") ? "queued" : statusText.includes("run") || statusText.includes("process") ? "running" : "succeeded";
     const outputValues = Array.isArray(value.data) ? value.data : Array.isArray(value.output) ? value.output : Array.isArray(value.outputs) ? value.outputs : [];
     const outputs = outputValues.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")).map((item) => ({ ...item }));
     const nestedOutput = value.output && typeof value.output === "object" ? value.output as Record<string, unknown> : undefined;
+    const video = value.video && typeof value.video === "object" ? value.video as Record<string, unknown> : undefined;
+    const directUrl = value.video_url ?? value.videoUrl ?? value.audio_url ?? value.audioUrl ?? value.url ?? value.file_url ?? value.fileUrl ?? value.download_url ?? value.downloadUrl;
+    if (typeof directUrl === "string" && directUrl.trim()) outputs.push({ url: directUrl.trim() });
+    const nestedUrl = video?.url ?? nestedOutput?.url;
+    if (outputs.length === 0 && typeof nestedUrl === "string" && nestedUrl.trim()) outputs.push({ url: nestedUrl.trim() });
     const usage = normalizeUsage(value.usage ?? value.usage_info ?? nestedOutput?.usage);
     return { providerTaskId, status, ...(typeof value.status === "string" ? { providerStatus: value.status } : {}), outputs, ...(usage ? { usage } : {}) };
   };
   return {
     provider: options.provider,
     execute: async (requestInput, cancellation) => toTask(await request(options.submitPath, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: requestInput.modelId, ...requestInput.input, ...(requestInput.idempotencyKey ? { idempotency_key: requestInput.idempotencyKey } : {}) }) }, cancellation)),
-    ...(options.queryPath ? { query: async (providerTaskId, cancellation) => toTask(await request(options.queryPath!(providerTaskId), { method: "GET" }, cancellation)) } : {}),
-    ...(options.cancelPath ? { cancel: async (providerTaskId, cancellation) => toTask(await request(options.cancelPath!(providerTaskId), { method: "POST" }, cancellation)) } : {}),
+    ...(options.queryPath ? { query: async (providerTaskId, cancellation) => toTask(await request(options.queryPath!(providerTaskId), { method: "GET" }, cancellation), providerTaskId) } : {}),
+    ...(options.cancelPath ? { cancel: async (providerTaskId, cancellation) => toTask(await request(options.cancelPath!(providerTaskId), { method: "POST" }, cancellation), providerTaskId) } : {}),
   };
 }
 
@@ -129,9 +158,16 @@ export interface DirectProviderOptions {
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly fetchImpl?: typeof fetch;
+  /** Optional per-request override used by tests and constrained hosts. */
+  readonly requestTimeoutMs?: number;
+  /** Use curl for gateways whose Node fetch connection is closed early. */
+  readonly imageTransport?: "fetch" | "curl";
+  readonly curlRunner?: (args: readonly string[], options: { readonly signal?: AbortSignal }) => Promise<{ readonly stdout: string; readonly stderr: string; readonly code: number | null }>;
   /** Workspace root used for provider-side uploads initiated by local adapters. */
   readonly workspacePath?: string;
 }
+
+export const IMAGE_GENERATION_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
 
 function providerUrl(baseUrl: string, path: string, query?: Record<string, string>) {
   // Treat provider paths as relative to the configured base path. A leading
@@ -143,7 +179,59 @@ function providerUrl(baseUrl: string, path: string, query?: Record<string, strin
   return url;
 }
 
-function text(value: unknown) { return typeof value === "string" ? value.trim() : ""; }
+/** Uploads a local media artifact to RunningHub's documented binary media
+ * endpoint and returns the provider file name accepted by LoadAudio/LoadImage. */
+export async function uploadRunningHubMedia(
+  options: DirectProviderOptions,
+  sourcePath: string,
+  cancellation: CancellationPort,
+) {
+  const asset = await uploadRunningHubMediaAsset(options, sourcePath, cancellation);
+  return asset.fileName;
+}
+
+/** Uploads a local media artifact and keeps both provider references. Older
+ * workflows consume `fileName`; newer LoadAudioFromUrl/LoadImageFromUrl
+ * workflows consume the returned `downloadUrl` instead. */
+export async function uploadRunningHubMediaAsset(
+  options: DirectProviderOptions,
+  sourcePath: string,
+  cancellation: CancellationPort,
+) {
+  requireInjectedProviderConfig(options, "runninghub-media-upload");
+  cancellation.throwIfCancelled();
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  const metadata = await fs.stat(sourcePath).catch(() => undefined);
+  if (!metadata?.isFile()) throw new Error("runninghub_media_source_missing");
+  const bytes = await fs.readFile(sourcePath);
+  const form = new FormData();
+  form.set("file", new Blob([bytes as unknown as BlobPart]), path.basename(sourcePath));
+  const response = await (options.fetchImpl ?? fetch)(providerUrl(options.baseUrl, "/openapi/v2/media/upload/binary"), {
+    method: "POST",
+    headers: { accept: "application/json", authorization: `Bearer ${options.apiKey}` },
+    body: form,
+    signal: cancellation.signal,
+  });
+  const raw = await response.text();
+  let payload: Record<string, unknown> = {};
+  try { payload = raw ? JSON.parse(raw) as Record<string, unknown> : {}; } catch { throw new Error("runninghub_media_upload_invalid_response"); }
+  const data = payload.data && typeof payload.data === "object" ? payload.data as Record<string, unknown> : {};
+  const providerFileName = text(data.fileName ?? data.file_name);
+  const downloadUrl = text(data.download_url ?? data.downloadUrl ?? data.url);
+  const code = Number(payload.code ?? 0);
+  if (!response.ok || (Number.isFinite(code) && code !== 0) || !providerFileName) {
+    const detail = text(payload.message ?? payload.msg ?? payload.code).slice(0, 180);
+    throw new Error(`runninghub_media_upload_failed${detail ? `:${detail}` : ""}`);
+  }
+  return { fileName: providerFileName, ...(downloadUrl ? { downloadUrl } : {}) };
+}
+
+function text(value: unknown) {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return "";
+}
 function numberValue(value: unknown, fallback: number) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : fallback; }
 function finiteNumber(value: unknown) {
   if (value === undefined || value === null || value === "") return undefined;
@@ -175,22 +263,24 @@ function mapProviderStatus(value: unknown): MediaTaskStatus {
 
 function asTask(provider: MediaProviderId, payload: Record<string, unknown>, fallbackId?: string): MediaTask {
   const output = payload.output && typeof payload.output === "object" ? payload.output as Record<string, unknown> : payload;
-  const providerTaskId = text(output.task_id) || text(output.taskId) || text(payload.task_id) || text(payload.id) || fallbackId || `sync-${Date.now()}`;
-  const providerStatus = output.task_status ?? output.status ?? payload.status ?? payload.state;
+  const providerTaskId = text(output.task_id) || text(output.taskId) || text(payload.task_id) || text(payload.taskId) || text(payload.id) || fallbackId || `sync-${Date.now()}`;
+  const providerStatus = output.task_status ?? output.taskStatus ?? output.status ?? payload.task_status ?? payload.taskStatus ?? payload.status ?? payload.state;
   const values: unknown[] = [];
   const addValue = (value: unknown) => {
     if (value === undefined || value === null || values.includes(value)) return;
     if (Array.isArray(value)) values.push(value);
     else values.push(value);
   };
-  for (const value of [output.video_url, output.audio, output.url, output.file_url, output.results, output.images, output.data, payload.data, payload.results, payload.outputs]) addValue(value);
+  for (const value of [output.video_url, output.videoUrl, output.audio, output.audio_url, output.audioUrl, output.url, output.file_url, output.fileUrl, output.download_url, output.downloadUrl, output.results, output.images, output.data, payload.data, payload.results, payload.outputs]) addValue(value);
   const seen = new Set<string>();
   const outputs = values.flatMap((value) => {
     const candidates = Array.isArray(value) ? value : [value];
     return candidates.flatMap((item) => {
       if (typeof item === "string") return [{ url: item }];
       if (!item || typeof item !== "object") return [];
-      return [{ ...(item as Record<string, unknown>) }];
+      const record = item as Record<string, unknown>;
+      const alias = text(record.url ?? record.uri ?? record.video_url ?? record.videoUrl ?? record.file_url ?? record.fileUrl ?? record.download_url ?? record.downloadUrl);
+      return [{ ...record, ...(alias && !record.url ? { url: alias } : {}) }];
     });
   }).filter((item) => {
     const key = JSON.stringify(item);
@@ -199,35 +289,210 @@ function asTask(provider: MediaProviderId, payload: Record<string, unknown>, fal
     return true;
   });
   const usage = normalizeUsage(output.usage ?? output.usage_info ?? payload.usage ?? payload.usage_info);
-  return { providerTaskId, status: mapProviderStatus(providerStatus), ...(providerStatus ? { providerStatus: String(providerStatus) } : {}), outputs, ...(usage ? { usage } : {}) };
+  const status = mapProviderStatus(providerStatus);
+  const failedReason = payload.failedReason && typeof payload.failedReason === "object" ? payload.failedReason as Record<string, unknown> : undefined;
+  const failedNode = text(failedReason?.node_name ?? failedReason?.nodeName);
+  const error = text(
+    failedReason?.exception_message ?? failedReason?.errorMessage ?? failedReason?.message ??
+    output.errorMessage ?? output.error_message ?? output.exception_message ?? output.message ??
+    payload.errorMessage ?? payload.error_message ?? payload.exception_message ?? payload.message ??
+    undefined,
+  ).slice(0, 220);
+  const diagnostic = error ? `${failedNode ? `${failedNode}: ` : ""}${error}`.slice(0, 240) : "";
+  return { providerTaskId, status, ...(providerStatus ? { providerStatus: String(providerStatus) } : {}), ...(status === "failed" && diagnostic ? { error: diagnostic } : {}), outputs, ...(usage ? { usage } : {}) };
 }
 
-async function jsonRequest(options: DirectProviderOptions, path: string, init: RequestInit, cancellation: CancellationPort, query?: Record<string, string>) {
+function requestAbortSignal(signal: AbortSignal | undefined, timeoutMs: number | undefined) {
+  if (timeoutMs === undefined) return { signal, didTimeout: () => false, cleanup: () => undefined };
+  const controller = new AbortController();
+  let timedOut = false;
+  const onCancel = () => controller.abort(signal?.reason);
+  if (signal?.aborted) onCancel();
+  else signal?.addEventListener("abort", onCancel, { once: true });
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort(new Error("media_provider_request_timeout"));
+  }, Math.max(1, Math.floor(timeoutMs)));
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    cleanup: () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onCancel);
+    },
+  };
+}
+
+async function defaultCurlRunner(args: readonly string[], options: { readonly signal?: AbortSignal }) {
+  const { spawn } = await import("node:child_process");
+  return new Promise<{ readonly stdout: string; readonly stderr: string; readonly code: number | null }>((resolve, reject) => {
+    const child = spawn(process.platform === "win32" ? "curl.exe" : "curl", [...args], { windowsHide: true });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const onAbort = () => { child.kill(); };
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+    child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf8"); });
+    child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
+    child.once("error", (error) => {
+      if (settled) return;
+      settled = true;
+      options.signal?.removeEventListener("abort", onAbort);
+      reject(error);
+    });
+    child.once("close", (code) => {
+      if (settled) return;
+      settled = true;
+      options.signal?.removeEventListener("abort", onAbort);
+      resolve({ stdout, stderr, code });
+    });
+  });
+}
+
+async function curlImageRequest(options: DirectProviderOptions, body: Record<string, unknown>, cancellation: CancellationPort, idempotencyKey?: string) {
   requireInjectedProviderConfig(options, "media");
   cancellation.throwIfCancelled();
-  const response = await (options.fetchImpl ?? fetch)(providerUrl(options.baseUrl, path, query), {
-    ...init,
-    headers: { accept: "application/json", authorization: `Bearer ${options.apiKey}`, "content-type": "application/json", ...(init.headers ?? {}) },
-    signal: cancellation.signal,
-  });
-  const raw = await response.text();
+  const timeoutMs = options.requestTimeoutMs ?? IMAGE_GENERATION_REQUEST_TIMEOUT_MS;
+  const requestAbort = requestAbortSignal(cancellation.signal, timeoutMs);
+  const args = [
+    "-sS", "--connect-timeout", String(Math.max(5, Math.ceil(timeoutMs / 3000))),
+    "--max-time", String(Math.max(10, Math.ceil(timeoutMs / 1000))),
+    // Windows curl uses Schannel and can fail when the local revocation
+    // service is offline even though the server certificate is otherwise
+    // valid. Keep the relaxation scoped to this legacy PPTOKEN transport;
+    // Node fetch and all non-Windows transports retain normal verification.
+    ...(process.platform === "win32" ? ["--ssl-no-revoke"] : []),
+    "-X", "POST", providerUrl(options.baseUrl, "/images/generations").toString(),
+    "-H", `Authorization: Bearer ${options.apiKey}`,
+    "-H", "Content-Type: application/json",
+    ...(idempotencyKey ? ["-H", `Idempotency-Key: ${idempotencyKey}`] : []),
+    "-d", JSON.stringify(body),
+    "-w", "\n__HTTP_STATUS__:%{http_code}",
+  ];
+  try {
+    const result = await (options.curlRunner ?? defaultCurlRunner)(args, { signal: requestAbort.signal });
+    if (requestAbort.didTimeout()) throw new Error("media_provider_request_timeout");
+    if (cancellation.signal?.aborted) cancellation.throwIfCancelled();
+    const marker = "\n__HTTP_STATUS__:";
+    const markerIndex = result.stdout.lastIndexOf(marker);
+    if (markerIndex === -1) throw new Error("media_provider_curl_response_malformed");
+    const status = Number.parseInt(result.stdout.slice(markerIndex + marker.length).trim(), 10);
+    let payload: Record<string, unknown> = {};
+    try { payload = JSON.parse(result.stdout.slice(0, markerIndex) || "{}") as Record<string, unknown>; } catch { throw new Error("media_provider_invalid_response"); }
+    if (result.code === 28) throw new Error("media_provider_request_timeout");
+    if (result.code !== 0 || !Number.isFinite(status) || status <= 0) {
+      const detail = result.stderr.trim().slice(-180);
+      throw new Error(`media_provider_curl_failed${detail ? `:${detail}` : ""}`);
+    }
+    if (status < 200 || status >= 300) {
+      const error = payload.error && typeof payload.error === "object" ? payload.error as Record<string, unknown> : payload;
+      const detail = text(error.message ?? error.msg ?? error.code).slice(0, 180);
+      throw new Error(`media_provider_http_${status}${detail ? `:${detail}` : ""}`);
+    }
+    return payload;
+  } catch (error) {
+    if (requestAbort.didTimeout()) throw new Error("media_provider_request_timeout");
+    if (cancellation.signal?.aborted) cancellation.throwIfCancelled();
+    if (error instanceof Error && error.message.includes("ENOENT")) throw new Error("media_provider_curl_unavailable");
+    throw error;
+  } finally {
+    requestAbort.cleanup();
+  }
+}
+
+async function jsonRequest(options: DirectProviderOptions, path: string, init: RequestInit, cancellation: CancellationPort, query?: Record<string, string>, requestTimeoutMs = options.requestTimeoutMs) {
+  requireInjectedProviderConfig(options, "media");
+  cancellation.throwIfCancelled();
+  const requestAbort = requestAbortSignal(cancellation.signal, requestTimeoutMs);
+  let response: Response;
+  let raw: string;
+  try {
+    const isMultipart = typeof FormData !== "undefined" && init.body instanceof FormData;
+    response = await (options.fetchImpl ?? fetch)(providerUrl(options.baseUrl, path, query), {
+      ...init,
+      headers: { accept: "application/json", authorization: `Bearer ${options.apiKey}`, ...(isMultipart ? {} : { "content-type": "application/json" }), ...(init.headers ?? {}) },
+      signal: requestAbort.signal,
+    });
+    raw = await response.text();
+  } catch (error) {
+    if (requestAbort.didTimeout()) throw new Error("media_provider_request_timeout");
+    if (cancellation.signal?.aborted) cancellation.throwIfCancelled();
+    throw error;
+  } finally {
+    requestAbort.cleanup();
+  }
   let body: unknown = null;
   try { body = raw ? JSON.parse(raw) : null; } catch { body = { raw: raw.slice(0, 1000) }; }
-  if (!response.ok) throw new Error(`media_provider_http_${response.status}`);
+  if (!response.ok) {
+    const error = body && typeof body === "object" ? body as Record<string, unknown> : {};
+    const nested = error.error && typeof error.error === "object" ? error.error as Record<string, unknown> : undefined;
+    const detail = text(nested?.message ?? nested?.msg ?? error.message ?? error.msg ?? error.code).slice(0, 180);
+    throw new Error(`media_provider_http_${response.status}${detail ? `:${detail}` : ""}`);
+  }
   return body && typeof body === "object" ? body as Record<string, unknown> : {};
 }
 
-async function uploadMiniMaxFile(options: DirectProviderOptions, sourcePath: string, cancellation: CancellationPort): Promise<string> {
+export type MiniMaxVoiceType = "system" | "voice_cloning" | "voice_generation" | "all";
+export type MiniMaxVoiceCategory = Exclude<MiniMaxVoiceType, "all">;
+export interface MiniMaxVoiceOption {
+  readonly voiceId: string;
+  readonly voiceName: string;
+  readonly category: MiniMaxVoiceCategory;
+  readonly description: readonly string[];
+  readonly createdTime: string | null;
+}
+
+/** Lists MiniMax voices without exposing the provider credential to the UI. */
+export async function listMiniMaxVoices(
+  options: DirectProviderOptions,
+  voiceType: MiniMaxVoiceType = "all",
+): Promise<readonly MiniMaxVoiceOption[]> {
+  const cancellation: CancellationPort = { throwIfCancelled: () => undefined };
+  const payload = await jsonRequest(options, "/get_voice", {
+    method: "POST",
+    body: JSON.stringify({ voice_type: voiceType }),
+  }, cancellation);
+  const baseResp = payload.base_resp && typeof payload.base_resp === "object" ? payload.base_resp as Record<string, unknown> : undefined;
+  const statusCode = Number(baseResp?.status_code ?? 0);
+  if (Number.isFinite(statusCode) && statusCode !== 0) {
+    throw new Error(text(baseResp?.status_msg) || "minimax_get_voice_failed");
+  }
+  const map = (category: MiniMaxVoiceCategory, value: unknown): MiniMaxVoiceOption[] => {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const record = item as Record<string, unknown>;
+      const voiceId = text(record.voice_id ?? record.voiceId);
+      if (!voiceId) return [];
+      const description = Array.isArray(record.description)
+        ? record.description.filter((entry): entry is string => typeof entry === "string" && Boolean(entry.trim())).map((entry) => entry.trim())
+        : [];
+      return [{
+        voiceId,
+        voiceName: text(record.voice_name ?? record.voiceName) || voiceId,
+        category,
+        description,
+        createdTime: text(record.created_time ?? record.createdTime) || null,
+      }];
+    });
+  };
+  return [
+    ...map("system", payload.system_voice),
+    ...map("voice_cloning", payload.voice_cloning),
+    ...map("voice_generation", payload.voice_generation),
+  ];
+}
+
+async function uploadMiniMaxFile(options: DirectProviderOptions, sourcePath: string, cancellation: CancellationPort, allowWorkflowLocalPath = false): Promise<string> {
   requireInjectedProviderConfig(options, "voice-clone");
   cancellation.throwIfCancelled();
   const workspacePath = text(options.workspacePath);
   if (!workspacePath) throw new Error("voice_clone_workspace_required");
   const fs = await import("node:fs/promises");
   const path = await import("node:path");
-  if (path.isAbsolute(sourcePath)) throw new Error("voice_clone_source_file_unsafe");
   const root = path.resolve(workspacePath);
-  const candidate = path.resolve(root, sourcePath);
-  if (candidate === root || !candidate.startsWith(`${root}${path.sep}`)) throw new Error("voice_clone_source_file_unsafe");
+  const candidate = path.isAbsolute(sourcePath) ? allowWorkflowLocalPath ? path.resolve(sourcePath) : (() => { throw new Error("voice_clone_source_file_unsafe"); })() : path.resolve(root, sourcePath);
+  if (!path.isAbsolute(sourcePath) && (candidate === root || !candidate.startsWith(`${root}${path.sep}`))) throw new Error("voice_clone_source_file_unsafe");
   const metadata = await fs.stat(candidate).catch(() => undefined);
   if (!metadata?.isFile()) throw new Error("voice_clone_source_file_missing");
   const bytes = await fs.readFile(candidate);
@@ -262,28 +527,91 @@ export function createOpenAICompatibleImageAdapter(options: DirectProviderOption
       const input = request.input as Record<string, unknown>;
       const prompt = text(input.prompt);
       if (!prompt) throw new Error("image_prompt_required");
-      const count = Math.max(1, Math.min(4, Math.floor(numberValue(input.n, 1))));
+      const count = Math.max(1, Math.min(9, Math.floor(numberValue(input.n, 1))));
+      const referenceImageUrls = [...new Set([
+        ...(Array.isArray(input.referenceImageUrls) ? input.referenceImageUrls.filter((value): value is string => typeof value === "string" && Boolean(value.trim())).map((value) => value.trim()) : []),
+        ...(text(input.inputImageUrl) ? [text(input.inputImageUrl)] : []),
+      ])];
       const optional = (key: string) => {
         const value = input[key];
         return typeof value === "string" && value.trim() ? { [key]: value.trim() } : {};
       };
-      const body = {
-        model: request.modelId,
-        prompt,
-        n: count,
-        ...optional("size"),
-        ...optional("quality"),
-        ...optional("background"),
-        ...optional("output_format"),
-        ...optional("response_format"),
-        ...(request.idempotencyKey ? { user: request.idempotencyKey } : {}),
+      const outputCompression = finiteNumber(input.output_compression);
+      const outputFormat = text(input.output_format);
+      const loadReferenceImage = async (value: string, index: number) => {
+        const dataUrl = /^data:([^;,]+)(;base64)?,([\s\S]*)$/u.exec(value);
+        if (dataUrl) {
+          const contentType = dataUrl[1] || "image/png";
+          const bytes = dataUrl[2] ? Buffer.from(dataUrl[3], "base64") : Buffer.from(decodeURIComponent(dataUrl[3]), "utf8");
+          return { blob: new Blob([bytes as unknown as BlobPart], { type: contentType }), fileName: `reference-${index}.${contentType.split("/")[1] || "png"}` };
+        }
+
+        let parsed: URL | undefined;
+        try { parsed = new URL(value); } catch { parsed = undefined; }
+        if (parsed && (parsed.protocol === "http:" || parsed.protocol === "https:")) {
+          const response = await (options.fetchImpl ?? fetch)(parsed, { signal: cancellation.signal });
+          if (!response.ok) throw new Error(`image_reference_fetch_failed:${response.status}`);
+          const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim() || "image/png";
+          const fileName = parsed.pathname.split("/").filter(Boolean).pop() || `reference-${index}.png`;
+          return { blob: new Blob([await response.arrayBuffer()], { type: contentType }), fileName };
+        }
+
+        const workspacePath = text(options.workspacePath);
+        if (!workspacePath) throw new Error("image_reference_workspace_required");
+        const fs = await import("node:fs/promises");
+        const path = await import("node:path");
+        const root = path.resolve(workspacePath);
+        const candidate = path.resolve(root, value);
+        if (candidate === root || !candidate.startsWith(`${root}${path.sep}`)) throw new Error("image_reference_path_unsafe");
+        const metadata = await fs.stat(candidate).catch(() => undefined);
+        if (!metadata?.isFile()) throw new Error("image_reference_file_missing");
+        const extension = path.extname(candidate).toLowerCase();
+        const contentType = extension === ".jpg" || extension === ".jpeg" ? "image/jpeg" : extension === ".webp" ? "image/webp" : "image/png";
+        return { blob: new Blob([await fs.readFile(candidate) as unknown as BlobPart], { type: contentType }), fileName: path.basename(candidate) };
       };
-      const payload = await jsonRequest(options, "/images/generations", {
-        method: "POST",
-        body: JSON.stringify(body),
-        headers: request.idempotencyKey ? { "Idempotency-Key": request.idempotencyKey } : undefined,
-      }, cancellation);
-      return asTask(options.provider, payload);
+      const submit = async (modelId: string, idempotencyKey?: string) => {
+        if (referenceImageUrls.length) {
+          const form = new FormData();
+          form.set("model", modelId);
+          form.set("prompt", prompt);
+          form.set("n", String(count));
+          for (const key of ["size", "quality", "output_format", "response_format"]) {
+            const value = text(input[key]);
+            if (value) form.set(key, value);
+          }
+          if (outputCompression !== undefined && outputFormat !== "png") form.set("output_compression", String(Math.max(0, Math.min(100, outputCompression))));
+          for (const [index, reference] of referenceImageUrls.entries()) {
+            const loaded = await loadReferenceImage(reference, index);
+            form.append("image", loaded.blob, loaded.fileName);
+          }
+          return jsonRequest(options, "/images/edits", {
+            method: "POST",
+            body: form,
+            headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+          }, cancellation, undefined, options.requestTimeoutMs ?? IMAGE_GENERATION_REQUEST_TIMEOUT_MS);
+        }
+        const body = {
+          model: modelId,
+          prompt,
+          n: count,
+          ...optional("size"),
+          ...optional("quality"),
+          ...optional("background"),
+          ...optional("output_format"),
+          ...(outputCompression !== undefined && outputFormat !== "png" ? { output_compression: Math.max(0, Math.min(100, outputCompression)) } : {}),
+          ...optional("moderation"),
+          ...optional("response_format"),
+          ...(idempotencyKey ? { user: idempotencyKey } : {}),
+        };
+        return options.imageTransport === "curl"
+          ? curlImageRequest(options, body, cancellation, idempotencyKey)
+          : jsonRequest(options, "/images/generations", {
+            method: "POST",
+            body: JSON.stringify(body),
+            headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+          }, cancellation, undefined, options.requestTimeoutMs ?? IMAGE_GENERATION_REQUEST_TIMEOUT_MS);
+      };
+      return asTask(options.provider, await submit(request.modelId, request.idempotencyKey));
     },
   };
 }
@@ -310,7 +638,7 @@ export function createBailianImageAdapter(options: DirectProviderOptions): Media
           parameters,
         }),
         headers: { "X-DashScope-Async": "enable", ...(request.idempotencyKey ? { "X-Request-ID": request.idempotencyKey } : {}) },
-      }, cancellation);
+      }, cancellation, undefined, options.requestTimeoutMs ?? IMAGE_GENERATION_REQUEST_TIMEOUT_MS);
       return asTask(options.provider, payload);
     },
     query: async (providerTaskId, cancellation) => asTask(options.provider, await jsonRequest(options, `/api/v1/tasks/${encodeURIComponent(providerTaskId)}`, { method: "GET" }, cancellation), providerTaskId),
@@ -365,7 +693,7 @@ export function createMiniMaxAudioAdapter(options: DirectProviderOptions): Media
           const attachments = Array.isArray(input.localAttachments) ? input.localAttachments.filter((value): value is string => typeof value === "string" && Boolean(value.trim())) : [];
           const sourceFilePath = text(input.sourceFilePath) || attachments[0] || "";
           if (!sourceFilePath) throw new Error("voice_clone_source_file_required");
-          sourceFileId = await uploadMiniMaxFile(options, sourceFilePath, cancellation);
+          sourceFileId = await uploadMiniMaxFile(options, sourceFilePath, cancellation, input.workflowLocalAttachments === true);
         }
         if (!sourceFileId) throw new Error("voice_clone_source_file_required");
         const numericSourceFileId = Number(sourceFileId);
@@ -406,7 +734,9 @@ export function createMiniMaxAudioAdapter(options: DirectProviderOptions): Media
       const task = asTask(options.provider, payload);
       const audio = text((payload.data as Record<string, unknown> | undefined)?.audio);
       if (kind === "music" && audio) return { ...task, status: "succeeded", outputs: [{ b64_json: audio }] };
-      return task;
+      // A TTS acknowledgement with only a task ID is not a finished result.
+      // Poll it even when the provider omitted an explicit Pending status.
+      return task.providerTaskId && task.outputs.length === 0 ? { ...task, status: "queued" } : task;
     },
     query: async (providerTaskId, cancellation) => {
       const payload = await jsonRequest(options, "/query/t2a_async_query_v2", { method: "GET" }, cancellation, { task_id: providerTaskId });
@@ -422,15 +752,21 @@ export function createRunningHubAdapter(options: DirectProviderOptions & { reado
   const queryPath = options.queryPath || "/openapi/v2/query";
   const map = (payload: Record<string, unknown>, fallbackId?: string): MediaTask => {
     const data = payload.data && typeof payload.data === "object" ? payload.data as Record<string, unknown> : payload;
-    const status = data.status ?? data.taskStatus ?? payload.status;
+    const status = data.status ?? data.taskStatus ?? data.task_status ?? payload.status ?? payload.taskStatus ?? payload.task_status;
     const task = asTask(options.provider, { ...payload, ...data }, fallbackId);
-    const results = Array.isArray(data.results) ? data.results : [];
+    const results = Array.isArray(data.results) ? data.results : Array.isArray(data.output) ? data.output : Array.isArray(payload.results) ? payload.results : [];
     const outputs = results.flatMap((item) => {
       if (!item || typeof item !== "object") return [];
       const value = item as Record<string, unknown>;
-      return text(value.url) ? [{ url: text(value.url) }] : [];
+      const url = text(value.url ?? value.uri ?? value.video_url ?? value.videoUrl ?? value.file_url ?? value.fileUrl ?? value.download_url ?? value.downloadUrl);
+      return url ? [{ url }] : [];
     });
-    return { ...task, status: mapProviderStatus(status), ...(outputs.length ? { outputs } : {}) };
+    const mappedStatus = mapProviderStatus(status);
+    // Some RunningHub workflows acknowledge submission as SUCCESS before the
+    // result URLs are attached. Keep polling until a terminal result includes
+    // an output, otherwise the host would attempt to download an empty task.
+    const statusWithoutOutputs = task.providerTaskId && outputs.length === 0 && mappedStatus === "succeeded" ? "queued" : mappedStatus;
+    return { ...task, status: statusWithoutOutputs, ...(outputs.length ? { outputs } : {}) };
   };
   return {
     provider: options.provider,
@@ -439,7 +775,237 @@ export function createRunningHubAdapter(options: DirectProviderOptions & { reado
   };
 }
 
+/** RunningHub's digital-human product is a workflow submission, not a video model endpoint. */
+export function createRunningHubDigitalHumanAdapter(options: DirectProviderOptions & { readonly workflowId: string; readonly submitPath?: string; readonly queryPath?: string }): MediaProviderAdapter {
+  const submitPath = options.submitPath || "/task/openapi/create";
+  const queryPath = options.queryPath || "/openapi/v2/query";
+  const map = (payload: Record<string, unknown>, fallbackId?: string) => {
+    const data = payload.data && typeof payload.data === "object" ? payload.data as Record<string, unknown> : payload;
+    return asTask(options.provider, { ...payload, ...data }, fallbackId);
+  };
+  return {
+    provider: options.provider,
+    execute: async (request, cancellation) => {
+      const input = request.input as Record<string, unknown>;
+      const avatar = text(input.avatarImageUrl);
+      const audio = text(input.audioUrl);
+      const script = text(input.script) || text(input.prompt);
+      if (!avatar) throw new Error("digital_human_avatar_required");
+      if (!audio && !script) throw new Error("digital_human_audio_or_script_required");
+      const payload = {
+        apiKey: options.apiKey,
+        workflowId: options.workflowId,
+        nodeInfoList: [
+          { nodeId: "243", fieldName: "audio", fieldValue: audio },
+          { nodeId: "244", fieldName: "string", fieldValue: script },
+          { nodeId: "288", fieldName: "index", fieldValue: audio ? 0 : 1 },
+          { nodeId: "343", fieldName: "image", fieldValue: avatar },
+          { nodeId: "349", fieldName: "value", fieldValue: text(input.scenePrompt) || "产品展示" },
+          { nodeId: "128", fieldName: "seed", fieldValue: Math.max(0, Math.floor(numberValue(input.seed, 0))) },
+        ],
+        ...(request.idempotencyKey ? { clientRequestId: request.idempotencyKey } : {}),
+      };
+      let response: Record<string, unknown>;
+      try {
+        response = await jsonRequest(options, submitPath, { method: "POST", body: JSON.stringify(payload) }, cancellation);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/media_provider_http_(?:401|403|404)/u.test(message)) {
+          throw new Error("runninghub_workflow_not_accessible: current API key cannot access the configured workflow");
+        }
+        throw error;
+      }
+      const data = response.data && typeof response.data === "object" ? response.data as Record<string, unknown> : response;
+      const code = finiteNumber(response.code);
+      const taskId = text(data.taskId ?? data.task_id ?? response.taskId ?? response.task_id);
+      if ((code !== undefined && code !== 0) || !taskId) {
+        const detail = text(response.message ?? response.msg ?? data.message ?? data.msg).slice(0, 180);
+        throw new Error(`runninghub_workflow_not_accessible: current API key cannot access workflow ${options.workflowId}${detail ? ` (${detail})` : ""}`);
+      }
+      return map(response);
+    },
+    query: async (providerTaskId, cancellation) => map(await jsonRequest(options, queryPath, { method: "POST", body: JSON.stringify({ taskId: providerTaskId }) }, cancellation), providerTaskId),
+  };
+}
+
+export type RunningHubWorkflowBinding = {
+  readonly inputId: string;
+  readonly nodeId: string;
+  readonly fieldName: string;
+  readonly valueType: "literal" | "file" | "file_list" | "reference";
+  readonly transform?: "string" | "number" | "boolean" | "json";
+  readonly defaultValue?: unknown;
+};
+
+/** Generic ComfyUI/RunningHub workflow adapter. The desktop registry owns the
+ * binding schema; this adapter only submits the resolved node values. */
+export function createRunningHubWorkflowAdapter(options: DirectProviderOptions & { readonly workflowId: string; readonly bindings: readonly RunningHubWorkflowBinding[]; readonly submitPath?: string; readonly queryPath?: string }): MediaProviderAdapter {
+  const submitPath = options.submitPath || "/task/openapi/create";
+  const queryPath = options.queryPath || "/openapi/v2/query";
+  const map = (payload: Record<string, unknown>, fallbackId?: string) => {
+    const data = payload.data && typeof payload.data === "object" ? payload.data as Record<string, unknown> : payload;
+    return asTask(options.provider, { ...payload, ...data }, fallbackId);
+  };
+  return {
+    provider: options.provider,
+    execute: async (request, cancellation) => {
+      const input = request.input as Record<string, unknown>;
+      const nodeInfoList = options.bindings.flatMap((binding) => {
+        const raw = input[binding.inputId] ?? binding.defaultValue;
+        if (raw === undefined || raw === null || raw === "") return [];
+        const values = binding.valueType === "file_list" ? (Array.isArray(raw) ? raw : [raw]) : binding.valueType === "file" && Array.isArray(raw) ? raw.slice(0, 1) : [raw];
+        return values.map((value) => ({ nodeId: binding.nodeId, fieldName: binding.fieldName, fieldValue: binding.transform === "number" ? Number(value) : binding.transform === "boolean" ? Boolean(value) : binding.transform === "json" ? JSON.stringify(value) : typeof value === "object" && value !== null ? (value as Record<string, unknown>).fileName ?? (value as Record<string, unknown>).url ?? value : value }));
+      });
+      if (!nodeInfoList.length) throw new Error("runninghub_workflow_inputs_empty");
+      const payload = { apiKey: options.apiKey, workflowId: options.workflowId, nodeInfoList, ...(request.idempotencyKey ? { clientRequestId: request.idempotencyKey } : {}) };
+      try {
+        return map(await jsonRequest(options, submitPath, { method: "POST", body: JSON.stringify(payload) }, cancellation));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/media_provider_http_(?:401|403|404)/u.test(message)) throw new Error("runninghub_workflow_not_accessible: current API key cannot access the configured workflow");
+        throw error;
+      }
+    },
+    query: async (providerTaskId, cancellation) => map(await jsonRequest(options, queryPath, { method: "POST", body: JSON.stringify({ taskId: providerTaskId }) }, cancellation), providerTaskId),
+  };
+}
+
 export interface DownloadedMediaArtifact { readonly relativePath: string; readonly bytes: number; readonly sha256: string; readonly contentType?: string; }
+
+function extensionForMediaContentType(contentType: string | undefined) {
+  switch (contentType?.toLowerCase()) {
+    case "audio/mpeg":
+    case "audio/mp3": return ".mp3";
+    case "audio/wav":
+    case "audio/x-wav": return ".wav";
+    case "audio/ogg": return ".ogg";
+    case "audio/mp4": return ".m4a";
+    case "video/mp4": return ".mp4";
+    case "video/webm": return ".webm";
+    case "image/png": return ".png";
+    case "image/jpeg": return ".jpg";
+    case "image/webp": return ".webp";
+    case "image/gif": return ".gif";
+    default: return ".bin";
+  }
+}
+
+function mediaContentTypeForExtension(extension: string) {
+  switch (extension.toLowerCase()) {
+    case ".mp3": return "audio/mpeg";
+    case ".wav": return "audio/wav";
+    case ".ogg": return "audio/ogg";
+    case ".m4a": return "audio/mp4";
+    case ".mp4": return "video/mp4";
+    case ".webm": return "video/webm";
+    case ".png": return "image/png";
+    case ".jpg":
+    case ".jpeg": return "image/jpeg";
+    case ".webp": return "image/webp";
+    case ".gif": return "image/gif";
+    default: return undefined;
+  }
+}
+
+function decodeDataUrl(value: string): { readonly bytes: Uint8Array; readonly contentType?: string } | undefined {
+  if (value.slice(0, 5).toLowerCase() !== "data:") return undefined;
+  const separator = value.indexOf(",");
+  if (separator < 0) throw new Error("media_download_data_url_invalid");
+  const metadata = value.slice(5, separator);
+  const encoded = value.slice(separator + 1);
+  const metadataParts = metadata.split(";");
+  const contentType = metadataParts[0]?.trim().toLowerCase() || undefined;
+  try {
+    const bytes = metadataParts.some((part) => part.trim().toLowerCase() === "base64")
+      ? new Uint8Array(Buffer.from(encoded, "base64"))
+      : new TextEncoder().encode(decodeURIComponent(encoded));
+    if (!bytes.byteLength) throw new Error("media_download_data_url_empty");
+    return { bytes, ...(contentType ? { contentType } : {}) };
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("media_download_data_url_")) throw error;
+    throw new Error("media_download_data_url_invalid", { cause: error });
+  }
+}
+
+async function detectMediaFileSignature(filePath: string) {
+  const fs = await import("node:fs/promises");
+  const source = await fs.open(filePath, "r");
+  try {
+    const bytes = new Uint8Array(new ArrayBuffer(16));
+    const { bytesRead } = await source.read(bytes, 0, bytes.length, 0);
+    const header = bytes.subarray(0, bytesRead);
+    const startsWith = (...signature: number[]) => signature.every((value, index) => header[index] === value);
+    const ascii = (start: number, end: number) => String.fromCharCode(...header.subarray(start, end));
+    if (header.length >= 8 && startsWith(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return { extension: ".png", contentType: "image/png" };
+    if (header.length >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff) return { extension: ".jpg", contentType: "image/jpeg" };
+    if (header.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") return { extension: ".webp", contentType: "image/webp" };
+    if (header.length >= 6 && /^GIF8[79]a$/u.test(ascii(0, 6))) return { extension: ".gif", contentType: "image/gif" };
+    if (header.length >= 12 && ascii(4, 8) === "ftyp") return { extension: ".mp4", contentType: "video/mp4" };
+    if (header.length >= 4 && startsWith(0x1a, 0x45, 0xdf, 0xa3)) return { extension: ".webm", contentType: "video/webm" };
+    if (header.length >= 3 && ascii(0, 3) === "ID3") return { extension: ".mp3", contentType: "audio/mpeg" };
+    if (header.length >= 2 && header[0] === 0xff && (header[1] & 0xe0) === 0xe0) return { extension: ".mp3", contentType: "audio/mpeg" };
+    if (header.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WAVE") return { extension: ".wav", contentType: "audio/wav" };
+    if (header.length >= 4 && ascii(0, 4) === "OggS") return { extension: ".ogg", contentType: "audio/ogg" };
+    return undefined;
+  } finally {
+    await source.close().catch(() => undefined);
+  }
+}
+
+async function extractSingleTarMedia(filePath: string, maxBytes: number) {
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  const crypto = await import("node:crypto");
+  const source = await fs.open(filePath, "r");
+  try {
+    let headerOffset = 0;
+    for (let entryIndex = 0; entryIndex < 64; entryIndex += 1) {
+      const headerBytes = new Uint8Array(new ArrayBuffer(512));
+      const { bytesRead } = await source.read(headerBytes, 0, headerBytes.length, headerOffset);
+      const header = Buffer.from(headerBytes.buffer);
+      if (bytesRead !== header.length || header.every((byte) => byte === 0)) return undefined;
+      if (header.subarray(257, 262).toString("ascii") !== "ustar") return undefined;
+      const name = header.subarray(0, 100).toString("utf8").replace(/\0.*$/u, "").trim();
+      const sizeText = header.subarray(124, 136).toString("ascii").replace(/\0.*$/u, "").trim();
+      const size = Number.parseInt(sizeText || "0", 8);
+      if (!Number.isSafeInteger(size) || size < 0 || size > maxBytes) throw new Error("media_download_tar_entry_invalid");
+      const type = header[156];
+      const dataOffset = headerOffset + 512;
+      const extension = path.extname(name).toLowerCase();
+      if ((type === 0 || type === 48) && mediaContentTypeForExtension(extension)) {
+        const extractedPath = `${filePath}.media`;
+        const target = await fs.open(extractedPath, "w");
+        const hash = crypto.createHash("sha256");
+        try {
+          const buffer = new Uint8Array(new ArrayBuffer(64 * 1024));
+          let copied = 0;
+          while (copied < size) {
+            const requested = Math.min(buffer.length, size - copied);
+            const result = await source.read(buffer, 0, requested, dataOffset + copied);
+            if (!result.bytesRead) throw new Error("media_download_tar_truncated");
+            const chunk = buffer.subarray(0, result.bytesRead);
+            await target.write(chunk);
+            hash.update(chunk);
+            copied += result.bytesRead;
+          }
+          await target.sync();
+        } catch (error) {
+          await target.close().catch(() => undefined);
+          await fs.rm(extractedPath, { force: true }).catch(() => undefined);
+          throw error;
+        }
+        await target.close();
+        await fs.rm(filePath, { force: true });
+        await fs.rename(extractedPath, filePath);
+        return { byteLength: size, digest: hash.digest("hex"), extension, contentType: mediaContentTypeForExtension(extension) };
+      }
+      headerOffset = dataOffset + Math.ceil(size / 512) * 512;
+    }
+    throw new Error("media_download_tar_entry_missing");
+  } finally {
+    await source.close().catch(() => undefined);
+  }
+}
 
 /** Downloads provider URLs before a task is considered durable. */
 export async function downloadMediaOutputs(task: MediaTask, directory: string, options: { readonly fetchImpl?: typeof fetch; readonly filenamePrefix?: string; readonly maxBytes?: number; readonly allowedContentTypes?: readonly string[]; readonly tempDirectory?: string } = {}): Promise<readonly DownloadedMediaArtifact[]> {
@@ -456,24 +1022,25 @@ export async function downloadMediaOutputs(task: MediaTask, directory: string, o
       const url = typeof output.url === "string" ? output.url : typeof output.uri === "string" ? output.uri : undefined;
       const encoded = typeof output.b64_json === "string" ? output.b64_json : typeof output.base64 === "string" ? output.base64 : undefined;
       if (!url && !encoded) continue;
-      const response = url ? await fetchImpl(url) : undefined;
+      const dataUrl = url ? decodeDataUrl(url) : undefined;
+      const response = url && !dataUrl ? await fetchImpl(url) : undefined;
       if (response && (!response.ok || !response.body)) throw new Error(`media_download_http_${response.status}`);
-      const contentType = response?.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+      const contentType = dataUrl?.contentType ?? response?.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
       if (contentType && options.allowedContentTypes?.length && !options.allowedContentTypes.some((allowed) => contentType === allowed.toLowerCase() || contentType.startsWith(`${allowed.toLowerCase()}/`))) throw new Error(`media_download_mime_rejected:${contentType}`);
       const maxBytes = Math.max(1, options.maxBytes ?? 512 * 1024 * 1024);
-      const advertisedBytes = Number(response?.headers.get("content-length") ?? 0);
+      const advertisedBytes = dataUrl?.bytes.byteLength ?? Number(response?.headers.get("content-length") ?? 0);
       if (advertisedBytes > maxBytes) throw new Error("media_download_too_large");
-      const extension = url ? path.extname(new URL(url).pathname) || ".bin" : ".bin";
       const temporary = path.join(tempDirectory, `${options.filenamePrefix ?? "media"}-${index + 1}-${Date.now()}-${process.pid}.tmp`);
       let name = "";
       let handle: Awaited<ReturnType<typeof fs.open>> | undefined;
       let digest = "";
       let byteLength = 0;
+      let artifactContentType = contentType;
       try {
         const hash = crypto.createHash("sha256");
         handle = await fs.open(temporary, "w");
-        if (encoded) {
-          const bytes = new Uint8Array(Buffer.from(encoded, "base64"));
+        if (dataUrl || encoded) {
+          const bytes = dataUrl?.bytes ?? new Uint8Array(Buffer.from(encoded!, "base64"));
           if (bytes.byteLength > maxBytes) throw new Error("media_download_too_large");
           await handle.write(bytes as unknown as Uint8Array<ArrayBuffer>);
           hash.update(bytes as unknown as Uint8Array<ArrayBuffer>);
@@ -498,6 +1065,16 @@ export async function downloadMediaOutputs(task: MediaTask, directory: string, o
         await handle.close();
         handle = undefined;
         digest = hash.digest("hex");
+        const urlExtension = url && !dataUrl ? path.extname(new URL(url).pathname) : "";
+        const extractedTar = await extractSingleTarMedia(temporary, maxBytes);
+        if (extractedTar) {
+          byteLength = extractedTar.byteLength;
+          digest = extractedTar.digest;
+          artifactContentType = extractedTar.contentType;
+        }
+        const detectedMedia = extractedTar ? undefined : await detectMediaFileSignature(temporary);
+        if (detectedMedia) artifactContentType = detectedMedia.contentType;
+        const extension = extractedTar?.extension ?? detectedMedia?.extension ?? (urlExtension && urlExtension !== ".bin" ? urlExtension : extensionForMediaContentType(contentType));
         name = `${options.filenamePrefix ?? "media"}-${index + 1}-${digest.slice(0, 12)}${extension}`;
         const target = path.join(directory, name);
         const targetExists = await fs.access(target).then(() => true).catch(() => false);
@@ -508,7 +1085,7 @@ export async function downloadMediaOutputs(task: MediaTask, directory: string, o
         await fs.rm(temporary, { force: true }).catch(() => undefined);
         throw error;
       }
-      artifacts.push({ relativePath: name, bytes: byteLength, sha256: digest, ...(contentType ? { contentType } : {}) });
+      artifacts.push({ relativePath: name, bytes: byteLength, sha256: digest, ...(artifactContentType ? { contentType: artifactContentType } : {}) });
     }
     return artifacts;
   } finally {
@@ -573,5 +1150,5 @@ export function recoverMediaJob(record: MediaJobRecord): "poll" | "submit" | "do
 
 export function normalizeMediaTask(task: MediaTask): MediaTask {
   const status: MediaTaskStatus = ["queued", "running", "succeeded", "failed", "cancelled"].includes(task.status) ? task.status : "failed";
-  return { providerTaskId: task.providerTaskId.trim(), status, ...(task.providerStatus ? { providerStatus: task.providerStatus.slice(0, 160) } : {}), outputs: task.outputs.map((output) => ({ ...output })), ...(task.usage ? { usage: normalizeUsage(task.usage) } : {}) };
+  return { providerTaskId: task.providerTaskId.trim(), status, ...(task.providerStatus ? { providerStatus: task.providerStatus.slice(0, 160) } : {}), ...(task.error ? { error: task.error.slice(0, 240) } : {}), outputs: task.outputs.map((output) => ({ ...output })), ...(task.usage ? { usage: normalizeUsage(task.usage) } : {}) };
 }

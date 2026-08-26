@@ -1,10 +1,10 @@
-use serde::Serialize;
-use serde::Deserialize;
-use std::io::Write;
+use serde::{Deserialize, Serialize};
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
-use tauri::Manager;
+use std::time::{Duration, Instant, UNIX_EPOCH};
+use tauri::{Emitter, Manager};
 use std::fs;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -79,8 +79,10 @@ fn health() -> Health {
 fn runtime_probe(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
     let data = data_dir(&app)?;
+    let cache_fingerprint = runtime_probe_fingerprint(&data, &resource);
+    if let Some(cached) = read_runtime_probe_cache(&data, &cache_fingerprint) { return Ok(cached); }
     let database = data.join("app.db");
-    let migrations = storage::initialize(&database).is_ok() && storage::migrations_ready(&database).unwrap_or(false);
+    let migrations = storage::migrations_ready_without_initialization(&database).unwrap_or(false);
     let configured_node = configured_runtime_executable(&data, "nodePath");
     let private_node = data.join("runtime").join("node").join("node.exe");
     let configured_opencode = configured_runtime_executable(&data, "opencodePath");
@@ -120,11 +122,89 @@ fn runtime_probe(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
         ("hostPath", host_path.as_ref()), ("knowledgePath", knowledge_path.as_ref()), ("skillsPath", skill_path.as_ref()), ("fontsPath", fonts_path.as_ref()),
         ("lancedbPath", lancedb_path.as_ref()), ("embeddingPath", embedding_path.as_ref()),
     ])?;
-    Ok(serde_json::json!({ "ready": node && opencode && python && skills && fonts && migrations && host && knowledge && lancedb && embedding, "node": node, "opencode": opencode, "python": python, "skills": skills, "fonts": fonts, "migrations": migrations, "host": host, "knowledge": knowledge, "lancedb": lancedb, "embedding": embedding, "semanticRag": lancedb, "paths": { "node": node_path, "opencode": opencode_path, "python": python_path, "host": host_path, "knowledge": knowledge_path, "skills": skill_path, "fonts": fonts_path, "lancedb": lancedb_path, "embedding": embedding_path } }))
+    let result = serde_json::json!({ "ready": node && opencode && python && skills && fonts && migrations && host && knowledge && lancedb && embedding, "node": node, "opencode": opencode, "python": python, "skills": skills, "fonts": fonts, "migrations": migrations, "host": host, "knowledge": knowledge, "lancedb": lancedb, "embedding": embedding, "semanticRag": lancedb, "paths": { "node": node_path, "opencode": opencode_path, "python": python_path, "host": host_path, "knowledge": knowledge_path, "skills": skill_path, "fonts": fonts_path, "lancedb": lancedb_path, "embedding": embedding_path } });
+    if result.get("ready").and_then(serde_json::Value::as_bool) == Some(true) {
+        write_runtime_probe_cache(&data, &runtime_probe_fingerprint(&data, &resource), &result);
+    }
+    Ok(result)
+}
+
+const RUNTIME_PROBE_CACHE_FILE: &str = ".runtime-probe-cache.json";
+
+#[derive(Debug, Deserialize, Serialize)]
+struct RuntimeProbeCache {
+    fingerprint: String,
+    result: serde_json::Value,
+}
+
+fn runtime_probe_fingerprint(data: &Path, resource: &Path) -> String {
+    [
+        ("config", data.join("config.json")),
+        ("database", data.join("app.db")),
+        ("resource", resource.to_path_buf()),
+        ("manifest", resource.join("runtime-manifest.json")),
+        ("dist-manifest", resource.join("dist-runtime").join("runtime").join("runtime-manifest.json")),
+    ]
+    .into_iter()
+    .map(|(label, path)| format!("{label}={}:{}", path.to_string_lossy(), path_stamp(&path)))
+    .collect::<Vec<_>>()
+    .join("|")
+}
+
+fn path_stamp(path: &Path) -> String {
+    let Ok(metadata) = fs::metadata(path) else { return "missing".to_string(); };
+    let modified = metadata.modified().ok().and_then(|value| value.duration_since(UNIX_EPOCH).ok()).map(|value| value.as_nanos()).unwrap_or_default();
+    format!("{}:{modified}", metadata.len())
+}
+
+fn read_runtime_probe_cache(data: &Path, fingerprint: &str) -> Option<serde_json::Value> {
+    let path = data.join(RUNTIME_PROBE_CACHE_FILE);
+    let cache = serde_json::from_str::<RuntimeProbeCache>(&fs::read_to_string(path).ok()?).ok()?;
+    (cache.fingerprint == fingerprint && cache.result.get("ready").and_then(serde_json::Value::as_bool) == Some(true)).then_some(cache.result)
+}
+
+fn write_runtime_probe_cache(data: &Path, fingerprint: &str, result: &serde_json::Value) {
+    let path = data.join(RUNTIME_PROBE_CACHE_FILE);
+    let cache = RuntimeProbeCache { fingerprint: fingerprint.to_string(), result: result.clone() };
+    if let Ok(serialized) = serde_json::to_vec(&cache) {
+        let _ = fs::write(path, serialized);
+    }
+}
+
+fn invalidate_runtime_probe_cache(data: &Path) {
+    let _ = fs::remove_file(data.join(RUNTIME_PROBE_CACHE_FILE));
+}
+
+fn read_local_skill_catalog(candidates: impl IntoIterator<Item = PathBuf>) -> Result<serde_json::Value, String> {
+    for candidate in candidates {
+        if !candidate.is_file() { continue; }
+        let raw = fs::read_to_string(&candidate).map_err(|error| error.to_string())?;
+        let value = serde_json::from_str::<serde_json::Value>(&raw).map_err(|error| error.to_string())?;
+        let valid = value.get("schemaVersion").and_then(serde_json::Value::as_u64) == Some(1)
+            && value.get("skills").and_then(serde_json::Value::as_array).is_some();
+        if valid { return Ok(value); }
+    }
+    Err("local_skill_catalog_unavailable".to_string())
+}
+
+#[tauri::command]
+fn list_local_skill_catalog(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
+    let data = data_dir(&app)?;
+    let development = std::env::current_dir().unwrap_or_default().join("apps").join("desktop").join("dist-runtime");
+    let configured_catalog = configured_runtime_path(&data, "skillsPath").and_then(|path| path.parent().map(|parent| parent.join("skill-catalog.json")));
+    read_local_skill_catalog(configured_catalog.into_iter().chain([
+        resource.join("dist-runtime").join("skill-catalog.json"),
+        resource.join("_up_").join("dist-runtime").join("skill-catalog.json"),
+        development.join("skill-catalog.json"),
+    ]))
 }
 
 fn executable_works(path: &std::path::Path, args: &[&str]) -> bool {
-    Command::new(path).args(args).output().map(|output| output.status.success()).unwrap_or(false)
+    let mut command = Command::new(path);
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
+    command.args(args).output().map(|output| output.status.success()).unwrap_or(false)
 }
 
 fn canonical_path(path: PathBuf) -> Option<PathBuf> {
@@ -159,17 +239,26 @@ fn persist_runtime_paths(data: &std::path::Path, updates: &[(&str, Option<&PathB
 }
 
 fn python_capable(path: &std::path::Path) -> bool {
-    Command::new(path).args(["-c", PPT_PYTHON_PROBE]).output().map(|output| output.status.success()).unwrap_or(false)
+    let mut command = Command::new(path);
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
+    command.args(["-c", PPT_PYTHON_PROBE]).output().map(|output| output.status.success()).unwrap_or(false)
 }
 
 fn system_python() -> Option<PathBuf> {
-    let output = Command::new("where.exe").arg("python").output().ok()?;
+    let mut command = Command::new("where.exe");
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
+    let output = command.arg("python").output().ok()?;
     if !output.status.success() { return None; }
     String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).flat_map(resolve_windows_command_shim).filter(|path| path.exists() && executable_works(path, &["--version"])).find_map(canonical_path)
 }
 
 fn system_executable(command: &str) -> Option<PathBuf> {
-    let output = Command::new("where.exe").arg(command).output().ok()?;
+    let mut where_command = Command::new("where.exe");
+    #[cfg(windows)]
+    where_command.creation_flags(0x08000000);
+    let output = where_command.arg(command).output().ok()?;
     if !output.status.success() { return None; }
     String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).flat_map(resolve_windows_command_shim).filter(|path| path.exists() && executable_works(path, &["--version"])).find_map(canonical_path)
 }
@@ -178,6 +267,23 @@ fn system_executable(command: &str) -> Option<PathBuf> {
 struct RuntimeRepairOptions {
     #[serde(rename = "offlineZip")]
     offline_zip: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct RuntimeProgressEvent {
+    message: String,
+}
+
+fn emit_runtime_progress(app: &tauri::AppHandle, message: impl Into<String>) {
+    let _ = app.emit("desktop://runtime-progress", RuntimeProgressEvent { message: message.into() });
+}
+
+fn discover_offline_runtime_zip(resource: &Path) -> Option<PathBuf> {
+    let executable = std::env::current_exe().ok();
+    let mut candidates = vec![resource.join("AIMarketing-Runtime-x64.zip")];
+    if let Some(parent) = resource.parent() { candidates.push(parent.join("AIMarketing-Runtime-x64.zip")); }
+    if let Some(executable) = executable.and_then(|path| path.parent().map(Path::to_path_buf)) { candidates.push(executable.join("AIMarketing-Runtime-x64.zip")); }
+    candidates.into_iter().find(|path| path.is_file()).and_then(|path| std::fs::canonicalize(path).ok()).map(bootstrap::powershell_compatible_path)
 }
 
 #[tauri::command]
@@ -192,28 +298,145 @@ fn repair_runtime(app: tauri::AppHandle, options: Option<RuntimeRepairOptions>) 
         resource.join("_up_").join("install-desktop-runtime.ps1"),
     ]
         .into_iter().find(|path| path.exists()).ok_or_else(|| "runtime_installer_missing".to_string())?;
+    let script_for_powershell = bootstrap::powershell_compatible_path(script);
+    let manifest_for_powershell = bootstrap::powershell_compatible_path(manifest);
     // The installer stages `runtime/...` under its install root. Passing the
     // data root (rather than the runtime subdirectory) keeps the resulting
     // layout aligned with all probes and host path resolution.
     let install_root = data_dir(&app)?;
-    let offline_zip = options.and_then(|value| value.offline_zip).map(PathBuf::from).map(|path| std::fs::canonicalize(path).map(bootstrap::powershell_compatible_path).map_err(|error| format!("offline_runtime_zip_unavailable: {error}"))).transpose()?;
+    let install_root_for_powershell = bootstrap::powershell_compatible_path(install_root.clone());
+    invalidate_runtime_probe_cache(&install_root);
+    let offline_zip = match options.and_then(|value| value.offline_zip) {
+        Some(path) => Some(std::fs::canonicalize(PathBuf::from(path)).map(bootstrap::powershell_compatible_path).map_err(|error| format!("offline_runtime_zip_unavailable: {error}"))?),
+        None => discover_offline_runtime_zip(&resource),
+    };
+    emit_runtime_progress(&app, if offline_zip.is_some() { "offline_archive_discovered" } else { "network_runtime_prepare" });
     let mut command = Command::new("powershell.exe");
     command
         .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
-        .arg(script)
+        .arg(script_for_powershell)
         .args(["-ManifestPath"])
-        .arg(manifest)
+        .arg(manifest_for_powershell)
         .args(["-InstallRoot"])
-        .arg(&install_root);
+        .arg(install_root_for_powershell);
     if let Some(zip) = offline_zip.as_ref() { command.args(["-OfflineZip"]).arg(zip); }
-    let output = command.output().map_err(|error| format!("runtime_installer_spawn_failed: {error}"))?;
-    if !output.status.success() { return Err(format!("runtime_install_failed: {}", String::from_utf8_lossy(&output.stderr).trim().chars().take(500).collect::<String>())); }
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
+    let mut child = command.spawn().map_err(|error| format!("runtime_installer_spawn_failed: {error}"))?;
+    let stdout = child.stdout.take().ok_or_else(|| "runtime_installer_stdout_missing".to_string())?;
+    let stderr = child.stderr.take().ok_or_else(|| "runtime_installer_stderr_missing".to_string())?;
+    let progress_app = app.clone();
+    let progress_root = install_root.clone();
+    let stdout_reader = std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            logs::append(&progress_root, "runtime-install", &line);
+            if let Some(message) = line.strip_prefix("RUNTIME_PROGRESS:") { emit_runtime_progress(&progress_app, message.trim()); }
+        }
+    });
+    let stderr_root = install_root.clone();
+    let stderr_reader = std::thread::spawn(move || {
+        BufReader::new(stderr).lines().map_while(Result::ok).inspect(|line| logs::append(&stderr_root, "runtime-install-stderr", line)).collect::<Vec<_>>()
+    });
+    let started_at = Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait().map_err(|error| format!("runtime_installer_wait_failed: {error}"))? { break status; }
+        if started_at.elapsed() > Duration::from_secs(30 * 60) {
+            let _ = child.kill();
+            let _ = child.wait();
+            emit_runtime_progress(&app, "timeout");
+            return Err("runtime_install_timeout".to_string());
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    };
+    let _ = stdout_reader.join();
+    let stderr_lines = stderr_reader.join().unwrap_or_default();
+    if !status.success() {
+        let detail = stderr_lines.join(" ").trim().chars().take(800).collect::<String>();
+        emit_runtime_progress(&app, "failed");
+        return Err(format!("runtime_install_failed: {detail}"));
+    }
+    emit_runtime_progress(&app, "ready");
     Ok(serde_json::json!({ "status": "ok", "installRoot": install_root }))
 }
 
 fn data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let executable = std::env::current_exe().map_err(|error| error.to_string())?;
     Ok(storage::data_root(executable.parent().unwrap_or(executable.as_path()), configured_local_app_data(&app)))
+}
+
+/// Older green packages and user instructions sometimes placed `config.json`
+/// beside the executable. Portable storage is intentionally rooted at
+/// `data/`, but importing that misplaced file is safe when the data config is
+/// still uses the untouched first-run text provider. Merge only provider
+/// configuration so existing portable media profiles and runtime paths are
+/// preserved.
+fn migrate_portable_root_config(executable_dir: &Path) -> Result<bool, String> {
+    if !executable_dir.join("portable.flag").exists() { return Ok(false); }
+    let misplaced = executable_dir.join("config.json");
+    if !misplaced.is_file() { return Ok(false); }
+    let data = executable_dir.join("data");
+    let target = data.join("config.json");
+    let current = config::read(&target, &data)?;
+    if !is_default_portable_text_config(&current) { return Ok(false); }
+    let imported = config::read(&misplaced, executable_dir)?;
+    if !is_usable_desktop_config(&imported) || is_default_portable_text_config(&imported) { return Ok(false); }
+    let merged = merge_portable_provider_config(&current, &imported);
+    if merged == current { return Ok(false); }
+    config::write(&target, &merged)?;
+    Ok(true)
+}
+
+fn portable_default_workspace_path(executable_dir: &Path, configured: &Path) -> Option<PathBuf> {
+    if !executable_dir.join("portable.flag").is_file() { return None; }
+    let configured_name = configured.file_name()?.to_str()?;
+    let data_name = configured.parent()?.file_name()?.to_str()?;
+    let portable_name = configured.parent()?.parent()?.file_name()?.to_str()?;
+    if !configured_name.eq_ignore_ascii_case("projects") || !data_name.eq_ignore_ascii_case("data") || !portable_name.eq_ignore_ascii_case("AI-Marketing-Windows-x64-portable") { return None; }
+    let current = executable_dir.join("data").join("projects");
+    if configured == current { return None; }
+    Some(current)
+}
+
+fn repair_portable_workspace_config(executable_dir: &Path, data: &Path, value: &mut serde_json::Value) -> Result<bool, String> {
+    let Some(configured) = value.get("workspacePath").and_then(serde_json::Value::as_str).map(PathBuf::from) else { return Ok(false); };
+    let Some(current) = portable_default_workspace_path(executable_dir, &configured) else { return Ok(false); };
+    // This exact shape is the package-generated default. An external
+    // workspace remains user-owned because it does not match this shape.
+    value["workspacePath"] = serde_json::Value::String(current.to_string_lossy().into_owned());
+    fs::create_dir_all(&current).map_err(|error| format!("portable_workspace_create_failed: {error}"))?;
+    config::write(&data.join("config.json"), value)?;
+    Ok(true)
+}
+
+fn is_usable_desktop_config(value: &serde_json::Value) -> bool {
+    value.get("schemaVersion").and_then(serde_json::Value::as_i64) == Some(1)
+        && value.get("workspacePath").and_then(serde_json::Value::as_str).is_some_and(|path| !path.trim().is_empty())
+        && value.get("provider").and_then(serde_json::Value::as_object).and_then(|provider| provider.get("model")).and_then(serde_json::Value::as_str).is_some_and(|model| !model.trim().is_empty())
+        && value.get("runtime").and_then(serde_json::Value::as_object).is_some()
+}
+
+fn is_default_portable_text_config(value: &serde_json::Value) -> bool {
+    value.get("provider").and_then(serde_json::Value::as_object).is_some_and(|provider| {
+        provider.get("id").and_then(serde_json::Value::as_str) == Some("local")
+            && matches!(provider.get("model").and_then(serde_json::Value::as_str), Some("") | Some("ollama/qwen3:8b"))
+    })
+}
+
+fn merge_portable_provider_config(current: &serde_json::Value, imported: &serde_json::Value) -> serde_json::Value {
+    let mut merged = current.clone();
+    if let Some(provider) = imported.get("provider") { merged["provider"] = provider.clone(); }
+    if let Some(imported_profiles) = imported.get("providers").and_then(serde_json::Value::as_object) {
+        let mut profiles = merged.get("providers").and_then(serde_json::Value::as_object).cloned().unwrap_or_default();
+        for (id, profile) in imported_profiles { profiles.insert(id.clone(), profile.clone()); }
+        merged["providers"] = serde_json::Value::Object(profiles);
+    }
+    if let Some(imported_defaults) = imported.get("defaults").and_then(serde_json::Value::as_object) {
+        let mut defaults = merged.get("defaults").and_then(serde_json::Value::as_object).cloned().unwrap_or_default();
+        for (capability, provider_id) in imported_defaults { defaults.insert(capability.clone(), provider_id.clone()); }
+        merged["defaults"] = serde_json::Value::Object(defaults);
+    }
+    merged
 }
 
 fn configured_local_app_data(app: &tauri::AppHandle) -> Option<PathBuf> {
@@ -236,7 +459,7 @@ fn project_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(root)
 }
 
-const MAX_ATTACHMENT_BYTES: usize = 25 * 1024 * 1024;
+const MAX_ATTACHMENT_BYTES: usize = 512 * 1024 * 1024;
 const MAX_ATTACHMENT_CHUNK_BYTES: usize = 1024 * 1024;
 const MAX_ATTACHMENT_NAME_CHARS: usize = 180;
 static ATTACHMENT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -514,6 +737,209 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console
     }
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LocalWorkflowFile {
+    file_name: String,
+    local_path: String,
+    mime_type: String,
+    byte_length: u64,
+}
+
+fn workflow_file_mime_type(path: &Path) -> &'static str {
+    match path.extension().and_then(|extension| extension.to_str()).unwrap_or("").to_ascii_lowercase().as_str() {
+        "png" => "image/png", "jpg" | "jpeg" => "image/jpeg", "webp" => "image/webp", "gif" => "image/gif",
+        "mp4" => "video/mp4", "mov" => "video/quicktime", "webm" => "video/webm",
+        "mp3" => "audio/mpeg", "wav" => "audio/wav", "m4a" => "audio/mp4", "ogg" => "audio/ogg",
+        "pdf" => "application/pdf", "txt" => "text/plain", "md" => "text/markdown", "csv" => "text/csv", "json" => "application/json",
+        "doc" => "application/msword", "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "ppt" => "application/vnd.ms-powerpoint", "pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        _ => "application/octet-stream",
+    }
+}
+
+#[tauri::command]
+fn pick_workflow_files() -> Result<Vec<LocalWorkflowFile>, String> {
+    #[cfg(windows)]
+    {
+        let script = r#"
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.OpenFileDialog
+$dialog.Multiselect = $true
+$dialog.Filter = 'Supported files|*.png;*.jpg;*.jpeg;*.webp;*.gif;*.mp4;*.mov;*.webm;*.mp3;*.wav;*.m4a;*.ogg;*.pdf;*.txt;*.md;*.doc;*.docx;*.csv;*.json;*.ppt;*.pptx|All files|*.*'
+if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $dialog.FileNames | ForEach-Object { [Console]::Out.WriteLine($_) } }
+"#;
+        let output = Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-STA", "-ExecutionPolicy", "Bypass", "-Command", script])
+            .creation_flags(0x08000000)
+            .output()
+            .map_err(|error| format!("workflow_file_picker_spawn_failed: {error}"))?;
+        if !output.status.success() { return Err(format!("workflow_file_picker_failed:{}", output.status.code().unwrap_or(-1))); }
+        let files = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(|line| {
+                let path = PathBuf::from(line.trim());
+                let metadata = fs::metadata(&path).ok()?;
+                if !metadata.is_file() { return None; }
+                Some(LocalWorkflowFile {
+                    file_name: path.file_name()?.to_string_lossy().to_string(),
+                    local_path: path.to_string_lossy().to_string(),
+                    mime_type: workflow_file_mime_type(&path).to_string(),
+                    byte_length: metadata.len(),
+                })
+            })
+            .take(8)
+            .collect::<Vec<_>>();
+        return Ok(files);
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(Vec::new())
+    }
+}
+
+fn workflow_export_file_name(suggested_name: &str) -> String {
+    let name = Path::new(suggested_name)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("ai-marketing-workflow.json");
+    let sanitized = name.chars()
+        .filter(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.'))
+        .collect::<String>();
+    let stem = sanitized.trim_matches('.');
+    if stem.is_empty() { return "ai-marketing-workflow.json".to_string(); }
+    if stem.to_ascii_lowercase().ends_with(".json") { stem.to_string() } else { format!("{stem}.json") }
+}
+
+#[tauri::command]
+fn save_workflow_export(content: String, suggested_name: String) -> Result<Option<String>, String> {
+    const MAX_EXPORT_BYTES: usize = 10 * 1024 * 1024;
+    if content.len() > MAX_EXPORT_BYTES { return Err("workflow_export_too_large".to_string()); }
+    let file_name = workflow_export_file_name(&suggested_name);
+    #[cfg(windows)]
+    {
+        let script = r#"
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.SaveFileDialog
+$dialog.Filter = 'JSON files|*.json|All files|*.*'
+$dialog.DefaultExt = 'json'
+$dialog.AddExtension = $true
+$dialog.FileName = [Environment]::GetEnvironmentVariable('AIMARKETING_WORKFLOW_EXPORT_NAME', 'Process')
+if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.FileName) }
+"#;
+        let output = Command::new("powershell.exe")
+            .env("AIMARKETING_WORKFLOW_EXPORT_NAME", &file_name)
+            .args(["-NoProfile", "-NonInteractive", "-STA", "-ExecutionPolicy", "Bypass", "-Command", script])
+            .creation_flags(0x08000000)
+            .output()
+            .map_err(|error| format!("workflow_export_dialog_spawn_failed: {error}"))?;
+        if !output.status.success() { return Err(format!("workflow_export_dialog_failed:{}", output.status.code().unwrap_or(-1))); }
+        let target = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if target.is_empty() { return Ok(None); }
+        fs::write(&target, content.as_bytes()).map_err(|error| format!("workflow_export_write_failed: {error}"))?;
+        return Ok(Some(target));
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (content, file_name);
+        Ok(None)
+    }
+}
+
+fn workflow_output_file_name(suggested_name: &str, mime_type: &str) -> String {
+    let raw = Path::new(suggested_name)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("workflow-output");
+    let sanitized = raw.chars()
+        .filter(|character| character.is_alphanumeric() || matches!(character, '-' | '_' | '.' | ' '))
+        .collect::<String>()
+        .trim()
+        .trim_matches('.')
+        .to_string();
+    if !sanitized.is_empty() && sanitized.contains('.') { return sanitized; }
+    let extension = match mime_type {
+        value if value.starts_with("image/") => "png",
+        value if value.starts_with("video/") => "mp4",
+        value if value.starts_with("audio/") => "mp3",
+        "text/markdown" => "md",
+        "text/html" => "html",
+        "application/json" => "json",
+        value if value.contains("presentation") => "pptx",
+        _ => "txt",
+    };
+    format!("{}.{}", if sanitized.is_empty() { "workflow-output" } else { sanitized.as_str() }, extension)
+}
+
+#[tauri::command]
+fn save_workflow_output(
+    app: tauri::AppHandle,
+    content: Option<String>,
+    local_path: Option<String>,
+    relative_path: Option<String>,
+    mime_type: String,
+    file_name: String,
+) -> Result<Option<String>, String> {
+    const MAX_OUTPUT_BYTES: u64 = 64 * 1024 * 1024;
+    let bytes = if let Some(value) = content {
+        if value.len() as u64 > MAX_OUTPUT_BYTES { return Err("workflow_output_too_large".to_string()); }
+        value.into_bytes()
+    } else if let Some(value) = local_path {
+        let source = PathBuf::from(value.trim());
+        if !source.is_absolute() { return Err("workflow_output_path_invalid".to_string()); }
+        let metadata = fs::metadata(&source).map_err(|error| format!("workflow_output_unavailable: {error}"))?;
+        if !metadata.is_file() || metadata.len() > MAX_OUTPUT_BYTES { return Err("workflow_output_unavailable".to_string()); }
+        fs::read(&source).map_err(|error| format!("workflow_output_read_failed: {error}"))?
+    } else if let Some(value) = relative_path {
+        let root = project_root(&app)?;
+        let metadata = artifacts::inspect(&root, &value, &mime_type)?;
+        if metadata.byte_length > MAX_OUTPUT_BYTES { return Err("workflow_output_too_large".to_string()); }
+        let source = root.join(metadata.relative_path.replace('/', "\\"));
+        fs::read(&source).map_err(|error| format!("workflow_output_read_failed: {error}"))?
+    } else {
+        return Err("workflow_output_missing_source".to_string());
+    };
+    let suggested_name = workflow_output_file_name(&file_name, &mime_type);
+    #[cfg(windows)]
+    {
+        let script = r#"
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.SaveFileDialog
+$dialog.Filter = 'All files|*.*'
+$dialog.FileName = [Environment]::GetEnvironmentVariable('AIMARKETING_OUTPUT_NAME', 'Process')
+if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.FileName) }
+"#;
+        let output = Command::new("powershell.exe")
+            .env("AIMARKETING_OUTPUT_NAME", &suggested_name)
+            .args(["-NoProfile", "-NonInteractive", "-STA", "-ExecutionPolicy", "Bypass", "-Command", script])
+            .creation_flags(0x08000000)
+            .output()
+            .map_err(|error| format!("workflow_output_dialog_spawn_failed: {error}"))?;
+        if !output.status.success() { return Err(format!("workflow_output_dialog_failed:{}", output.status.code().unwrap_or(-1))); }
+        let target = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if target.is_empty() { return Ok(None); }
+        fs::write(&target, bytes).map_err(|error| format!("workflow_output_write_failed: {error}"))?;
+        return Ok(Some(target));
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (bytes, suggested_name);
+        Ok(None)
+    }
+}
+
+#[tauri::command]
+fn read_workflow_local_file(local_path: String, mime_type: String) -> Result<serde_json::Value, String> {
+    const MAX_PREVIEW_BYTES: u64 = 64 * 1024 * 1024;
+    let path = PathBuf::from(local_path.trim());
+    if !path.is_absolute() { return Err("workflow_local_file_path_invalid".to_string()); }
+    let metadata = fs::metadata(&path).map_err(|error| format!("workflow_local_file_unavailable: {error}"))?;
+    if !metadata.is_file() { return Err("workflow_local_file_unavailable".to_string()); }
+    if metadata.len() > MAX_PREVIEW_BYTES { return Err("workflow_local_file_preview_too_large".to_string()); }
+    let bytes = fs::read(&path).map_err(|error| format!("workflow_local_file_read_failed: {error}"))?;
+    Ok(serde_json::json!({ "mimeType": mime_type, "data": bytes }))
+}
+
 #[tauri::command]
 fn open_artifact(app: tauri::AppHandle, relative_path: String, mime_type: String) -> Result<(), String> {
     let root = project_root(&app)?;
@@ -523,11 +949,60 @@ fn open_artifact(app: tauri::AppHandle, relative_path: String, mime_type: String
 }
 
 #[tauri::command]
+fn open_artifact_folder(app: tauri::AppHandle, relative_path: String, mime_type: String) -> Result<(), String> {
+    let root = project_root(&app)?;
+    let metadata = artifacts::inspect(&root, &relative_path, &mime_type)?;
+    let target = root.join(metadata.relative_path.replace('/', "\\"));
+    let folder = target.parent().ok_or_else(|| "artifact_folder_missing".to_string())?;
+    Command::new("explorer.exe").arg(folder).spawn().map(|_| ()).map_err(|error| format!("explorer_spawn_failed: {error}"))
+}
+
+#[cfg(windows)]
+fn open_with_installed_program(target: &Path) -> Result<(), String> {
+    use std::iter;
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    let operation: Vec<u16> = std::ffi::OsStr::new("openas").encode_wide().chain(iter::once(0)).collect();
+    let file: Vec<u16> = target.as_os_str().encode_wide().chain(iter::once(0)).collect();
+    let result = unsafe { ShellExecuteW(std::ptr::null_mut(), operation.as_ptr(), file.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL) };
+    if (result as isize) <= 32 { return Err(format!("open_with_program_failed:{}", result as isize)); }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn open_with_installed_program(target: &Path) -> Result<(), String> {
+    Command::new("xdg-open").arg(target).spawn().map(|_| ()).map_err(|error| format!("open_with_program_spawn_failed: {error}"))
+}
+
+#[tauri::command]
 fn open_artifact_default(app: tauri::AppHandle, relative_path: String, mime_type: String) -> Result<(), String> {
     let root = project_root(&app)?;
     let metadata = artifacts::inspect(&root, &relative_path, &mime_type)?;
     let target = root.join(metadata.relative_path.replace('/', "\\"));
     open_with_default_program(&target)
+}
+
+#[tauri::command]
+fn open_artifact_with(app: tauri::AppHandle, relative_path: String, mime_type: String) -> Result<(), String> {
+    let root = project_root(&app)?;
+    let metadata = artifacts::inspect(&root, &relative_path, &mime_type)?;
+    let target = root.join(metadata.relative_path.replace('/', "\\"));
+    open_with_installed_program(&target)
+}
+
+#[tauri::command]
+fn read_artifact(app: tauri::AppHandle, relative_path: String, mime_type: String) -> Result<serde_json::Value, String> {
+    const MAX_PREVIEW_BYTES: u64 = 64 * 1024 * 1024;
+    let root = project_root(&app)?;
+    let metadata = artifacts::inspect(&root, &relative_path, &mime_type)?;
+    if metadata.byte_length > MAX_PREVIEW_BYTES {
+        return Err("artifact_preview_too_large".to_string());
+    }
+    let target = root.join(metadata.relative_path.replace('/', "\\"));
+    let bytes = std::fs::read(&target).map_err(|error| format!("artifact_read_failed: {error}"))?;
+    Ok(serde_json::json!({ "mimeType": metadata.mime_type, "data": bytes }))
 }
 
 #[tauri::command]
@@ -548,7 +1023,11 @@ fn open_vault_file(app: tauri::AppHandle, relative_path: String) -> Result<(), S
 #[tauri::command]
 fn read_config(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let data = data_dir(&app)?;
-    config::read(&data.join("config.json"), &data)
+    let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+    let executable_dir = executable.parent().unwrap_or(executable.as_path());
+    let mut value = config::read(&data.join("config.json"), &data)?;
+    repair_portable_workspace_config(executable_dir, &data, &mut value)?;
+    Ok(value)
 }
 
 #[tauri::command]
@@ -584,12 +1063,12 @@ fn initialize_local_state(app: tauri::AppHandle) -> Result<serde_json::Value, St
 }
 
 #[derive(Debug, Deserialize)]
-struct ConversationInput { id: String, title: String, project_id: Option<String> }
+struct ConversationInput { id: String, title: String, project_id: Option<String>, agent_id: Option<String> }
 
 #[tauri::command]
 fn create_conversation(app: tauri::AppHandle, input: ConversationInput) -> Result<storage::ConversationRow, String> {
     let path = database_path(&app)?;
-    storage::create_conversation(&path, &input.id, &input.title, input.project_id.as_deref()).map_err(|error| error.to_string())
+    storage::create_conversation(&path, &input.id, &input.title, input.project_id.as_deref(), input.agent_id.as_deref()).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -598,11 +1077,11 @@ fn set_conversation_session(app: tauri::AppHandle, conversation_id: String, sess
 }
 
 #[derive(Debug, Deserialize)]
-struct MessageInput { id: String, conversation_id: String, role: String, content: String }
+struct MessageInput { id: String, conversation_id: String, role: String, content: String, parts_json: Option<String>, metadata_json: Option<String>, created_at: Option<String> }
 
 #[tauri::command]
 fn append_message(app: tauri::AppHandle, input: MessageInput) -> Result<(), String> {
-    storage::append_message(&database_path(&app)?, &input.id, &input.conversation_id, &input.role, &input.content).map_err(|error| error.to_string())
+    storage::append_message(&database_path(&app)?, &input.id, &input.conversation_id, &input.role, &input.content, input.parts_json.as_deref(), input.metadata_json.as_deref(), input.created_at.as_deref()).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -680,6 +1159,11 @@ fn list_workflows(app: tauri::AppHandle) -> Result<Vec<storage::WorkflowRow>, St
 }
 
 #[tauri::command]
+fn remove_workflow(app: tauri::AppHandle, workflow_id: String) -> Result<(), String> {
+    storage::remove_workflow(&database_path(&app)?, &workflow_id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn usage_summary(app: tauri::AppHandle) -> Result<storage::UsageSummary, String> {
     storage::usage_summary(&database_path(&app)?).map_err(|error| error.to_string())
 }
@@ -694,23 +1178,36 @@ pub fn run() {
         Ok(lock) => lock,
         Err(error) => { eprintln!("AI Marketing cannot acquire instance lock: {error}"); bootstrap::show_startup_error(&error); return; }
     };
-    if let Err(error) = bootstrap::ensure_webview2() {
+    if let Ok(executable) = std::env::current_exe() {
+        if let Some(executable_dir) = executable.parent() {
+            match migrate_portable_root_config(executable_dir) {
+                Ok(true) => eprintln!("AI Marketing imported portable config from the executable directory into data/config.json"),
+                Ok(false) => {},
+                Err(error) => eprintln!("AI Marketing could not import the portable config: {error}"),
+            }
+        }
+    }
+    let startup_progress = bootstrap::StartupProgress::new(bootstrap::StartupStage::Starting);
+    startup_progress.show_stage(bootstrap::StartupStage::WebView);
+    if let Err(error) = bootstrap::ensure_webview2(&startup_progress) {
         eprintln!("AI Marketing cannot start without WebView2: {error}");
+        startup_progress.update(&format!("WebView2 unavailable: {error}"));
         bootstrap::show_startup_error(&error);
         instance_lock.release();
         return;
     }
-    if let Err(error) = bootstrap::ensure_runtime_before_window() {
-        eprintln!("AI Marketing cannot start without the local runtime: {error}");
-        bootstrap::show_startup_error(&error);
-        instance_lock.release();
-        return;
-    }
+    // Runtime installation/probing is intentionally handled by the React
+    // bootstrap screen after the Tauri window exists. WebView2 must be ready
+    // before creating the window, but the green runtime can be repaired while
+    // the user sees progress and diagnostics instead of a blank native shell.
+    startup_progress.show_stage(bootstrap::StartupStage::Runtime);
+    startup_progress.show_stage(bootstrap::StartupStage::Workbench);
     let builder = tauri::Builder::default()
         .manage(instance_lock)
         .manage(host::HostState::default())
-        .invoke_handler(tauri::generate_handler![health, runtime_probe, repair_runtime, runtime_paths, initialize_local_state, read_config, write_config, begin_local_attachment, append_local_attachment_chunk, finish_local_attachment, abort_local_attachment, allocate_media_temp, write_writer_draft, inspect_artifact, register_artifact, list_artifacts, remove_artifact, export_diagnostics, open_workspace, pick_directory, open_artifact, open_artifact_default, open_vault_file, create_conversation, set_conversation_session, append_message, create_run, append_run_event, finish_run, record_usage, record_run_node, record_run_checkpoint, record_run_attempt, list_conversations, list_messages, list_runs, inspect_run, list_recoverable_attempts, save_workflow, list_workflows, usage_summary, host::host_start, host::host_send, host::host_stop]);
+        .invoke_handler(tauri::generate_handler![health, runtime_probe, list_local_skill_catalog, repair_runtime, runtime_paths, initialize_local_state, read_config, write_config, begin_local_attachment, append_local_attachment_chunk, finish_local_attachment, abort_local_attachment, allocate_media_temp, write_writer_draft, inspect_artifact, register_artifact, list_artifacts, remove_artifact, export_diagnostics, open_workspace, pick_directory, pick_workflow_files, save_workflow_export, save_workflow_output, open_artifact, open_artifact_folder, open_artifact_default, open_artifact_with, read_artifact, read_workflow_local_file, open_vault_file, create_conversation, set_conversation_session, append_message, create_run, append_run_event, finish_run, record_usage, record_run_node, record_run_checkpoint, record_run_attempt, list_conversations, list_messages, list_runs, inspect_run, list_recoverable_attempts, save_workflow, list_workflows, remove_workflow, usage_summary, host::host_start, host::host_send, host::host_stop]);
     let app = builder.build(tauri::generate_context!()).expect("error while building AI Marketing");
+    drop(startup_progress);
     app.run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
                 if let Some(state) = app.try_state::<host::HostState>() { let _ = host::stop_state(state.inner()); }
@@ -738,7 +1235,7 @@ fn adjacent_instance_lock_path(data_root: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::{adjacent_instance_lock_path, archive_diagnostics, attachment_relative_path, bootstrap, config, configured_runtime_executable, persist_runtime_paths, powershell_quote, redact_diagnostic_value, resolve_windows_command_shim, safe_attachment_name, safe_media_component, write_file_atomically, MAX_ATTACHMENT_NAME_CHARS};
+    use super::{adjacent_instance_lock_path, archive_diagnostics, attachment_relative_path, bootstrap, config, configured_runtime_executable, is_default_portable_text_config, is_usable_desktop_config, migrate_portable_root_config, persist_runtime_paths, portable_default_workspace_path, powershell_quote, read_local_skill_catalog, read_runtime_probe_cache, redact_diagnostic_value, resolve_windows_command_shim, safe_attachment_name, safe_media_component, workflow_export_file_name, write_file_atomically, write_runtime_probe_cache, MAX_ATTACHMENT_NAME_CHARS};
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -755,6 +1252,71 @@ mod tests {
         let lock = adjacent_instance_lock_path(data_root);
         assert_eq!(lock, PathBuf::from("C:/Users/test/AppData/Local/AIMarketing.instance.lock"));
         assert_ne!(lock.parent(), Some(data_root));
+    }
+
+    #[test]
+    fn portable_config_migrates_a_misplaced_root_config_only_over_the_first_run_default() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-portable-config-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("data")).unwrap();
+        fs::write(root.join("portable.flag"), b"").unwrap();
+        let mut portable_default = config::default_config(&root.join("data"));
+        portable_default["providers"] = serde_json::json!({
+            "image-main": {
+                "id": "image-main",
+                "kind": "image",
+                "source": "runninghub",
+                "model": "seedream-5"
+            }
+        });
+        config::write(&root.join("data/config.json"), &portable_default).unwrap();
+        let mut imported = config::default_config(&root);
+        imported["provider"]["id"] = serde_json::json!("text-main");
+        imported["provider"]["model"] = serde_json::json!("deepseek-v4-flash");
+        imported["provider"]["models"] = serde_json::json!(["deepseek-v4-flash", "deepseek-chat"]);
+        imported["provider"]["source"] = serde_json::json!("deepseek");
+        imported["providers"] = serde_json::json!({
+            "text-main": {
+                "id": "text-main",
+                "kind": "text",
+                "source": "deepseek",
+                "model": "deepseek-v4-flash"
+            }
+        });
+        imported["defaults"] = serde_json::json!({ "text": "text-main" });
+        config::write(&root.join("config.json"), &imported).unwrap();
+
+        assert!(is_default_portable_text_config(&config::read(&root.join("data/config.json"), &root.join("data")).unwrap()));
+        assert!(is_usable_desktop_config(&imported));
+        assert!(migrate_portable_root_config(&root).unwrap());
+        let migrated = config::read(&root.join("data/config.json"), &root.join("data")).unwrap();
+        assert_eq!(migrated["provider"]["model"], "deepseek-v4-flash");
+        assert_eq!(migrated["provider"]["models"][1], "deepseek-chat");
+        assert!(migrated["providers"]["image-main"].is_object());
+        assert!(migrated["providers"]["text-main"].is_object());
+        assert_eq!(migrated["defaults"]["text"], "text-main");
+        assert!(!is_default_portable_text_config(&migrated));
+
+        let mut existing = migrated.clone();
+        existing["provider"]["model"] = serde_json::json!("keep-this-model");
+        config::write(&root.join("data/config.json"), &existing).unwrap();
+        assert!(!migrate_portable_root_config(&root).unwrap());
+        assert_eq!(config::read(&root.join("data/config.json"), &root.join("data")).unwrap()["provider"]["model"], "keep-this-model");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn portable_default_workspace_moves_with_the_current_package() {
+        let base = std::env::temp_dir().join(format!("ai-marketing-portable-workspace-{}", std::process::id()));
+        let root = base.join("desktop-release-gray-20260826").join("AI-Marketing-Windows-x64-portable");
+        let stale = base.join("desktop-release-gray-20260824").join("AI-Marketing-Windows-x64-portable").join("AI-Marketing-Windows-x64-portable").join("data").join("projects");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("portable.flag"), b"").unwrap();
+        assert_eq!(portable_default_workspace_path(&root, &stale), Some(root.join("data").join("projects")));
+        assert_eq!(portable_default_workspace_path(&root, &root.join("data").join("projects")), None);
+        assert_eq!(portable_default_workspace_path(&root, Path::new(r"D:\work\marketing")), None);
+        let _ = fs::remove_dir_all(base);
     }
 
     #[test]
@@ -790,6 +1352,35 @@ mod tests {
     }
 
     #[test]
+    fn runtime_probe_cache_accepts_only_matching_ready_results() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-runtime-cache-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let result = serde_json::json!({ "ready": true, "paths": { "node": "C:/runtime/node.exe" } });
+        write_runtime_probe_cache(&root, "fingerprint-a", &result);
+        assert_eq!(read_runtime_probe_cache(&root, "fingerprint-a"), Some(result.clone()));
+        assert_eq!(read_runtime_probe_cache(&root, "fingerprint-b"), None);
+        let not_ready = serde_json::json!({ "ready": false });
+        write_runtime_probe_cache(&root, "fingerprint-a", &not_ready);
+        assert_eq!(read_runtime_probe_cache(&root, "fingerprint-a"), None);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn local_skill_catalog_uses_the_valid_bundled_manifest() {
+        let root = std::env::temp_dir().join(format!("ai-marketing-skill-catalog-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let invalid = root.join("invalid.json");
+        let valid = root.join("skill-catalog.json");
+        fs::write(&invalid, r#"{"schemaVersion":1}"#).unwrap();
+        fs::write(&valid, r#"{"schemaVersion":1,"skills":[{"id":"writer","relativePath":"writer/SKILL.md","digest":"fixture"}]}"#).unwrap();
+        let catalog = read_local_skill_catalog([invalid, valid]).unwrap();
+        assert_eq!(catalog["skills"][0]["id"], "writer");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn windows_command_shims_resolve_to_real_opencode_executable() {
         let root = std::env::temp_dir().join(format!("ai-marketing-command-shim-{}", std::process::id()));
         let bin = root.join("node_modules").join("opencode-ai").join("bin");
@@ -806,13 +1397,21 @@ mod tests {
     #[test]
     fn startup_gates_run_before_tauri_builder() {
         let source = include_str!("lib.rs");
-        let webview_gate = source.find("bootstrap::ensure_webview2()").expect("webview gate missing");
-        let runtime_gate = source.find("bootstrap::ensure_runtime_before_window()").expect("runtime gate missing");
+        let webview_gate = source.find("bootstrap::ensure_webview2(&startup_progress)").expect("webview gate missing");
         let builder = source.find("let builder = tauri::Builder::default()").expect("tauri builder missing");
         assert!(webview_gate < builder, "WebView2 must be ready before Tauri creates the window");
-        assert!(runtime_gate < builder, "green runtime must be ready before Tauri creates the window");
         assert!(source[webview_gate..builder].contains("instance_lock.release()"));
-        assert!(source[runtime_gate..builder].contains("instance_lock.release()"));
+        assert!(!source[webview_gate..builder].contains("ensure_runtime_before_window"), "runtime repair must not block the first Tauri window");
+        assert!(source.contains("bootstrap::StartupProgress::new"));
+        assert!(source.contains("startup_progress.show_stage(bootstrap::StartupStage::WebView)"));
+        assert!(source.contains("startup_progress.show_stage(bootstrap::StartupStage::Runtime)"));
+        assert!(source.contains("startup_progress.show_stage(bootstrap::StartupStage::Workbench)"));
+    }
+
+    #[test]
+    fn release_binary_uses_the_windows_gui_subsystem() {
+        let source = include_str!("main.rs");
+        assert!(source.contains("windows_subsystem = \"windows\""));
     }
 
     #[test]
@@ -845,6 +1444,14 @@ mod tests {
         let files = fs::read_dir(root.join("articles")).unwrap().map(|entry| entry.unwrap().file_name()).collect::<Vec<_>>();
         assert_eq!(files, vec![std::ffi::OsString::from("draft.md")]);
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn workflow_export_names_are_safe_json_files() {
+        assert_eq!(workflow_export_file_name("campaign.json"), "campaign.json");
+        assert_eq!(workflow_export_file_name("../../campaign"), "campaign.json");
+        assert_eq!(workflow_export_file_name("<invalid>"), "invalid.json");
+        assert_eq!(workflow_export_file_name("..."), "ai-marketing-workflow.json");
     }
 
     #[cfg(windows)]

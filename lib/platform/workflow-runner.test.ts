@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import type { AuthUser } from "@/lib/auth/session"
+import { isPlatformArtifactAssetLibraryEligible } from "@/lib/platform/artifact-actions"
 import {
   buildPlatformWorkflowRunDetailPath,
   createPlatformWorkflowRun,
@@ -179,6 +180,7 @@ test("recordPlatformWorkflowProxyResult marks async workflow responses as runnin
   assert.equal(detail.artifacts.length, 1)
   assert.equal(detail.artifacts[0]?.title, "Content repurpose output")
   assert.equal(detail.workItems.length, 0)
+  assert.equal(isPlatformArtifactAssetLibraryEligible(detail.artifacts[0]!), false)
 })
 
 test("recordPlatformWorkflowProxyResult promotes synchronous workflow outputs into work items", async () => {
@@ -226,6 +228,11 @@ test("recordPlatformWorkflowProxyResult promotes synchronous workflow outputs in
   assert.equal(detail.workItems.length, 1)
   assert.equal(detail.workItems[0]?.type, "deck")
   assert.equal(detail.workItems[0]?.sourceArtifactId, detail.artifacts[0]?.id)
+  const artifact = detail.artifacts[0]!
+  assert.equal((artifact.payload as { source?: string }).source, "workflow")
+  assert.equal((artifact.payload as { assetLibraryEligible?: boolean }).assetLibraryEligible, true)
+  assert.equal(typeof (artifact.payload as { embeddedContentBase64?: string }).embeddedContentBase64, "string")
+  assert.equal(isPlatformArtifactAssetLibraryEligible(artifact), true)
 })
 
 test("getPlatformWorkflowRunDetail hides runs from other enterprises", async () => {

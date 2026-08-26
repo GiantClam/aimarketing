@@ -6,8 +6,9 @@ export type OpenCodeCommandInput = { readonly modelHint?: string | null };
 
 export type OpenCodeRuntimeEvent =
   | { readonly event: "text_delta"; readonly delta: string; readonly runId: string }
+  | { readonly event: "reasoning_delta"; readonly delta: string; readonly runId: string }
   | { readonly event: "tool_event"; readonly tool: string; readonly toolCallId?: string; readonly phase: "started" | "progress" | "completed" | "failed"; readonly message?: string; readonly runId: string }
-  | { readonly event: "usage"; readonly provider?: string; readonly inputTokens?: number; readonly outputTokens?: number; readonly costUsd?: number; readonly runId: string }
+  | { readonly event: "usage"; readonly provider?: string; readonly model?: string; readonly inputTokens?: number; readonly outputTokens?: number; readonly costUsd?: number; readonly runId: string }
   | { readonly event: "runtime_warning"; readonly code: string; readonly message: string; readonly runId: string }
   | { readonly event: "runtime_error"; readonly code: string; readonly message: string; readonly retryable: boolean; readonly runId: string }
   | { readonly event: "done"; readonly runId: string };
@@ -57,6 +58,7 @@ export interface OpenCodeServePromptPayloadInput {
   readonly prompt: string;
   readonly providerId?: string;
   readonly modelId?: string;
+  readonly variant?: string;
   readonly systemPrompt?: string;
   readonly agent?: string;
 }
@@ -80,13 +82,10 @@ export function openCodeServeSessionsPath(directory: string) {
 }
 
 export function createOpenCodeServeSessionPayload(input: OpenCodeServeSessionPayloadInput) {
-  const model = openCodeServeModel(input);
-  return {
-    title: input.title,
-    agent: input.agent || "build",
-    ...(model ? { model } : {}),
-    ...(input.metadata ? { metadata: input.metadata } : {}),
-  };
+  // OpenCode 1.17.x validates session creation strictly. Agent/model selection
+  // belongs to the prompt payload; sending those fields (or platform metadata)
+  // to POST /session makes the real server reject the request with HTTP 400.
+  return { title: input.title };
 }
 
 export function createOpenCodeServePromptPayload(input: OpenCodeServePromptPayloadInput) {
@@ -94,6 +93,7 @@ export function createOpenCodeServePromptPayload(input: OpenCodeServePromptPaylo
   return {
     agent: input.agent || "build",
     ...(model ? { model } : {}),
+    ...(readString(input.variant) ? { variant: readString(input.variant) } : {}),
     ...(input.systemPrompt === undefined ? {} : { system: input.systemPrompt }),
     parts: [{ type: "text" as const, text: input.prompt }],
   };
@@ -129,6 +129,12 @@ function parseEvent(runId: string, value: unknown): OpenCodeRuntimeEvent[] {
   const part = readRecord(record.part);
   const state = readRecord(part?.state);
   const error = readRecord(record.error);
+  const partType = readString(part?.type)?.toLowerCase();
+
+  if (type === "reasoning" || type === "thinking" || partType === "reasoning" || partType === "thinking") {
+    const text = readString(part?.text, part?.reasoning, record.text, record.delta);
+    return text ? [{ event: "reasoning_delta", delta: text, runId }] : [];
+  }
 
   if (type === "text") {
     const text = readString(part?.text, record.text, record.delta);
@@ -256,6 +262,8 @@ export interface OpenCodeServeEventState {
 
 export interface OpenCodeServeEventResult {
   readonly sessionId: string;
+  readonly messageId?: string;
+  readonly messageRole?: string;
   readonly events: readonly OpenCodeRuntimeEvent[];
   readonly terminalError?: { readonly code: string; readonly message: string; readonly retryable: boolean };
 }
@@ -278,19 +286,25 @@ export function normalizeOpenCodeServeEvent(
   const record = readRecord(envelope?.payload) ?? envelope;
   const properties = readRecord(record?.properties);
   const part = readRecord(properties?.part);
-  const sessionId = readString(properties?.sessionID, properties?.sessionId, part?.sessionID, part?.sessionId) ?? "";
+  const info = readRecord(properties?.info);
+  // OpenCode has emitted both `sessionID` and `sessionId`, with the session
+  // occasionally nested under the message metadata. Keep host routing tied to
+  // this normalized value instead of duplicating a narrower parser per host.
+  const sessionId = readString(properties?.sessionID, properties?.sessionId, part?.sessionID, part?.sessionId, info?.sessionID, info?.sessionId) ?? "";
+  const messageId = readString(info?.id, part?.messageID, part?.messageId) ?? undefined;
+  const messageRole = readString(info?.role) ?? undefined;
+  const identity = { sessionId, ...(messageId ? { messageId } : {}), ...(messageRole ? { messageRole } : {}) };
   const type = readString(record?.type) ?? "";
   if (type === "message.updated") {
-    const info = readRecord(properties?.info);
     const messageId = readString(info?.id);
     const role = readString(info?.role);
     if (messageId && role) state.messageRoles.set(messageId, role);
-    return { sessionId, events: [] };
+    return { ...identity, events: [] };
   }
   if (type === "session.error") {
     const error = readRecord(properties?.error);
     return {
-      sessionId,
+      ...identity,
       events: [],
       terminalError: {
         code: "opencode_error",
@@ -299,17 +313,47 @@ export function normalizeOpenCodeServeEvent(
       },
     };
   }
-  if (type !== "message.part.updated" || !part) return { sessionId, events: [] };
-  const messageId = readString(part.messageID, part.messageId);
-  if (messageId && state.messageRoles.get(messageId) === "user") return { sessionId, events: [] };
+  if (type === "message.part.delta") {
+    // OpenCode streams visible text and model reasoning through the same event
+    // type. Keep reasoning separate from the assistant response so the UI can
+    // show it as process context without leaking it into the transcript.
+    const field = readString(properties?.field)?.toLowerCase();
+    const delta = readString(properties?.delta);
+    const deltaMessageId = readString(properties?.messageID, properties?.messageId);
+    const deltaPartId = readString(properties?.partID, properties?.partId) ?? deltaMessageId ?? "text";
+    if (!delta || (deltaMessageId && state.messageRoles.get(deltaMessageId) === "user")) return { ...identity, events: [] };
+    if (field === "reasoning" || field === "thinking" || field === "reasoning_content") {
+      state.textByPartId.set(deltaPartId, `${state.textByPartId.get(deltaPartId) ?? ""}${delta}`);
+      return { ...identity, ...(deltaMessageId ? { messageId: deltaMessageId } : {}), events: [{ event: "reasoning_delta", delta, runId }] };
+    }
+    if (field && field !== "text") return { ...identity, events: [] };
+    const previous = state.textByPartId.get(deltaPartId) ?? "";
+    state.textByPartId.set(deltaPartId, `${previous}${delta}`);
+    return {
+      ...identity,
+      ...(deltaMessageId ? { messageId: deltaMessageId } : {}),
+      events: [{ event: "text_delta", delta, runId }],
+    };
+  }
+  if (type !== "message.part.updated" || !part) return { ...identity, events: [] };
+  const partMessageId = readString(part.messageID, part.messageId);
+  if (partMessageId && state.messageRoles.get(partMessageId) === "user") return { ...identity, events: [] };
   const partType = readString(part.type)?.toLowerCase();
   if (partType === "text") {
-    const partId = readString(part.id, messageId) ?? "text";
+    const partId = readString(part.id, partMessageId) ?? "text";
     const text = typeof part.text === "string" ? part.text : "";
     const previous = state.textByPartId.get(partId) ?? "";
     const delta = text.startsWith(previous) ? text.slice(previous.length) : text;
     state.textByPartId.set(partId, text);
-    return { sessionId, events: delta ? [{ event: "text_delta", delta, runId }] : [] };
+    return { ...identity, events: delta ? [{ event: "text_delta", delta, runId }] : [] };
+  }
+  if (partType === "reasoning" || partType === "thinking") {
+    const partId = readString(part.id, partMessageId) ?? "reasoning";
+    const text = typeof part.text === "string" ? part.text : typeof part.reasoning === "string" ? part.reasoning : "";
+    const previous = state.textByPartId.get(partId) ?? "";
+    const delta = text.startsWith(previous) ? text.slice(previous.length) : text;
+    state.textByPartId.set(partId, text);
+    return { ...identity, events: delta ? [{ event: "reasoning_delta", delta, runId }] : [] };
   }
   if (partType === "tool") {
     const partState = readRecord(part.state);
@@ -322,7 +366,7 @@ export function normalizeOpenCodeServeEvent(
     const toolCallId = readString(part.id);
     const message = readString(partState?.title, partState?.message);
     return {
-      sessionId,
+      ...identity,
       events: [{
         event: "tool_event",
         tool: sanitizeToolName(readString(part.tool, part.name)),
@@ -338,9 +382,9 @@ export function normalizeOpenCodeServeEvent(
     const inputTokens = readFiniteNumber(tokens?.input, tokens?.inputTokens, part.inputTokens);
     const outputTokens = readFiniteNumber(tokens?.output, tokens?.outputTokens, part.outputTokens);
     const costUsd = readFiniteNumber(part.cost, part.costUsd);
-    if (inputTokens === null && outputTokens === null && costUsd === null) return { sessionId, events: [] };
+    if (inputTokens === null && outputTokens === null && costUsd === null) return { ...identity, events: [] };
     return {
-      sessionId,
+      ...identity,
       events: [{
         event: "usage",
         ...(inputTokens === null ? {} : { inputTokens }),
@@ -350,7 +394,7 @@ export function normalizeOpenCodeServeEvent(
       }],
     };
   }
-  return { sessionId, events: [] };
+  return { ...identity, events: [] };
 }
 
 export const opencodeRuntimeDefinition = {

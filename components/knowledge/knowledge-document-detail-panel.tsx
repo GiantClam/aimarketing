@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea"
 import type { AppLocale } from "@/lib/i18n/config"
 import type { KnowledgeDocumentSnapshot } from "@/lib/knowledge/service"
 import type { KnowledgeChunk, KnowledgeChunkingConfig, KnowledgeScope } from "@/lib/knowledge/types"
+import { Context, InlineCitation, Source, Sources } from "@aimarketing/workbench-ui"
 
 const CHUNK_PREVIEW_PAGE_SIZE = 4
 
@@ -282,6 +283,12 @@ export function KnowledgeDocumentDetailPanel({
 
   return (
     <div className="space-y-6">
+        <Context
+          maxTokens={Math.max(1, initialDetail.document.chunkCount)}
+          usedTokens={initialDetail.document.chunkCount}
+          modelId={initialDetail.dataset?.name}
+          className="contents"
+        >
         <article className="dashboard-panel rounded-[12px] border border-border bg-card/90 p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -321,6 +328,12 @@ export function KnowledgeDocumentDetailPanel({
               <div className="mt-2 text-sm text-foreground">{initialDetail.dataset?.name || "-"}</div>
             </div>
           </div>
+          {initialDetail.document.sourceUrl ? (
+            <div className="mt-4 text-xs text-muted-foreground">
+              {locale === "zh" ? "原始来源" : "Original source"}: {" "}
+              <InlineCitation title={initialDetail.document.sourceUrl} href={initialDetail.document.sourceUrl} />
+            </div>
+          ) : null}
 
           {message ? (
             <div className="mt-4 rounded-[8px] border border-border bg-background/80 px-3 py-2 text-xs text-muted-foreground">
@@ -328,6 +341,7 @@ export function KnowledgeDocumentDetailPanel({
             </div>
           ) : null}
         </article>
+        </Context>
 
         <article className="dashboard-panel rounded-[12px] border border-border bg-card/90 p-5">
           <div className="dashboard-kicker text-muted-foreground">{locale === "zh" ? "分块设置" : "Chunking settings"}</div>
@@ -402,19 +416,17 @@ export function KnowledgeDocumentDetailPanel({
               </div>
             ) : null}
           </div>
-          <div className="mt-4 space-y-2">
+          <Sources className="mt-4 space-y-2">
             {initialDetail.bindings.length === 0 ? (
               <div className="text-sm text-muted-foreground">
                 {locale === "zh" ? "当前还没有使用绑定。" : "No bindings configured yet."}
               </div>
             ) : (
               initialDetail.bindings.map((binding) => (
-                <div key={binding.id} className="rounded-[8px] border border-border bg-background/70 px-3 py-2 text-sm text-foreground">
-                  {binding.targetType}
-                </div>
+                <Source key={binding.id} title={binding.targetType} className="rounded-[8px] border border-border bg-background/70 px-3 py-2 text-sm text-foreground" />
               ))
             )}
-          </div>
+          </Sources>
         </article>
 
         <article className="dashboard-panel rounded-[12px] border border-border bg-card/90 p-5">

@@ -56,8 +56,8 @@
 | --- | --- | --- | --- |
 | 文生视频 | 保留并接入 | RunningHub seedance2.0 标准模型 API | 用户输入 prompt，输出视频 |
 | 图生视频 | 保留并接入 | RunningHub seedance2.0 标准模型 API | 用户输入 prompt、首帧图片，可选尾帧图片，输出视频 |
-| 口播数字人 | 保留并接入 | RunningHub workflow API | workflowId `2019410250268418050`，输入音频和人物图片 |
-| 视频高清化 | 保留并接入 | RunningHub workflow API | workflowId `2064172986302812162`，输入源视频，输出高清视频 |
+| 口播数字人 | 保留并接入 | RunningHub workflow API | 使用当前 API 账号下的 workflowId，输入音频和人物图片 |
+| 视频高清化 | 保留并接入 | RunningHub workflow API | 使用当前 API 账号下的 workflowId，输入源视频，输出高清视频 |
 | 视频复刻 | 暂不接入 | 无 | 继续 deferred |
 | 热门视频检索 | 暂不接入 | 无 | 继续 deferred |
 | 人脸融合 | 暂不接入 | 无 | 本轮不做 |
@@ -156,8 +156,8 @@ POST https://www.runninghub.cn/openapi/v2/rhart-video/sparkvideo-2.0-fast/image-
 使用 RunningHub workflow API：
 
 ```text
-workflowId: 2019410250268418050
-source: https://www.runninghub.cn/workflow/2019410250268418050
+workflowId: <当前 RunningHub API 账号下的数字人工作流 ID>
+source: <当前账号中的工作流链接>
 api json: /Users/beihuang/Downloads/直播带货数字人对口型RCM+Infinite Talk+VoxCPM TTS1.5_api.json
 ```
 
@@ -196,8 +196,8 @@ api json: /Users/beihuang/Downloads/直播带货数字人对口型RCM+Infinite T
 使用 RunningHub workflow API：
 
 ```text
-workflowId: 2064172986302812162
-source: https://www.runninghub.cn/workflow/2064172986302812162
+workflowId: <当前 RunningHub API 账号下的视频高清化工作流 ID>
+source: <当前账号中的工作流链接>
 api json: /Users/beihuang/Downloads/LTX2.3视频高清修复-视频去模糊高清化工作流_api (1).json
 ```
 
@@ -442,8 +442,8 @@ RUNNINGHUB_SEEDANCE_PRO_IMAGE_TO_VIDEO_ENDPOINT=/openapi/v2/rhart-video/sparkvid
 RUNNINGHUB_SEEDANCE_MINI_TEXT_TO_VIDEO_ENDPOINT=/openapi/v2/rhart-video/sparkvideo-2.0-mini/text-to-video
 RUNNINGHUB_SEEDANCE_MINI_IMAGE_TO_VIDEO_ENDPOINT=/openapi/v2/rhart-video/sparkvideo-2.0-mini/image-to-video
 
-RUNNINGHUB_DIGITAL_HUMAN_WORKFLOW_ID=2019410250268418050
-RUNNINGHUB_VIDEO_ENHANCE_WORKFLOW_ID=2064172986302812162
+RUNNINGHUB_DIGITAL_HUMAN_WORKFLOW_ID=
+RUNNINGHUB_VIDEO_ENHANCE_WORKFLOW_ID=
 
 RUNNINGHUB_WEBHOOK_SECRET=
 RUNNINGHUB_RESULT_TRANSFER_BUCKET=

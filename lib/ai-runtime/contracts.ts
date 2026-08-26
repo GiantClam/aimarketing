@@ -64,6 +64,7 @@ export type AgentRuntimeEvent =
   | { event: "skill_completed"; skillId: string; runId: string }
   | { event: "skill_failed"; skillId: string; message: string; runId: string }
   | { event: "text_delta"; delta: string; runId: string }
+  | { event: "reasoning_delta"; delta: string; runId: string }
   | { event: "tool_event"; tool: string; toolCallId?: string; phase: "started" | "completed" | "failed"; message?: string; runId: string }
   | { event: "writer_result_submitted"; result: Record<string, unknown>; runId: string }
   | { event: "usage"; inputTokens?: number; outputTokens?: number; costUsd?: number; runId: string }

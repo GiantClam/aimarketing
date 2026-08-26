@@ -1,30 +1,11 @@
 "use client"
 
-import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
-import {
-  AlertTriangle,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Clock3,
-  ExternalLink,
-  History,
-  Plus,
-  RefreshCw,
-  Search,
-  Workflow,
-} from "lucide-react"
+import { useState } from "react"
 
-import { Button } from "@/components/ui/button"
-import { DashboardFilterToolbar } from "@/components/ui/dashboard-filter-toolbar"
-import { listEnterpriseWorkflowPresets } from "@/lib/workflows/presets"
-import { getWorkflowTemplatePresentation } from "@/lib/workflows/template-definitions"
-import { cn } from "@/lib/utils"
-import type { WorkflowDefinition } from "@/lib/workflows/store"
-import { resolveWorkflowNodeTitle, type WorkflowDefinitionNode, type WorkflowNodeType } from "@/lib/workflows/schema"
+import { WorkbenchWorkflowDirectory, type WorkbenchWorkflowDirectoryAction } from "@aimarketing/workbench-ui"
 import type { PlatformRegistryEntryExecutionState } from "@/lib/platform/registry-entry-execution"
+import type { WorkflowDefinition } from "@/lib/workflows/store"
 
 type WorkflowListDefinition = Omit<WorkflowDefinition, "createdAt" | "updatedAt"> & {
   createdAt: string
@@ -40,355 +21,19 @@ type WorkflowListRunItem = {
   finishedAt: string | null
 }
 
-type WorkflowNodePreviewTone = "start" | "upload" | "process" | "add"
-
-type WorkflowNodePreviewItem = {
-  label: string
-  tone: WorkflowNodePreviewTone
-}
-
-type WorkflowRunDetailSnapshot = {
-  workflow: {
-    title: string
-    description: string | null
-    metadata: Record<string, unknown> | null
-    nodes: WorkflowDefinition["nodes"]
-    edges: WorkflowDefinition["edges"]
-  }
-}
-
 type WorkflowTemplateItem = Pick<
   PlatformRegistryEntryExecutionState,
   | "slug"
   | "status"
   | "title"
   | "summary"
-  | "bindingTarget"
-  | "runtimeStatus"
-  | "accessState"
-  | "workspaceHref"
-  | "publicHref"
-  | "workspaceLaunchPath"
-  | "publicLaunchPath"
-  | "label"
-  | "notes"
 >
-
-const WORKFLOW_CARDS_PER_PAGE = 6
-const RECENT_RUNS_PER_PAGE = 10
-const DAY_MS = 24 * 60 * 60 * 1000
-
-function parseDate(value: string | null) {
-  if (!value) return null
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
-}
-
-function formatDateTime(value: string | null, locale: "zh" | "en", nowMs: number | null = null) {
-  if (nowMs === null) return locale === "zh" ? "待加载" : "Loading"
-  const parsed = parseDate(value)
-  if (!parsed) return locale === "zh" ? "未记录" : "Not recorded"
-  return parsed.toLocaleString(locale === "zh" ? "zh-CN" : "en-US", {
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
-
-function formatRelativeTime(value: string | null, locale: "zh" | "en", nowMs: number | null = null) {
-  if (nowMs === null) return locale === "zh" ? "待加载" : "Loading"
-  const parsed = parseDate(value)
-  if (!parsed) return locale === "zh" ? "未记录" : "Not recorded"
-
-  const diffMs = parsed.getTime() - nowMs
-  const absSeconds = Math.round(Math.abs(diffMs) / 1000)
-  const rtf = new Intl.RelativeTimeFormat(locale === "zh" ? "zh-CN" : "en-US", { numeric: "auto" })
-
-  if (absSeconds < 60) return rtf.format(Math.round(diffMs / 1000), "second")
-  const absMinutes = Math.round(absSeconds / 60)
-  if (absMinutes < 60) return rtf.format(Math.round(diffMs / (60 * 1000)), "minute")
-  const absHours = Math.round(absMinutes / 60)
-  if (absHours < 24) return rtf.format(Math.round(diffMs / (60 * 60 * 1000)), "hour")
-  const absDays = Math.round(absHours / 24)
-  if (absDays < 30) return rtf.format(Math.round(diffMs / DAY_MS), "day")
-  return formatDateTime(value, locale, nowMs)
-}
-
-function formatDuration(createdAt: string | null, finishedAt: string | null, locale: "zh" | "en") {
-  const created = parseDate(createdAt)
-  const finished = parseDate(finishedAt)
-  if (!created || !finished) return "—"
-
-  const totalSeconds = Math.max(0, Math.round((finished.getTime() - created.getTime()) / 1000))
-  if (totalSeconds < 60) return locale === "zh" ? `${totalSeconds} 秒` : `${totalSeconds}s`
-
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  if (minutes < 60) return locale === "zh" ? `${minutes} 分 ${seconds} 秒` : `${minutes}m ${seconds}s`
-
-  const hours = Math.floor(minutes / 60)
-  const remainingMinutes = minutes % 60
-  return locale === "zh" ? `${hours} 小时 ${remainingMinutes} 分` : `${hours}h ${remainingMinutes}m`
-}
-
-function getWorkflowStatusMeta(status: WorkflowDefinition["status"] | "beta" | "planned", locale: "zh" | "en") {
-  if (status === "live") {
-    return {
-      label: locale === "zh" ? "已启用" : "Live",
-      className: "border-[#ccefd7] bg-[#eefaf2] text-[#168449]",
-    }
-  }
-  if (status === "beta") {
-    return {
-      label: locale === "zh" ? "测试中" : "Beta",
-      className: "border-[#d8c9ff] bg-[#f2ecff] text-[#6846d6]",
-    }
-  }
-  if (status === "planned") {
-    return {
-      label: locale === "zh" ? "已规划" : "Planned",
-      className: "border-[#e8d474] bg-[#fff7d6] text-[#9a7900]",
-    }
-  }
-  if (status === "archived") {
-    return {
-      label: locale === "zh" ? "已归档" : "Archived",
-      className: "border-[#ffd6d6] bg-[#fff0f0] text-[#d93025]",
-    }
-  }
-  return {
-    label: locale === "zh" ? "草稿" : "Draft",
-    className: "border-[#e8d474] bg-[#fff7d6] text-[#9a7900]",
-  }
-}
-
-function getRunStatusMeta(status: string, locale: "zh" | "en") {
-  if (status === "succeeded") {
-    return {
-      label: locale === "zh" ? "成功" : "Succeeded",
-      className: "border-[#ccefd7] bg-[#eefaf2] text-[#23a55a]",
-    }
-  }
-  if (status === "failed") {
-    return {
-      label: locale === "zh" ? "失败" : "Failed",
-      className: "border-[#ffd6d6] bg-[#fff0f0] text-[#d93025]",
-    }
-  }
-  if (status === "running" || status === "queued") {
-    return {
-      label: status === "queued" ? (locale === "zh" ? "排队中" : "Queued") : locale === "zh" ? "运行中" : "Running",
-      className: "border-[#efe6a8] bg-[#fffbe5] text-[#8a7500]",
-    }
-  }
-  if (status === "cancelled") {
-    return {
-      label: locale === "zh" ? "已取消" : "Cancelled",
-      className: "border-[#e2e2da] bg-[#f7f7f2] text-[#666]",
-    }
-  }
-  return {
-    label: status,
-    className: "border-[#e2e2da] bg-[#f7f7f2] text-[#666]",
-  }
-}
-
-function getNodeTone(type: WorkflowNodeType): WorkflowNodePreviewTone {
-  if (type === "upload") return "upload"
-  if (type === "text_input") return "start"
-  return "process"
-}
-
-function buildWorkflowNodePreview(nodes: WorkflowDefinitionNode[], locale: "zh" | "en"): WorkflowNodePreviewItem[] {
-  const sortedNodes = [...nodes].sort((a, b) => a.positionX - b.positionX || a.positionY - b.positionY)
-  const visibleNodes = sortedNodes.slice(0, 2)
-  const preview: WorkflowNodePreviewItem[] = [
-    { label: locale === "zh" ? "开始" : "Start", tone: "start" },
-    ...visibleNodes.map((node) => ({
-      label: resolveWorkflowNodeTitle(node.type, node.title, locale),
-      tone: getNodeTone(node.type),
-    })),
-  ]
-
-  if (sortedNodes.length > visibleNodes.length) {
-    preview.push({
-      label: `+${sortedNodes.length - visibleNodes.length}`,
-      tone: "add",
-    })
-  } else {
-    preview.push({
-      label: "+",
-      tone: "add",
-    })
-  }
-
-  return preview
-}
-
-function listWorkflowQualityGates(metadata: Record<string, unknown> | null | undefined) {
-  if (!metadata || typeof metadata !== "object" || !Array.isArray(metadata.qualityGates)) return []
-  return [
-    ...new Set(
-      metadata.qualityGates
-        .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-        .map((item) => item.trim()),
-    ),
-  ]
-}
-
-function WorkflowMetricCard({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  tone = "neutral",
-}: {
-  icon: typeof Workflow
-  label: string
-  value: string
-  detail: string
-  tone?: "neutral" | "success" | "danger"
-}) {
-  return (
-    <article className="rounded-2xl border border-[#e7e7df] bg-white p-5 shadow-[0_10px_28px_rgba(0,0,0,0.055)]">
-      <div className="flex items-start gap-4">
-        <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[10px] bg-primary text-primary-foreground">
-          <Icon className="h-5 w-5" />
-        </div>
-        <div className="min-w-0">
-          <div className="text-[11px] font-black uppercase tracking-[0.12em] text-[#6f6f6f]">{label}</div>
-          <div className="mt-2 font-display text-3xl font-black uppercase leading-none text-[#111]">{value}</div>
-          <div
-            className={cn(
-              "mt-2 text-xs font-semibold",
-              tone === "success" && "text-[#23a55a]",
-              tone === "danger" && "text-[#d93025]",
-              tone === "neutral" && "text-[#6f6f6f]",
-            )}
-          >
-            {detail}
-          </div>
-        </div>
-      </div>
-    </article>
-  )
-}
-
-function WorkflowStatusBadge({
-  label,
-  className,
-}: {
-  label: string
-  className: string
-}) {
-  return (
-    <span className={cn("inline-flex h-[26px] items-center rounded-[7px] border px-[10px] text-[12px] font-extrabold uppercase", className)}>
-      {label}
-    </span>
-  )
-}
-
-function RunStatusBadge({
-  label,
-  className,
-}: {
-  label: string
-  className: string
-}) {
-  return (
-    <span className={cn("inline-flex h-6 items-center rounded-full border px-2.5 text-[11px] font-black uppercase", className)}>
-      {label}
-    </span>
-  )
-}
-
-function WorkflowNodePreview({
-  items,
-}: {
-  items: WorkflowNodePreviewItem[]
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {items.map((item, index) => (
-        <div key={`${item.label}-${index}`} className="flex items-center gap-2">
-          <div
-            className={cn(
-              "flex h-10 items-center rounded-[10px] border px-4 text-[13px] font-extrabold text-[#111]",
-              item.tone === "start" && "border-[#ccefd7] bg-[#eefaf2]",
-              item.tone === "upload" && "border-[#d8c9ff] bg-[#f2ecff]",
-              item.tone === "process" && "border-[#efe6a8] bg-[#fffbe5]",
-              item.tone === "add" && "border-[#e2e2da] border-dashed bg-white",
-            )}
-          >
-            {item.label}
-          </div>
-          {index < items.length - 1 ? <span className="text-base font-black text-[#111]">→</span> : null}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function WorkflowPagination({
-  currentPage,
-  totalPages,
-  onPageChange,
-}: {
-  currentPage: number
-  totalPages: number
-  onPageChange: (page: number) => void
-}) {
-  if (totalPages <= 1) return null
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="text-sm text-[#666]">
-        {currentPage} / {totalPages}
-      </div>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] disabled:cursor-not-allowed disabled:opacity-45"
-          disabled={currentPage <= 1}
-          onClick={() => onPageChange(currentPage - 1)}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
-          <button
-            key={page}
-            type="button"
-            className={cn(
-              "h-9 min-w-9 rounded-[8px] px-3 text-sm font-black",
-              page === currentPage
-                ? "bg-primary text-primary-foreground"
-                : "border border-[#deded6] bg-white text-[#111]",
-            )}
-            onClick={() => onPageChange(page)}
-          >
-            {page}
-          </button>
-        ))}
-        <button
-          type="button"
-          className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] disabled:cursor-not-allowed disabled:opacity-45"
-          disabled={currentPage >= totalPages}
-          onClick={() => onPageChange(currentPage + 1)}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
-  )
-}
 
 export function WorkflowListPage({
   locale,
   initialWorkflows,
   initialTemplates,
   recentRuns,
-  currentUserName,
 }: {
   locale: "zh" | "en"
   initialWorkflows: WorkflowListDefinition[]
@@ -399,284 +44,7 @@ export function WorkflowListPage({
   const router = useRouter()
   const [workflows, setWorkflows] = useState(initialWorkflows)
   const [templates] = useState(initialTemplates)
-  const [submitting, setSubmitting] = useState(false)
-  const [instantiatingTemplateSlug, setInstantiatingTemplateSlug] = useState<string | null>(null)
-  const [duplicatingWorkflowId, setDuplicatingWorkflowId] = useState<number | null>(null)
-  const [duplicatingRunId, setDuplicatingRunId] = useState<number | null>(null)
-  const [deletingWorkflowId, setDeletingWorkflowId] = useState<number | null>(null)
   const [errorMessage, setErrorMessage] = useState("")
-  const [currentPage, setCurrentPage] = useState(1)
-  const [runsPage, setRunsPage] = useState(1)
-  const [runSearch, setRunSearch] = useState("")
-  const [runStatusFilter, setRunStatusFilter] = useState("all")
-  const [runDateFilter, setRunDateFilter] = useState("7d")
-  const [nowMs, setNowMs] = useState<number | null>(null)
-  const [isHydrated, setIsHydrated] = useState(false)
-
-  const copy =
-    locale === "zh"
-      ? {
-          eyebrow: "Workflow Builder",
-          title: "工作流",
-          description:
-            "把工作流模板与已保存 workflow definitions 收敛到同一入口，先按模板启动业务流程，再进入 Builder 维护可编辑的执行链与最近运行记录。",
-          createWorkflow: "创建工作流",
-          createBuilder: "创建并进入 Builder",
-          createPending: "创建中...",
-          viewRunHistory: "查看运行记录",
-          templatesEyebrow: "Workflow Templates",
-          templatesTitle: "工作流模板",
-          templatesDescription: "企业工作流模板来自平台目录，适合作为业务启动入口；已保存 workflow 则继续承担 Builder 可编辑流程图。",
-          templateOpenWorkspace: "在 Workflow 中打开",
-          templateCreateAction: "从模板创建",
-          templateCreatePending: "创建中...",
-          templateViewPublic: "查看公共页",
-          templateBindingTarget: "绑定目标",
-          templateInputs: "输入",
-          templateFlow: "流程",
-          templateOutputs: "输出",
-          templateTeams: "适用团队",
-          noTemplates: "当前企业还没有可见的工作流模板，请先在平台目录或企业模板配置中开启。",
-          metricsTotal: "工作流总数",
-          metricsActive: "启用中的工作流",
-          metricsSucceeded: "近 7 天成功运行",
-          metricsFailed: "近 7 天失败运行",
-          metricsUpdated: "最近更新",
-          metricTotalDetail: "企业工作流资产库",
-          metricActiveDetail: "可直接打开与复用",
-          metricSucceededDetail: "按最近 7 天运行统计",
-          metricFailedDetail: "需要优先检查的失败",
-          metricUpdatedDetail: "最近被编辑的工作流",
-          cardsEyebrow: "Workflow Cards",
-          cardsTitle: "工作流卡片",
-          cardsDescription: "Create Workflow 永远作为最强入口，其余卡片用于打开、复制与追踪最近状态。",
-          createTitle: "创建工作流",
-          createDescription: "新建一个空白工作流，并立即进入 Builder 配置节点与参数。",
-          createAction: "创建并打开 Builder",
-          latestRunNone: "还没有运行记录",
-          latestRunLabel: "最近运行",
-          updatedBy: "更新于",
-          ownerBy: "创建者",
-          openAction: "打开",
-          duplicateAction: "复制",
-          duplicatePending: "复制中...",
-          deleteAction: "删除",
-          deletePending: "删除中...",
-          duplicateFromRunAction: "从运行复制",
-          duplicateFromRunPending: "复制运行中...",
-          viewRunsAction: "查看运行",
-          moreAction: "更多",
-          noWorkflows: "当前企业还没有保存任何工作流，先创建第一条可复用链路。",
-          recentRunsEyebrow: "Recent Runs",
-          recentRunsTitle: "最近运行",
-          recentRunsEmpty: "还没有 workflow 运行记录。",
-          searchPlaceholder: "搜索工作流、Run ID 或 slug...",
-          filterAllStatus: "全部状态",
-          filterSucceeded: "成功",
-          filterFailed: "失败",
-          filterRunning: "运行中",
-          filterQueued: "排队中",
-          filterAllDates: "全部时间",
-          filter7d: "最近 7 天",
-          filter30d: "最近 30 天",
-          filterTriggerAll: "全部触发方式",
-          filterTriggerManual: "手动触发",
-          refresh: "刷新",
-          tableWorkflow: "工作流",
-          tableRunId: "Run ID",
-          tableCreated: "创建时间",
-          tableUpdated: "更新时间",
-          tableTrigger: "触发方式",
-          tableDuration: "耗时",
-          tableStatus: "状态",
-          tableActions: "操作",
-          triggerManual: "Manual",
-          showingRuns: (start: number, end: number, total: number) => `显示 ${start} - ${end} / ${total} 条运行`,
-          defaultWorkflowTitle: "未命名工作流",
-          duplicatedSuffix: "副本",
-          noRunsForWorkflow: "暂无运行",
-          qualityGateCount: "质量门",
-          reviewRuleCount: "审查规则",
-          knowledgeNodes: "知识节点",
-        }
-      : {
-          eyebrow: "Workflow Builder",
-          title: "WORKFLOWS",
-          description:
-            "Bring workflow templates and saved workflow definitions into one surface so teams can launch a reusable business flow first, then maintain editable builder chains and recent runs.",
-          createWorkflow: "Create workflow",
-          createBuilder: "Create and open builder",
-          createPending: "Creating...",
-          viewRunHistory: "View run history",
-          templatesEyebrow: "Workflow Templates",
-          templatesTitle: "WORKFLOW TEMPLATES",
-          templatesDescription: "Enterprise workflow templates come from the shared platform directory, while saved workflows remain the editable builder definitions.",
-          templateOpenWorkspace: "Open in workflows",
-          templateCreateAction: "Create from template",
-          templateCreatePending: "Creating...",
-          templateViewPublic: "View public page",
-          templateBindingTarget: "Binding target",
-          templateInputs: "Inputs",
-          templateFlow: "Flow",
-          templateOutputs: "Outputs",
-          templateTeams: "Teams",
-          noTemplates: "No workflow templates are currently visible for this enterprise. Enable them in the platform directory or enterprise template studio first.",
-          metricsTotal: "Total workflows",
-          metricsActive: "Active workflows",
-          metricsSucceeded: "Successful runs (7d)",
-          metricsFailed: "Failed runs (7d)",
-          metricsUpdated: "Last updated",
-          metricTotalDetail: "Reusable workflow assets in this workspace",
-          metricActiveDetail: "Ready to open or duplicate",
-          metricSucceededDetail: "Measured from the last 7 days",
-          metricFailedDetail: "Runs that need attention first",
-          metricUpdatedDetail: "Most recently edited workflow",
-          cardsEyebrow: "Workflow Cards",
-          cardsTitle: "WORKFLOW CARDS",
-          cardsDescription: "Keep Create Workflow as the strongest entry, then browse reusable chains as cards instead of a flat list.",
-          createTitle: "Create workflow",
-          createDescription: "Create a blank workflow and jump straight into the builder.",
-          createAction: "Create and open builder",
-          latestRunNone: "No runs yet",
-          latestRunLabel: "Latest run",
-          updatedBy: "Updated",
-          ownerBy: "Owner",
-          openAction: "Open",
-          duplicateAction: "Duplicate",
-          duplicatePending: "Duplicating...",
-          deleteAction: "Delete",
-          deletePending: "Deleting...",
-          duplicateFromRunAction: "Copy from run",
-          duplicateFromRunPending: "Copying run...",
-          viewRunsAction: "View runs",
-          moreAction: "More",
-          noWorkflows: "No workflows have been saved for this enterprise yet. Create the first reusable production chain.",
-          recentRunsEyebrow: "Recent Runs",
-          recentRunsTitle: "RECENT RUNS",
-          recentRunsEmpty: "No workflow runs have been recorded yet.",
-          searchPlaceholder: "Search workflow, run ID, or slug...",
-          filterAllStatus: "All status",
-          filterSucceeded: "Succeeded",
-          filterFailed: "Failed",
-          filterRunning: "Running",
-          filterQueued: "Queued",
-          filterAllDates: "All dates",
-          filter7d: "Last 7 days",
-          filter30d: "Last 30 days",
-          filterTriggerAll: "All triggers",
-          filterTriggerManual: "Manual trigger",
-          refresh: "Refresh",
-          tableWorkflow: "Workflow",
-          tableRunId: "Run ID",
-          tableCreated: "Created",
-          tableUpdated: "Updated",
-          tableTrigger: "Trigger",
-          tableDuration: "Duration",
-          tableStatus: "Status",
-          tableActions: "Actions",
-          triggerManual: "Manual",
-          showingRuns: (start: number, end: number, total: number) => `Showing ${start} to ${end} of ${total} runs`,
-          defaultWorkflowTitle: "Untitled workflow",
-          duplicatedSuffix: "Copy",
-          noRunsForWorkflow: "No runs yet",
-          qualityGateCount: "Quality gates",
-          reviewRuleCount: "Review rules",
-          knowledgeNodes: "Knowledge nodes",
-        }
-
-  const workflowMap = useMemo(() => new Map(workflows.map((workflow) => [workflow.id, workflow])), [workflows])
-  const templatePresentationMap = useMemo(
-    () =>
-      new Map(
-        templates.map((template) => [
-          template.slug,
-          getWorkflowTemplatePresentation({
-            locale,
-            slug: template.slug,
-            bindingTarget: template.bindingTarget,
-          }),
-        ]),
-      ),
-    [locale, templates],
-  )
-
-  const latestRunsByWorkflowId = useMemo(() => {
-    const map = new Map<number, WorkflowListRunItem>()
-    for (const run of recentRuns) {
-      if (!run.workflowId || map.has(run.workflowId)) continue
-      map.set(run.workflowId, run)
-    }
-    return map
-  }, [recentRuns])
-
-  const workflowMetrics = useMemo(() => {
-    const now = nowMs ?? 0
-    const last7DaysRuns = recentRuns.filter((run) => {
-      const created = parseDate(run.createdAt)
-      return created ? now - created.getTime() <= 7 * DAY_MS : false
-    })
-
-    const latestWorkflow = [...workflows].sort((a, b) => {
-      const left = parseDate(a.updatedAt)?.getTime() ?? 0
-      const right = parseDate(b.updatedAt)?.getTime() ?? 0
-      return right - left
-    })[0]
-
-    return {
-      total: workflows.length,
-      active: workflows.filter((workflow) => workflow.status === "live").length,
-      succeeded7d: last7DaysRuns.filter((run) => run.status === "succeeded").length,
-      failed7d: last7DaysRuns.filter((run) => run.status === "failed").length,
-      lastUpdated: latestWorkflow ? formatRelativeTime(latestWorkflow.updatedAt, locale, nowMs) : "—",
-    }
-  }, [locale, nowMs, recentRuns, workflows])
-
-  const totalPages = Math.max(1, Math.ceil(workflows.length / WORKFLOW_CARDS_PER_PAGE))
-  const pagedWorkflows = useMemo(() => {
-    const startIndex = (currentPage - 1) * WORKFLOW_CARDS_PER_PAGE
-    return workflows.slice(startIndex, startIndex + WORKFLOW_CARDS_PER_PAGE)
-  }, [currentPage, workflows])
-
-  const filteredRuns = useMemo(() => {
-    const search = runSearch.trim().toLowerCase()
-
-    return recentRuns.filter((run) => {
-      if (runStatusFilter !== "all" && run.status !== runStatusFilter) return false
-      if (runDateFilter !== "all") {
-        const created = parseDate(run.createdAt)
-        if (!created) return false
-        const maxAge = runDateFilter === "7d" ? 7 * DAY_MS : 30 * DAY_MS
-        if (nowMs !== null && nowMs - created.getTime() > maxAge) return false
-      }
-      if (!search) return true
-
-      const workflowTitle = run.workflowId ? workflowMap.get(run.workflowId)?.title ?? "" : ""
-      return [workflowTitle, run.itemSlug, String(run.id)].some((value) => value.toLowerCase().includes(search))
-    })
-  }, [nowMs, recentRuns, runDateFilter, runSearch, runStatusFilter, workflowMap])
-
-  useEffect(() => {
-    setNowMs(Date.now())
-    setIsHydrated(true)
-  }, [])
-
-  const totalRunsPages = Math.max(1, Math.ceil(filteredRuns.length / RECENT_RUNS_PER_PAGE))
-  const pagedRuns = useMemo(() => {
-    const startIndex = (runsPage - 1) * RECENT_RUNS_PER_PAGE
-    return filteredRuns.slice(startIndex, startIndex + RECENT_RUNS_PER_PAGE)
-  }, [filteredRuns, runsPage])
-
-  useEffect(() => {
-    setCurrentPage((page) => Math.min(page, totalPages))
-  }, [totalPages])
-
-  useEffect(() => {
-    setRunsPage((page) => Math.min(page, totalRunsPages))
-  }, [totalRunsPages])
-
-  useEffect(() => {
-    setRunsPage(1)
-  }, [runDateFilter, runSearch, runStatusFilter])
 
   async function createWorkflow(payload: {
     title: string
@@ -691,7 +59,6 @@ export function WorkflowListPage({
       credentials: "same-origin",
       body: JSON.stringify(payload),
     })
-
     const result = await response.json().catch(() => null)
     if (!response.ok || !result?.data) {
       throw new Error(typeof result?.error === "string" ? result.error : "workflow_create_failed")
@@ -706,50 +73,38 @@ export function WorkflowListPage({
   }
 
   async function handleCreate() {
-    setSubmitting(true)
     setErrorMessage("")
-
     try {
       const created = await createWorkflow({
-        title: copy.defaultWorkflowTitle,
+        title: locale === "zh" ? "未命名工作流" : "Untitled workflow",
         description: null,
       })
       setWorkflows((current) => [created, ...current])
-      setCurrentPage(1)
       router.push(`/dashboard/workflows/${created.id}`)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "workflow_create_failed")
-    } finally {
-      setSubmitting(false)
     }
   }
 
   async function handleDuplicate(workflow: WorkflowListDefinition) {
-    setDuplicatingWorkflowId(workflow.id)
     setErrorMessage("")
-
     try {
       const created = await createWorkflow({
-        title: `${workflow.title} ${copy.duplicatedSuffix}`,
+        title: `${workflow.title} ${locale === "zh" ? "副本" : "Copy"}`,
         description: workflow.description,
         nodes: workflow.nodes,
         edges: workflow.edges,
         metadata: workflow.metadata,
       })
       setWorkflows((current) => [created, ...current])
-      setCurrentPage(1)
       router.push(`/dashboard/workflows/${created.id}`)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "workflow_duplicate_failed")
-    } finally {
-      setDuplicatingWorkflowId(null)
     }
   }
 
   async function handleCreateFromTemplate(template: WorkflowTemplateItem) {
-    setInstantiatingTemplateSlug(template.slug)
     setErrorMessage("")
-
     try {
       const response = await fetch(`/api/workflow-templates/${template.slug}/instantiate?locale=${locale}`, {
         method: "POST",
@@ -767,575 +122,96 @@ export function WorkflowListPage({
         updatedAt: new Date(created.updatedAt).toISOString(),
       } satisfies WorkflowListDefinition
       setWorkflows((current) => [normalized, ...current])
-      setCurrentPage(1)
       router.push(`/dashboard/workflows/${normalized.id}`)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "workflow_template_instantiate_failed")
-    } finally {
-      setInstantiatingTemplateSlug(null)
     }
   }
 
   async function handleDeleteWorkflow(workflow: WorkflowListDefinition) {
     const confirmed =
-      typeof window === "undefined"
-        ? false
-        : window.confirm(
-            locale === "zh"
-              ? `确认删除工作流「${workflow.title}」？此操作不可撤销。`
-              : `Delete workflow "${workflow.title}"? This cannot be undone.`,
-          )
+      typeof window !== "undefined" &&
+      window.confirm(
+        locale === "zh"
+          ? `确认删除工作流「${workflow.title}」？此操作不可撤销。`
+          : `Delete workflow "${workflow.title}"? This cannot be undone.`,
+      )
     if (!confirmed) return
 
-    setDeletingWorkflowId(workflow.id)
     setErrorMessage("")
-
     try {
       const response = await fetch(`/api/workflows/${workflow.id}`, {
         method: "DELETE",
         credentials: "same-origin",
-        headers: {
-          "If-Match": `"${workflow.revision ?? 1}"`,
-        },
+        headers: { "If-Match": `"${workflow.revision ?? 1}"` },
       })
       const result = await response.json().catch(() => null)
       if (!response.ok) {
         throw new Error(typeof result?.error === "string" ? result.error : "workflow_delete_failed")
       }
-
       setWorkflows((current) => current.filter((item) => item.id !== workflow.id))
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "workflow_delete_failed")
-    } finally {
-      setDeletingWorkflowId(null)
     }
   }
 
-  async function handleCreateFromRun(run: WorkflowListRunItem) {
-    setDuplicatingRunId(run.id)
-    setErrorMessage("")
+  const handleDirectoryAction = async (action: WorkbenchWorkflowDirectoryAction) => {
+    if (action.type === "create") return handleCreate()
+    if (!action.id) return
 
-    try {
-      const response = await fetch(`/api/workflows/runs/${run.id}`, {
-        credentials: "same-origin",
-        cache: "no-store",
-      })
-      const result = (await response.json().catch(() => null)) as
-        | { data?: WorkflowRunDetailSnapshot; error?: string }
-        | null
-      if (!response.ok || !result?.data?.workflow) {
-        throw new Error(typeof result?.error === "string" ? result.error : "workflow_run_detail_failed")
-      }
-
-      const snapshot = result.data.workflow
-      const created = await createWorkflow({
-        title: `${snapshot.title} ${copy.duplicatedSuffix}`,
-        description: snapshot.description,
-        nodes: snapshot.nodes,
-        edges: snapshot.edges,
-        metadata: snapshot.metadata,
-      })
-      setWorkflows((current) => [created, ...current])
-      setCurrentPage(1)
-      router.push(`/dashboard/workflows/${created.id}`)
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "workflow_duplicate_failed")
-    } finally {
-      setDuplicatingRunId(null)
+    if (action.type === "open") {
+      router.push(`/dashboard/workflows/${action.id}`)
+      return
     }
-  }
-
-  const runsStart = filteredRuns.length === 0 ? 0 : (runsPage - 1) * RECENT_RUNS_PER_PAGE + 1
-  const runsEnd = Math.min(filteredRuns.length, runsPage * RECENT_RUNS_PER_PAGE)
-
-  if (!isHydrated) {
-    return <main className="min-h-screen bg-[#f7f7f2]" aria-busy="true" />
+    if (action.type === "duplicate") {
+      const workflow = workflows.find((item) => String(item.id) === action.id)
+      if (workflow) await handleDuplicate(workflow)
+      return
+    }
+    if (action.type === "delete") {
+      const workflow = workflows.find((item) => String(item.id) === action.id)
+      if (workflow) await handleDeleteWorkflow(workflow)
+      return
+    }
+    if (action.type === "instantiate") {
+      const template = templates.find((item) => item.slug === action.id)
+      if (template) await handleCreateFromTemplate(template)
+      return
+    }
+    if (action.type === "open-run") {
+      router.push(`/dashboard/workflows/runs/${action.id}`)
+    }
   }
 
   return (
     <div className="h-full overflow-auto bg-transparent">
-      <section className="public-grid-bg mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
-        <div className="space-y-6">
-          <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[#6f6f6f]">{copy.eyebrow}</div>
-              <h1 className="mt-2 font-display text-5xl font-black uppercase leading-[0.95] text-[#111] lg:text-[78px]">
-                {copy.title}
-              </h1>
-              <p className="mt-4 max-w-[720px] text-[15px] leading-7 text-[#666] lg:text-base">{copy.description}</p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <Button
-                variant="outline"
-                className="h-11 rounded-[9px] border-[#deded6] bg-white px-[18px] text-sm font-extrabold text-[#111]"
-                asChild
-              >
-                <Link href="#recent-runs">
-                  <History className="mr-2 h-4 w-4" />
-                  {copy.viewRunHistory}
-                </Link>
-              </Button>
-              <Button
-                className="h-11 rounded-[9px] border border-primary/50 bg-primary px-[22px] text-sm font-black text-[#111] hover:bg-primary/90"
-                onClick={() => void handleCreate()}
-                disabled={submitting}
-                data-agent-new-workflow
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                {submitting ? copy.createPending : copy.createWorkflow}
-              </Button>
-            </div>
-          </header>
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            <WorkflowMetricCard icon={Workflow} label={copy.metricsTotal} value={String(workflowMetrics.total)} detail={copy.metricTotalDetail} />
-            <WorkflowMetricCard icon={CheckCircle2} label={copy.metricsActive} value={String(workflowMetrics.active)} detail={copy.metricActiveDetail} tone="success" />
-            <WorkflowMetricCard icon={CheckCircle2} label={copy.metricsSucceeded} value={String(workflowMetrics.succeeded7d)} detail={copy.metricSucceededDetail} tone="success" />
-            <WorkflowMetricCard icon={AlertTriangle} label={copy.metricsFailed} value={String(workflowMetrics.failed7d)} detail={copy.metricFailedDetail} tone="danger" />
-            <WorkflowMetricCard icon={Clock3} label={copy.metricsUpdated} value={workflowMetrics.lastUpdated} detail={copy.metricUpdatedDetail} />
-          </div>
-
-          <section className="rounded-[18px] border border-[#e7e7df] bg-white p-6 shadow-[0_14px_34px_rgba(0,0,0,0.06)]">
-            <div className="flex flex-col gap-3 border-b border-[#efefe7] pb-5 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <div className="text-[11px] font-black uppercase tracking-[0.14em] text-[#777]">{copy.cardsEyebrow}</div>
-                <h2 className="mt-2 font-display text-2xl font-black uppercase leading-none text-[#111]">{copy.cardsTitle}</h2>
-                <p className="mt-3 max-w-3xl text-sm leading-6 text-[#666]">{copy.cardsDescription}</p>
-              </div>
-              <div className="text-sm font-semibold text-[#666]">{workflows.length}</div>
-            </div>
-
-            <div className="mt-6 grid gap-4 xl:grid-cols-3">
-              <article className={cn("relative overflow-hidden rounded-xl border border-[#e7e7df] bg-white p-5", submitting && "pointer-events-none opacity-70")}>
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 opacity-10"
-                  style={{
-                    backgroundImage:
-                      "radial-gradient(circle at 20% 22%, rgba(17,17,17,0.25) 0, rgba(17,17,17,0.25) 2px, transparent 3px), linear-gradient(90deg, transparent 24%, rgba(17,17,17,0.22) 25%, rgba(17,17,17,0.22) 26%, transparent 27%), linear-gradient(transparent 38%, rgba(17,17,17,0.22) 39%, rgba(17,17,17,0.22) 40%, transparent 41%)",
-                    backgroundSize: "120px 120px, 120px 120px, 120px 120px",
-                  }}
-                />
-                <div className="relative flex h-full flex-col">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-[12px] bg-primary text-primary-foreground">
-                    <Plus className="h-6 w-6" />
-                  </div>
-                  <h3 className="mt-5 font-display text-[24px] font-black uppercase leading-none text-[#111]">{copy.createTitle}</h3>
-                  <p className="mt-3 max-w-[28rem] text-sm leading-6 text-[#666]">{copy.createDescription}</p>
-                  <div className="mt-auto pt-6">
-                    <Button
-                      className="h-11 w-full rounded-[9px] border border-primary/50 bg-primary text-sm font-black text-[#111] hover:bg-primary/90"
-                      onClick={() => void handleCreate()}
-                      disabled={submitting}
-                      data-agent-new-workflow
-                    >
-                      {submitting ? copy.createPending : copy.createAction}
-                    </Button>
-                  </div>
-                </div>
-              </article>
-
-              {pagedWorkflows.map((workflow) => {
-                const status = getWorkflowStatusMeta(workflow.status, locale)
-                const latestRun = latestRunsByWorkflowId.get(workflow.id)
-                const nodePreview = buildWorkflowNodePreview(workflow.nodes, locale)
-                const hasDescription = Boolean(workflow.description && workflow.description.trim())
-                const qualityGates = listWorkflowQualityGates(workflow.metadata)
-                const defaultPreset =
-                  listEnterpriseWorkflowPresets(workflow.metadata, locale).find((preset) => preset.isDefault) ?? null
-                const knowledgeReadNodeCount = workflow.nodes.filter((node) => node.type === "knowledge_retrieve").length
-                const knowledgeWriteNodeCount = workflow.nodes.filter((node) => node.type === "knowledge_write").length
-
-                return (
-                  <article
-                    key={workflow.id}
-                    className="h-full min-h-[228px] rounded-xl border border-[#e7e7df] bg-white p-5 shadow-[0_10px_24px_rgba(0,0,0,0.04)]"
-                  >
-                    <div className="flex h-full flex-col">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <h3 className="line-clamp-2 font-display text-[22px] font-black uppercase leading-[1.02] text-[#111]">
-                            {workflow.title}
-                          </h3>
-                          <div className="mt-2 text-[13px] text-[#666]">
-                            {copy.updatedBy} {formatRelativeTime(workflow.updatedAt, locale, nowMs)} · {copy.ownerBy} {currentUserName}
-                          </div>
-                        </div>
-                        <WorkflowStatusBadge label={status.label} className={status.className} />
-                      </div>
-
-                      <p className="mt-3 line-clamp-2 min-h-[40px] text-sm leading-5 text-[#666]">
-                        {hasDescription ? workflow.description : workflow.slug}
-                      </p>
-
-                      <div className="mt-4">
-                        <WorkflowNodePreview items={nodePreview} />
-                      </div>
-
-                      <div className="mt-4 rounded-[12px] border border-[#ededE7] bg-[#fafaf7] px-4 py-3">
-                        <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">{copy.latestRunLabel}</div>
-                        <div className="mt-2 flex items-center justify-between gap-3">
-                          <div className="text-sm font-semibold text-[#111]">
-                            {latestRun ? `#${latestRun.id} · ${formatRelativeTime(latestRun.createdAt, locale, nowMs)}` : copy.latestRunNone}
-                          </div>
-                          {latestRun ? (
-                            <RunStatusBadge {...getRunStatusMeta(latestRun.status, locale)} />
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <span className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
-                          {copy.qualityGateCount}: {qualityGates.length}
-                        </span>
-                        <span className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
-                          {copy.reviewRuleCount}: {defaultPreset?.reviewRules.length ?? 0}
-                        </span>
-                        <span className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
-                          {copy.knowledgeNodes}: {knowledgeReadNodeCount}/{knowledgeWriteNodeCount}
-                        </span>
-                      </div>
-
-                      <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-5">
-                        <Button
-                          className="h-10 rounded-[9px] border border-primary/50 bg-primary px-4 text-sm font-black text-[#111] hover:bg-primary/90"
-                          asChild
-                        >
-                          <Link href={`/dashboard/workflows/${workflow.id}`}>{copy.openAction}</Link>
-                        </Button>
-                        <button
-                          type="button"
-                          className="h-10 rounded-[9px] px-3 text-sm font-extrabold text-[#111] hover:bg-[#f7f7f2]"
-                          onClick={() => void handleDuplicate(workflow)}
-                          disabled={duplicatingWorkflowId === workflow.id}
-                        >
-                          {duplicatingWorkflowId === workflow.id ? copy.duplicatePending : copy.duplicateAction}
-                        </button>
-                        <Link
-                          href={latestRun ? `/dashboard/workflows/runs/${latestRun.id}` : `/dashboard/workflows/${workflow.id}`}
-                          className="h-10 rounded-[9px] px-3 text-sm font-extrabold text-[#111] hover:bg-[#f7f7f2]"
-                        >
-                          {latestRun ? copy.viewRunsAction : copy.noRunsForWorkflow}
-                        </Link>
-                        <button
-                          type="button"
-                          className="h-10 rounded-[9px] px-3 text-sm font-extrabold text-[#d93025] hover:bg-[#fff3f2]"
-                          onClick={() => void handleDeleteWorkflow(workflow)}
-                          disabled={deletingWorkflowId === workflow.id}
-                        >
-                          {deletingWorkflowId === workflow.id ? copy.deletePending : copy.deleteAction}
-                        </button>
-                        <Link
-                          href={`/dashboard/workflows/${workflow.id}`}
-                          className="ml-auto flex h-10 w-10 items-center justify-center rounded-[9px] text-[#111] hover:bg-[#f7f7f2]"
-                          aria-label={copy.moreAction}
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </Link>
-                      </div>
-                    </div>
-                  </article>
-                )
-              })}
-            </div>
-
-            {workflows.length === 0 ? (
-              <div className="mt-5 rounded-2xl border border-dashed border-[#d9d9d0] bg-[#fafaf7] px-5 py-6 text-sm text-[#666]">
-                {copy.noWorkflows}
-              </div>
-            ) : null}
-
-            <div className="mt-6">
-              <WorkflowPagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
-            </div>
-          </section>
-
-          <section className="rounded-[18px] border border-[#e7e7df] bg-white p-6 shadow-[0_14px_34px_rgba(0,0,0,0.06)]">
-            <div className="flex flex-col gap-3 border-b border-[#efefe7] pb-5 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <div className="text-[11px] font-black uppercase tracking-[0.14em] text-[#777]">{copy.templatesEyebrow}</div>
-                <h2 className="mt-2 font-display text-2xl font-black uppercase leading-none text-[#111]">{copy.templatesTitle}</h2>
-                <p className="mt-3 max-w-3xl text-sm leading-6 text-[#666]">{copy.templatesDescription}</p>
-              </div>
-              <div className="text-sm font-semibold text-[#666]">{templates.length}</div>
-            </div>
-
-            {templates.length === 0 ? (
-              <div className="mt-5 rounded-2xl border border-dashed border-[#d9d9d0] bg-[#fafaf7] px-5 py-6 text-sm text-[#666]">
-                {copy.noTemplates}
-              </div>
-            ) : (
-              <div className="mt-6 grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
-                {templates.map((template) => {
-                  const status = getWorkflowStatusMeta(template.status, locale)
-                  const presentation = templatePresentationMap.get(template.slug) || null
-                  const publicHref = template.publicHref
-
-                  return (
-                    <article
-                      key={template.slug}
-                      className="min-h-[260px] rounded-2xl border border-[#e7e7df] bg-white p-7 shadow-[0_10px_28px_rgba(0,0,0,0.045)]"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <h3 className="truncate font-display text-[28px] font-black uppercase leading-none text-[#111]">
-                            {template.title}
-                          </h3>
-                          <div className="mt-3 text-sm text-[#666]">{template.label}</div>
-                        </div>
-                        <WorkflowStatusBadge label={status.label} className={status.className} />
-                      </div>
-
-                      <p className="mt-4 min-h-[44px] text-sm leading-6 text-[#666]">{template.summary}</p>
-
-                      {presentation ? (
-                        <div className="mt-5 grid gap-3 md:grid-cols-2">
-                          <div className="rounded-[12px] border border-[#ededE7] bg-[#fafaf7] px-4 py-3">
-                            <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">{copy.templateInputs}</div>
-                            <div className="mt-2 text-sm font-semibold text-[#111]">
-                              {presentation.inputFields.map((field) => field.label).join(" · ")}
-                            </div>
-                          </div>
-                          <div className="rounded-[12px] border border-[#ededE7] bg-[#fafaf7] px-4 py-3">
-                            <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">{copy.templateOutputs}</div>
-                            <div className="mt-2 text-sm font-semibold text-[#111]">
-                              {presentation.outputs.slice(0, 3).join(" · ")}
-                            </div>
-                          </div>
-                          <div className="rounded-[12px] border border-[#ededE7] bg-[#fafaf7] px-4 py-3 md:col-span-2">
-                            <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">{copy.templateFlow}</div>
-                            <div className="mt-2 text-sm font-semibold text-[#111]">
-                              {presentation.steps.slice(0, 4).join(" → ")}
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="mt-5 rounded-[12px] border border-[#ededE7] bg-[#fafaf7] px-4 py-3">
-                          <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">{copy.templateBindingTarget}</div>
-                          <div className="mt-2 text-sm font-semibold text-[#111]">{template.bindingTarget}</div>
-                        </div>
-                      )}
-
-                      {presentation?.suitableTeams.length ? (
-                        <div className="mt-5">
-                          <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">{copy.templateTeams}</div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {presentation.suitableTeams.map((team) => (
-                              <span key={team} className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
-                                {team}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {presentation?.qualityGates.length ? (
-                        <div className="mt-5">
-                          <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">{copy.qualityGateCount}</div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {presentation.qualityGates.slice(0, 3).map((gate) => (
-                              <span key={gate} className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
-                                {gate}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      <div className="mt-6 flex flex-wrap items-center gap-2">
-                        <Button
-                          className="h-[42px] rounded-[9px] border border-primary/50 bg-primary px-[22px] text-sm font-black text-[#111] hover:bg-primary/90"
-                          onClick={() => void handleCreateFromTemplate(template)}
-                          disabled={instantiatingTemplateSlug === template.slug}
-                        >
-                          {instantiatingTemplateSlug === template.slug ? copy.templateCreatePending : copy.templateCreateAction}
-                        </Button>
-                        {template.workspaceLaunchPath || template.workspaceHref ? (
-                          <Button
-                            variant="outline"
-                            className="h-[42px] rounded-[9px] border-[#deded6] bg-white px-[18px] text-sm font-extrabold text-[#111]"
-                            onClick={() => void handleCreateFromTemplate(template)}
-                            disabled={instantiatingTemplateSlug === template.slug}
-                          >
-                            {instantiatingTemplateSlug === template.slug ? copy.templateCreatePending : copy.templateOpenWorkspace}
-                          </Button>
-                        ) : null}
-                        {publicHref ? (
-                          <Button
-                            variant="outline"
-                            className="h-[42px] rounded-[9px] border-[#deded6] bg-white px-[18px] text-sm font-extrabold text-[#111]"
-                            asChild
-                          >
-                            <Link href={publicHref}>{copy.templateViewPublic}</Link>
-                          </Button>
-                        ) : null}
-                      </div>
-                    </article>
-                  )
-                })}
-              </div>
-            )}
-          </section>
-
-          <section id="recent-runs" className="rounded-[18px] border border-[#e7e7df] bg-white p-6 shadow-[0_14px_34px_rgba(0,0,0,0.06)]">
-            <div className="flex flex-col gap-3 border-b border-[#efefe7] pb-5 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <div className="text-[11px] font-black uppercase tracking-[0.14em] text-[#777]">{copy.recentRunsEyebrow}</div>
-                <h2 className="mt-2 font-display text-2xl font-black uppercase leading-none text-[#111]">{copy.recentRunsTitle}</h2>
-              </div>
-            </div>
-
-            <DashboardFilterToolbar
-              className="mt-5"
-              search={
-                <label className="relative block min-w-0">
-                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#777]" />
-                  <input
-                    value={runSearch}
-                    onChange={(event) => setRunSearch(event.target.value)}
-                    placeholder={copy.searchPlaceholder}
-                    className="h-[42px] w-full rounded-[9px] border border-[#deded6] bg-white pl-10 pr-4 text-sm text-[#111] outline-none transition focus:border-[#111]"
-                  />
-                </label>
-              }
-              filters={
-                <>
-                  <select
-                    value={runStatusFilter}
-                    onChange={(event) => setRunStatusFilter(event.target.value)}
-                    className="h-[42px] w-full rounded-[9px] border border-[#deded6] bg-white px-4 text-sm font-bold text-[#111] sm:min-w-[150px] sm:w-auto"
-                  >
-                    <option value="all">{copy.filterAllStatus}</option>
-                    <option value="succeeded">{copy.filterSucceeded}</option>
-                    <option value="failed">{copy.filterFailed}</option>
-                    <option value="running">{copy.filterRunning}</option>
-                    <option value="queued">{copy.filterQueued}</option>
-                  </select>
-
-                  <select
-                    value={runDateFilter}
-                    onChange={(event) => setRunDateFilter(event.target.value)}
-                    className="h-[42px] w-full rounded-[9px] border border-[#deded6] bg-white px-4 text-sm font-bold text-[#111] sm:min-w-[160px] sm:w-auto"
-                  >
-                    <option value="7d">{copy.filter7d}</option>
-                    <option value="30d">{copy.filter30d}</option>
-                    <option value="all">{copy.filterAllDates}</option>
-                  </select>
-
-                  <select
-                    value="manual"
-                    disabled
-                    className="h-[42px] w-full rounded-[9px] border border-[#deded6] bg-white px-4 text-sm font-bold text-[#111] disabled:opacity-100 sm:min-w-[160px] sm:w-auto"
-                  >
-                    <option value="all">{copy.filterTriggerAll}</option>
-                    <option value="manual">{copy.filterTriggerManual}</option>
-                  </select>
-                </>
-              }
-              actions={
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-[42px] rounded-[9px] border-[#deded6] bg-white px-4 text-sm font-extrabold text-[#111]"
-                  onClick={() => router.refresh()}
-                >
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  {copy.refresh}
-                </Button>
-              }
-            />
-
-            <div className="mt-5 overflow-hidden rounded-xl border border-[#ededE7] bg-white">
-              <table className="w-full border-collapse text-left">
-                <thead className="bg-[#fafaf7] text-[11px] font-black uppercase tracking-[0.08em] text-[#555]">
-                  <tr>
-                    <th className="px-4 py-3">{copy.tableWorkflow}</th>
-                    <th className="px-4 py-3">{copy.tableRunId}</th>
-                    <th className="px-4 py-3">{copy.tableCreated}</th>
-                    <th className="px-4 py-3">{copy.tableUpdated}</th>
-                    <th className="px-4 py-3">{copy.tableTrigger}</th>
-                    <th className="px-4 py-3">{copy.tableDuration}</th>
-                    <th className="px-4 py-3">{copy.tableStatus}</th>
-                    <th className="px-4 py-3">{copy.tableActions}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedRuns.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="px-4 py-10 text-center text-sm text-[#666]">
-                        {copy.recentRunsEmpty}
-                      </td>
-                    </tr>
-                  ) : null}
-
-                  {pagedRuns.map((run) => {
-                    const status = getRunStatusMeta(run.status, locale)
-                    const workflow = run.workflowId ? workflowMap.get(run.workflowId) ?? null : null
-                    const workflowHref = workflow ? `/dashboard/workflows/${workflow.id}` : null
-
-                    return (
-                      <tr key={run.id} className="border-t border-[#ededE7] align-top">
-                        <td className="px-4 py-[14px] text-[13px]">
-                          {workflowHref ? (
-                            <Link href={workflowHref} className="font-bold text-[#111] hover:underline">
-                              {workflow?.title}
-                            </Link>
-                          ) : (
-                            <div className="font-bold text-[#111]">{run.itemSlug}</div>
-                          )}
-                          <div className="mt-1 text-xs text-[#666]">{run.itemSlug}</div>
-                        </td>
-                        <td className="px-4 py-[14px] text-[13px] font-semibold text-[#111]">#{run.id}</td>
-                        <td className="px-4 py-[14px] text-[13px] text-[#666]">{formatDateTime(run.createdAt, locale, nowMs)}</td>
-                        <td className="px-4 py-[14px] text-[13px] text-[#666]">{formatDateTime(run.finishedAt || run.createdAt, locale, nowMs)}</td>
-                        <td className="px-4 py-[14px] text-[13px] text-[#111]">{copy.triggerManual}</td>
-                        <td className="px-4 py-[14px] text-[13px] text-[#666]">{formatDuration(run.createdAt, run.finishedAt, locale)}</td>
-                        <td className="px-4 py-[14px] text-[13px]">
-                          <RunStatusBadge label={status.label} className={status.className} />
-                        </td>
-                        <td className="px-4 py-[14px] text-[13px]">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <Link href={`/dashboard/workflows/runs/${run.id}`} className="font-extrabold text-[#111] hover:underline">
-                              {copy.viewRunsAction}
-                            </Link>
-                            {workflow ? (
-                              <button
-                                type="button"
-                                className="font-extrabold text-[#111] hover:underline disabled:opacity-45"
-                                onClick={() => void handleCreateFromRun(run)}
-                                disabled={duplicatingRunId === run.id}
-                              >
-                                {duplicatingRunId === run.id ? copy.duplicateFromRunPending : copy.duplicateFromRunAction}
-                              </button>
-                            ) : null}
-                            {workflowHref ? (
-                              <Link href={workflowHref} className="font-extrabold text-[#111] hover:underline">
-                                {copy.openAction}
-                              </Link>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="mt-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="text-sm text-[#666]">{copy.showingRuns(runsStart, runsEnd, filteredRuns.length)}</div>
-              <WorkflowPagination currentPage={runsPage} totalPages={totalRunsPages} onPageChange={setRunsPage} />
-            </div>
-          </section>
-
-          {errorMessage ? (
-            <div className="rounded-[12px] border border-[#ffd6d6] bg-[#fff0f0] px-4 py-3 text-sm text-[#d93025]">
-              {errorMessage}
-            </div>
-          ) : null}
-        </div>
-      </section>
+      <WorkbenchWorkflowDirectory
+        locale={locale}
+        workflows={workflows.map((workflow) => ({
+          id: String(workflow.id),
+          title: workflow.title,
+          description: workflow.description ?? "",
+          status: workflow.status,
+          updatedAt: workflow.updatedAt,
+          nodeCount: workflow.nodes.length,
+        }))}
+        templates={templates.map((template) => ({
+          id: template.slug,
+          title: template.title,
+          description: template.summary,
+          status: "ready",
+        }))}
+        recentRuns={recentRuns.map((run) => ({
+          id: String(run.id),
+          ...(run.workflowId === null ? {} : { workflowId: String(run.workflowId) }),
+          workflowTitle: workflows.find((workflow) => workflow.id === run.workflowId)?.title ?? run.itemSlug,
+          status: run.status,
+          createdAt: run.createdAt ?? "",
+          ...(run.finishedAt ? { finishedAt: run.finishedAt } : {}),
+        }))}
+        onAction={handleDirectoryAction}
+      />
+      {errorMessage ? <p className="mx-auto max-w-[1440px] px-4 pb-6 text-sm text-destructive">{errorMessage}</p> : null}
     </div>
   )
 }

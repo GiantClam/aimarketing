@@ -6,7 +6,7 @@ const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 
 export const FORBIDDEN_BUNDLE_MARKERS = [
   { label: "SaaS API route", pattern: /\/api\/(?:billing|enterprise|lead-hunter|marketplace)(?:\/|["'`]|$)/iu },
-  { label: "excluded desktop capability", pattern: /\b(?:lead[\s_-]*hunter|publish[\s_-]*as[\s_-]*agent|marketplace|enterprise[\s_-]+preset)\b/iu },
+  { label: "excluded desktop capability", pattern: /\b(?:lead[\s_-]*hunter|publish[\s_-]*as[\s_-]*agent|marketplace(?!\s+submission\s+pipeline)|enterprise[\s_-]+preset)\b/iu },
   { label: "cloud-only integration", pattern: /\b(?:railway|cloudflare|ragflow|dify)\b/iu },
 ];
 

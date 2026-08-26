@@ -1,6 +1,12 @@
+import {
+  getWorkbenchTaskStatusLabel,
+  normalizeWorkbenchTaskStatus,
+  type WorkbenchTaskStatus,
+} from "@aimarketing/workbench-ui"
+
 export type TaskSource = "tool" | "workflow" | "agent" | "media"
-export type TaskStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled"
-export type StatusFilter = "all" | "running" | "succeeded" | "failed" | "queued"
+export type TaskStatus = WorkbenchTaskStatus
+export type StatusFilter = "all" | TaskStatus
 export type SourceFilter = "all" | TaskSource
 export type DateRangeFilter = "today" | "7d" | "30d" | "custom"
 export type SortFilter = "newest" | "duration" | "status" | "source"
@@ -37,7 +43,7 @@ export type TaskCenterTask = {
   runCount: number
   runningRunCount: number
   queuedRunCount: number
-  succeededRunCount: number
+  completedRunCount: number
   failedRunCount: number
   createdAt: string | null
   updatedAt: string | null
@@ -48,16 +54,18 @@ export type TaskCenterTask = {
 
 export const statusOrder: Record<TaskStatus, number> = {
   running: 0,
-  queued: 1,
-  failed: 2,
-  cancelled: 3,
-  succeeded: 4,
+  waiting: 1,
+  queued: 2,
+  failed: 3,
+  cancelled: 4,
+  completed: 5,
 }
 
 export const statusLabels: Record<TaskStatus, string> = {
   queued: "Queued",
   running: "Running",
-  succeeded: "Succeeded",
+  waiting: "Waiting",
+  completed: "Completed",
   failed: "Failed",
   cancelled: "Cancelled",
 }
@@ -72,7 +80,8 @@ export const sourceLabels: Record<TaskSource, string> = {
 const localizedStatusLabels: Record<TaskStatus, { zh: string; en: string }> = {
   queued: { zh: "排队中", en: "Queued" },
   running: { zh: "运行中", en: "Running" },
-  succeeded: { zh: "已完成", en: "Succeeded" },
+  waiting: { zh: "等待中", en: "Waiting" },
+  completed: { zh: "已完成", en: "Completed" },
   failed: { zh: "失败", en: "Failed" },
   cancelled: { zh: "已取消", en: "Cancelled" },
 }
@@ -97,7 +106,7 @@ const localizedTaskNames: Record<string, { zh: string; en: string }> = {
 }
 
 export function getLocalizedStatusLabel(status: TaskStatus, locale: "zh" | "en") {
-  return localizedStatusLabels[status][locale]
+  return getWorkbenchTaskStatusLabel(status, locale) ?? localizedStatusLabels[status][locale]
 }
 
 export function getLocalizedSourceLabel(source: TaskSource, locale: "zh" | "en") {
@@ -114,8 +123,7 @@ export function normalizeSource(kind: string): TaskSource {
 }
 
 export function normalizeStatus(status: string): TaskStatus {
-  if (status === "queued" || status === "running" || status === "succeeded" || status === "failed" || status === "cancelled") return status
-  return "queued"
+  return normalizeWorkbenchTaskStatus(status)
 }
 
 export function toDate(value: string | null) {
@@ -124,15 +132,40 @@ export function toDate(value: string | null) {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
-export function formatTaskTimestamp(value: string | null, locale: "zh" | "en") {
+export function formatTaskTimestamp(value: string | null, locale: "zh" | "en", timeZone?: string | null) {
   const date = toDate(value)
   if (!date) return locale === "zh" ? "未记录" : "Not recorded"
-  return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
+  const options: Intl.DateTimeFormatOptions = {
     month: "short",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(date)
+  }
+  if (timeZone) options.timeZone = timeZone
+  try {
+    return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", options).format(date)
+  } catch {
+    delete options.timeZone
+    return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", options).format(date)
+  }
+}
+
+export function getDateKeyInTimeZone(value: Date | string | null, timeZone?: string | null) {
+  const date = value instanceof Date ? value : toDate(value)
+  if (!date) return null
+
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timeZone || undefined,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date)
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+    return `${values.year}-${values.month}-${values.day}`
+  } catch {
+    return date.toISOString().slice(0, 10)
+  }
 }
 
 export function formatDuration(value: number | null) {
@@ -234,7 +267,7 @@ export function buildTaskCenterTasks(runs: NormalizedTaskRun[]): TaskCenterTask[
       const updatedAt = getLatestTimestamp(sortedRuns)
       const runningRunCount = sortedRuns.filter((run) => run.normalizedStatus === "running").length
       const queuedRunCount = sortedRuns.filter((run) => run.normalizedStatus === "queued").length
-      const succeededRunCount = sortedRuns.filter((run) => run.normalizedStatus === "succeeded").length
+      const completedRunCount = sortedRuns.filter((run) => run.normalizedStatus === "completed").length
       const failedRunCount = sortedRuns.filter((run) => run.normalizedStatus === "failed" || run.normalizedStatus === "cancelled").length
 
       return {
@@ -248,7 +281,7 @@ export function buildTaskCenterTasks(runs: NormalizedTaskRun[]): TaskCenterTask[
         runCount: sortedRuns.length,
         runningRunCount,
         queuedRunCount,
-        succeededRunCount,
+        completedRunCount,
         failedRunCount,
         createdAt: createdAt ? createdAt.toISOString() : latestRun.createdAt,
         updatedAt: updatedAt ? updatedAt.toISOString() : latestRun.updatedAt,

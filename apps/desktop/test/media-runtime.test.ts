@@ -64,23 +64,34 @@ test("desktop host emits terminal media attempt events for recovery idempotency"
   assert.match(app, /status === "succeeded"[\s\S]*record_usage/);
   assert.match(host, /task\.usage/);
   assert.match(host, /status: "download_failed"/);
-  assert.match(host, /if \(!artifacts\.length\) throw new Error\("media_outputs_not_downloadable"\)/);
+  assert.match(host, /!artifacts\.length && executorId !== "voice_clone"/);
   assert.match(host, /tempDirectory/);
+  assert.match(host, /const persistedArtifacts = artifacts\.map/);
+  assert.match(host, /join\("artifacts", runId\.replace/);
+  assert.match(host, /artifacts: persistedArtifacts/);
   assert.match(app, /allocate_media_temp/);
   assert.match(app, /payload\.status === "download_failed"/);
   assert.match(host, /slice\(0, 64 \* 1024\)/);
   assert.match(app, /record_run_checkpoint/);
+  assert.match(app, /const localizedFeatures = useMemo\(\(\) => mediaFeatureCatalog/);
+  assert.match(app, /applyConfiguredMediaModels\(feature, models, model\)/);
+  assert.match(app, /const isStandaloneMediaTask = Boolean\(mediaFeatureId && mediaFeatureId !== "image_generate"\)/);
+  assert.match(app, /!isWorkflowRun && !isStandaloneMediaTask && conversationId && !conversationIdFromPath/);
+  assert.match(app, /standaloneMediaRunsRef\.current\.add\(runId\)/);
 });
 
 test("desktop keeps large files and Provider credentials out of UI payload persistence", () => {
   const app = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  const upload = readFileSync(resolve(process.cwd(), "src/local-file-upload.ts"), "utf8");
   const host = readFileSync(resolve(process.cwd(), "runtime/host.ts"), "utf8");
   const tauriHost = readFileSync(resolve(process.cwd(), "src-tauri/src/host.rs"), "utf8");
   const logs = readFileSync(resolve(process.cwd(), "src-tauri/src/logs.rs"), "utf8");
   const lib = readFileSync(resolve(process.cwd(), "src-tauri/src/lib.rs"), "utf8");
-  assert.match(app, /file\.stream\(\)\.getReader\(\)/);
-  assert.match(app, /append_local_attachment_chunk/);
-  assert.match(app, /bytes = Array\.from\(chunk\.value\)/);
+  assert.match(app, /persistLocalFile\(file, tauriBridge\)/);
+  assert.match(upload, /LOCAL_ATTACHMENT_CHUNK_BYTES = 256 \* 1024/);
+  assert.match(upload, /file\.slice\(offset, Math\.min\(file\.size, offset \+ LOCAL_ATTACHMENT_CHUNK_BYTES\)\)\.arrayBuffer\(\)/);
+  assert.match(upload, /append_local_attachment_chunk/);
+  assert.doesNotMatch(upload, /file\.stream\(\)/);
   assert.doesNotMatch(app, /readAsDataURL|btoa\(/);
   assert.match(tauriHost, /MAX_RUNTIME_MESSAGE_BYTES/);
   assert.doesNotMatch(host, /spawn\([^\n]*apiKey/);
@@ -91,9 +102,12 @@ test("desktop keeps large files and Provider credentials out of UI payload persi
 
 test("desktop image capabilities select direct OpenAI-compatible or Bailian adapters", () => {
   const host = readFileSync(resolve(process.cwd(), "runtime/host.ts"), "utf8");
+  const app = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
   assert.match(host, /createBailianImageAdapter\(providerOptions\)/);
   assert.match(host, /createOpenAICompatibleImageAdapter\(providerOptions\)/);
   assert.match(host, /executorId === "image_generate"/);
+  assert.match(app, /mediaFeatureId === "image_generate"/);
+  assert.match(app, /mediaFeatureId !== "image_generate" &&/);
 });
 
 test("desktop video capabilities select shared MiniMax, Bailian and RunningHub clients", () => {
@@ -102,8 +116,25 @@ test("desktop video capabilities select shared MiniMax, Bailian and RunningHub c
   assert.match(host, /createBailianVideoAdapter\(providerOptions\)/);
   assert.match(host, /createMiniMaxVideoAdapter\(providerOptions\)/);
   assert.match(host, /createRunningHubAdapter\(/);
+  assert.match(host, /const configuredEndpoint =/);
+  assert.match(host, /!registeredWorkflow && !configuredEndpoint/);
   assert.match(host, /readProviderMap\(command\.payload\?\.providers\)/);
   assert.match(host, /providerProfiles\[provider\]/);
+  assert.match(host, /const providerKind = \(profile\?\.source \?\? provider\)\.toLowerCase\(\)/);
+  assert.match(host, /retryTransientMediaJob/);
+  assert.match(host, /IMAGE_GENERATION_REQUEST_TIMEOUT_MS/);
+  assert.match(host, /requestTimeoutMs: executorId === "image_generate" \? IMAGE_GENERATION_REQUEST_TIMEOUT_MS : undefined/);
+  assert.match(host, /const pptokenImageProvider = executorId === "image_generate"/);
+  assert.match(host, /providerKind\.includes\("pptoken"\)/);
+  assert.match(host, /providerHostname\.endsWith\("\.pptoken\.cc"\)/);
+  assert.match(host, /imageTransport: pptokenImageProvider \? "curl"/);
+  assert.match(host, /stage: "provider_request"/);
+  assert.match(host, /stage: "result_download"/);
+  assert.match(host, /const mediaDownloadFetch = providerKind\.includes\("minimax"\) && apiKey/);
+  assert.match(host, /buildMediaCapabilityInput\(executorId, config, inputs\)/);
+  assert.match(host, /const outputPort = executorId === "image_generate"/);
+  assert.match(host, /\[outputPort\]: providerOutputs/);
+  assert.match(host, /executorId === "ppt_generate" \? \{ ppt: artifacts \}/);
   assert.match(app, /providers: config\.providers/);
   assert.match(host, /executorId === "video_generate"/);
   assert.match(host, /executorId === "digital_human"/);
@@ -113,4 +144,16 @@ test("desktop host keeps voice cloning on the MiniMax media path", () => {
   const host = readFileSync(resolve(process.cwd(), "runtime/host.ts"), "utf8");
   assert.match(host, /voice_clone/);
   assert.match(host, /featureId: "voice-clone"/);
+});
+
+test("desktop voice synthesis loads MiniMax voices through the local host", () => {
+  const host = readFileSync(resolve(process.cwd(), "runtime/host.ts"), "utf8");
+  const app = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  assert.match(host, /"media\.voices"/);
+  assert.match(host, /listMiniMaxVoices/);
+  assert.match(host, /voice_provider_unsupported/);
+  assert.match(app, /"media\.voices"/);
+  assert.match(app, /Reload voices/);
+  assert.match(app, /voiceOptions\.slice\(0, 6\)/);
+  assert.match(app, /activeFeature\.id === "voice-synthesis" && field\.id === "voiceId"/);
 });

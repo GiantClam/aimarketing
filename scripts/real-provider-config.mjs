@@ -81,6 +81,17 @@ export function assertRealProviderConfig(value) {
   return value;
 }
 
+/** Resolve the profile used by the desktop for a capability, with the legacy
+ * top-level smoke entry retained only as a compatibility fallback. */
+export function resolveCapabilityProviderProfile(config, capability, legacyKey = capability) {
+  if (!isRecord(config)) return undefined;
+  const profileId = isRecord(config.defaults) && requiredString(config.defaults[capability])
+    ? config.defaults[capability].trim()
+    : undefined;
+  if (profileId && isRecord(config.providers) && isRecord(config.providers[profileId])) return config.providers[profileId];
+  return isRecord(config[legacyKey]) ? config[legacyKey] : undefined;
+}
+
 export function hasExpectedSmokeResponse(label, response) {
   if (!isRecord(response)) return false;
   if (label === "llm") return Array.isArray(response.choices) && isRecord(response.usage) && requiredString(response.model);

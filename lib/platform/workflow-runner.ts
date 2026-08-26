@@ -4,6 +4,7 @@ import type { AuthUser } from "@/lib/auth/session"
 import { db } from "@/lib/db"
 import { platformTaskRuns } from "@/lib/db/schema"
 import type { PlatformExecutionProxyTarget } from "@/lib/platform/execute"
+import { toBase64 } from "@/lib/utils/binary"
 import {
   platformTaskRunStore,
   type HydratedPlatformTaskRun,
@@ -437,6 +438,7 @@ export async function recordPlatformWorkflowProxyResult(input: RecordPlatformWor
   }
 
   const store = resolveWorkflowRunStore(input.store)
+  const normalizedResponse = normalizeUnknownForStorage(summary.payload)
   const artifact = await store.savePlatformArtifact({
     runId: detail.id,
     enterpriseId: detail.enterpriseId,
@@ -445,12 +447,15 @@ export async function recordPlatformWorkflowProxyResult(input: RecordPlatformWor
     title: inferWorkflowArtifactTitle(input.bindingTarget),
     mimeType: inferWorkflowArtifactMimeType(summary.contentType),
     payload: {
+      source: "workflow",
+      assetLibraryEligible: !externalRunId && detail.status === "succeeded",
       bindingTarget: input.bindingTarget,
       action: input.target.action,
       downstreamPath: input.target.downstreamPath,
       downstreamStatus: input.response.status,
       externalRunId,
-      response: normalizeUnknownForStorage(summary.payload),
+      response: normalizedResponse,
+      embeddedContentBase64: toBase64(Buffer.from(JSON.stringify(normalizedResponse ?? {}), "utf8")),
     },
   })
 

@@ -42,7 +42,7 @@ NSIS 产物位于 `apps/desktop/src-tauri/target/release/bundle/nsis/`；当前�
     },
     "image-main": {
       "id": "image-main",
-      "model": "gpt-image-2",
+      "model": "gpt-image-2-1k",
       "baseUrl": "https://image.example/v1",
       "apiKey": "image-secret"
     },
@@ -83,6 +83,8 @@ NSIS 产物位于 `apps/desktop/src-tauri/target/release/bundle/nsis/`；当前�
 ```
 
 未配置或找不到默认 profile 时，会安全回退到旧版 `provider`。工作流节点如果显式携带 `provider`，Host 会从同一组 profiles 解析该节点的 Base URL、API Key、Endpoint 和模型。
+
+RunningHub 的工作流是账号私有资源，API Key 只对该账号有权限的 workflow 生效。请在自己的 RunningHub 账号中复制或创建工作流，然后在设置页的 RunningHub Provider 中通过“账号工作流注册”导入 workflow ID/链接和 ComfyUI API JSON。旧版 `workflowId`、`digitalHumanWorkflowId`、`videoEnhanceWorkflowId` 会在首次启动时自动转换为可编辑的 `workflows[]` 注册项；不要把他人工作流链接写入共享 workflow JSON。运行时缺少当前账号 workflow 或收到 401/403/404 时会直接提示访问权限错误。
 
 LanceDB 使用动态加载：主绿色包不携带约 283 MiB 的平台原生 `.node`。索引默认使用随应用提供的离线 `local-hash-384-v1` 特征哈希向量（无需网络），若用户显式配置 loopback Ollama `nomic-embed-text` 则使用真实本地模型；两者都只写入每 Vault 独立 LanceDB，SQLite 永不保存 chunk、向量或 Vault 原文。
 

@@ -11,6 +11,7 @@ import {
   isLowInformationPptPlan,
   normalizeLeadToolPptPlan,
   normalizePptMasterRuntimeProviderError,
+  normalizePptPreviewModel,
   resolveRuntimeSlideExecutionConfig,
   resolveLeadToolPreviewProviderPreference,
   setLeadToolPptGenerationDepsForTests,
@@ -715,6 +716,8 @@ test("runtime slide provider preference honors explicit override", () => {
   assert.equal(resolveLeadToolPreviewProviderPreference("gpt-5.4", "stepfun"), "stepfun")
   assert.equal(resolveLeadToolPreviewProviderPreference("MiniMax-M3", ""), "minimax")
   assert.equal(resolveLeadToolPreviewProviderPreference("unknown-model", "writer"), "writer")
+  assert.equal(normalizePptPreviewModel("grok-4.5"), "grok-4.5")
+  assert.equal(resolveLeadToolPreviewProviderPreference("grok-4.5", undefined), "pptoken")
   assert.equal(
     resolveLeadToolPreviewProviderPreference("deepseek-v4-pro", "enterprise-openai-compatible"),
     "deepseek",

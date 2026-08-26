@@ -1,10 +1,13 @@
 import type { EnterpriseKnowledgeContext } from "@/lib/knowledge/types"
+import { generateText, stepCountIs, tool, type ModelMessage } from "ai"
 import { randomUUID } from "node:crypto"
 import type { AiEntryProviderId } from "@/lib/ai-entry/provider-routing"
-import { resolveAiEntryOpenCodeProvider } from "@/lib/ai-entry/provider-routing"
+import { executeAiEntryWithProviderFailover, resolveAiEntryOpenCodeProvider } from "@/lib/ai-entry/provider-routing"
+import { resolveDesktopConfiguredWriterProvider } from "@/lib/ai-entry/desktop-config-provider"
 import { buildAgentRuntimeInput } from "@/lib/ai-entry/runtime/context-builder"
 import { runOpenCodeAgent } from "@/lib/ai-entry/runtime/opencode-adapter"
 import { resolveWriterOpenCodeRuntimeProfile } from "@/lib/ai-entry/runtime/profile-store"
+import { buildAiEntryProviderMessages } from "@/lib/skills/runtime/ai-entry-executor"
 import { isWriterTitleOnlyRevisionRequest, reconcileWriterRevisionResult } from "@/lib/writer/revision-guard"
 import {
   WRITER_PLATFORM_CONFIG,
@@ -27,7 +30,7 @@ import {
   runWriterRuntimeWithRecovery,
   type WriterRuntimeContext,
 } from "@/lib/writer/runtime/session-runtime"
-import { validateWriterSubmitResult, type WriterSubmitResult } from "@/lib/writer/writer-result"
+import { validateWriterSubmitResult, writerSubmitResultSchema, type WriterSubmitResult } from "@/lib/writer/writer-result"
 
 const WRITER_ENABLE_WEB_RESEARCH = process.env.WRITER_ENABLE_WEB_RESEARCH !== "false"
 const WRITER_REQUIRE_WEB_RESEARCH = process.env.WRITER_REQUIRE_WEB_RESEARCH === "true"
@@ -68,6 +71,13 @@ type WriterBriefPlan = {
   }
 }
 
+type WriterProvider = {
+  providerId: AiEntryProviderId
+  modelId: string
+  baseUrl: string
+  apiKey: string
+}
+
 export type WriterRuntimeUsage = {
   inputTokens: number
   outputTokens: number
@@ -85,6 +95,20 @@ function hasWriterResponse(answer: string, writerResult: WriterSubmitResult | nu
   return Boolean(answer.trim() || writerResult)
 }
 
+function resolveWriterProvider(input: { providerId?: string | null; modelId?: string | null } = {}): WriterProvider | null {
+  const desktopProvider = resolveDesktopConfiguredWriterProvider()
+  if (desktopProvider) {
+    return {
+      providerId: desktopProvider.id,
+      modelId: desktopProvider.model,
+      baseUrl: desktopProvider.baseURL,
+      apiKey: desktopProvider.apiKey,
+    }
+  }
+
+  return resolveAiEntryOpenCodeProvider(input)
+}
+
 async function runWriterOpenCodeText(params: {
   systemPrompt: string
   userPrompt: string
@@ -100,15 +124,15 @@ async function runWriterOpenCodeText(params: {
   writerContext?: WriterRuntimeContext | null
 }) {
   const runtimeProfile = resolveWriterOpenCodeRuntimeProfile()
-  if (!runtimeProfile.enabled || runtimeProfile.backend !== "railway-opencode") {
-    throw new Error("writer_opencode_runtime_not_configured")
-  }
-
-  const provider = resolveAiEntryOpenCodeProvider({
+  const provider = resolveWriterProvider({
     providerId: params.selectedProviderId,
     modelId: params.selectedModelId,
   })
   if (!provider) throw new Error("writer_opencode_provider_not_configured")
+
+  if (!runtimeProfile.enabled || runtimeProfile.backend !== "railway-opencode") {
+    return runWriterDirectConfiguredProvider({ ...params, provider })
+  }
 
   const historyMessages = (params.history || []).flatMap((entry) => {
     if (entry.role && entry.content) {
@@ -181,6 +205,107 @@ async function runWriterOpenCodeText(params: {
   }
   if (!hasWriterResponse(answer, writerResult)) throw new Error("writer_opencode_empty_response")
   return { answer, usage, writerResult, activatedSkillIds, resultToolCallCount }
+}
+
+async function runWriterDirectConfiguredProvider(params: {
+  systemPrompt: string
+  userPrompt: string
+  history?: WriterHistoryEntry[]
+  selectedSkillIds: string[]
+  writerPhase: "briefing" | "draft"
+  allowNetwork: boolean
+  userId?: number
+  conversationId?: string | null
+  enterpriseId?: number | null
+  selectedProviderId?: AiEntryProviderId | null
+  selectedModelId?: string | null
+  writerContext?: WriterRuntimeContext | null
+  provider: WriterProvider
+}) {
+  const historyMessages: ModelMessage[] = (params.history || []).flatMap((entry) => {
+    if (entry.role && entry.content) return [{ role: entry.role, content: entry.content.trim() }]
+    return [
+      ...(entry.query.trim() ? [{ role: "user" as const, content: entry.query.trim() }] : []),
+      ...(entry.answer.trim() ? [{ role: "assistant" as const, content: entry.answer.trim() }] : []),
+    ]
+  }).filter((entry) => entry.content)
+  const activeDraftContext = params.writerContext?.activeDraft
+    ? [
+        "[Active draft — preserve it for revisions]",
+        `revision: ${params.writerContext.activeDraft.revision}`,
+        `title: ${params.writerContext.activeDraft.title}`,
+        params.writerContext.activeDraft.content,
+      ].join("\n")
+    : ""
+  const directSystemPrompt = [
+    params.systemPrompt,
+    "This Writer turn runs directly through the provider selected in the desktop config.json; no Railway OpenCode runtime is available.",
+    "Call writer_submit_result exactly once. Return a complete platform-native draft when actionable.",
+    "Do not claim external research was performed. Set research.requested and research.completed to false unless verified sources were supplied by the application.",
+    "Keep the active draft body intact for title-only revisions.",
+    activeDraftContext,
+  ].filter(Boolean).join("\n\n")
+  const messages: ModelMessage[] = [
+    ...historyMessages,
+    ...(activeDraftContext ? [{ role: "user" as const, content: activeDraftContext }] : []),
+    { role: "user", content: params.userPrompt },
+  ]
+
+  let submitted: WriterSubmitResult | null = null
+  const submitResultTool = tool({
+    description: "Submit the single validated Writer result for this turn.",
+    inputSchema: writerSubmitResultSchema as any,
+    execute: async (input: unknown) => {
+      submitted = validateWriterSubmitResult(input)
+      return { accepted: true }
+    },
+  })
+  const execution = await executeAiEntryWithProviderFailover(
+    async (providerRun) => {
+      const providerInput = buildAiEntryProviderMessages({ providerId: providerRun.providerId, systemPrompt: directSystemPrompt, messages })
+      const result = await generateText({
+        model: providerRun.provider.chat(providerRun.model),
+        ...(providerInput.system ? { system: providerInput.system } : {}),
+        messages: providerInput.messages,
+        tools: { writer_submit_result: submitResultTool },
+        toolChoice: "required",
+        stopWhen: stepCountIs(1),
+      })
+      return result
+    },
+    {
+      providerConfigs: [{ id: params.provider.providerId, apiKey: params.provider.apiKey, baseURL: params.provider.baseUrl, model: params.provider.modelId }],
+      preferredProviderId: params.provider.providerId,
+      preferredModel: params.provider.modelId,
+      forcePreferredProvider: true,
+      disableProviderFailover: true,
+      disableSameProviderModelFallback: true,
+    },
+  )
+
+  if (!submitted) {
+    const text = execution.result.text.trim().replace(/^```(?:json)?\s*/iu, "").replace(/\s*```$/u, "")
+    try {
+      submitted = validateWriterSubmitResult(JSON.parse(text))
+    } catch {
+      throw new Error("writer_direct_provider_result_missing")
+    }
+  }
+
+  const writerResult = validateWriterSubmitResult(submitted)
+  const usage = execution.result.usage as { inputTokens?: number; outputTokens?: number; costUsd?: number } | undefined
+  return {
+    answer: writerResult.outcome === "draft_ready" ? writerResult.draft?.content || writerResult.userMessage : writerResult.userMessage,
+    usage: {
+      inputTokens: Number(usage?.inputTokens || 0),
+      outputTokens: Number(usage?.outputTokens || 0),
+      costUsd: Number(usage?.costUsd || 0),
+      toolCallCount: 1,
+    },
+    writerResult,
+    activatedSkillIds: ["writer-orchestrator", ...params.selectedSkillIds.filter((id) => id !== "writer-orchestrator")],
+    resultToolCallCount: 1,
+  }
 }
 
 export type WriterSkillsTurnResult =
@@ -635,13 +760,12 @@ function safeNormalizeWechatTitle(markdown: string, languageLabel: string) {
 
 
 export function isWriterSkillsAvailable() {
-  const openCodeWriterAvailable = hasWriterOpenCodeRuntime()
-  return openCodeWriterAvailable && isWriterR2Available()
+  return getWriterProviderAvailability().available && isWriterR2Available()
 }
 
 export type WriterSkillsAvailability = {
   enabled: boolean
-  provider: "opencode" | "unavailable"
+  provider: "configured" | "opencode" | "unavailable"
   reason: "ok" | "llm_api_key_missing" | "research_config_missing" | "writer_r2_config_missing"
   requiresWebResearch: boolean
   webResearchEnabled: boolean
@@ -649,14 +773,23 @@ export type WriterSkillsAvailability = {
 
 function hasWriterOpenCodeRuntime() {
   const profile = resolveWriterOpenCodeRuntimeProfile()
-  return profile.enabled && profile.backend === "railway-opencode" && Boolean(resolveAiEntryOpenCodeProvider())
+  return Boolean(resolveAiEntryOpenCodeProvider()) && profile.enabled && profile.backend === "railway-opencode"
+}
+
+function getWriterProviderAvailability() {
+  if (resolveDesktopConfiguredWriterProvider()) {
+    return { available: true, provider: "configured" as const }
+  }
+  if (hasWriterOpenCodeRuntime()) {
+    return { available: true, provider: "opencode" as const }
+  }
+  return { available: false, provider: "unavailable" as const }
 }
 
 export function getWriterSkillsAvailability(): WriterSkillsAvailability {
-  const openCodeWriterAvailable = hasWriterOpenCodeRuntime()
-  const preferredProvider = openCodeWriterAvailable ? "opencode" : "unavailable"
+  const providerAvailability = getWriterProviderAvailability()
 
-  if (!openCodeWriterAvailable) {
+  if (!providerAvailability.available) {
     return {
       enabled: false,
       provider: "unavailable",
@@ -669,7 +802,7 @@ export function getWriterSkillsAvailability(): WriterSkillsAvailability {
   if (!isWriterR2Available()) {
     return {
       enabled: false,
-      provider: preferredProvider,
+      provider: providerAvailability.provider,
       reason: "writer_r2_config_missing",
       requiresWebResearch: WRITER_REQUIRE_WEB_RESEARCH,
       webResearchEnabled: WRITER_ENABLE_WEB_RESEARCH,
@@ -678,7 +811,7 @@ export function getWriterSkillsAvailability(): WriterSkillsAvailability {
 
   return {
     enabled: true,
-    provider: preferredProvider,
+    provider: providerAvailability.provider,
     reason: "ok",
     requiresWebResearch: WRITER_REQUIRE_WEB_RESEARCH,
     webResearchEnabled: WRITER_ENABLE_WEB_RESEARCH,

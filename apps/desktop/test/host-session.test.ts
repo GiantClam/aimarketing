@@ -88,7 +88,12 @@ test("built workflow-host completes a local file workflow without network egress
     assert.equal(event.event, "done", JSON.stringify(event));
     assert.equal(child.stderr.join(""), "");
   } finally {
-    child.child.kill();
+    if (child.child.exitCode === null) {
+      const stopped = new Promise<void>((resolveClose) => child.child.once("close", () => resolveClose()));
+      child.child.kill();
+      await Promise.race([stopped, new Promise<void>((resolveClose) => setTimeout(resolveClose, 5_000))]);
+    }
+    child.child.stdin.destroy();
     await rm(workspace, { recursive: true, force: true });
   }
 });
@@ -204,6 +209,32 @@ test("workflow-host creates a stable session mapping through RPC", async () => {
   assert.equal(typeof (response.data as Record<string, unknown>).sessionId, "string");
   assert.equal((response.data as Record<string, unknown>).transport, "opencode-serve");
   assert.equal((response.data as Record<string, unknown>).fullAccess, true);
+});
+
+test("workflow-host reports the configured model when OpenCode usage omits the model", async () => {
+  const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const workspace = await mkdtemp(join(tmpdir(), "aimarketing-host-usage-model-"));
+  const fixture = join(desktopRoot, "test", "fixtures", "fake-opencode-serve.mjs");
+  const child = startHost(desktopRoot, { AIMARKETING_OPENCODE_PATH: fixture, OPENCODE_RUNTIME_DIR: workspace });
+  const provider = { id: "configured", source: "openai-compatible", model: "configured/model" };
+  try {
+    const sessionRequestId = randomUUID();
+    child.child.stdin.write(encodeRpcMessage({ version: 1, requestId: sessionRequestId, type: "session.create", payload: { conversationId: "conversation-usage-model", workspacePath: workspace, model: provider.model, provider } }));
+    const sessionResponse = await child.waitFor((frame) => frame.requestId === sessionRequestId && frame.ok === true);
+    const sessionId = String(((sessionResponse.data as Record<string, unknown> | undefined)?.sessionId) ?? "");
+    assert.ok(sessionId);
+    const runId = `usage-model-${randomUUID()}`;
+    child.child.stdin.write(encodeRpcMessage({ version: 1, requestId: runId, runId, sessionId, type: "session.prompt", payload: { prompt: "First turn", model: provider.model, provider } }));
+    const usageFrame = await child.waitFor((frame) => {
+      const event = (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined;
+      return event?.event === "usage" && event.runId === runId;
+    });
+    const usage = (usageFrame.data as Record<string, unknown>).event as Record<string, unknown>;
+    assert.equal(usage.model, provider.model);
+  } finally {
+    child.child.kill();
+    await rm(workspace, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  }
 });
 
 test("workflow-host executes a v2 local file workflow and streams node lifecycle events", async () => {

@@ -1,3 +1,4 @@
+import { WORKBENCH_MESSAGE_PARTS_VERSION, normalizeWorkbenchMessageParts } from "../../packages/workbench-client/src/index"
 import type {
   NavigationAdapter,
   WorkbenchArtifact,
@@ -159,7 +160,9 @@ export function createWebWorkbenchClient(options: WebWorkbenchClientOptions): Wo
         const data = Array.isArray(payload?.data) ? payload.data : []
         return data.map((row): WorkbenchMessage => {
           const value = row as Record<string, unknown>
-          return { id: String(value.id), conversationId: String(value.conversation_id ?? conversationId), role: messageRole(value.role), content: String(value.content ?? ""), createdAt: toIso(value.created_at) }
+          const content = String(value.content ?? "")
+          const rawParts = Array.isArray(value.parts) ? value.parts : typeof value.parts_json === "string" ? (() => { try { const parsed = JSON.parse(value.parts_json as string); return Array.isArray(parsed) ? parsed : undefined } catch { return undefined } })() : undefined
+          return { id: String(value.id), conversationId: String(value.conversation_id ?? conversationId), role: messageRole(value.role), content, createdAt: toIso(value.created_at), partsVersion: WORKBENCH_MESSAGE_PARTS_VERSION, parts: normalizeWorkbenchMessageParts(rawParts as NonNullable<WorkbenchMessage["parts"]> | undefined, content) }
         })
       },
     },
@@ -177,6 +180,9 @@ export function createWebWorkbenchClient(options: WebWorkbenchClientOptions): Wo
           body: JSON.stringify({ title: input.title, nodes: input.definition.nodes, edges: input.definition.edges }),
         }))
         return webWorkflow(payload?.data ?? payload)
+      },
+      async remove(workflowId) {
+        await jsonOrError(await fetchImpl(`${workflowsApiBase}/${encodeURIComponent(workflowId)}`, { method: "DELETE", credentials: "same-origin" }))
       },
     },
     knowledge: {
@@ -261,15 +267,16 @@ async function streamRun(input: {
     const decoder = new TextDecoder()
     let buffer = ""
     let terminal = false
+    let sequence = 0
     while (true) {
       const { done, value } = await reader.read()
       buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
       const parsed = consumeSseEvents(buffer)
       buffer = parsed.rest
-      for (const event of parsed.events) terminal ||= dispatchStreamEvent(event, pending, onEvent, input.usages, input.artifacts)
+      for (const event of parsed.events) terminal ||= dispatchStreamEvent(event, pending, onEvent, input.usages, input.artifacts, ++sequence)
       if (done) break
     }
-    for (const event of consumeSseEvents(buffer).events) terminal ||= dispatchStreamEvent(event, pending, onEvent, input.usages, input.artifacts)
+    for (const event of consumeSseEvents(buffer).events) terminal ||= dispatchStreamEvent(event, pending, onEvent, input.usages, input.artifacts, ++sequence)
     if (!terminal) onEvent({ type: "status", status: "interrupted" })
   } catch (_error) {
     if (controller.signal.aborted) onEvent({ type: "status", status: "cancelled" })
@@ -277,22 +284,32 @@ async function streamRun(input: {
   }
 }
 
-function dispatchStreamEvent(event: AiEntryStreamEvent, pending: PendingRun, onEvent: (event: WorkbenchRunEvent) => void, usages: Map<string, { conversationId: string; usage: WorkbenchUsage }>, artifacts: Map<string, WorkbenchArtifact>) {
-  if (event.event === "message" && typeof event.answer === "string") onEvent({ type: "text", delta: event.answer })
-  else if (event.event === "tool_call") onEvent({ type: "tool", tool: String(event.data?.toolName ?? "tool"), phase: "started" })
-  else if (event.event === "tool_result") onEvent({ type: "tool", tool: String(event.data?.toolName ?? "tool"), phase: event.data?.result && (event.data.result as Record<string, unknown>).ok === false ? "failed" : "completed" })
+function dispatchStreamEvent(event: AiEntryStreamEvent, pending: PendingRun, onEvent: (event: WorkbenchRunEvent) => void, usages: Map<string, { conversationId: string; usage: WorkbenchUsage }>, artifacts: Map<string, WorkbenchArtifact>, sequence: number) {
+  const createdAt = new Date().toISOString()
+  const metadata = { sequence, createdAt }
+  const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : {}
+  if (event.event === "message" && typeof event.answer === "string") onEvent({ type: "text", delta: event.answer, ...metadata })
+  else if ((event.event === "reasoning" || event.event === "reasoning_delta") && typeof event.answer === "string") onEvent({ type: "reasoning", delta: event.answer, ...metadata })
+  else if (event.event === "plan" && data.plan && typeof data.plan === "object") onEvent({ type: "plan", plan: data.plan as never, ...metadata })
+  else if (event.event === "task" && data.task && typeof data.task === "object") onEvent({ type: "task", task: data.task as never, ...metadata })
+  else if (event.event === "tool_call" || event.event === "tool_result") {
+    const result = data.result && typeof data.result === "object" ? data.result as Record<string, unknown> : undefined
+    const failed = event.event === "tool_result" && (result?.ok === false || Boolean(data.error))
+    onEvent({ type: "tool_call", toolName: String(data.toolName ?? "tool"), toolCallId: String(data.toolCallId ?? data.callId ?? data.id ?? data.toolName ?? "tool"), phase: event.event === "tool_call" ? "started" : failed ? "failed" : "completed", input: data.args ?? data.input, output: result ?? data.output, error: typeof data.error === "string" ? data.error : undefined, ...metadata })
+  }
+  else if (event.event === "attachment" && data.attachment && typeof data.attachment === "object") onEvent({ type: "attachment", attachment: data.attachment as never, ...metadata })
   else if (event.event === "artifact_created") {
     const artifact = eventArtifact(event.artifact)
-    if (artifact) { artifacts.set(artifact.id, artifact); onEvent({ type: "artifact", artifact }) }
+    if (artifact) { artifacts.set(artifact.id, artifact); onEvent({ type: "artifact", artifact, ...metadata }) }
   } else if (event.event === "usage") {
     const usage: WorkbenchUsage = { runId: pending.run.id, model: typeof event.provider_model === "string" ? event.provider_model : pending.request.model ?? "unknown", inputTokens: typeof event.data?.inputTokens === "number" ? event.data.inputTokens : undefined, outputTokens: typeof event.data?.outputTokens === "number" ? event.data.outputTokens : undefined }
     usages.set(pending.run.id, { conversationId: pending.run.conversationId, usage })
-    onEvent({ type: "usage", usage })
+    onEvent({ type: "usage", usage, ...metadata })
   } else if (event.event === "message_end") {
-    onEvent({ type: "status", status: "succeeded" })
+    onEvent({ type: "status", status: "succeeded", ...metadata })
     return true
   } else if (event.event === "error") {
-    onEvent({ type: "status", status: "failed" })
+    onEvent({ type: "status", status: "failed", ...metadata })
     return true
   }
   return false

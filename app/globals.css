@@ -1,9 +1,11 @@
 /* Do not let Tailwind recursively scan generated PPT/cache artifacts at repo root. */
+@import "@aimarketing/workbench-ui/styles.css";
 @import "tailwindcss" source(none);
 @source "../app";
 @source "../components";
 @source "../lib";
 @source "../modules";
+@source "../packages/workbench-ui/src";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
 
@@ -41,6 +43,8 @@
   --popover: #ffffff;
   --popover-foreground: #111111;
   --primary: #ffd000;
+  --wb-brand-yellow: #ffd000;
+  --wb-brand-yellow-reference: #f4f254;
   --primary-foreground: #111111;
   --secondary: #111111;
   --secondary-foreground: #ffffff;
@@ -81,6 +85,8 @@
   --popover: #1a1a1a;
   --popover-foreground: #f5f5f5;
   --primary: #ffd21a;
+  --wb-brand-yellow: #ffd21a;
+  --wb-brand-yellow-reference: #f4f254;
   --primary-foreground: #1a1a1a;
   --secondary: #f5f5f5;
   --secondary-foreground: #1a1a1a;
@@ -1142,6 +1148,10 @@
     color: #8a8a8a;
   }
 
+  .wb-cloud-message-user .message-time {
+    color: rgba(255, 255, 255, 0.78);
+  }
+
   .message-body {
     max-width: 78ch;
     color: #242424;
@@ -1186,6 +1196,25 @@
     background: #f1f1ec;
     padding: 2px 6px;
     font-size: 0.82rem;
+  }
+
+  .wb-cloud-message-user .wb-chat-user-body {
+    color: #fff;
+  }
+
+  .wb-cloud-message-user .message-body :where(li)::marker {
+    color: #fff;
+  }
+
+  .wb-cloud-message-user .message-body :where(a) {
+    color: #fff;
+    text-decoration-color: rgba(255, 255, 255, 0.72);
+  }
+
+  .wb-cloud-message-user .message-body :where(code) {
+    border-color: rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
   }
 
   .message-divider {

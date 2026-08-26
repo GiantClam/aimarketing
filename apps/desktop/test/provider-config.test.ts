@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { configuredModelOptions, modelOptionsForProvider, preferredConfiguredModel, providerForCapability, providerForId, supportsProviderCapability, type DesktopProviderConfig } from "../src/provider-config";
+import { configuredModelOptions, isDevelopmentRunningHubWorkflowId, modelOptionsForProvider, preferredConfiguredModel, providerForCapability, providerForId, supportsProviderCapability, usableRunningHubWorkflowId, type DesktopProviderConfig } from "../src/provider-config";
 
 const text: DesktopProviderConfig = { id: "text", model: "text/model", baseUrl: "https://text.test/v1" };
 const image: DesktopProviderConfig = { id: "image", model: "image/model", baseUrl: "https://image.test/v1" };
@@ -25,6 +25,19 @@ test("unknown profile ids fall back safely to the legacy provider", () => {
   assert.deepEqual(providerForId(config, "missing"), text);
 });
 
+test("configured profiles are used when a capability has no explicit default", () => {
+  const config = {
+    provider: { ...text, model: "legacy/model" },
+    providers: {
+      "text-zeta": { ...text, id: "text-zeta", model: "zeta/model", models: ["zeta/model"] },
+      "text-alpha": { ...text, id: "text-alpha", model: "alpha/model", models: ["alpha/model"] },
+    },
+  };
+  const selected = providerForCapability(config, "text");
+  assert.equal(selected.id, "text-alpha");
+  assert.deepEqual(modelOptionsForProvider(config, selected), ["alpha/model"]);
+});
+
 test("profile model catalogs do not leak the legacy provider models", () => {
   const config = {
     provider: { ...text, models: ["text/model-a", "text/model-b"] },
@@ -41,6 +54,12 @@ test("configured model lists are canonical and prefer the first configured model
   assert.deepEqual(configuredModelOptions(provider), ["text/model-a", "text/model-b"]);
   assert.equal(preferredConfiguredModel(provider), "text/model-a");
   assert.deepEqual(modelOptionsForProvider({ provider }, provider), ["text/model-a", "text/model-b"]);
+});
+
+test("legacy profiles without a model catalog still expose the active model", () => {
+  const provider: DesktopProviderConfig = { id: "text", source: "openai-compatible", model: "gpt-5.4" };
+  assert.deepEqual(modelOptionsForProvider({ provider }, provider), ["gpt-5.4"]);
+  assert.deepEqual(modelOptionsForProvider({ provider, providers: { text: provider }, defaults: { text: "text" } }, provider), ["gpt-5.4"]);
 });
 
 test("same-capability provider profiles keep independent model catalogs and defaults", () => {
@@ -93,5 +112,11 @@ test("capability defaults recover from an existing incompatible profile", () => 
     defaults: { image: "audio" },
   };
   assert.equal(providerForCapability(config, "image").id, "image");
-  assert.equal(providerForCapability(config, "audio").id, "text");
+  assert.equal(providerForCapability(config, "audio").id, "audio");
+});
+
+test("RunningHub developer workflow IDs are never treated as user-owned", () => {
+  assert.equal(isDevelopmentRunningHubWorkflowId("2019410250268418050"), true);
+  assert.equal(usableRunningHubWorkflowId("2019410250268418050"), undefined);
+  assert.equal(usableRunningHubWorkflowId(" user-workflow-42 "), "user-workflow-42");
 });

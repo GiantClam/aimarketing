@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { ArrowUpRight, Bot, Database, FileText, House, ImageIcon, LayoutGrid, LibraryBig, ListChecks, Network, PenSquare, Presentation, Send, Settings2, Sparkles, Users2, Video, Workflow } from "lucide-react";
+import { ArrowUpRight, Bot, Cpu, Database, FileText, House, ImageIcon, LayoutGrid, LibraryBig, ListChecks, Network, PenSquare, Presentation, Send, Settings2, Sparkles, Users2, Video, Workflow } from "lucide-react";
 import type { SVGProps } from "react";
 
 const ROUTE_ICONS: Record<string, LucideIcon> = {
@@ -21,6 +21,7 @@ const ROUTE_ICONS: Record<string, LucideIcon> = {
   sparkles: Sparkles,
   docs: FileText,
   network: Network,
+  runtime: Cpu,
 };
 
 export function WorkbenchRouteIcon({ name, size = 16, strokeWidth = 1.8, ...props }: { name?: string; size?: number } & SVGProps<SVGSVGElement>) {

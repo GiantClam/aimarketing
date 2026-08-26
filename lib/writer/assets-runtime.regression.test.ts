@@ -96,6 +96,17 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     }
   }
 
+  if (request === "@/lib/writer/platform-artifacts") {
+    return {
+      persistWriterGeneratedImage: async (input: { assetId: string }) => ({
+        artifactId: input.assetId === "cover" ? 101 : 102,
+        url: `https://cdn.example.com/${input.assetId}.png`,
+        storageKey: `platform/${input.assetId}`,
+        contentType: "image/png",
+      }),
+    }
+  }
+
   if (request === "@/lib/writer/r2") {
     return {
       isWriterR2Available: () => true,
@@ -156,6 +167,7 @@ test("multi-image runs allow cumulative near-timeout execution and settle billin
     platform: "wechat",
     mode: "article",
     userId: 7,
+    enterpriseId: 42,
     conversationId: "conversation-near-timeout",
     taskId: "task-near-timeout",
     expectedRevision: 3,
@@ -172,6 +184,7 @@ test("multi-image runs allow cumulative near-timeout execution and settle billin
   assert.ok(generatedPrompts.length === 3)
   assert.equal(progress.length, 3)
   assert.ok(progress.every((markdown) => markdown.includes("https://cdn.example.com/")))
+  assert.deepEqual(result.assets.map((asset) => asset.artifactId), [101, 102, 102])
 })
 
 test("inline-capable platform plans generate cover and inline images through the same runtime", async () => {
@@ -183,6 +196,7 @@ test("inline-capable platform plans generate cover and inline images through the
       platform,
       mode: "article",
       userId: 7,
+      enterpriseId: 42,
       conversationId: `conversation-inline-${platform}`,
       taskId: `task-inline-${platform}`,
       expectedRevision: 1,
@@ -208,6 +222,7 @@ test("partial success preserves stored URLs and reports partial status", async (
     platform: "wechat",
     mode: "article",
     userId: 7,
+    enterpriseId: 42,
     conversationId: "conversation-partial",
     taskId: "task-partial",
     expectedRevision: 4,
@@ -244,6 +259,7 @@ test("worker restart skips ready cover and resumes only unfinished assets", asyn
     platform: "wechat",
     mode: "article",
     userId: 7,
+    enterpriseId: 42,
     conversationId: "conversation-restart",
     taskId: "task-restart",
     expectedRevision: 5,

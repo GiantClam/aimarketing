@@ -1,3 +1,5 @@
+import type { RunningHubWorkflowRegistration } from "./runninghub-workflow";
+
 export type DesktopProviderConfig = {
   readonly id?: string;
   readonly source?: string;
@@ -9,6 +11,12 @@ export type DesktopProviderConfig = {
   readonly skillId?: string;
   readonly endpoint?: string;
   readonly queryEndpoint?: string;
+  readonly workflowId?: string;
+  readonly digitalHumanWorkflowId?: string;
+  /** Optional account-owned workflow used by RunningHub video capabilities. */
+  readonly videoEnhanceWorkflowId?: string;
+  /** Account-owned RunningHub/ComfyUI workflows registered locally. */
+  readonly workflows?: readonly RunningHubWorkflowRegistration[];
   readonly capabilities?: readonly ProviderCapability[];
 };
 
@@ -24,18 +32,43 @@ type ProviderConfigContainer = {
 
 export type ResolvedDesktopProviderConfig = DesktopProviderConfig & { readonly id: string; readonly model: string };
 
+/**
+ * These IDs belonged to the development RunningHub account and must never be
+ * treated as a desktop-wide default. Users must configure a workflow that is
+ * visible to their own RunningHub API key.
+ */
+const DEVELOPMENT_RUNNINGHUB_WORKFLOW_IDS = new Set([
+  "2019410250268418050",
+  "2064172986302812162",
+]);
+
+export function isDevelopmentRunningHubWorkflowId(value: unknown): boolean {
+  return typeof value === "string" && DEVELOPMENT_RUNNINGHUB_WORKFLOW_IDS.has(value.trim());
+}
+
+export function usableRunningHubWorkflowId(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  return normalized && !isDevelopmentRunningHubWorkflowId(normalized) ? normalized : undefined;
+}
+
 /** Keep configured provider models canonical across every desktop surface. */
 export function configuredModelOptions(provider: DesktopProviderConfig): string[] {
   return [...new Set((provider.models ?? []).map((model) => model.trim()).filter(Boolean))];
 }
 
 export function modelOptionsForProvider(config: ProviderConfigContainer, provider: DesktopProviderConfig): readonly string[] | undefined {
-  if (provider.models !== undefined) return configuredModelOptions(provider);
+  if (provider.models !== undefined) {
+    const configured = configuredModelOptions(provider);
+    // Older persisted profiles may only have `model` and no model catalog.
+    // Keep that active model selectable instead of rendering an empty menu.
+    return configured.length ? configured : (provider.model?.trim() ? [provider.model.trim()] : []);
+  }
   const providerId = provider.id?.trim();
   const fallbackId = config.provider.id?.trim();
-  return provider === config.provider || (providerId && fallbackId && providerId === fallbackId)
-    ? configuredModelOptions(config.provider)
-    : undefined;
+  if (!(provider === config.provider || (providerId && fallbackId && providerId === fallbackId))) return undefined;
+  const configured = configuredModelOptions(config.provider);
+  return configured.length ? configured : (config.provider.model?.trim() ? [config.provider.model.trim()] : []);
 }
 
 export function preferredConfiguredModel(provider: DesktopProviderConfig): string {
@@ -62,6 +95,12 @@ export function providerForCapability(config: ProviderConfigContainer, capabilit
   const selected = selectedId ? config.providers?.[selectedId] : undefined;
   if (selected && !supportsProviderCapability(selected, capability)) {
     const compatible = Object.entries(config.providers ?? {}).find(([id, provider]) => id !== selectedId && supportsProviderCapability(provider, capability));
+    if (compatible) return providerForId(config, compatible[0]);
+  }
+  if (!selectedId) {
+    const compatible = Object.entries(config.providers ?? {})
+      .filter(([, provider]) => supportsProviderCapability(provider, capability))
+      .sort(([left], [right]) => left.localeCompare(right))[0];
     if (compatible) return providerForId(config, compatible[0]);
   }
   return providerForId(config, selectedId);
@@ -97,7 +136,7 @@ export function supportsProviderCapability(provider: DesktopProviderConfig, capa
   if (source === "runninghub") return capability === "video";
   if (source === "minimax") return capability === "audio";
   if (source === "bailian" || source === "dashscope") return capability === "image";
-  if (["openai", "openai-compatible", "pptoken", "deepseek", "openrouter"].includes(source)) return capability === "text";
+  if (["openai", "openai-compatible", "pptoken", "siliconflow", "deepseek", "openrouter"].includes(source)) return capability === "text";
   return true;
 }
 
@@ -108,7 +147,7 @@ export function supportsProviderCapability(provider: DesktopProviderConfig, capa
  * endpoint, so source is the authoritative signal here.
  */
 export function isMediaProviderConfigured(provider: DesktopProviderConfig) {
-  if (!provider.baseUrl?.trim()) return false;
+  if (!provider.baseUrl?.trim() || !provider.model?.trim()) return false;
   const source = (provider.source ?? provider.id ?? "").trim().toLowerCase();
   return source !== "" && source !== "local";
 }

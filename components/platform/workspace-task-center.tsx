@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import Link from "next/link"
 import {
@@ -25,11 +25,14 @@ import {
 } from "lucide-react"
 
 import { DashboardFilterToolbar } from "@/components/ui/dashboard-filter-toolbar"
+import { resolveBrowserTimeZone } from "@/lib/ai-entry/message-time"
+import { resolveTaskEntryHref } from "@/lib/platform/task-entry-routing"
 import {
   buildNormalizedRuns,
   buildTaskCenterTasks,
   filterTaskCenterTasks,
   formatDuration,
+  getDateKeyInTimeZone,
   formatTaskTimestamp,
   getAverageDuration,
   getLatestTimestamp,
@@ -65,10 +68,11 @@ const sourceDotStyles: Record<TaskSource, string> = {
 }
 
 const statusStyles: Record<TaskStatus, string> = {
-  succeeded: "border-[#ccefd7] bg-[#eefaf2] text-[#23a55a]",
+  completed: "border-[#ccefd7] bg-[#eefaf2] text-[#23a55a]",
   failed: "border-[#ffd6d6] bg-[#fff0f0] text-[#d93025]",
-  cancelled: "border-[#ffd6d6] bg-[#fff0f0] text-[#d93025]",
+  cancelled: "border-[#d9d9d2] bg-[#f2f2ee] text-[#666]",
   running: "border-[#efe6a8] bg-[#fffbe5] text-[#8a7500]",
+  waiting: "border-[#ded4ff] bg-[#f4f0ff] text-[#7653d6]",
   queued: "border-[#e6e6de] bg-[#f2f2ee] text-[#666]",
 }
 
@@ -320,18 +324,20 @@ function TaskMetricGrid({
   tasks,
   totalRuns,
   locale,
+  timeZone,
 }: {
   tasks: TaskCenterTask[]
   totalRuns: number
   locale: "zh" | "en"
+  timeZone: string | null
 }) {
   const copy = getTaskCenterCopy(locale)
-  const running = tasks.filter((task) => task.normalizedStatus === "running").length
+  const running = tasks.filter((task) => task.normalizedStatus === "running" || task.normalizedStatus === "waiting").length
   const queued = tasks.filter((task) => task.normalizedStatus === "queued").length
-  const succeeded = tasks.filter((task) => task.normalizedStatus === "succeeded").length
+  const succeeded = tasks.filter((task) => task.normalizedStatus === "completed").length
   const failed = tasks.filter((task) => task.normalizedStatus === "failed" || task.normalizedStatus === "cancelled").length
   const latest = getLatestTimestamp(tasks)
-  const latestLabel = latest ? formatTaskTimestamp(latest.toISOString(), locale) : copy.noSync
+  const latestLabel = latest ? formatTaskTimestamp(latest.toISOString(), locale, timeZone) : copy.noSync
 
   return (
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -394,9 +400,11 @@ function TaskFilterToolbar({
             <select value={status} onChange={(event) => onStatusChange(event.target.value as StatusFilter)} className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white px-3 text-sm font-bold text-[#111] outline-none sm:min-w-[140px] sm:w-auto">
               <option value="all">{copy.allStatus}</option>
               <option value="running">{getLocalizedStatusLabel("running", locale)}</option>
-              <option value="succeeded">{getLocalizedStatusLabel("succeeded", locale)}</option>
+              <option value="waiting">{getLocalizedStatusLabel("waiting", locale)}</option>
+              <option value="completed">{getLocalizedStatusLabel("completed", locale)}</option>
               <option value="failed">{getLocalizedStatusLabel("failed", locale)}</option>
               <option value="queued">{getLocalizedStatusLabel("queued", locale)}</option>
+              <option value="cancelled">{getLocalizedStatusLabel("cancelled", locale)}</option>
             </select>
             <select value={source} onChange={(event) => onSourceChange(event.target.value as SourceFilter)} className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white px-3 text-sm font-bold text-[#111] outline-none sm:min-w-[140px] sm:w-auto">
               <option value="all">{copy.allSources}</option>
@@ -427,25 +435,37 @@ function TaskFilterToolbar({
 function TaskActions({ task, locale }: { task: TaskCenterTask; locale: "zh" | "en" }) {
   const copy = getTaskCenterCopy(locale)
   const isFailed = task.normalizedStatus === "failed" || task.normalizedStatus === "cancelled"
+  const entryHref = resolveTaskEntryHref(task)
 
   return (
     <div className="flex items-center gap-2">
       <Link
-        href={`/dashboard/tasks/${task.latestRun.id}`}
+        href={entryHref}
         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e1e1da] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
         title={copy.viewLatestExecution}
         aria-label={copy.viewLatestExecution}
       >
         <Eye className="h-4 w-4" />
       </Link>
-      <button
-        type="button"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e1e1da] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
-        title={isFailed ? copy.retry : copy.openResult}
-        aria-label={isFailed ? copy.retry : copy.openResult}
-      >
-        <RotateCcw className="h-4 w-4" />
-      </button>
+      {isFailed ? (
+        <Link
+          href={`${entryHref}${entryHref.includes("?") ? "&" : "?"}retry=1`}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e1e1da] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
+          title={copy.retry}
+          aria-label={copy.retry}
+        >
+          <RotateCcw className="h-4 w-4" />
+        </Link>
+      ) : (
+        <Link
+          href={entryHref}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e1e1da] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
+          title={copy.openResult}
+          aria-label={copy.openResult}
+        >
+          <RotateCcw className="h-4 w-4" />
+        </Link>
+      )}
       <button
         type="button"
         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e1e1da] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
@@ -461,9 +481,11 @@ function TaskActions({ task, locale }: { task: TaskCenterTask; locale: "zh" | "e
 function RecentTasksTable({
   tasks,
   locale,
+  timeZone,
 }: {
   tasks: TaskCenterTask[]
   locale: "zh" | "en"
+  timeZone: string | null
 }) {
   const copy = getTaskCenterCopy(locale)
 
@@ -521,7 +543,7 @@ function RecentTasksTable({
                     <TaskSourceBadge source={task.source} locale={locale} />
                   </td>
                   <td className="border-t border-[#edede7] px-4 py-3 font-mono text-xs text-[#333]">{getRunId(task.latestRun)}</td>
-                  <td className="border-t border-[#edede7] px-4 py-3 text-sm text-[#333]">{formatTaskTimestamp(task.updatedAt, locale)}</td>
+                  <td className="border-t border-[#edede7] px-4 py-3 text-sm text-[#333]">{formatTaskTimestamp(task.updatedAt, locale, timeZone)}</td>
                   <td className="border-t border-[#edede7] px-4 py-3 text-sm text-[#333]">{task.runCount.toLocaleString()}</td>
                   <td className="border-t border-[#edede7] px-4 py-3 font-mono text-xs text-[#333]">{formatDuration(task.averageDurationMs)}</td>
                   <td className="border-t border-[#edede7] px-4 py-3">
@@ -598,12 +620,14 @@ function RecentTasksPanel({
   total,
   page,
   locale,
+  timeZone,
   onPageChange,
 }: {
   tasks: TaskCenterTask[]
   total: number
   page: number
   locale: "zh" | "en"
+  timeZone: string | null
   onPageChange: (page: number) => void
 }) {
   const copy = getTaskCenterCopy(locale)
@@ -620,7 +644,7 @@ function RecentTasksPanel({
         </span>
       </div>
 
-      <RecentTasksTable tasks={tasks} locale={locale} />
+      <RecentTasksTable tasks={tasks} locale={locale} timeZone={timeZone} />
       <TaskPagination page={page} total={total} locale={locale} onPageChange={onPageChange} />
     </section>
   )
@@ -647,16 +671,16 @@ function Sparkline({ locale }: { locale: "zh" | "en" }) {
   )
 }
 
-function TasksOverTime({ tasks, locale }: { tasks: TaskCenterTask[]; locale: "zh" | "en" }) {
+function TasksOverTime({ tasks, locale, timeZone }: { tasks: TaskCenterTask[]; locale: "zh" | "en"; timeZone: string | null }) {
   const copy = getTaskCenterCopy(locale)
   const latest = getLatestTimestamp(tasks)
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = latest ? new Date(latest.getTime() - (6 - index) * 24 * 60 * 60 * 1000) : null
-    const key = date?.toISOString().slice(0, 10) ?? `day-${index}`
-    const dayTasks = tasks.filter((task) => task.updatedAt?.slice(0, 10) === key)
-    const succeeded = dayTasks.filter((task) => task.normalizedStatus === "succeeded").length
+    const key = getDateKeyInTimeZone(date, timeZone) ?? `day-${index}`
+    const dayTasks = tasks.filter((task) => getDateKeyInTimeZone(task.updatedAt, timeZone) === key)
+    const succeeded = dayTasks.filter((task) => task.normalizedStatus === "completed").length
     const failed = dayTasks.filter((task) => task.normalizedStatus === "failed" || task.normalizedStatus === "cancelled").length
-    const running = dayTasks.filter((task) => task.normalizedStatus === "running" || task.normalizedStatus === "queued").length
+    const running = dayTasks.filter((task) => task.normalizedStatus === "running" || task.normalizedStatus === "waiting" || task.normalizedStatus === "queued").length
     const total = Math.max(1, succeeded + failed + running)
 
     return {
@@ -715,9 +739,9 @@ function SourceBreakdown({ tasks, locale }: { tasks: TaskCenterTask[]; locale: "
   )
 }
 
-function QueueInsightsPanel({ tasks, locale }: { tasks: TaskCenterTask[]; locale: "zh" | "en" }) {
+function QueueInsightsPanel({ tasks, locale, timeZone }: { tasks: TaskCenterTask[]; locale: "zh" | "en"; timeZone: string | null }) {
   const copy = getTaskCenterCopy(locale)
-  const succeeded = tasks.filter((task) => task.normalizedStatus === "succeeded").length
+  const succeeded = tasks.filter((task) => task.normalizedStatus === "completed").length
   const failed = tasks.filter((task) => task.normalizedStatus === "failed" || task.normalizedStatus === "cancelled").length
   const terminal = succeeded + failed
   const successRate = terminal > 0 ? (succeeded / terminal) * 100 : 0
@@ -753,7 +777,7 @@ function QueueInsightsPanel({ tasks, locale }: { tasks: TaskCenterTask[]; locale
           <Sparkline locale={locale} />
         </div>
 
-        <TasksOverTime tasks={tasks} locale={locale} />
+        <TasksOverTime tasks={tasks} locale={locale} timeZone={timeZone} />
         <SourceBreakdown tasks={tasks} locale={locale} />
 
         <Link
@@ -797,6 +821,19 @@ export function WorkspaceTaskCenter({
   const [dateRange, setDateRange] = useState<DateRangeFilter>("7d")
   const [sort, setSort] = useState<SortFilter>("newest")
   const [page, setPage] = useState(1)
+  const [browserTimeZone, setBrowserTimeZone] = useState<string | null>(null)
+  useEffect(() => {
+    const syncBrowserTimeZone = () => setBrowserTimeZone(resolveBrowserTimeZone())
+    syncBrowserTimeZone()
+    window.addEventListener("focus", syncBrowserTimeZone)
+    window.addEventListener("pageshow", syncBrowserTimeZone)
+    document.addEventListener("visibilitychange", syncBrowserTimeZone)
+    return () => {
+      window.removeEventListener("focus", syncBrowserTimeZone)
+      window.removeEventListener("pageshow", syncBrowserTimeZone)
+      document.removeEventListener("visibilitychange", syncBrowserTimeZone)
+    }
+  }, [])
   const filteredTasks = useFilteredTasks(groupedTasks, { query, status, source, dateRange, sort })
   const pageCount = Math.max(1, Math.ceil(filteredTasks.length / PAGE_SIZE))
   const normalizedPage = Math.min(page, pageCount)
@@ -814,7 +851,7 @@ export function WorkspaceTaskCenter({
       getLocalizedTaskName(task, locale),
       getLocalizedSourceLabel(task.source, locale),
       getRunId(task.latestRun),
-      formatTaskTimestamp(task.updatedAt, locale),
+      formatTaskTimestamp(task.updatedAt, locale, browserTimeZone),
       String(task.runCount),
       formatDuration(task.averageDurationMs),
       getLocalizedStatusLabel(task.normalizedStatus, locale),
@@ -833,7 +870,7 @@ export function WorkspaceTaskCenter({
     <div className="h-full overflow-auto bg-[#fafaf6] bg-[linear-gradient(rgba(0,0,0,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.035)_1px,transparent_1px)] bg-[length:48px_48px]">
       <section className="mx-auto flex max-w-[1480px] flex-col gap-6 px-4 py-6 lg:px-6 xl:px-8">
         <TaskCenterHeader locale={locale} onExport={exportTasks} />
-        <TaskMetricGrid tasks={groupedTasks} totalRuns={normalizedRuns.length} locale={locale} />
+        <TaskMetricGrid tasks={groupedTasks} totalRuns={normalizedRuns.length} locale={locale} timeZone={browserTimeZone} />
 
         <main className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]">
           <div className="space-y-5">
@@ -855,11 +892,12 @@ export function WorkspaceTaskCenter({
               total={filteredTasks.length}
               page={normalizedPage}
               locale={locale}
+              timeZone={browserTimeZone}
               onPageChange={setPage}
             />
           </div>
 
-          <QueueInsightsPanel tasks={filteredTasks} locale={locale} />
+          <QueueInsightsPanel tasks={filteredTasks} locale={locale} timeZone={browserTimeZone} />
         </main>
       </section>
 

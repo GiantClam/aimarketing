@@ -2,6 +2,11 @@ use std::fs::{remove_file, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
+use std::os::windows::ffi::OsStringExt;
 
 pub struct InstanceLock {
     path: PathBuf,
@@ -15,15 +20,15 @@ impl InstanceLock {
         }
         match OpenOptions::new().write(true).create_new(true).open(&path) {
             Ok(mut file) => {
-                writeln!(file, "{}", std::process::id()).map_err(|error| format!("desktop_lock_write_failed: {error}"))?;
+                write_owner(&mut file).map_err(|error| format!("desktop_lock_write_failed: {error}"))?;
                 Ok(Self { path, file })
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 let owner = read_owner(&path);
-                if owner.is_some_and(|pid| !process_alive(pid)) {
+                if owner.is_some_and(|pid| !process_is_current_instance(pid)) {
                     remove_file(&path).map_err(|remove_error| lock_conflict(&path, owner, &remove_error))?;
                     let mut file = OpenOptions::new().write(true).create_new(true).open(&path).map_err(|retry_error| lock_conflict(&path, owner, &retry_error))?;
-                    writeln!(file, "{}", std::process::id()).map_err(|write_error| format!("desktop_lock_write_failed: {write_error}"))?;
+                    write_owner(&mut file).map_err(|write_error| format!("desktop_lock_write_failed: {write_error}"))?;
                     Ok(Self { path, file })
                 } else {
                     Err(lock_conflict(&path, owner, "close the existing AI Marketing instance first"))
@@ -50,20 +55,63 @@ fn lock_conflict(path: &Path, owner: Option<u32>, detail: impl std::fmt::Display
 fn read_owner(path: &Path) -> Option<u32> {
     let mut content = String::new();
     File::open(path).ok()?.read_to_string(&mut content).ok()?;
-    content.trim().parse().ok()
+    content.lines().next()?.trim().parse().ok()
+}
+
+fn write_owner(file: &mut File) -> std::io::Result<()> {
+    writeln!(file, "{}", std::process::id())?;
+    if let Ok(executable) = std::env::current_exe() {
+        writeln!(file, "{}", executable.display())?;
+    }
+    Ok(())
+}
+
+fn process_is_current_instance(pid: u32) -> bool {
+    process_alive(pid) && process_matches_current_executable(pid)
 }
 
 fn process_alive(pid: u32) -> bool {
     #[cfg(windows)]
     {
         let filter = format!("PID eq {pid}");
-        return Command::new("tasklist").args(["/FI", &filter, "/NH"]).output().map(|output| output.status.success() && String::from_utf8_lossy(&output.stdout).contains(&pid.to_string())).unwrap_or(true);
+        let mut command = Command::new("tasklist");
+        command.creation_flags(0x08000000);
+        return command.args(["/FI", &filter, "/NH"]).output().map(|output| output.status.success() && String::from_utf8_lossy(&output.stdout).contains(&pid.to_string())).unwrap_or(true);
     }
     #[cfg(not(windows))]
     {
         let _ = pid;
         false
     }
+}
+
+#[cfg(windows)]
+fn process_matches_current_executable(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+
+    let Some(current) = std::env::current_exe().ok().and_then(|path| std::fs::canonicalize(path).ok()) else { return false; };
+    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    if handle.is_null() { return false; }
+    let mut buffer = vec![0_u16; 32_768];
+    let mut length = buffer.len() as u32;
+    let success = unsafe { QueryFullProcessImageNameW(handle, 0, buffer.as_mut_ptr(), &mut length) != 0 };
+    unsafe { CloseHandle(handle); }
+    if !success { return false; }
+    buffer.truncate(length as usize);
+    let owner = std::ffi::OsString::from_wide(&buffer);
+    std::fs::canonicalize(owner).map(|path| paths_equal(&path, &current)).unwrap_or(false)
+}
+
+#[cfg(not(windows))]
+fn process_matches_current_executable(_pid: u32) -> bool {
+    true
+}
+
+fn paths_equal(left: &Path, right: &Path) -> bool {
+    left.to_string_lossy().eq_ignore_ascii_case(&right.to_string_lossy())
 }
 
 #[cfg(test)]
@@ -94,5 +142,11 @@ mod tests {
         let message = lock_conflict(Path::new("C:/AIMarketing/data/instance.lock"), None, "repair the lock file");
         assert!(message.contains("owner_pid=unknown"));
         assert!(message.contains("repair the lock file"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn current_process_identity_matches_its_executable() {
+        assert!(process_matches_current_executable(std::process::id()));
     }
 }

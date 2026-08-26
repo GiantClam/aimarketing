@@ -8,16 +8,57 @@ import { OpenCodeServeClient } from "../runtime/opencode-serve";
 
 test("desktop OpenCode uses the shared synchronous serve-session contract", () => {
   const source = readFileSync(resolve(process.cwd(), "runtime/opencode-serve.ts"), "utf8");
+  const hostSource = readFileSync(resolve(process.cwd(), "runtime/host.ts"), "utf8");
   assert.match(source, /createOpenCodeServeSessionPayload/);
   assert.match(source, /createOpenCodeServePromptPayload/);
   assert.match(source, /openCodeServeSessionPath\(sessionId, workspacePath, "message"\)/);
-  assert.match(source, /30 \* 60 \* 1000/);
+  assert.match(source, /normalizeOpenCodeServeEvent\("pending", payload/);
+  assert.match(source, /DEFAULT_PROMPT_TIMEOUT_MS = 60_000/);
+  assert.match(source, /runtimeEnvironmentSignature/);
+  assert.match(source, /opencode_prompt_timeout/);
   assert.match(source, /taskkill/);
   assert.match(source, /windowsHide: true/);
+  assert.match(source, /failActiveRuns\("provider_rate_limited"/u);
+  assert.match(source, /Too Many Requests|rate limit exceeded|status\(\?:code\)\?\[=: \]\*429/u);
+  assert.match(source, /failActiveRuns\("provider_access_forbidden"/u);
   assert.match(source, /"serve", "--pure", "--hostname", "127\.0\.0\.1"/u);
+  assert.match(source, /OPENCODE_DISABLE_PROJECT_CONFIG: "1"/u);
+  assert.match(source, /OPENCODE_DISABLE_EXTERNAL_SKILLS: "1"/u);
+  assert.match(source, /OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: "1"/u);
+  assert.match(source, /OPENCODE_DISABLE_DEFAULT_PLUGINS: "1"/u);
+  assert.match(hostSource, /OPENCODE_CONFIG_CONTENT: configContent/u);
+  assert.match(hostSource, /node_modules.*opencode-ai.*bin.*opencode\.exe/u);
+  assert.match(hostSource, /ProgramFiles/u);
+  assert.match(hostSource, /USERPROFILE: isolatedHome/u);
+  assert.match(hostSource, /XDG_CONFIG_HOME: isolatedConfigHome/u);
+  assert.match(hostSource, /AIMARKETING_DESKTOP_LOCAL: "1"/u);
+  assert.match(hostSource, /skills: \{ paths: \[\] \}/u);
+  assert.match(hostSource, /OpenCode caches the Agent catalog/u);
+  assert.match(hostSource, /cp\(agentsSource, target, \{ recursive: true/u);
+  assert.match(hostSource, /\(\?:tools\|services\)/u);
+  assert.match(hostSource, /#6b7280/u);
+  assert.match(hostSource, /preparedAgentName/u);
+  assert.doesNotMatch(hostSource, /name:\s*\$\{agentId\}/u);
   assert.doesNotMatch(source, /"--mdns"/u);
   assert.doesNotMatch(source, /"--cors"/u);
   assert.doesNotMatch(source, /prompt_async/);
+});
+
+test("OpenCode Serve turns a hanging provider request into a retryable runtime error", async () => {
+  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "aimarketing-opencode-timeout-"));
+  const fixture = resolve(process.cwd(), "test/fixtures/fake-opencode-serve.mjs");
+  const client = new OpenCodeServeClient(process.execPath, runtimeDirectory, [fixture], 80);
+  const events: Array<{ event: string; [key: string]: unknown }> = [];
+  try {
+    const session = await client.createOrResumeSession(runtimeDirectory, undefined, { model: "configured/model" }, { FAKE_OPENCODE_PROMPT_HANG: "1" });
+    await client.prompt(session.sessionId, runtimeDirectory, "timeout-run", "This request will hang", { model: "configured/model" }, (event) => events.push(event));
+    const timeout = events.find((event) => event.event === "runtime_error");
+    assert.equal(timeout?.code, "opencode_prompt_timeout");
+    assert.match(String(timeout?.message), /timed out/iu);
+  } finally {
+    await client.stop();
+    await rm(runtimeDirectory, { recursive: true, force: true });
+  }
 });
 
 test("OpenCode Serve recreates a lost persisted session and preserves streamed evidence", async () => {
@@ -59,6 +100,38 @@ test("OpenCode Serve recreates a lost persisted session and preserves streamed e
   }
 });
 
+test("OpenCode Serve parses CRLF-delimited SSE frames", async () => {
+  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "aimarketing-opencode-serve-crlf-"));
+  const fixture = resolve(process.cwd(), "test/fixtures/fake-opencode-serve.mjs");
+  const client = new OpenCodeServeClient(process.execPath, runtimeDirectory, [fixture]);
+  const events: Array<{ event: string; [key: string]: unknown }> = [];
+  try {
+    const session = await client.createOrResumeSession(runtimeDirectory, undefined, { model: "configured/model" }, { FAKE_OPENCODE_CRLF: "1" });
+    await client.prompt(session.sessionId, runtimeDirectory, "crlf-run", "First turn", { model: "configured/model" }, (event) => events.push(event));
+    assert.equal(events.some((event) => event.event === "text_delta" && event.delta === "First answer"), true);
+    assert.equal(events.some((event) => event.event === "usage"), true);
+    assert.equal(events.some((event) => event.event === "done"), true);
+  } finally {
+    await client.stop();
+    await rm(runtimeDirectory, { recursive: true, force: true });
+  }
+});
+
+test("OpenCode Serve forwards the selected packaged Agency Agent", async () => {
+  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "aimarketing-opencode-agent-"));
+  const fixture = resolve(process.cwd(), "test/fixtures/fake-opencode-serve.mjs");
+  const client = new OpenCodeServeClient(process.execPath, runtimeDirectory, [fixture]);
+  const agentLog = resolve(runtimeDirectory, "agent.log");
+  try {
+    const session = await client.createOrResumeSession(runtimeDirectory, undefined, { model: "configured/model" }, { FAKE_OPENCODE_AGENT_LOG: agentLog, AIMARKETING_OPENCODE_AGENT_ID: "agency-engineering-code-reviewer" });
+    await client.prompt(session.sessionId, runtimeDirectory, "agent-run", "Review this change", { model: "configured/model" }, () => undefined, undefined, "agency-engineering-code-reviewer");
+    assert.equal(await readFile(agentLog, "utf8"), "agency-engineering-code-reviewer");
+  } finally {
+    await client.stop();
+    await rm(runtimeDirectory, { recursive: true, force: true });
+  }
+});
+
 test("fake OpenCode E2E covers first chat, multi-turn, tool/artifact, cancel, crash and usage", async () => {
   const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "aimarketing-opencode-e2e-"));
   const fixture = resolve(process.cwd(), "test/fixtures/fake-opencode-serve.mjs");
@@ -79,6 +152,10 @@ test("fake OpenCode E2E covers first chat, multi-turn, tool/artifact, cancel, cr
     await client.prompt(session.sessionId, runtimeDirectory, "second-run", "Second turn", provider, (event) => secondEvents.push(event));
     assert.equal(secondEvents.some((event) => event.event === "text_delta" && event.delta === "Second answer"), true);
 
+    const camelCaseEvents: Array<{ event: string; [key: string]: unknown }> = [];
+    await client.prompt(session.sessionId, runtimeDirectory, "camel-case-run", "Camel case stream", provider, (event) => camelCaseEvents.push(event));
+    assert.equal(camelCaseEvents.some((event) => event.event === "text_delta" && event.delta === "Recovered answer"), true);
+
     const artifactEvents: Array<{ event: string; [key: string]: unknown }> = [];
     await client.prompt(session.sessionId, runtimeDirectory, "artifact-run", "Create artifact", provider, (event) => artifactEvents.push(event));
     assert.equal(artifactEvents.some((event) => event.event === "tool_event" && event.tool === "artifact:result"), true);
@@ -95,6 +172,74 @@ test("fake OpenCode E2E covers first chat, multi-turn, tool/artifact, cancel, cr
     await client.prompt(session.sessionId, runtimeDirectory, "crash-run", "Trigger crash", provider, (event) => crashEvents.push(event));
     assert.deepEqual(crashEvents.filter((event) => event.event === "runtime_error").map((event) => event.code), ["opencode_serve_exited"]);
     assert.equal((await client.createOrResumeSession(runtimeDirectory, undefined, provider, { FAKE_OPENCODE_ABORT_LOG: abortLog })).sessionId, "recovered-session");
+  } finally {
+    await client.stop();
+    await rm(runtimeDirectory, { recursive: true, force: true });
+  }
+});
+
+test("OpenCode Serve reloads the selected model when a persistent conversation switches models", async () => {
+  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "aimarketing-opencode-model-switch-"));
+  const fixture = resolve(process.cwd(), "test/fixtures/fake-opencode-serve.mjs");
+  const modelLog = resolve(runtimeDirectory, "model-switch.log");
+  const client = new OpenCodeServeClient(process.execPath, runtimeDirectory, [fixture]);
+  const firstProvider = { model: "configured/model-a" };
+  const secondProvider = { model: "configured/model-b" };
+  try {
+    const first = await client.createOrResumeSession(runtimeDirectory, undefined, firstProvider, { OPENCODE_CONFIG_CONTENT: "model-a", FAKE_OPENCODE_CONFIG_MODEL: "model-a", FAKE_OPENCODE_CONFIG_MODEL_LOG: modelLog });
+    await client.prompt(first.sessionId, runtimeDirectory, "model-a-run", "First turn", firstProvider, () => undefined);
+    const second = await client.createOrResumeSession(runtimeDirectory, first.sessionId, secondProvider, { OPENCODE_CONFIG_CONTENT: "model-b", FAKE_OPENCODE_CONFIG_MODEL: "model-b", FAKE_OPENCODE_CONFIG_MODEL_LOG: modelLog });
+    await client.prompt(second.sessionId, runtimeDirectory, "model-b-run", "Second turn", secondProvider, () => undefined);
+    assert.deepEqual((await readFile(modelLog, "utf8")).trim().split(/\r?\n/u), ["model-a:model-a", "model-b:model-b"]);
+  } finally {
+    await client.stop();
+    await rm(runtimeDirectory, { recursive: true, force: true });
+  }
+});
+
+test("OpenCode Serve reuses one process across Agent sessions and routes same-session concurrent prompts", async () => {
+  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "aimarketing-opencode-concurrency-"));
+  const fixture = resolve(process.cwd(), "test/fixtures/fake-opencode-serve.mjs");
+  const activityLog = resolve(runtimeDirectory, "activity.log");
+  const environment = { FAKE_OPENCODE_CONCURRENCY_MODE: "1", FAKE_OPENCODE_ACTIVITY_LOG: activityLog };
+  const client = new OpenCodeServeClient(process.execPath, runtimeDirectory, [fixture]);
+  const provider = { model: "configured/model" };
+  const waitForActivity = async (value: string) => {
+    const deadline = Date.now() + 2_000;
+    while (Date.now() < deadline) {
+      if ((await readFile(activityLog, "utf8").catch(() => "")).includes(value)) return;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+    }
+    throw new Error(`fake_opencode_activity_timeout:${value}`);
+  };
+  const run = async (sessionId: string, runId: string, prompt: string, agent?: string) => {
+    const events: Array<{ event: string; [key: string]: unknown }> = [];
+    await client.prompt(sessionId, runtimeDirectory, runId, prompt, provider, (event) => events.push(event), undefined, agent);
+    return events;
+  };
+  try {
+    const chatSession = await client.createOrResumeSession(runtimeDirectory, undefined, provider, environment);
+    const sameSessionResults = await Promise.all([
+      run(chatSession.sessionId, "same-session-a", "same-session-a"),
+      run(chatSession.sessionId, "same-session-b", "same-session-b"),
+    ]);
+    for (const [index, events] of sameSessionResults.entries()) {
+      const prompt = `same-session-${index === 0 ? "a" : "b"}`;
+      assert.equal(events.some((event) => event.event === "text_delta" && String(event.delta).includes(prompt)), true, prompt);
+      assert.equal(events.some((event) => event.event === "runtime_error"), false, JSON.stringify(events));
+    }
+
+    const slowChat = run(chatSession.sessionId, "slow-chat", "slow-chat");
+    await waitForActivity(":slow-chat");
+    const agentEnvironment = { ...environment, AIMARKETING_OPENCODE_AGENT_ID: "agency-engineering-code-reviewer" };
+    const agentSession = await client.createOrResumeSession(runtimeDirectory, undefined, provider, agentEnvironment);
+    const agentRun = run(agentSession.sessionId, "agent-chat", "agent-chat", "agency-engineering-code-reviewer");
+    const [chatEvents, agentEvents] = await Promise.all([slowChat, agentRun]);
+    assert.equal(chatEvents.some((event) => event.event === "text_delta" && String(event.delta).includes("slow-chat")), true);
+    assert.equal(agentEvents.some((event) => event.event === "text_delta" && String(event.delta).includes("agent-chat")), true);
+    assert.equal([...chatEvents, ...agentEvents].some((event) => event.event === "runtime_error"), false);
+    const activity = await readFile(activityLog, "utf8");
+    assert.equal(new Set(activity.split(/\r?\n/u).filter(Boolean).map((line) => line.split(":", 1)[0])).size, 1, activity);
   } finally {
     await client.stop();
     await rm(runtimeDirectory, { recursive: true, force: true });

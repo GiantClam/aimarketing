@@ -21,7 +21,8 @@ test("AI Entry routes through an injected NavigationAdapter with a Next fallback
 test("AI Entry delegates common cloud message geometry to the shared workbench UI", () => {
   const source = readFileSync(resolve(process.cwd(), "components/ai-entry/ai-entry-workspace.tsx"), "utf8")
 
-  assert.match(source, /import \{ WorkbenchCloudMessageShell \} from "@aimarketing\/workbench-ui"/)
+  assert.match(source, /import \{ WorkbenchCloudMessageShell, WorkbenchMessageTimeline \} from "@aimarketing\/workbench-ui"/)
+  assert.match(source, /<WorkbenchMessageTimeline/)
   assert.equal(source.match(/<WorkbenchCloudMessageShell/g)?.length, 2)
   assert.doesNotMatch(source, /<Message key=\{message\.id\}/)
 })

@@ -1,18 +1,55 @@
-import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = join(repoRoot, "content", "skills");
 const target = join(repoRoot, "apps", "desktop", "dist-runtime", "skills");
+const agentsSource = join(source, "agency-agents");
+const agentsTarget = join(repoRoot, "apps", "desktop", "dist-runtime", "agents");
 const execFileAsync = promisify(execFile);
 const pptMasterCommit = "4e6ecbcb0dc079efebd3c79b775c0f02581509fe";
 await mkdir(dirname(target), { recursive: true });
 await cp(source, target, { recursive: true, force: true });
+// Agency Agents are OpenCode agents, not SKILL.md packages. Keep their
+// runtime definitions in dist-runtime/agents so the skill scanner never
+// attempts to resolve an agency-* ID as a Skill.
+await rm(join(target, "agency-agents"), { recursive: true, force: true });
+
+function runtimeAgentId(category, sourcePath) {
+  const fileSlug = sourcePath.replace(/\.md$/iu, "").replaceAll("/", "-");
+  return fileSlug.startsWith(`${category}-`) ? `agency-${fileSlug}` : `agency-${category}-${fileSlug}`;
+}
+
+async function listAgentFiles(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...await listAgentFiles(path));
+    else if (entry.isFile() && entry.name.endsWith(".md")) files.push(path);
+  }
+  return files.sort();
+}
+
+await rm(agentsTarget, { recursive: true, force: true });
+await mkdir(agentsTarget, { recursive: true });
+const agencyAgents = [];
+for (const categoryEntry of (await readdir(agentsSource, { withFileTypes: true })).filter((entry) => entry.isDirectory()).sort((left, right) => left.name.localeCompare(right.name))) {
+  const category = categoryEntry.name;
+  const categoryRoot = join(agentsSource, category);
+  for (const file of await listAgentFiles(categoryRoot)) {
+    const sourcePath = relative(categoryRoot, file).replaceAll("\\", "/");
+    const id = runtimeAgentId(category, sourcePath);
+    await cp(file, join(agentsTarget, `${id}.md`), { force: true });
+    agencyAgents.push({ id, category, sourcePath, relativePath: `${id}.md`, sourceUrl: `https://github.com/msitarzewski/agency-agents/blob/main/${category}/${sourcePath}` });
+  }
+}
+await writeFile(join(repoRoot, "apps", "desktop", "dist-runtime", "agency-agent-manifest.json"), `${JSON.stringify({ schemaVersion: 1, repository: "https://github.com/msitarzewski/agency-agents", agents: agencyAgents }, null, 2)}\n`, "utf8");
 const catalogPath = join(repoRoot, ".artifacts", "shared-skill-catalog.json");
 try { await writeFile(join(repoRoot, "apps", "desktop", "dist-runtime", "skill-catalog.json"), await readFile(catalogPath, "utf8"), "utf8"); }
 catch { throw new Error("Run the shared skill catalog generator before bundling desktop skills."); }

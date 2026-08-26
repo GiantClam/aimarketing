@@ -8,7 +8,7 @@ export type WorkflowDefinitionPortValueKind = WorkflowPortValueKind | "workflow"
 export type WorkflowDefinitionPortRole = WorkflowPortRole;
 export type WorkflowDefinitionNodeV2 = { nodeKey: string; type: string; nodeVersion: number; title: string; positionX: number; positionY: number; config: Record<string, unknown> };
 export type WorkflowDefinitionEdgeV2 = { edgeKey: string; sourceNodeKey: string; sourcePortId: string; targetNodeKey: string; targetPortId: string; inputName?: string | null };
-export type WorkflowDefinitionEnvelope = { schemaVersion: typeof CURRENT_WORKFLOW_SCHEMA_VERSION; revision: number; definitionHash: string; nodes: WorkflowDefinitionNodeV2[]; edges: WorkflowDefinitionEdgeV2[] };
+export type WorkflowDefinitionEnvelope = { schemaVersion: typeof CURRENT_WORKFLOW_SCHEMA_VERSION; revision: number; definitionHash: string; nodes: WorkflowDefinitionNodeV2[]; edges: WorkflowDefinitionEdgeV2[]; metadata?: Record<string, unknown> };
 export type WorkflowDefinitionEnvelopeV2 = WorkflowDefinitionEnvelope;
 export type WorkflowValidationIssueCode = "duplicate_workflow_node_key" | "duplicate_workflow_edge_key" | "dangling_workflow_edge" | "workflow_cycle_detected" | "invalid_port_connection" | "invalid_workflow_port_role" | "invalid_workflow_port_cardinality" | "unsupported_node_type" | "unsupported_node_version" | "invalid_workflow_definition";
 export type WorkflowValidationIssue = { code: WorkflowValidationIssueCode; nodeKey?: string; edgeKey?: string; field?: string; message: string };
@@ -67,7 +67,7 @@ function canonicalHashPayload(definition: WorkflowDefinitionEnvelope) {
 }
 
 export function canonicalizeWorkflowDefinition(definition: WorkflowDefinitionEnvelope): WorkflowDefinitionEnvelope {
-  return { schemaVersion: CURRENT_WORKFLOW_SCHEMA_VERSION, revision: definition.revision, definitionHash: definition.definitionHash, nodes: [...definition.nodes].map((node) => ({ ...node, config: sortObjectKeys(node.config) as Record<string, unknown> })).sort((left, right) => compareStrings(left.nodeKey, right.nodeKey)), edges: [...definition.edges].sort((left, right) => compareStrings(left.edgeKey, right.edgeKey)) };
+  return { schemaVersion: CURRENT_WORKFLOW_SCHEMA_VERSION, revision: definition.revision, definitionHash: definition.definitionHash, nodes: [...definition.nodes].map((node) => ({ ...node, config: sortObjectKeys(node.config) as Record<string, unknown> })).sort((left, right) => compareStrings(left.nodeKey, right.nodeKey)), edges: [...definition.edges].sort((left, right) => compareStrings(left.edgeKey, right.edgeKey)), ...(definition.metadata ? { metadata: sortObjectKeys(definition.metadata) as Record<string, unknown> } : {}) };
 }
 export function canonicalizeWorkflowDefinitionJson(definition: WorkflowDefinitionEnvelope) { return canonicalJson(canonicalHashPayload(canonicalizeWorkflowDefinition(definition))); }
 export function hashWorkflowDefinition(definition: WorkflowDefinitionEnvelope) { return sha256Hex(canonicalizeWorkflowDefinitionJson(definition)); }

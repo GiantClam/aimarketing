@@ -41,7 +41,7 @@
 - 查询参数 Agent 路由现在与云端一样只高亮精确 Agent 项，不会同时激活 `/dashboard/ai` 基础入口；Composer 的按钮尺寸、圆角、顶部黄色强调线和消息 Markdown 段落/列表/代码块间距也与云端样式契约一致。
 - AI 对话在非落地空会话状态下也会把云端快捷提示词放回 Composer；落地页补齐 `AI WORKSPACE` 信号条、标题层级和 `dashboard-panel` 快捷卡语义，避免从历史会话返回时出现交互分叉。
 - 普通对话和首页输入区同时提供 Skill 选择（自动、内容写作、营销分析、ppt-master、Obsidian RAG）；选定 Skill 作为 OpenCode 本轮上下文，不改变本地会话原文。
-- 默认 `local + ollama/qwen3:8b` 会按模型前缀写入 OpenCode 的 `ollama` provider，避免首启后本地模型被错误归入 `local`。
+- 首次启动不预置文本模型；用户配置 Provider 和 model 后，运行时才会向 OpenCode 写入对应模型。
 - 能力中心保留线上 `/dashboard/capabilities` 路由与同构能力目录；视频 Agent `/dashboard/video` 单独提供音频/视频分组卡、能力 tile 和 launcher 多标签。卡片点击后进入对应本地工作区，不引入企业预设或发布市场。
 - 任务中心保留线上任务路由，读取 SQLite `runs`，展示 succeeded/failed/interrupted/cancelled 状态，并可把最近一次用户指令载入普通对话以显式准备重试。
 - 工作流页面支持 JSON 导出/导入；导入经过 `workflow-core` schema migration，重新生成本地 workflow ID，不复制原机 Provider、路径或数据库 ID。

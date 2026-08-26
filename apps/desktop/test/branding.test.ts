@@ -24,6 +24,7 @@ function icoSizes(path: string): number[] {
 }
 
 test("desktop brand assets are wired into the window, bundle, and responsive sidebar", () => {
+  const app = readFileSync(resolve(desktopRoot, "src/App.tsx"), "utf8");
   const index = readFileSync(resolve(desktopRoot, "index.html"), "utf8");
   const styles = readFileSync(resolve(desktopRoot, "src/styles.css"), "utf8");
   const tauriConfig = JSON.parse(readFileSync(resolve(desktopRoot, "src-tauri/tauri.conf.json"), "utf8")) as {
@@ -46,8 +47,16 @@ test("desktop brand assets are wired into the window, bundle, and responsive sid
   assert.match(csp, /connect-src[^;]*ipc:\s*http:\/\/ipc\.localhost/u);
   const capability = JSON.parse(readFileSync(resolve(desktopRoot, "src-tauri/capabilities/default.json"), "utf8")) as { permissions: string[] };
   assert.ok(capability.permissions.includes("core:event:default"));
-  assert.match(styles, /\.wb-brand-mark[^}]+ai-marketing-icon-64\.png/u);
+  assert.match(styles, /\.wb-brand-mark[^}]+background:\s*var\(--wb-sidebar-highlight/u);
   assert.match(styles, /\.wb-brand-title[^}]+ai-marketing-logo\.svg/u);
-  assert.match(styles, /\.wb-shell:not\(\.wb-shell-collapsed\)[^}]+\.wb-brand-mark[^}]+display:\s*none/u);
+  assert.match(styles, /\.wb-brand-title[^}]+display:\s*none/u);
+  assert.doesNotMatch(styles, /\.wb-shell:not\(\.wb-shell-collapsed\)[^}]+\.wb-brand-mark[^}]+display:\s*none/u);
   assert.match(styles, /\.bootstrap-mark[^}]+ai-marketing-icon-64\.png/u);
+  assert.match(app, /"--primary":\s*WORKBENCH_THEME\.light\.primary/u);
+  assert.match(app, /"--sidebar-primary":\s*WORKBENCH_THEME\.light\.sidebarPrimary/u);
+  assert.match(app, /"--wb-sidebar-highlight":\s*WORKBENCH_THEME\.light\.sidebarPrimary/u);
+  assert.match(app, /className="bootstrap-screen" style=\{(?:style|workbenchThemeStyle)\}/u);
+  assert.match(app, /className="wb-runtime-status"[\s\S]*name="runtime"/u);
+  assert.match(styles, /\.wb-runtime-status-icon\s*\{/u);
+  assert.doesNotMatch(styles, /#f5f84a/u);
 });

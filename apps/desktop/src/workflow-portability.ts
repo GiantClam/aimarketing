@@ -1,5 +1,5 @@
 import { parseAndMigrateWorkflowDefinition, type WorkflowDefinitionEnvelope } from "@aimarketing/workflow-core";
-import { sanitizeWorkflowDefinitionForStorage } from "./workflow-storage";
+import { sanitizeWorkflowDefinitionForExport, sanitizeWorkflowDefinitionForStorage } from "./workflow-storage";
 
 export type WorkflowExportPayload = {
   format: "aimarketing-workflow";
@@ -15,7 +15,7 @@ export function createWorkflowExportPayload(definition: WorkflowDefinitionEnvelo
   return {
     format: "aimarketing-workflow",
     exportedAt,
-    definition: sanitizeWorkflowDefinitionForStorage(definition),
+    definition: sanitizeWorkflowDefinitionForExport(definition),
   };
 }
 

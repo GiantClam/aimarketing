@@ -1,7 +1,8 @@
 import { copyFile, mkdir, open, readFile, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { DesktopPaths } from "./paths";
-import type { DesktopProviderConfig, DesktopProviderDefaults, DesktopProviderProfiles, ProviderCapability } from "../src/provider-config";
+import { usableRunningHubWorkflowId, type DesktopProviderConfig, type DesktopProviderDefaults, type DesktopProviderProfiles, type ProviderCapability } from "../src/provider-config";
+import { migrateLegacyRunningHubWorkflows, type RunningHubWorkflowRegistration } from "../src/runninghub-workflow";
 
 export interface DesktopConfig {
   readonly schemaVersion: 1;
@@ -11,6 +12,8 @@ export interface DesktopConfig {
   readonly obsidianIndexPath?: string;
   readonly embedding?: DesktopEmbeddingConfig;
   readonly offlineRuntimeZipPath?: string;
+  /** Agent IDs explicitly added from the local Agent Center to the sidebar. */
+  readonly menuAgentIds?: string[];
   readonly provider: DesktopProviderConfig & { readonly model: string };
   readonly providers?: DesktopProviderProfiles;
   readonly defaults?: DesktopProviderDefaults;
@@ -25,7 +28,7 @@ export interface DesktopEmbeddingConfig {
 }
 
 export function defaultDesktopConfig(paths: DesktopPaths): DesktopConfig {
-  return { schemaVersion: 1, locale: "auto", workspacePath: paths.projects, provider: { id: "local", source: "local", model: "ollama/qwen3:8b", models: ["ollama/qwen3:8b"], baseUrl: "http://127.0.0.1:11434/v1", apiKey: "" }, runtime: { source: "system" } };
+  return { schemaVersion: 1, locale: "auto", workspacePath: paths.projects, provider: { id: "local", source: "local", model: "", baseUrl: "http://127.0.0.1:11434/v1", apiKey: "" }, runtime: { source: "system" } };
 }
 
 export async function readDesktopConfig(paths: DesktopPaths): Promise<DesktopConfig> {
@@ -60,7 +63,8 @@ function parseConfig(raw: string): DesktopConfig {
     ...(typeof value.obsidianIndexPath === "string" ? { obsidianIndexPath: value.obsidianIndexPath } : {}),
     ...(embedding ? { embedding } : {}),
     ...(typeof (value as Partial<DesktopConfig>).offlineRuntimeZipPath === "string" ? { offlineRuntimeZipPath: (value as Partial<DesktopConfig>).offlineRuntimeZipPath } : {}),
-    provider: { id: String(value.provider.id ?? "local"), model, ...(models.length ? { models } : {}), ...(capabilities ? { capabilities } : {}), ...(value.provider.source ? { source: String(value.provider.source) } : {}), ...(value.provider.baseUrl ? { baseUrl: String(value.provider.baseUrl) } : {}), ...(value.provider.apiKey ? { apiKey: String(value.provider.apiKey) } : {}), ...(value.provider.reasoningEffort ? { reasoningEffort: String(value.provider.reasoningEffort) } : {}), ...(typeof value.provider.skillId === "string" && value.provider.skillId.trim() ? { skillId: value.provider.skillId.trim() } : {}), ...(value.provider.endpoint ? { endpoint: String(value.provider.endpoint) } : {}), ...(value.provider.queryEndpoint ? { queryEndpoint: String(value.provider.queryEndpoint) } : {}) },
+    ...(normalizeMenuAgentIds(value.menuAgentIds).length ? { menuAgentIds: normalizeMenuAgentIds(value.menuAgentIds) } : {}),
+    provider: { id: String(value.provider.id ?? "local"), model, ...(models.length ? { models } : {}), ...(capabilities ? { capabilities } : {}), ...(value.provider.source ? { source: String(value.provider.source) } : {}), ...(value.provider.baseUrl ? { baseUrl: String(value.provider.baseUrl) } : {}), ...(value.provider.apiKey ? { apiKey: String(value.provider.apiKey) } : {}), ...(value.provider.reasoningEffort ? { reasoningEffort: String(value.provider.reasoningEffort) } : {}), ...(typeof value.provider.skillId === "string" && value.provider.skillId.trim() ? { skillId: value.provider.skillId.trim() } : {}), ...(value.provider.endpoint ? { endpoint: String(value.provider.endpoint) } : {}), ...(value.provider.queryEndpoint ? { queryEndpoint: String(value.provider.queryEndpoint) } : {}), ...(migrateLegacyRunningHubWorkflows(normalizeRunningHubWorkflows(value.provider.workflows), legacyWorkflowIds(value.provider)) ? { workflows: migrateLegacyRunningHubWorkflows(normalizeRunningHubWorkflows(value.provider.workflows), legacyWorkflowIds(value.provider)) } : {}) },
     ...(normalizeProviderProfiles(value.providers) ? { providers: normalizeProviderProfiles(value.providers) } : {}),
     ...(normalizeProviderDefaults(value.defaults) ? { defaults: normalizeProviderDefaults(value.defaults) } : {}),
     runtime: {
@@ -76,6 +80,11 @@ function parseConfig(raw: string): DesktopConfig {
       ...(value.runtime.embeddingPath ? { embeddingPath: String(value.runtime.embeddingPath) } : {}),
     },
   };
+}
+
+function normalizeMenuAgentIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((id): id is string => typeof id === "string").map((id) => id.trim()).filter(Boolean))].slice(0, 64);
 }
 
 function normalizeProviderProfiles(value: unknown): DesktopProviderProfiles | undefined {
@@ -100,9 +109,25 @@ function normalizeProviderProfiles(value: unknown): DesktopProviderProfiles | un
       ...(typeof record.skillId === "string" && record.skillId.trim() ? { skillId: record.skillId.trim() } : {}),
       ...(typeof record.endpoint === "string" && record.endpoint.trim() ? { endpoint: record.endpoint.trim() } : {}),
       ...(typeof record.queryEndpoint === "string" && record.queryEndpoint.trim() ? { queryEndpoint: record.queryEndpoint.trim() } : {}),
+      ...(migrateLegacyRunningHubWorkflows(normalizeRunningHubWorkflows(record.workflows), legacyWorkflowIds(record)) ? { workflows: migrateLegacyRunningHubWorkflows(normalizeRunningHubWorkflows(record.workflows), legacyWorkflowIds(record)) } : {}),
     };
   }
   return Object.keys(profiles).length ? profiles : undefined;
+}
+
+function normalizeRunningHubWorkflows(value: unknown): readonly RunningHubWorkflowRegistration[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const workflows = value.filter((item): item is RunningHubWorkflowRegistration => Boolean(item && typeof item === "object" && !Array.isArray(item) && typeof (item as Record<string, unknown>).id === "string" && typeof (item as Record<string, unknown>).remoteWorkflowId === "string" && Array.isArray((item as Record<string, unknown>).inputSchema) && Array.isArray((item as Record<string, unknown>).nodeBindings))).slice(0, 128);
+  return workflows.length ? workflows : undefined;
+}
+
+function legacyWorkflowIds(value: Record<string, unknown>) {
+  return {
+    ...(usableRunningHubWorkflowId(value.workflowId) ? { workflowId: usableRunningHubWorkflowId(value.workflowId) } : {}),
+    ...(usableRunningHubWorkflowId(value.workflowId) ? { workflowId: usableRunningHubWorkflowId(value.workflowId) } : {}),
+    ...(usableRunningHubWorkflowId(value.digitalHumanWorkflowId) ? { digitalHumanWorkflowId: usableRunningHubWorkflowId(value.digitalHumanWorkflowId) } : {}),
+    ...(usableRunningHubWorkflowId(value.videoEnhanceWorkflowId) ? { videoEnhanceWorkflowId: usableRunningHubWorkflowId(value.videoEnhanceWorkflowId) } : {}),
+  };
 }
 
 function normalizeProviderDefaults(value: unknown): DesktopProviderDefaults | undefined {

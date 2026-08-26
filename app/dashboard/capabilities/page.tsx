@@ -10,7 +10,8 @@ import {
   type CapabilityMediaWorkspaceFeatureId,
 } from "@/lib/platform/capabilities-media-workspace"
 import { listPlatformCapabilityExecutionStates } from "@/lib/platform/execution"
-import { listPlatformArtifactsForEnterprise } from "@/lib/platform/task-run-store"
+import { serializePlatformMediaTask } from "@/lib/platform/media-task-view"
+import { getPlatformTaskRun, listPlatformArtifactsForEnterprise } from "@/lib/platform/task-run-store"
 
 function normalizeInitialFeatureId(value: string | string[] | undefined): CapabilityMediaWorkspaceFeatureId | null {
   const raw = Array.isArray(value) ? value[0] : value
@@ -41,10 +42,20 @@ export default async function DashboardCapabilitiesPage({
   const resolvedSearchParams = (await searchParams) || {}
   const currentUser = await getServerSessionUser().catch(() => null)
   const mediaWorkspace = getCapabilityMediaWorkspaceFeatures(displayLocale)
+  const rawRunId = Array.isArray(resolvedSearchParams.runId) ? resolvedSearchParams.runId[0] : resolvedSearchParams.runId
+  const numericRunId = rawRunId && /^\d+$/.test(rawRunId) ? Number(rawRunId) : null
   const artifacts =
     currentUser?.enterpriseId != null
       ? await listPlatformArtifactsForEnterprise(currentUser.enterpriseId)
       : []
+  const taskRun =
+    currentUser?.enterpriseId != null && numericRunId != null
+      ? await getPlatformTaskRun(numericRunId)
+      : null
+  const initialTask =
+    taskRun && taskRun.enterpriseId === currentUser?.enterpriseId && taskRun.kind === "media"
+      ? serializePlatformMediaTask(taskRun)
+      : null
   const executionMap = new Map(
     (await listPlatformCapabilityExecutionStates(locale, currentUser)).map((item) => [item.capabilitySlug, item] as const),
   )
@@ -79,6 +90,7 @@ export default async function DashboardCapabilitiesPage({
           sourceUrl: resolvePlatformArtifactSourceUrl(artifact),
         }))}
         initialFeatureId={normalizeInitialFeatureId(resolvedSearchParams.feature)}
+        initialTask={initialTask}
       />
   )
 }

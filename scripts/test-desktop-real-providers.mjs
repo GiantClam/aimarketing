@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertRealProviderConfig, buildRealProviderSmokeScope, defaultVideoPollBudget, hasExpectedSmokeResponse, resolveNonSeedanceVideoProfile } from "./real-provider-config.mjs";
+import { assertRealProviderConfig, buildRealProviderSmokeScope, defaultVideoPollBudget, hasExpectedSmokeResponse, resolveCapabilityProviderProfile, resolveNonSeedanceVideoProfile } from "./real-provider-config.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const configPath = resolve(process.env.AIMARKETING_REAL_PROVIDER_CONFIG ?? resolve(repoRoot, "apps/desktop/real-providers.test.local.json"));
@@ -12,9 +12,7 @@ const imageOnly = process.argv.includes("--image-only") || process.env.AIMARKETI
 const musicOnly = process.argv.includes("--music-only") || process.env.AIMARKETING_PROVIDER_SMOKE_MUSIC_ONLY === "1";
 const includeVideo = videoOnly || process.argv.includes("--include-video") || process.env.AIMARKETING_PROVIDER_SMOKE_INCLUDE_VIDEO === "1";
 const smokeScope = buildRealProviderSmokeScope({ includeVideo, videoOnly, audioOnly, imageOnly, musicOnly });
-const imageSize = String(process.env.AIMARKETING_PROVIDER_IMAGE_SIZE ?? "256x256").trim();
 const supportedImageSizes = new Set(["256x256", "512x512", "1024x1024", "1536x1024", "1024x1536"]);
-if (!supportedImageSizes.has(imageSize)) throw new Error(`real_provider_image_size_unsupported:${imageSize}`);
 
 function endpoint(baseUrl, path) {
   return `${String(baseUrl).replace(/\/+$/u, "")}/${String(path).replace(/^\/+/, "")}`;
@@ -63,7 +61,17 @@ function providerSource(profile) {
 }
 
 function resolveImageSmokeModel(profile) {
-  return providerSource(profile) === "pptoken" ? "gpt-image-2" : profile.model;
+  const configured = String(profile.model ?? "").trim();
+  if (providerSource(profile) !== "pptoken") return configured;
+  // The gateway exposes fixed-size image SKUs such as `gpt-image-2-1k`.
+  // Keep an explicitly configured SKU while preserving the historic default
+  // for profiles whose model is only a generic catalog label.
+  return /^gpt-image-2(?:-\d+k)?$/iu.test(configured) ? configured : "gpt-image-2";
+}
+
+function defaultImageSmokeSize(model) {
+  // Fixed-size image SKUs reject the inexpensive 256px smoke fixture.
+  return /-1k$/iu.test(String(model ?? "").trim()) ? "1024x1024" : "256x256";
 }
 
 function buildImageSmokeBody(model, imageSize) {
@@ -202,13 +210,17 @@ function configuredAudioProfile(value) {
 // bounded number of times. The default scope excludes video/Seedance; the
 // explicit --include-video path only selects a configured non-Seedance profile.
 const configuredVideoProfile = includeVideo ? resolveNonSeedanceVideoProfile(config) : undefined;
-const imageSmokeModel = resolveImageSmokeModel(config.image);
+const configuredImageProfile = resolveCapabilityProviderProfile(config, "image", "image");
+if (!configuredImageProfile) throw new Error("real_provider_config_image_profile_missing");
+const imageSmokeModel = resolveImageSmokeModel(configuredImageProfile);
+const imageSize = String(process.env.AIMARKETING_PROVIDER_IMAGE_SIZE ?? defaultImageSmokeSize(imageSmokeModel)).trim();
+if (!supportedImageSizes.has(imageSize)) throw new Error(`real_provider_image_size_unsupported:${imageSize}`);
 const results = includeVideo && !configuredVideoProfile
   ? [{ label: "video", ok: false, error: "real_provider_config_non_seedance_video_profile_missing" }]
   : videoOnly
     ? []
   : imageOnly
-    ? [await request("image", endpoint(config.image.baseUrl, "images/generations"), config.image.apiKey, buildImageSmokeBody(imageSmokeModel, imageSize))]
+    ? [await request("image", endpoint(configuredImageProfile.baseUrl, "images/generations"), configuredImageProfile.apiKey, buildImageSmokeBody(imageSmokeModel, imageSize))]
   : audioOnly
     ? [await requestAudio(configuredAudioProfile(config))]
   : musicOnly
@@ -220,7 +232,7 @@ const results = includeVideo && !configuredVideoProfile
         max_tokens: 32,
         temperature: 0,
       }),
-      await request("image", endpoint(config.image.baseUrl, "images/generations"), config.image.apiKey, buildImageSmokeBody(imageSmokeModel, imageSize)),
+      await request("image", endpoint(configuredImageProfile.baseUrl, "images/generations"), configuredImageProfile.apiKey, buildImageSmokeBody(imageSmokeModel, imageSize)),
       await requestAudio(configuredAudioProfile(config)),
     ];
 

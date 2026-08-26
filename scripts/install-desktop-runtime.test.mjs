@@ -66,6 +66,7 @@ test("installer falls back through every mirror after bounded HTTP failures", as
         "$Proxy=''",
         `$stageRoot=${quote(stageRoot)}`,
         `$asset=ConvertFrom-Json ${quote(assetJson)}`,
+        "function Write-RuntimeProgress { param([string]$message) }",
         functionSource,
         "New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null",
         "Install-VerifiedAsset $asset",
@@ -106,6 +107,32 @@ test("installer seeds bundled runtime and skills before downloading missing comp
   assert.match(source, /HttpWebRequest/u);
   assert.match(source, /pip install[^\n]+--timeout 30/u);
   assert.match(source, /if \(-not \$OfflineZip\) \{ Seed-BundledRuntime \}/u);
+});
+
+test("installer normalizes Windows extended paths before PowerShell path operations", async () => {
+  const source = await readFile(scriptPath, "utf8");
+  assert.match(source, /function Convert-ToPowerShellCompatiblePath/);
+  assert.match(source, /\$ManifestPath = Convert-ToPowerShellCompatiblePath \$ManifestPath/);
+  assert.match(source, /\$InstallRoot = Convert-ToPowerShellCompatiblePath \$InstallRoot/);
+  assert.match(source, /\$OfflineZip = Convert-ToPowerShellCompatiblePath \$OfflineZip/);
+  assert.match(source, /Substring\(4\)/);
+  assert.match(source, /Substring\(8\)/);
+});
+
+test("installer emits bounded progress markers for the desktop bootstrap UI", async () => {
+  const source = await readFile(scriptPath, "utf8");
+  assert.match(source, /function Write-RuntimeProgress/);
+  assert.match(source, /RUNTIME_PROGRESS:/);
+  assert.match(source, /downloading:\$\(\$asset\.id\)/);
+  assert.match(source, /python_dependencies_check/);
+  assert.match(source, /activating_runtime/);
+  assert.match(source, /completed/);
+});
+
+test("nested Node runtime cleanup is idempotent after Move-Item", async () => {
+  const source = await readFile(scriptPath, "utf8");
+  assert.match(source, /try \{ Remove-Item -LiteralPath \$nestedNode\.FullName -Recurse -Force -ErrorAction Stop \} catch \{ \}/u);
+  assert.match(source, /try \{ Remove-Item -LiteralPath \$stageRoot -Recurse -Force -ErrorAction Stop \} catch \{ \}/u);
 });
 
 test("installer keeps source fallback, resume, proxy and disk gates fail-closed", async () => {

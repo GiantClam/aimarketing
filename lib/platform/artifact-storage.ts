@@ -76,7 +76,12 @@ function buildPlatformArtifactStorageKey(input: {
 }
 
 export function isPlatformArtifactR2Available() {
-  return isR2Available()
+  const localDesktop = [
+    process.env.AIMARKETING_DESKTOP_LOCAL,
+    process.env.AI_ENTRY_RUNTIME_MODE,
+  ].some((value) => value === "1" || value === "true" || value === "desktop-local-exec")
+
+  return !localDesktop && isR2Available()
 }
 
 export async function mirrorPlatformArtifactToR2(input: {
@@ -88,6 +93,10 @@ export async function mirrorPlatformArtifactToR2(input: {
   contentType?: string | null
   suggestedExtension?: string | null
 }) {
+  if (!isPlatformArtifactR2Available()) {
+    throw new Error("platform_artifact_r2_disabled")
+  }
+
   const client = getR2Client()
   if (!client) {
     throw new Error("platform_artifact_r2_config_missing")
@@ -138,6 +147,10 @@ export async function uploadPlatformArtifactBufferToR2(input: {
   fileName: string
   contentType: string
 }) {
+  if (!isPlatformArtifactR2Available()) {
+    throw new Error("platform_artifact_r2_disabled")
+  }
+
   const client = getR2Client()
   if (!client) {
     throw new Error("platform_artifact_r2_config_missing")

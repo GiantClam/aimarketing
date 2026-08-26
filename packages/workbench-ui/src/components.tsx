@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+"use client";
+
+import React, { useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -204,6 +206,66 @@ export function WorkbenchWriterMessage({ role, label, content, timestamp, pendin
 }
 
 export type WorkbenchShellNavItem = { path: string; label: string; section?: string; glyph?: string; icon?: ReactNode; placement?: "main" | "footer" | "hidden" };
+export type WorkbenchShellSessionItem = { path: string; title: string; updatedAt?: string; agentId?: string; status?: "running" | "unread" };
+
+export function isWorkbenchAssistantPath(path: string) {
+  return path === "/dashboard/ai" || path.startsWith("/dashboard/ai/") || path.startsWith("/dashboard/ai?");
+}
+
+/** Routes whose local durable conversations are rendered in the shell sidebar. */
+export function isWorkbenchSessionPath(path: string) {
+  const pathname = path.split("?", 1)[0].replace(/\/+$/u, "") || "/";
+  return pathname === "/dashboard/ai"
+    || pathname.startsWith("/dashboard/ai/")
+    || pathname === "/dashboard/writer"
+    || pathname.startsWith("/dashboard/writer/")
+    || pathname === "/dashboard/image-assistant"
+    || pathname.startsWith("/dashboard/image-assistant/");
+}
+
+function workbenchAgentId(path: string) {
+  const query = path.split("?", 2)[1];
+  const agentId = query ? new URLSearchParams(query).get("agent") : null;
+  return agentId?.trim() || null;
+}
+
+/**
+ * Conversations belong to either a concrete Agent or an entry-only expert
+ * surface. The online consulting route has no `agent` parameter, so its
+ * `entry` value must remain part of the session identity.
+ */
+export function workbenchSessionScope(path: string) {
+  const pathname = path.split("?", 1)[0].replace(/\/+$/u, "") || "/";
+  const query = path.split("?", 2)[1];
+  const params = new URLSearchParams(query ?? "");
+  const agentId = params.get("agent")?.trim();
+  if (agentId) return agentId;
+  const entry = params.get("entry")?.trim();
+  if (entry) return `entry:${entry}`;
+  if (pathname === "/dashboard/writer" || pathname.startsWith("/dashboard/writer/")) return "entry:writer";
+  if (pathname === "/dashboard/image-assistant" || pathname.startsWith("/dashboard/image-assistant/")) return "entry:image-assistant";
+  return undefined;
+}
+
+export function isWorkbenchNavItemActive(itemPath: string, activePath: string, navPaths: readonly string[] = []) {
+  const normalize = (path: string) => {
+    const [pathname, query] = path.split("?", 2);
+    const normalizedPathname = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+    return query ? `${normalizedPathname}?${query}` : normalizedPathname;
+  };
+  const normalizedItemPath = normalize(itemPath);
+  const normalizedActivePath = normalize(activePath);
+  if (normalizedItemPath === normalizedActivePath) return true;
+  if (navPaths.map(normalize).includes(normalizedActivePath)) return false;
+
+  const itemBasePath = normalizedItemPath.split("?")[0];
+  const activeBasePath = normalizedActivePath.split("?")[0];
+  const activeAgentId = workbenchAgentId(normalizedActivePath);
+  if (activeAgentId && itemBasePath === "/dashboard/ai" && navPaths.some((path) => workbenchAgentId(path) === activeAgentId)) return false;
+  if (normalizedItemPath !== itemBasePath) return false;
+  if (itemBasePath === "/dashboard") return activeBasePath === itemBasePath;
+  return activeBasePath === itemBasePath || activeBasePath.startsWith(`${itemBasePath}/`);
+}
 
 export function WorkbenchShellFrame({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`wb-shell-frame ${className}`.trim()}>{children}</div>;
@@ -222,6 +284,12 @@ export function WorkbenchShell({
   title = "MARKETING",
   localLabel = "本地工作区 · Full Access",
   status = "",
+  sessions = [],
+  sessionsLabel,
+  activeSessionAgentId,
+  activeSessionAgentLabel,
+  newSessionLabel,
+  onNewSession,
 }: {
   navItems: WorkbenchShellNavItem[];
   activePath: string;
@@ -235,15 +303,48 @@ export function WorkbenchShell({
   title?: string;
   localLabel?: string;
   status?: ReactNode;
+  sessions?: WorkbenchShellSessionItem[];
+  sessionsLabel?: string;
+  /** Restricts the expanded chat list to the selected Agent, matching the web workspace. */
+  activeSessionAgentId?: string | null;
+  activeSessionAgentLabel?: string;
+  newSessionLabel?: string;
+  onNewSession?: () => void;
 }) {
+  const [assistantSessionsExpanded, setAssistantSessionsExpanded] = useState(true);
   const locale = shellLocale ?? workbenchLocale();
-  const toggleCopy = locale === "en" ? { navigation: "Workspace navigation", expand: "Expand sidebar", collapse: "Collapse sidebar" } : { navigation: "工作区导航", expand: "展开侧栏", collapse: "收起侧栏" };
+  const toggleCopy = locale === "en"
+    ? { navigation: "Workspace navigation", expand: "Expand sidebar", collapse: "Collapse sidebar", recent: "Recent chats", newSession: "New chat", empty: "No chats yet" }
+    : { navigation: "工作区导航", expand: "展开侧栏", collapse: "收起侧栏", recent: "最近会话", newSession: "新建会话", empty: "暂无会话" };
   const visibleNavItems = navItems.filter((item) => item.placement !== "hidden");
   const mainNavItems = visibleNavItems.filter((item) => item.placement !== "footer");
   const footerNavItems = navItems.filter((item) => item.placement === "footer");
-  // Query-string Agent routes must win over their base `/dashboard/ai` item.
-  // The cloud sidebar highlights the exact Agent entry, not both entries.
-  const hasExactActiveRoute = navItems.some((item) => item.path === activePath);
+  const navPaths = navItems.map((item) => item.path);
+  const activeAgentFromPath = workbenchAgentId(activePath);
+  const activeSessionScope = workbenchSessionScope(activePath);
+  const hasMatchingSessionNav = Boolean(activeSessionScope && navItems.some((item) => workbenchSessionScope(item.path) === activeSessionScope));
+  const renderSessionSection = (item: WorkbenchShellNavItem) => {
+    const itemSessionScope = workbenchSessionScope(item.path);
+    const isRoot = item.path === "/dashboard/ai" || item.path === "/dashboard/writer" || item.path === "/dashboard/image-assistant";
+    const isCurrentAgent = Boolean(itemSessionScope && itemSessionScope === activeSessionScope);
+    const isFallbackAgent = isRoot && Boolean(activeSessionScope) && !hasMatchingSessionNav;
+    const shouldShow = !collapsed && assistantSessionsExpanded && isWorkbenchSessionPath(activePath) && (isCurrentAgent || (isRoot && (!activeSessionScope || isFallbackAgent)));
+    if (!shouldShow) return null;
+    const visibleSessions = itemSessionScope || isFallbackAgent || activeSessionAgentId
+      ? sessions.filter((session) => session.agentId === (itemSessionScope ?? activeSessionAgentId ?? activeSessionScope))
+      : sessions.filter((session) => !session.agentId);
+    const sessionTitle = itemSessionScope || isFallbackAgent ? (isCurrentAgent || isFallbackAgent ? activeSessionAgentLabel ?? item.label : item.label) : sessionsLabel ?? toggleCopy.recent;
+    const showSessionHeading = itemSessionScope !== "entry:writer" && itemSessionScope !== "entry:image-assistant";
+    return <section className="wb-sidebar-sessions" aria-label={sessionTitle}>
+      {showSessionHeading ? <div className="wb-sidebar-session-heading">{sessionTitle}</div> : null}
+      {onNewSession ? <button type="button" className="wb-sidebar-session-create" onClick={onNewSession} aria-label={newSessionLabel ?? toggleCopy.newSession} title={newSessionLabel ?? toggleCopy.newSession}><span aria-hidden="true">＋</span>{newSessionLabel ?? toggleCopy.newSession}</button> : null}
+      {visibleSessions.length ? <div className="wb-sidebar-session-list">{visibleSessions.slice(0, 30).map((session) => {
+        const isActive = session.path === activePath;
+        const statusLabel = session.status === "running" ? (locale === "zh" ? "运行中" : "Running") : session.updatedAt;
+        return <button key={session.path} type="button" className={`wb-sidebar-session ${isActive ? "wb-sidebar-session-active" : ""}`.trim()} onClick={() => onNavigate(session.path)} aria-current={isActive ? "page" : undefined} title={session.title}><span>{session.status === "running" ? <i className="wb-sidebar-session-status" aria-label={statusLabel} /> : null}{session.title}</span>{statusLabel ? <small>{statusLabel}</small> : null}</button>;
+      })}</div> : <div className="wb-sidebar-session-empty">{toggleCopy.empty}</div>}
+    </section>;
+  };
   let lastSection: string | undefined;
   return (
     <WorkbenchShellFrame className={`wb-shell ${collapsed ? "wb-shell-collapsed" : ""}`.trim()}>
@@ -254,21 +355,29 @@ export function WorkbenchShell({
             {(onLocaleChange || onLocaleToggle) ? <div className="wb-locale-switcher" role="group" aria-label={locale === "zh" ? "界面语言" : "Interface language"}>{!collapsed ? <span className="wb-locale-globe" aria-hidden="true">◉</span> : null}<button type="button" className={`wb-locale-option ${locale === "zh" ? "is-active" : ""}`.trim()} onClick={() => onLocaleChange ? onLocaleChange("zh") : (locale === "zh" ? undefined : onLocaleToggle?.())} aria-pressed={locale === "zh"} aria-label={locale === "zh" ? "切换到中文" : "Switch to Chinese"} title={locale === "zh" ? "切换到中文" : "Switch to Chinese"}>{collapsed ? "中" : "中文"}</button><button type="button" className={`wb-locale-option ${locale === "en" ? "is-active" : ""}`.trim()} onClick={() => onLocaleChange ? onLocaleChange("en") : (locale === "en" ? undefined : onLocaleToggle?.())} aria-pressed={locale === "en"} aria-label={locale === "en" ? "Switch to English" : "切换到英文"} title={locale === "en" ? "Switch to English" : "切换到英文"}>EN</button></div> : null}
             <button type="button" className="wb-sidebar-toggle" aria-label={collapsed ? toggleCopy.expand : toggleCopy.collapse} title={collapsed ? toggleCopy.expand : toggleCopy.collapse} onClick={onToggleCollapsed}><span className="wb-sidebar-toggle-icon" aria-hidden="true">{collapsed ? "›" : "‹"}</span></button>
           </div>
+          {!collapsed && localLabel ? <div className="wb-sidebar-context-label">{localLabel}</div> : null}
         </div>
-        <nav className="wb-sidebar-nav" aria-label={toggleCopy.navigation}>
+        <div className="wb-sidebar-scroll">
+          <nav className="wb-sidebar-nav" aria-label={toggleCopy.navigation}>
             {mainNavItems.map((item) => {
-              const itemBasePath = item.path.split("?")[0];
-              const activeBasePath = activePath.split("?")[0];
-              const isActive = item.path === activePath || (!hasExactActiveRoute && item.path === itemBasePath && (activeBasePath === itemBasePath || activeBasePath.startsWith(`${itemBasePath}/`)));
+              const isActive = isWorkbenchNavItemActive(item.path, activePath, navPaths);
+              const isAssistantRoot = item.path === "/dashboard/ai";
+              const isAssistantEntry = item.path.startsWith("/dashboard/ai");
+              const isSessionRoot = item.path === "/dashboard/ai" || item.path === "/dashboard/writer" || item.path === "/dashboard/image-assistant";
+              const itemSessionScope = workbenchSessionScope(item.path);
+              const sessionItemMatches = itemSessionScope ? itemSessionScope === activeSessionScope : !activeSessionScope || !hasMatchingSessionNav;
+              const assistantHighlighted = (isAssistantRoot && !activeSessionScope && isWorkbenchSessionPath(activePath)) || (itemSessionScope && itemSessionScope === activeSessionScope) || (isActive && isAssistantEntry && !(isAssistantRoot && activeSessionScope));
               const showSection = Boolean(item.section && !collapsed && item.section !== lastSection);
               if (item.section) lastSection = item.section;
               return <div key={item.path}>
             {showSection ? <h3 className="wb-nav-section">{item.section}</h3> : null}
-            <button type="button" className={`wb-nav-item ${isActive ? "wb-nav-item-active" : ""}`.trim()} title={item.label} aria-label={item.label} aria-current={isActive ? "page" : undefined} data-agent-nav={item.label} onClick={() => onNavigate(item.path)}><span className="wb-nav-glyph" aria-hidden="true">{item.icon ?? item.glyph ?? item.label.slice(0, 1)}</span>{!collapsed ? <span className="wb-nav-label">{item.label}</span> : null}</button>
+            <button type="button" className={`wb-nav-item ${isActive || assistantHighlighted ? "wb-nav-item-active" : ""} ${assistantHighlighted ? "wb-nav-item-active-assistant" : ""}`.trim()} title={item.label} aria-label={item.label} aria-current={isActive ? "page" : undefined} aria-expanded={(isSessionRoot || itemSessionScope) ? Boolean(!collapsed && assistantSessionsExpanded && isWorkbenchSessionPath(activePath) && sessionItemMatches) : undefined} data-agent-nav={item.label} onClick={() => { if (!isSessionRoot) { onNavigate(item.path); return; } if (isWorkbenchSessionPath(activePath) && sessionItemMatches) { setAssistantSessionsExpanded((current) => !current); return; } setAssistantSessionsExpanded(true); onNavigate(item.path); }}><span className="wb-nav-glyph" aria-hidden="true">{item.icon ?? item.glyph ?? item.label.slice(0, 1)}</span>{!collapsed ? <span className="wb-nav-label">{item.label}</span> : null}{(isSessionRoot || itemSessionScope) && !collapsed ? <span className="wb-nav-expander" aria-hidden="true">{Boolean(!collapsed && assistantSessionsExpanded && isWorkbenchSessionPath(activePath) && sessionItemMatches) ? "⌄" : "›"}</span> : null}</button>
+            {renderSessionSection(item)}
           </div>;
             })}
-        </nav>
-        <div className="wb-sidebar-footer">{footerNavItems.length ? <div className="wb-sidebar-footer-nav">{footerNavItems.map((item) => <button key={item.path} type="button" className={`wb-nav-item ${item.path === activePath ? "wb-nav-item-active" : ""}`.trim()} title={item.label} aria-label={item.label} aria-current={item.path === activePath ? "page" : undefined} data-agent-nav={item.label} onClick={() => onNavigate(item.path)}><span className="wb-nav-glyph" aria-hidden="true">{item.icon ?? item.glyph ?? item.label.slice(0, 1)}</span>{!collapsed ? <span className="wb-nav-label">{item.label}</span> : null}</button>)}</div> : null}{!collapsed && (localLabel || status) ? <div className="wb-status">{localLabel ? <div className="wb-local-label">{localLabel}</div> : null}{status}</div> : null}</div>
+          </nav>
+        </div>
+        <div className="wb-sidebar-footer">{footerNavItems.length ? <div className="wb-sidebar-footer-nav">{footerNavItems.map((item) => <button key={item.path} type="button" className={`wb-nav-item ${item.path === activePath ? "wb-nav-item-active" : ""}`.trim()} title={item.label} aria-label={item.label} aria-current={item.path === activePath ? "page" : undefined} data-agent-nav={item.label} onClick={() => onNavigate(item.path)}><span className="wb-nav-glyph" aria-hidden="true">{item.icon ?? item.glyph ?? item.label.slice(0, 1)}</span>{!collapsed ? <span className="wb-nav-label">{item.label}</span> : null}</button>)}</div> : null}{!collapsed && status ? <div className="wb-status">{status}</div> : null}</div>
       </aside>
       <main className="wb-shell-main">{children}</main>
     </WorkbenchShellFrame>

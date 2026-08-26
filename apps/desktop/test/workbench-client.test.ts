@@ -1,14 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createDesktopWorkbenchClient } from "../src/workbench-client";
+import { createDesktopChatTransport, createDesktopWorkbenchClient } from "../src/workbench-client";
+import { createDesktopUIMessage } from "@aimarketing/workbench-client";
 
 test("desktop WorkbenchClient adapts conversations, workflows and file actions through Tauri", async () => {
   const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
   const bridge = {
     async invoke<T>(command: string, args?: Record<string, unknown>) {
       calls.push({ command, args });
-      if (command === "list_conversations") return [{ id: "c1", title: "本地会话", updated_at: "2026-08-12T00:00:00Z", message_count: 2, opencode_session_id: "session-c1" }] as T;
-      if (command === "list_messages") return [{ id: "m1", conversation_id: "c1", role: "user", content: "你好", created_at: "2026-08-12T00:00:00Z" }] as T;
+      if (command === "list_conversations") return [{ id: "c1", title: "本地会话", updated_at: "2026-08-12T00:00:00Z", message_count: 2, opencode_session_id: "session-c1", agent_id: "executive-brand" }] as T;
+      if (command === "list_messages") return [{
+        id: "m1",
+        conversation_id: "c1",
+        role: "assistant",
+        content: "已完成",
+        parts_json: JSON.stringify([
+          { id: "part-text", type: "text", text: "已完成" },
+          { id: "part-tool", type: "tool", tool: "writer", status: "completed", sequence: 2, createdAt: "2026-08-12T00:00:02Z" },
+          { id: "part-artifact", type: "artifact", artifact: { id: "a1", relativePath: "artifacts/report.md", title: "报告", mimeType: "text/markdown", byteLength: 12, sha256: "hash-a" }, sequence: 3, createdAt: "2026-08-12T00:00:03Z" },
+        ]),
+        created_at: "2026-08-12T00:00:00Z",
+      }] as T;
       if (command === "list_workflows") return [{ id: "w1", name: "内容工作流", definition_json: JSON.stringify({ schemaVersion: 2, revision: 3, definitionHash: "hash-1", nodes: [{ nodeKey: "input" }], edges: [] }), updated_at: "2026-08-12T00:00:00Z" }] as T;
       if (command === "save_workflow") return { id: String((args?.input as { id: string }).id), name: String((args?.input as { name: string }).name), definition_json: String((args?.input as { definition_json: string }).definition_json), updated_at: "2026-08-12T00:00:00Z" } as T;
       if (command === "list_artifacts") return [{ id: "a1", relative_path: "artifacts/report.md", mime_type: "text/markdown", byte_length: 12, sha256: "hash-a", created_at: "2026-08-12T00:00:00Z", available: true }] as T;
@@ -21,7 +33,13 @@ test("desktop WorkbenchClient adapts conversations, workflows and file actions t
   const client = createDesktopWorkbenchClient(bridge, { go: () => undefined, replace: () => undefined, current: () => "/dashboard/ai" });
   assert.equal((await client.conversations.list())[0]?.title, "本地会话");
   assert.equal((await client.conversations.list())[0]?.opencodeSessionId, "session-c1");
-  assert.equal((await client.conversations.messages("c1"))[0]?.content, "你好");
+  assert.equal((await client.conversations.list())[0]?.agentId, "executive-brand");
+  const message = (await client.conversations.messages("c1"))[0];
+  assert.equal(message?.content, "已完成");
+  assert.equal(message?.createdAt, "2026-08-12T00:00:00Z");
+  assert.equal(message?.parts?.[1]?.type, "tool");
+  assert.equal(message?.parts?.[1]?.sequence, 2);
+  assert.equal(message?.parts?.[2]?.type, "artifact");
   const listedWorkflow = (await client.workflows.list())[0];
   assert.equal(listedWorkflow?.title, "内容工作流");
   assert.equal(listedWorkflow?.definition.definitionHash, "hash-1");
@@ -29,6 +47,9 @@ test("desktop WorkbenchClient adapts conversations, workflows and file actions t
   const savedWorkflow = await client.workflows.save({ id: "w2", title: "本地流程", definition: { nodes: [], edges: [] } });
   assert.equal(savedWorkflow.id, "w2");
   assert.equal(calls.at(-1)?.command, "save_workflow");
+  await client.workflows.remove("w1");
+  assert.equal(calls.at(-1)?.command, "remove_workflow");
+  assert.equal(calls.at(-1)?.args?.workflowId, "w1");
   assert.equal((await client.artifacts.list())[0]?.relativePath, "artifacts/report.md");
   await client.artifacts.remove("a1");
   assert.equal(calls.at(-1)?.command, "remove_artifact");
@@ -44,13 +65,92 @@ test("desktop WorkbenchClient adapts conversations, workflows and file actions t
   await client.files.reveal("output/report.md", "text/markdown");
   assert.equal(calls.at(-1)?.command, "open_artifact");
   assert.equal(calls.at(-1)?.args?.mimeType, "text/markdown");
+  await client.files.openFolder?.("output/report.md", "text/markdown");
+  assert.equal(calls.at(-1)?.command, "open_artifact_folder");
+  await client.files.openWith?.("output/report.md", "text/markdown");
+  assert.equal(calls.at(-1)?.command, "open_artifact_with");
   const started = await client.runs.start({ id: "run-1", conversationId: "c1", prompt: "生成内容", model: "provider/model" });
   assert.equal(started.id, "run-1");
   assert.equal(calls.at(-1)?.command, "create_run");
+  await client.runs.start({ id: "media-run-1", conversationId: null, prompt: "生成音频", model: "audio/model" });
+  assert.equal(calls.at(-1)?.command, "create_run");
+  assert.equal(calls.at(-1)?.args?.conversationId, null);
   await client.runs.cancel("run-1");
   assert.equal((calls.at(-1)?.args?.message as { type?: string } | undefined)?.type, "run.cancel");
   await client.runs.emergencyStop("run-1");
   assert.equal((calls.at(-1)?.args?.message as { type?: string } | undefined)?.type, "run.emergency_stop");
+});
+
+test("desktop WorkbenchClient restores UIMessage parts without projecting away metadata or media", async () => {
+  const bridge = {
+    async invoke<T>(command: string) {
+      if (command !== "list_messages") return undefined as T;
+      return [{
+        id: "ui-m1",
+        conversation_id: "c-ui",
+        role: "assistant",
+        content: "",
+        parts_json: JSON.stringify([
+          { type: "text", text: "流式内容", state: "done", providerMetadata: { aimarketing: { partId: "text:1", sequence: 1 } } },
+          { type: "data-media", id: "media:1", data: { kind: "image", title: "封面", mimeType: "image/png", relativePath: "artifacts/cover.png" } },
+        ]),
+        metadata_json: JSON.stringify({ conversationId: "c-ui", runId: "run-ui", providerId: "deepseek", modelId: "deepseek-v4-flash", modelLocked: true }),
+        created_at: "2026-08-26T00:00:00Z",
+      }] as T;
+    },
+    async listen() { return () => undefined; },
+  };
+  const client = createDesktopWorkbenchClient(bridge, { go: () => undefined, replace: () => undefined, current: () => "/dashboard/ai" });
+  const uiMessage = (await client.conversations.uiMessages("c-ui"))[0];
+  assert.equal(uiMessage?.metadata?.modelId, "deepseek-v4-flash");
+  assert.equal(uiMessage?.parts[1]?.type, "data-media");
+  const projected = (await client.conversations.messages("c-ui"))[0];
+  assert.equal(projected?.content, "流式内容");
+  assert.equal(projected?.parts?.[0]?.type, "text");
+});
+
+test("desktop ChatTransport forwards the locked config model and persists the UIMessage user turn", async () => {
+  const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
+  const started: string[] = [];
+  const bridge = {
+    async invoke<T>(command: string, args?: Record<string, unknown>) { calls.push({ command, args }); return undefined as T; },
+    async listen() { return () => undefined; },
+  };
+  const workbenchClient = { runs: { subscribe: () => () => undefined } } as never;
+  const transport = createDesktopChatTransport(bridge, workbenchClient, {
+    resolveSessionId: async () => "session-c1",
+    resolveProvider: () => ({ id: "deepseek", model: "deepseek-v4-flash" }),
+    onRunStarted: (runId) => started.push(runId),
+  });
+  const message = createDesktopUIMessage({ id: "ui-user-1", role: "user", conversationId: "c1", content: "你好", providerId: "deepseek", modelId: "deepseek-v4-flash" });
+  await transport.sendMessages({ trigger: "submit-message", chatId: "c1", messageId: undefined, messages: [message], abortSignal: undefined });
+  assert.deepEqual(calls.map((call) => call.command), ["create_run", "append_message", "host_start", "host_send"]);
+  assert.equal((calls[0]?.args as { model?: string }).model, "deepseek-v4-flash");
+  const persisted = calls[1]?.args?.input as { metadata_json?: string };
+  assert.match(String(persisted.metadata_json), /deepseek-v4-flash/);
+  assert.equal(started.length, 1);
+});
+
+test("desktop ChatTransport lets the config/session adapter materialize a draft conversation before prompting", async () => {
+  const calls: string[] = [];
+  const bridge = {
+    async invoke<T>(command: string) { calls.push(command); return undefined as T; },
+    async listen() { return () => undefined; },
+  };
+  let ensured: { chatId: string; sessionId: string; model?: string } | undefined;
+  const workbenchClient = { runs: { subscribe: () => () => undefined } } as never;
+  const transport = createDesktopChatTransport(bridge, workbenchClient, {
+    resolveSessionId: async (chatId) => chatId,
+    resolveProvider: () => ({ id: "deepseek", model: "deepseek-v4-flash" }),
+    ensureSession: async ({ chatId, sessionId, message }) => {
+      ensured = { chatId, sessionId, model: message.metadata?.modelId };
+      return "session-materialized";
+    },
+  });
+  const message = createDesktopUIMessage({ id: "draft-user-1", role: "user", conversationId: "draft-chat-1", content: "首轮消息", providerId: "deepseek", modelId: "deepseek-v4-flash" });
+  await transport.sendMessages({ trigger: "submit-message", chatId: "draft-chat-1", messageId: undefined, messages: [message], abortSignal: undefined });
+  assert.deepEqual(ensured, { chatId: "draft-chat-1", sessionId: "draft-chat-1", model: "deepseek-v4-flash" });
+  assert.deepEqual(calls, ["create_run", "append_message", "host_start", "host_send"]);
 });
 
 test("desktop WorkbenchClient streams text, tool, usage, cancellation and terminal events", async () => {
@@ -72,17 +172,21 @@ test("desktop WorkbenchClient streams text, tool, usage, cancellation and termin
     listener?.({ raw: `${Buffer.byteLength(body, "utf8")}:${body}` });
   };
   listener?.({ raw: "not-a-frame" });
-  emit({ event: "text_delta", delta: "hello" });
-  emit({ event: "tool_event", tool: "writer", message: "started" });
-  emit({ event: "usage", provider: "fixture", model: "fixture/model", inputTokens: 3, outputTokens: 5, costUsd: 0.02 });
-  emit({ event: "runtime_error", code: "workflow_cancelled" });
-  emit({ event: "done" });
+  emit({ event: "text_delta", delta: "hello", sequence: 1, createdAt: "2026-08-12T00:00:01Z" });
+  emit({ event: "reasoning_delta", delta: "planning", sequence: 2, createdAt: "2026-08-12T00:00:02Z" });
+  emit({ event: "tool_event", tool: "writer", phase: "completed", message: "finished", sequence: 3, createdAt: "2026-08-12T00:00:03Z" });
+  emit({ event: "artifact", artifact: { id: "a1", relativePath: "artifacts/report.md", title: "报告", mimeType: "text/markdown", byteLength: 12, sha256: "hash-a" }, sequence: 4, createdAt: "2026-08-12T00:00:04Z" });
+  emit({ event: "usage", provider: "fixture", model: "fixture/model", inputTokens: 3, outputTokens: 5, costUsd: 0.02, sequence: 5, createdAt: "2026-08-12T00:00:05Z" });
+  emit({ event: "runtime_error", code: "workflow_cancelled", sequence: 6, createdAt: "2026-08-12T00:00:06Z" });
+  emit({ event: "done", sequence: 7, createdAt: "2026-08-12T00:00:07Z" });
   assert.deepEqual(events, [
-    { type: "text", delta: "hello" },
-    { type: "tool", tool: "writer", phase: "started", message: "started" },
-    { type: "usage", usage: { runId: "run-stream", provider: "fixture", model: "fixture/model", inputTokens: 3, outputTokens: 5, providerCost: 0.02 } },
-    { type: "status", status: "cancelled" },
-    { type: "status", status: "succeeded" },
+    { type: "text", delta: "hello", sequence: 1, createdAt: "2026-08-12T00:00:01Z" },
+    { type: "reasoning", delta: "planning", sequence: 2, createdAt: "2026-08-12T00:00:02Z" },
+    { type: "tool", tool: "writer", phase: "completed", message: "finished", sequence: 3, createdAt: "2026-08-12T00:00:03Z" },
+    { type: "artifact", artifact: { id: "a1", relativePath: "artifacts/report.md", title: "报告", mimeType: "text/markdown", byteLength: 12, sha256: "hash-a" }, sequence: 4, createdAt: "2026-08-12T00:00:04Z" },
+    { type: "usage", usage: { runId: "run-stream", provider: "fixture", model: "fixture/model", inputTokens: 3, outputTokens: 5, providerCost: 0.02 }, sequence: 5, createdAt: "2026-08-12T00:00:05Z" },
+    { type: "status", status: "cancelled", sequence: 6, createdAt: "2026-08-12T00:00:06Z" },
+    { type: "status", status: "succeeded", sequence: 7, createdAt: "2026-08-12T00:00:07Z" },
   ]);
   dispose();
   assert.equal(listener, undefined);

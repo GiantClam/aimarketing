@@ -169,6 +169,7 @@ New-Item -ItemType Directory -Force -Path $stage, $output | Out-Null
 try {
   Copy-Item -LiteralPath (Join-Path $source "runtime") -Destination (Join-Path $stage "runtime") -Recurse -Force
   Copy-Item -LiteralPath (Join-Path $source "skills") -Destination (Join-Path $stage "skills") -Recurse -Force
+  Copy-Item -LiteralPath (Join-Path $source "agents") -Destination (Join-Path $stage "agents") -Recurse -Force
   Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $stage "runtime-manifest.json") -Force
   Copy-Item -LiteralPath (Join-Path $source "install-desktop-runtime.ps1") -Destination (Join-Path $stage "install-desktop-runtime.ps1") -Force
   if (Test-Path -LiteralPath (Join-Path $source "runtime-manifest-crypto.mjs") -PathType Leaf) { Copy-Item -LiteralPath (Join-Path $source "runtime-manifest-crypto.mjs") -Destination (Join-Path $stage "runtime-manifest-crypto.mjs") -Force }
@@ -186,7 +187,7 @@ try {
   $archive = [IO.Compression.ZipFile]::OpenRead($zip)
   try {
     $entries = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
-    foreach ($required in @("runtime-manifest.json", "install-desktop-runtime.ps1", "runtime/", "skills/")) {
+    foreach ($required in @("runtime-manifest.json", "install-desktop-runtime.ps1", "runtime/", "skills/", "agents/")) {
       if (-not ($entries | Where-Object { $_ -eq $required -or $_.StartsWith($required) })) { throw "runtime_package_archive_missing:$required" }
     }
   } finally { $archive.Dispose() }

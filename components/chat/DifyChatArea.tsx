@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { Copy, ExternalLink, FileText, History, Loader2, MessageSquare, Paperclip, Radar, Send, Sparkles, Target, TrendingUp } from "lucide-react";
+import { Copy, ExternalLink, FileText, History, Loader2, MessageSquare, Paperclip, Radar, Sparkles, Target, TrendingUp } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -12,14 +12,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ScrollToBottomButton } from "@/components/ui/scroll-to-bottom-button";
-import { Textarea } from "@/components/ui/textarea";
 import { TextMorph } from "@/components/ui/text-morph";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TypingIndicator } from "@/components/ui/typing-indicator";
-import {
-  WorkspaceComposerPanel,
-  WorkspaceEmptyState,
-} from "@/components/workspace/workspace-primitives";
+import { WorkspaceEmptyState } from "@/components/workspace/workspace-primitives";
 import {
   WorkspaceLoadingMessage,
   WorkspaceMessageFrame,
@@ -33,6 +29,7 @@ import { arePendingTaskEventsEqual, normalizePendingTaskEvents, type PendingTask
 import { buildSessionRecoveryPlan } from "@/lib/session-recovery";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./CodeBlock";
+import { Conversation, ConversationContent, Message as AIElementMessage, MessageContent, MessageResponse, PromptInput, PromptInputBody, PromptInputFooter, PromptInputSubmit, PromptInputTextarea, Shimmer, Source, Sources } from "@aimarketing/workbench-ui";
 
 type Message = AdvisorChatMessage;
 
@@ -1148,13 +1145,6 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
     }
   };
 
-  const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-      event.preventDefault();
-      void handleSend();
-    }
-  };
-
   const shouldRenderConversationSkeleton =
     isConversationLoading && Boolean(conversationId) && messagesState.length === 0;
 
@@ -1163,6 +1153,8 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
       <section className="flex min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-b-[28px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
         <div className="relative min-h-0 flex-1 bg-[#f7f7f7]">
           <ScrollArea ref={scrollRef} className="h-full" viewportClassName="px-3 pb-3 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
+            <Conversation className="dify-ai-elements-conversation" autoScroll>
+              <ConversationContent>
             {messagesState.length === 0 ? (
               <div className="mx-auto flex min-h-full w-full max-w-5xl items-center">
                 {shouldRenderConversationSkeleton ? (
@@ -1202,9 +1194,15 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
                 {messagesState.map((message, index) => {
                   const isAssistant = message.role === "assistant";
                   const isPendingAssistant = isAssistant && !message.content.trim();
+                  const inlineSources = Array.from(message.content.matchAll(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/gu), ([, title, href]) => ({ title, href }));
                   return (
-                    <WorkspaceMessageFrame
+                    <AIElementMessage
                       key={message.id || index}
+                      from={isAssistant ? "assistant" : "user"}
+                      className="dify-ai-elements-message"
+                    >
+                      <MessageContent>
+                    <WorkspaceMessageFrame
                       role={isAssistant ? "assistant" : "user"}
                       className={cn(index === 0 && "border-b border-border/40 bg-transparent pt-5 lg:pt-6")}
                       label={isAssistant ? message.agentName || meta.title : ui.you}
@@ -1234,7 +1232,7 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
                             <div className="space-y-2 text-sm text-muted-foreground">
                               <span className="flex items-center gap-2">
                                 <TypingIndicator />
-                                {ui.waitingAdvisorResponse}
+                                <Shimmer>{ui.waitingAdvisorResponse}</Shimmer>
                               </span>
                               <WorkspaceTaskEvents events={pendingTaskEvents} limit={4} />
                             </div>
@@ -1243,6 +1241,7 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
                       ) : (
                         <div className={cn("rounded-[24px] border-2 px-4 py-3.5", isAssistant ? "border-border bg-background text-foreground" : "border-primary bg-primary text-primary-foreground")}>
                           <div className={cn("break-words leading-7 [&_a]:underline [&_a]:underline-offset-4 [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_h1]:my-3 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:font-semibold [&_li]:my-1 [&_ol]:my-2 [&_p]:my-2 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:p-3 [&_ul]:my-2 first:[&_p]:mt-0 last:[&_p]:mb-0", isAssistant ? "text-foreground [&_code]:bg-accent/6 [&_pre]:bg-accent [&_pre]:text-accent-foreground" : "text-primary-foreground [&_code]:bg-black/10 [&_pre]:bg-black/10 [&_pre]:text-primary-foreground")}>
+                            <MessageResponse content={message.content} className="dify-ai-elements-message-response">
                             <ReactMarkdown
                               remarkPlugins={[remarkGfm]}
                               components={{
@@ -1277,15 +1276,21 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
                             >
                               {message.content}
                             </ReactMarkdown>
+                            </MessageResponse>
+                            {isAssistant && inlineSources.length ? <Sources className="dify-ai-elements-sources">{inlineSources.map((source) => <Source key={`${message.id}:${source.href}`} title={source.title} href={source.href} />)}</Sources> : null}
                           </div>
                         </div>
                       )}
                     </WorkspaceMessageFrame>
+                      </MessageContent>
+                    </AIElementMessage>
                   );
                 })}
                 <div ref={messagesEndRef} className="h-1 w-full" />
               </div>
             )}
+              </ConversationContent>
+            </Conversation>
           </ScrollArea>
           <div className="pointer-events-none absolute bottom-4 right-4 z-20">
             <ScrollToBottomButton
@@ -1299,29 +1304,15 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
 
         <div className="sticky bottom-0 z-20 shrink-0 border-t border-border/70 bg-[#f7f7f7]/95 px-3 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-[#f7f7f7]/85 lg:px-4 lg:py-3">
           <div className="mx-auto w-full max-w-5xl">
-            <WorkspaceComposerPanel
+            <PromptInput
+              value={inputVal}
+              onValueChange={setInputVal}
+              onSubmit={() => void handleSend()}
+              onAddAttachments={(files) => handleUnsupportedAttachment(files)}
+              status="ready"
+              disabled={isLoading}
+              locale={localeKey}
               className="rounded-[24px] border-2 border-border bg-card p-2"
-              cardClassName="rounded-[18px] border-2 border-border bg-background"
-              bodyClassName="px-2"
-              footer={
-                <>
-                  <p className="text-[11px] leading-5 text-muted-foreground">{ui.enterToSendHint}</p>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="rounded-full border-2 border-border bg-background px-2.5 py-1 text-[10px] text-foreground">{conversationId ? ui.contextActive : ui.newThread}</Badge>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-10 rounded-full px-3"
-                      onClick={() => unsupportedAttachmentInputRef.current?.click()}
-                      disabled={isLoading}
-                      aria-label={localeKey === "zh" ? "上传附件" : "Upload attachment"}
-                    >
-                      <Paperclip className="h-4 w-4" />
-                    </Button>
-                    <Button className="h-10 rounded-full px-4" onClick={() => void handleSend()} disabled={!inputVal.trim() || isLoading}>{isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}{ui.send}</Button>
-                  </div>
-                </>
-              }
             >
               <input
                 ref={unsupportedAttachmentInputRef}
@@ -1330,8 +1321,27 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
                 className="hidden"
                 onChange={(event) => handleUnsupportedAttachment(event.target.files)}
               />
-              <Textarea ref={composerRef} value={inputVal} onChange={(event) => setInputVal(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder={meta.composerPlaceholder} disabled={isLoading} className="min-h-[80px] border-0 bg-transparent px-2 py-2 text-[14px] leading-6 shadow-none focus-visible:ring-0" />
-            </WorkspaceComposerPanel>
+              <PromptInputBody className="rounded-[18px] border-2 border-border bg-background px-2">
+                <PromptInputTextarea ref={composerRef} placeholder={meta.composerPlaceholder} className="min-h-[80px] border-0 bg-transparent px-2 py-2 text-[14px] leading-6 shadow-none focus-visible:ring-0" />
+              </PromptInputBody>
+              <PromptInputFooter className="px-2">
+                <p className="text-[11px] leading-5 text-muted-foreground">{ui.enterToSendHint}</p>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="rounded-full border-2 border-border bg-background px-2.5 py-1 text-[10px] text-foreground">{conversationId ? ui.contextActive : ui.newThread}</Badge>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 rounded-full px-3"
+                    onClick={() => unsupportedAttachmentInputRef.current?.click()}
+                    disabled={isLoading}
+                    aria-label={localeKey === "zh" ? "上传附件" : "Upload attachment"}
+                  >
+                    <Paperclip className="h-4 w-4" />
+                  </Button>
+                  <PromptInputSubmit disabled={!inputVal.trim()} className="h-10 rounded-full px-4">{isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}{ui.send}</PromptInputSubmit>
+                </div>
+              </PromptInputFooter>
+            </PromptInput>
           </div>
         </div>
       </section>

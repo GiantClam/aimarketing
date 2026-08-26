@@ -10,6 +10,7 @@ import {
   getLocalizedStatusLabel,
   getLocalizedTaskName,
   getRunId,
+  formatTaskTimestamp,
   type WorkspaceTaskCenterItem,
 } from "@/lib/platform/task-center-view"
 
@@ -111,6 +112,10 @@ test("formatDuration keeps task duration display stable", () => {
   assert.equal(formatDuration(null), "00:00:00")
 })
 
+test("formatTaskTimestamp converts UTC timestamps to the requested local timezone", () => {
+  assert.equal(formatTaskTimestamp("2026-07-20T10:05:00.000Z", "en", "Asia/Shanghai"), "Jul 20, 06:05 PM")
+})
+
 test("task center labels localize common video task states and names", () => {
   const task = buildTaskCenterTasks(
     buildNormalizedRuns([
@@ -119,7 +124,7 @@ test("task center labels localize common video task states and names", () => {
   )[0]!
 
   assert.equal(getLocalizedTaskName(task, "zh"), "文生视频")
-  assert.equal(getLocalizedStatusLabel("succeeded", "zh"), "已完成")
+  assert.equal(getLocalizedStatusLabel("completed", "zh"), "已完成")
   assert.equal(getLocalizedSourceLabel("media", "zh"), "媒体")
   assert.equal(getLocalizedTaskName(task, "en"), "Text To Video")
 })

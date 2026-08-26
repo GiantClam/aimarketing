@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { WorkflowDefinitionEnvelope } from "@aimarketing/workflow-core";
-import { sanitizeWorkflowDefinitionForStorage } from "../src/workflow-storage";
+import { sanitizeWorkflowDefinitionForExport, sanitizeWorkflowDefinitionForStorage } from "../src/workflow-storage";
 import { parseWorkflowImportText, serializeWorkflowExport } from "../src/workflow-portability";
 
 test("workflow persistence removes provider credentials without changing executable fields", () => {
@@ -66,6 +66,22 @@ test("workflow portability drops database/provider bindings but keeps relative f
     uploadedFiles: ["attachments/a.txt"],
     nested: { targetPath: "notes/output.md" },
   });
+});
+
+test("local workflow storage retains selected-file paths while exports remove them", () => {
+  const definition = {
+    schemaVersion: 2,
+    revision: 1,
+    definitionHash: "",
+    nodes: [{ nodeKey: "upload", type: "upload", nodeVersion: 1, title: "Upload", positionX: 0, positionY: 0, config: {
+      uploadedFiles: [{ fileName: "reference.png", mimeType: "image/png", byteLength: 1024, localPath: "C:\\media\\reference.png" }],
+    } }],
+    edges: [],
+  } as never as WorkflowDefinitionEnvelope;
+  const stored = sanitizeWorkflowDefinitionForStorage(definition);
+  const exported = sanitizeWorkflowDefinitionForExport(definition);
+  assert.equal((stored.nodes[0]?.config.uploadedFiles as Array<Record<string, unknown>>)[0]?.localPath, "C:\\media\\reference.png");
+  assert.equal("localPath" in ((exported.nodes[0]?.config.uploadedFiles as Array<Record<string, unknown>>)[0] ?? {}), false);
 });
 
 test("workflow JSON survives ordinary file sharing and imports with a fresh portable hash", async () => {

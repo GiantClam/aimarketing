@@ -891,6 +891,7 @@ const PPT_PREVIEW_RUNTIME_MODELS = new Set([
   "gpt-5.6-sol",
   "gpt-5.6-terra",
   "gpt-5.6-luna",
+  "grok-4.5",
   "step-3.7-flash",
 ])
 
@@ -1047,6 +1048,10 @@ function inferPreviewProviderId(model: string) {
   }
 
   if (/^gpt-5\.6-(?:sol|terra|luna)$/iu.test(model)) {
+    return "pptoken" as const
+  }
+
+  if (/^grok[-_.]4[-_.]5$/iu.test(model)) {
     return "pptoken" as const
   }
 

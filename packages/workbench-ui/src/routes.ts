@@ -17,6 +17,7 @@ export const WORKBENCH_HOME_GROUPS: readonly WorkbenchHomeGroup[] = [
   { label: "AI TEAM", entries: [
     { label: { zh: "AI 对话", en: "AI Chat" }, description: { zh: "通用 AI 对话入口", en: "General-purpose AI chat" }, path: "/dashboard/ai", glyph: "✦", tone: "gold" },
     { label: { zh: "咨询专家", en: "Consulting Advisor" }, description: { zh: "围绕品牌、增长和经营问题获得结构化建议", en: "Structured advice for brand, growth, and operating questions" }, path: "/dashboard/ai?entry=consulting-advisor", glyph: "◎", tone: "ink" },
+    { label: { zh: "智能体中心", en: "Agent Center" }, description: { zh: "查找已安装的本地智能体与 Skills", en: "Find installed local agents and Skills" }, path: "/dashboard/agent-platform", glyph: "◈", tone: "soft" },
   ] },
   { label: "OFFICE TOOLS", entries: [
     { label: { zh: "PPT Assistant", en: "PPT Assistant" }, description: { zh: "生成可编辑的演示文稿", en: "Create editable presentations" }, path: "/dashboard/ai?agent=executive-ppt", glyph: "▣", tone: "gold" },
@@ -32,9 +33,6 @@ export const WORKBENCH_HOME_GROUPS: readonly WorkbenchHomeGroup[] = [
     { label: { zh: "AI 图片", en: "AI Image" }, description: { zh: "图片生成与设计助手", en: "Image generation and design" }, path: "/dashboard/image-assistant", glyph: "▧", tone: "gold" },
     { label: { zh: "AI 视频", en: "AI Video" }, description: { zh: "视频脚本与生成工作台", en: "Video scripts and generation" }, path: "/dashboard/video", glyph: "▶", tone: "ink" },
     { label: { zh: "素材库", en: "Asset Library" }, description: { zh: "集中查看和复用生成的素材", en: "Browse and reuse generated assets" }, path: "/dashboard/assets", glyph: "▱", tone: "soft" },
-  ] },
-  { label: "MORE", entries: [
-    { label: { zh: "作品库", en: "Work Library" }, description: { zh: "回看已经产出的内容和交付物", en: "Review produced content and deliverables" }, path: "/dashboard/works", glyph: "▱", tone: "ink" },
   ] },
 ] as const;
 
@@ -75,18 +73,11 @@ export const WORKBENCH_ROUTE_MANIFEST: readonly WorkbenchRoute[] = [
   { path: "/dashboard/writer", label: { zh: "多平台写作", en: "Multi-platform writing" }, description: { zh: "统一生成多平台图文内容，并支持 Markdown 编辑与发布准备。", en: "Generate multi-platform written content with Markdown editing and publishing preparation." }, mode: "writer", section: { zh: "创作工作台", en: "Creative workspace" }, glyph: "✎" },
   { path: "/dashboard/image-assistant", label: { zh: "图片设计助手", en: "Image design assistant" }, description: { zh: "集对话生图、参考图编辑与画布精修于一体的工作台。", en: "A unified workspace for conversational image generation, reference editing, and canvas refinement." }, mode: "workflow", section: { zh: "创作工作台", en: "Creative workspace" }, glyph: "▧" },
   { path: "/dashboard/capabilities", label: { zh: "能力中心", en: "Capabilities" }, description: { zh: "查看本地可用的营销能力与 Skills", en: "Browse local marketing capabilities and Skills" }, mode: "library", section: { zh: "平台中台", en: "Platform" }, glyph: "▦" },
+  { path: "/dashboard/agent-platform", label: { zh: "智能体中心", en: "Agent Center" }, description: { zh: "搜索已安装的本地智能体与 Skills，并启动本地对话", en: "Search installed local agents and Skills, then start a local conversation" }, mode: "library", section: { zh: "平台中台", en: "Platform" }, glyph: "◈" },
   { path: "/dashboard/workflows", label: { zh: "工作流", en: "Workflows" }, description: { zh: "编排内容、媒体、PPT 与 Obsidian 节点", en: "Compose content, media, PPT, and Obsidian nodes" }, mode: "workflow", section: { zh: "平台中台", en: "Platform" }, glyph: "⌘" },
   { path: "/dashboard/tasks", label: { zh: "任务中心", en: "Task Center" }, description: { zh: "查看本地任务、运行事件和恢复状态", en: "Inspect local runs, events, and recovery state" }, mode: "library", section: { zh: "资源入口", en: "Resources" }, glyph: "≡" },
   { path: "/dashboard/assets", label: { zh: "资产库", en: "Asset Library" }, description: { zh: "查看项目目录中的本地产物", en: "Browse local project artifacts" }, mode: "library", section: { zh: "资源入口", en: "Resources" }, glyph: "▱" },
-  // Online `/dashboard/works` is a compatibility alias that redirects to the
-  // asset library. Keeping the route lets desktop links and deep links match
-  // the cloud URL without introducing a second storage surface.
-  { path: "/dashboard/works", label: { zh: "作品库", en: "Work Library" }, description: { zh: "回看已经产出的内容和交付物", en: "Review produced content and deliverables" }, mode: "library", section: { zh: "资源入口", en: "Resources" }, glyph: "▱" },
   { path: "/dashboard/knowledge-base", label: { zh: "知识库", en: "Knowledge Base" }, description: { zh: "使用 Obsidian Vault 建立本地知识检索", en: "Search a local Obsidian Vault" }, mode: "library", section: { zh: "资源入口", en: "Resources" }, glyph: "⌑" },
-  { path: "/dashboard/video", label: { zh: "视频生成 Agent", en: "Video generation agent" }, description: { zh: "生成视频、数字人、音乐、语音与通用音频", en: "Generate video, digital human, music, voice, and audio" }, mode: "workflow", glyph: "▶", placement: "footer" },
-  // The cloud route is opened from the account/status menu rather than the
-  // primary sidebar. Keep the route for deep links and the shared settings
-  // surface, but hide it from the desktop nav so the shell has the same
-  // navigation density as the online dashboard.
-  { path: "/dashboard/settings", label: { zh: "设置", en: "Settings" }, description: { zh: "模型、工作目录与本地运行环境配置", en: "Configure models, workspace, and local runtime" }, mode: "library", glyph: "⚙", placement: "hidden" },
+  { path: "/dashboard/video", label: { zh: "视频生成 Agent", en: "Video generation agent" }, description: { zh: "生成视频、数字人、音乐、语音与通用音频", en: "Generate video, digital human, music, voice, and audio" }, mode: "workflow", glyph: "▶", placement: "hidden" },
+  { path: "/dashboard/settings", label: { zh: "设置", en: "Settings" }, description: { zh: "模型、工作目录与本地运行环境配置", en: "Configure models, workspace, and local runtime" }, mode: "library", glyph: "⚙", placement: "footer" },
 ] as const;

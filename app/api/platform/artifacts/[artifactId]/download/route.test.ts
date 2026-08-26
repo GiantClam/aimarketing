@@ -175,6 +175,30 @@ test("artifact download returns payload.text for workflow text artifacts without
   assert.equal(Buffer.from((response as any).body as Uint8Array).toString("utf8"), "Hello from workflow text output")
 })
 
+test("artifact download serializes successful workflow response artifacts without file storage", async () => {
+  artifact = {
+    ...artifact,
+    kind: "json",
+    title: "Campaign launch output",
+    mimeType: "application/json",
+    payload: {
+      source: "workflow",
+      response: { slides: [{ title: "Q3 launch" }] },
+    },
+  }
+
+  const response = await GET(
+    new Request("http://localhost:3000/api/platform/artifacts/146/download?download=1") as any,
+    { params: Promise.resolve({ artifactId: "146" }) },
+  )
+
+  assert.equal((response as any).status, 200)
+  assert.equal((response as any).headers.get("content-type"), "application/json; charset=utf-8")
+  assert.deepEqual(JSON.parse(Buffer.from((response as any).body as Uint8Array).toString("utf8")), {
+    slides: [{ title: "Q3 launch" }],
+  })
+})
+
 test("artifact download normalizes upstream markdown responses to utf-8", async () => {
   artifact = {
     ...artifact,

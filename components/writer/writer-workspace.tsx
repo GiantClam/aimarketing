@@ -35,7 +35,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { TextMorph } from "@/components/ui/text-morph"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { TypingIndicator } from "@/components/ui/typing-indicator"
-import { WorkspaceComposerPanel, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
+import { WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
 import {
   WorkspaceActionRow,
   WorkspaceConversationSkeleton,
@@ -43,6 +43,19 @@ import {
   WorkspaceMessageFrame,
   WorkspaceTaskEvents,
 } from "@/components/workspace/workspace-message-primitives"
+import {
+  Artifact,
+  Conversation,
+  ConversationContent,
+  Message as AIElementMessage,
+  MessageContent,
+  MessageResponse,
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+} from "@aimarketing/workbench-ui"
 import {
   findWriterPendingTask,
   removePendingAssistantTask,
@@ -2943,6 +2956,8 @@ export function WriterWorkspace({
             <div className="dashboard-panel flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-[12px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
               <div className="relative min-h-0 flex-1 bg-[#f7f7f7]">
                 <ScrollArea className="h-full" ref={viewportRef}>
+                <Conversation className="writer-ai-conversation">
+                  <ConversationContent>
                 <div className="space-y-0">
                   {hasMoreHistory ? (
                     <div className="flex justify-center px-3 py-3">
@@ -3030,14 +3045,16 @@ export function WriterWorkspace({
                         icon={message.role === "assistant" ? <Sparkles className="h-3.5 w-3.5" /> : null}
                         bodyClassName="space-y-3"
                       >
-                        <div
+                        <AIElementMessage from={message.role}>
+                          <MessageContent
                           className={cn(
                             "rounded-[10px] border p-4",
                             message.role === "user"
                               ? "border-primary bg-primary text-primary-foreground"
                               : "border-border bg-background selection:bg-[#E8E8E8]",
                           )}
-                        >
+                          >
+                            <MessageResponse>
                           {renderMarkdown(
                             messagePreview?.previewMarkdown || message.content,
                             messagePreview?.assets || [],
@@ -3046,8 +3063,10 @@ export function WriterWorkspace({
                               : "prose prose-sm max-w-none prose-invert prose-p:my-2 prose-p:text-[14px] prose-p:leading-6 prose-headings:text-primary-foreground prose-p:text-primary-foreground prose-li:text-primary-foreground",
                             writerCopy,
                           )}
+                            </MessageResponse>
                           {messageIsPreviewable && messagePreview ? (
-                            <WorkspaceActionRow>
+                            <Artifact title={writerCopy.preview} onOpen={() => openPreviewForMessage(message.id)}>
+                              <WorkspaceActionRow>
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -3109,9 +3128,11 @@ export function WriterWorkspace({
                                   <TooltipContent>{copyFeedback === "markdown" ? copiedToClipboardLabel : writerCopy.copyMarkdown}</TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
-                            </WorkspaceActionRow>
+                              </WorkspaceActionRow>
+                            </Artifact>
                           ) : null}
-                        </div>
+                          </MessageContent>
+                        </AIElementMessage>
                       </WorkspaceMessageFrame>
                     )
                   })}
@@ -3168,6 +3189,8 @@ export function WriterWorkspace({
                     </WorkspaceMessageFrame>
                   ) : null}
                 </div>
+                  </ConversationContent>
+                </Conversation>
                 </ScrollArea>
                 <div className="pointer-events-none absolute bottom-4 right-4 z-20">
                   <ScrollToBottomButton
@@ -3180,10 +3203,31 @@ export function WriterWorkspace({
               </div>
 
               <div className="sticky bottom-0 z-20 shrink-0 border-t border-border/70 bg-[#f7f7f7]/95 px-3 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-[#f7f7f7]/85 lg:px-4 lg:py-3">
-                <WorkspaceComposerPanel
+                <PromptInput
+                  value={inputValue}
+                  onValueChange={setInputValue}
+                  onSubmit={() => void handleSend()}
+                  disabled={composerDisabled || isLoading}
                   className="border-none bg-transparent p-0"
-                  toolbar={
-                    <>
+                >
+                  <PromptInputBody>
+                    <PromptInputTextarea
+                      ref={composerRef}
+                      value={inputValue}
+                      onChange={(event) => setInputValue(event.target.value)}
+                      onKeyDown={(event) => {
+                        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                          event.preventDefault()
+                          void handleSend()
+                        }
+                      }}
+                      placeholder={`${writerCopy.composerPlaceholderPrefix} ${currentPlatformLabel} ${writerCopy.composerPlaceholderSuffix}`}
+                      className="min-h-12 resize-none border-0 bg-transparent px-3 py-2.5 text-[13px] leading-6 shadow-none focus-visible:ring-0"
+                      disabled={composerDisabled || isLoading}
+                    />
+                  </PromptInputBody>
+                  <PromptInputFooter className="items-center gap-2 border-t-0 px-0 pt-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                       {routingBadges.map((item) => (
                         <Badge key={item} variant="outline" className="dashboard-kicker rounded-[4px] px-2.5 py-1 text-[10px] text-muted-foreground">
                           {item}
@@ -3225,50 +3269,21 @@ export function WriterWorkspace({
                           {writerCopy.preview}
                         </Button>
                       </div>
-                    </>
-                  }
-                  bodyClassName="px-0"
-                  footer={
-                    <>
-                      <p className="text-[11px] leading-5 text-muted-foreground">
-                        {currentPlatformLabel} / {currentModeLabel} / {currentLengthLabel} / {currentLanguageLabel}
-                        {composerDisabled ? ` / ${writerCopy.preparingCapabilities}` : ` / ${writerCopy.supportsPreviewAndImages}`}
-                      </p>
-                      {isLoading ? (
-                        <Button size="sm" variant="outline" className="dashboard-button-secondary h-8 px-3 text-[11px]" disabled>
-                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                          {writerCopy.generatingDraft}
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          className="dashboard-button-primary h-8 px-3 text-[11px]"
-                          data-testid="writer-send-button"
-                          onClick={() => void handleSend()}
-                          disabled={!inputValue.trim() || composerDisabled}
-                        >
-                          <Send className="mr-1.5 h-3.5 w-3.5" />
-                          {writerCopy.send}
-                        </Button>
-                      )}
-                    </>
-                  }
-                >
-                  <Textarea
-                    ref={composerRef}
-                    value={inputValue}
-                    onChange={(event) => setInputValue(event.target.value)}
-                    onKeyDown={(event) => {
-                      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                        event.preventDefault()
-                        void handleSend()
-                      }
-                    }}
-                    placeholder={`${writerCopy.composerPlaceholderPrefix} ${currentPlatformLabel} ${writerCopy.composerPlaceholderSuffix}`}
-                    className="min-h-12 resize-none border-0 bg-transparent px-3 py-2.5 text-[13px] leading-6 shadow-none focus-visible:ring-0"
-                    disabled={composerDisabled}
-                  />
-                </WorkspaceComposerPanel>
+                    </div>
+                    <p className="hidden text-[11px] leading-5 text-muted-foreground xl:block">
+                      {currentPlatformLabel} / {currentModeLabel} / {currentLengthLabel} / {currentLanguageLabel}
+                      {composerDisabled ? ` / ${writerCopy.preparingCapabilities}` : ` / ${writerCopy.supportsPreviewAndImages}`}
+                    </p>
+                    <PromptInputSubmit
+                      data-testid="writer-send-button"
+                      className="dashboard-button-primary h-8 shrink-0 px-3 text-[11px]"
+                      disabled={!inputValue.trim() || composerDisabled || isLoading}
+                    >
+                      {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
+                      {isLoading ? writerCopy.generatingDraft : writerCopy.send}
+                    </PromptInputSubmit>
+                  </PromptInputFooter>
+                </PromptInput>
               </div>
             </div>
           </div>
