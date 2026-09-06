@@ -26,7 +26,7 @@ if (Test-WebView2Runtime) {
   exit 0
 }
 
-$downloadRoot = Join-Path ([IO.Path]::GetTempPath()) "aimarketing-webview2-$([guid]::NewGuid().ToString('N'))"
+$downloadRoot = Join-Path ([IO.Path]::GetTempPath()) "coworkany-webview2-$([guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Path $downloadRoot | Out-Null
 $installer = Join-Path $downloadRoot 'MicrosoftEdgeWebview2Setup.exe'
 try {

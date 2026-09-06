@@ -1,1 +1,1 @@
-export { AudioPlayer, MicSelector, Persona, SpeechInput, Transcription, VoiceSelector } from "./source";
+export { AudioPlayer, AudioPlayerControlBar, AudioPlayerDurationDisplay, AudioPlayerElement, AudioPlayerMuteButton, AudioPlayerPlayButton, AudioPlayerSeekBackwardButton, AudioPlayerSeekForwardButton, AudioPlayerTimeDisplay, AudioPlayerTimeRange, AudioPlayerVolumeRange, MicSelector, Persona, SpeechInput, Transcription, VoiceSelector } from "./source";

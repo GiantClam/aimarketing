@@ -91,7 +91,7 @@ mod tests {
 
     #[test]
     fn config_round_trip_rejects_invalid_schema() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-config-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-config-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root); fs::create_dir_all(&root).unwrap();
         let path = root.join("config.json"); let value = default_config(&root);
         write(&path, &value).unwrap(); assert_eq!(read(&path, &root).unwrap()["schemaVersion"], 1);
@@ -101,7 +101,7 @@ mod tests {
 
     #[test]
     fn config_read_accepts_a_utf8_bom() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-config-bom-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-config-bom-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root); fs::create_dir_all(&root).unwrap();
         let path = root.join("config.json");
         let mut bytes = vec![0xEF, 0xBB, 0xBF];

@@ -1,8 +1,8 @@
 "use client";
 
 import React from "react";
-import type { WorkbenchMessagePart, WorkbenchPartStatus, WorkbenchPlanStep, WorkbenchTaskStep } from "@aimarketing/workbench-client";
-import { Confirmation, Message, MessageContent, Plan, Reasoning, Task, Tool } from "./ai-elements/index";
+import type { WorkbenchMessagePart, WorkbenchPartStatus, WorkbenchPlanStep, WorkbenchTaskStep } from "@coworkany/workbench-client";
+import { Confirmation, ConfirmationAction, ConfirmationActions, ConfirmationRequest, ConfirmationTitle, Message, MessageContent, Plan, Reasoning, Task, Tool } from "./ai-elements/index";
 
 export function WorkbenchMessage({ role, label, timestamp, children, actions }: { role: "user" | "assistant"; label?: string; timestamp?: React.ReactNode; children: React.ReactNode; actions?: React.ReactNode }) {
   return <Message from={role}><div className="wb-ai-message-header"><strong>{label || (role === "user" ? "Your prompt" : "AI response")}</strong><span>{timestamp}</span>{actions}</div><MessageContent>{children}</MessageContent></Message>;
@@ -14,7 +14,7 @@ export function WorkbenchTask({ title, steps = [], status = "running", locale = 
 export function WorkbenchTool({ toolName, toolCallId, input, output, error, status = "running", locale = "zh", onApprove, onReject }: { toolName: string; toolCallId?: string; input?: unknown; output?: unknown; error?: string; status?: WorkbenchPartStatus; locale?: "zh" | "en"; onApprove?: () => void; onReject?: () => void }) {
   const waiting = status === "waiting" || status === "blocked";
   const confirmationStatus = waiting ? "approval-requested" : error && status === "failed" ? "output-denied" : output !== undefined ? "output-available" : undefined;
-  return <Tool toolName={toolName} toolCallId={toolCallId} input={input} output={output} error={error} status={status === "blocked" ? "waiting" : status} locale={locale}>{confirmationStatus && (onApprove || onReject) ? <Confirmation status={confirmationStatus} onApprove={onApprove} onReject={onReject}>{waiting ? (locale === "zh" ? "此工具调用需要审批" : "This tool call requires approval") : error ? error : (locale === "zh" ? "工具输出已就绪" : "Tool output available")}</Confirmation> : null}</Tool>;
+  return <Tool toolName={toolName} toolCallId={toolCallId} input={input} output={output} error={error} status={status === "blocked" ? "waiting" : status} locale={locale}>{confirmationStatus && (onApprove || onReject) ? <Confirmation state={confirmationStatus} approval={{ id: toolCallId ?? toolName }}><ConfirmationTitle>{waiting ? (locale === "zh" ? "此工具调用需要审批" : "This tool call requires approval") : error ? error : (locale === "zh" ? "工具输出已就绪" : "Tool output available")}</ConfirmationTitle><ConfirmationRequest><ConfirmationActions><ConfirmationAction onClick={onReject}>{locale === "zh" ? "拒绝" : "Reject"}</ConfirmationAction><ConfirmationAction onClick={onApprove}>{locale === "zh" ? "批准" : "Approve"}</ConfirmationAction></ConfirmationActions></ConfirmationRequest></Confirmation> : null}</Tool>;
 }
 
 export function renderWorkbenchProcessPart(part: WorkbenchMessagePart, locale: "zh" | "en", actions?: { onToolApproval?: (part: Extract<WorkbenchMessagePart, { type: "tool-call" }>, decision: "approve" | "reject") => void }) {

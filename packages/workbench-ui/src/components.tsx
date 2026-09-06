@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, type ReactNode } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MessagePlainText, MessageResponse } from "./ai-elements";
+import { artifactDisplayName } from "./artifact-label";
 
 export type WorkbenchMessageRole = "assistant" | "user" | "system";
 
@@ -105,7 +105,7 @@ export function WorkbenchCloudMessageShell({
 
 /** Shared Markdown body so desktop and cloud render the same authored content. */
 function WorkbenchMessageMarkdown({ content, className = "" }: { content: string; className?: string }) {
-  return <div className={className}><ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown></div>;
+  return <MessageResponse content={content} className={className} />;
 }
 
 /**
@@ -156,7 +156,7 @@ export function WorkbenchChatMessage({
             <div className="dashboard-kicker text-primary">{label ?? copy.user}</div>
             <div className="text-xs text-white/55">{time}</div>
           </div>
-          <WorkbenchMessageMarkdown className="message-body wb-chat-user-body" content={content} />
+          <MessagePlainText className="message-body wb-chat-user-body" content={content} />
           {attachments.length ? <div className="wb-message-attachments">{attachments.map((attachment) => <span key={attachment.id} className="wb-message-attachment"><span aria-hidden="true">{attachment.mediaType?.startsWith("image/") ? "▧" : "⌕"}</span>{attachment.name}</span>)}</div> : null}
         </div>
         <div className="ai-avatar wb-chat-user-avatar">U</div>
@@ -176,7 +176,7 @@ export function WorkbenchChatMessage({
         </div>
         {pending ? <div className="wb-chat-pending"><span className="wb-chat-pending-dot" />{copy.pending}</div> : content ? <WorkbenchMessageMarkdown className="message-body assistant-body" content={content} /> : null}
         {events.length ? <div className="assistant-live-panel"><WorkbenchTaskEvents events={events} limit={4} className="pl-0" /></div> : null}
-        {artifacts.length ? <section className="wb-artifact-section"><div className="wb-artifact-title">✦ {copy.artifacts}</div><div className="wb-artifact-grid">{artifacts.map((artifact) => <button key={artifact.id} type="button" className="wb-artifact-card" onClick={() => onArtifactOpen?.(artifact.relativePath, artifact.mimeType)}><span className="wb-artifact-name">{artifact.title || artifact.relativePath}</span><small>{artifact.mimeType}{typeof artifact.byteLength === "number" ? ` · ${Math.ceil(artifact.byteLength / 1024)} KB` : ""}</small></button>)}</div></section> : null}
+        {artifacts.length ? <section className="wb-artifact-section"><div className="wb-artifact-title">✦ {copy.artifacts}</div><div className="wb-artifact-grid">{artifacts.map((artifact) => <button key={artifact.id} type="button" className="wb-artifact-card" onClick={() => onArtifactOpen?.(artifact.relativePath, artifact.mimeType)}><span className="wb-artifact-name">{artifactDisplayName(artifact.title, artifact.relativePath)}</span><small>{artifact.mimeType}{typeof artifact.byteLength === "number" ? ` · ${Math.ceil(artifact.byteLength / 1024)} KB` : ""}</small></button>)}</div></section> : null}
       </article>
     </div>
   );
@@ -199,7 +199,7 @@ export function WorkbenchWriterMessage({ role, label, content, timestamp, pendin
         {pending ? <div className="wb-chat-pending"><span className="wb-chat-pending-dot" />{copy.pending}</div> : content ? <WorkbenchMessageMarkdown className="wb-writer-message-markdown" content={content} /> : null}
         {attachments.length ? <div className="wb-message-attachments">{attachments.map((attachment) => <span key={attachment.id} className="wb-message-attachment"><span aria-hidden="true">{attachment.mediaType?.startsWith("image/") ? "▧" : "⌕"}</span>{attachment.name}</span>)}</div> : null}
         {events.length ? <div className="wb-writer-message-events"><WorkbenchTaskEvents events={events} limit={4} /></div> : null}
-        {artifacts.length ? <section className="wb-artifact-section"><div className="wb-artifact-title">✦ {copy.artifacts}</div><div className="wb-artifact-grid">{artifacts.map((artifact) => <button key={artifact.id} type="button" className="wb-artifact-card" onClick={() => onArtifactOpen?.(artifact.relativePath, artifact.mimeType)}><span className="wb-artifact-name">{artifact.title || artifact.relativePath}</span><small>{artifact.mimeType}{typeof artifact.byteLength === "number" ? ` · ${Math.ceil(artifact.byteLength / 1024)} KB` : ""}</small></button>)}</div></section> : null}
+        {artifacts.length ? <section className="wb-artifact-section"><div className="wb-artifact-title">✦ {copy.artifacts}</div><div className="wb-artifact-grid">{artifacts.map((artifact) => <button key={artifact.id} type="button" className="wb-artifact-card" onClick={() => onArtifactOpen?.(artifact.relativePath, artifact.mimeType)}><span className="wb-artifact-name">{artifactDisplayName(artifact.title, artifact.relativePath)}</span><small>{artifact.mimeType}{typeof artifact.byteLength === "number" ? ` · ${Math.ceil(artifact.byteLength / 1024)} KB` : ""}</small></button>)}</div></section> : null}
       </div>
     </WorkbenchMessageFrame>
   );
@@ -290,6 +290,7 @@ export function WorkbenchShell({
   activeSessionAgentLabel,
   newSessionLabel,
   onNewSession,
+  initialSessionsExpanded = false,
 }: {
   navItems: WorkbenchShellNavItem[];
   activePath: string;
@@ -310,8 +311,9 @@ export function WorkbenchShell({
   activeSessionAgentLabel?: string;
   newSessionLabel?: string;
   onNewSession?: () => void;
+  initialSessionsExpanded?: boolean;
 }) {
-  const [assistantSessionsExpanded, setAssistantSessionsExpanded] = useState(true);
+  const [assistantSessionsExpanded, setAssistantSessionsExpanded] = useState(initialSessionsExpanded);
   const locale = shellLocale ?? workbenchLocale();
   const toggleCopy = locale === "en"
     ? { navigation: "Workspace navigation", expand: "Expand sidebar", collapse: "Collapse sidebar", recent: "Recent chats", newSession: "New chat", empty: "No chats yet" }
@@ -320,7 +322,6 @@ export function WorkbenchShell({
   const mainNavItems = visibleNavItems.filter((item) => item.placement !== "footer");
   const footerNavItems = navItems.filter((item) => item.placement === "footer");
   const navPaths = navItems.map((item) => item.path);
-  const activeAgentFromPath = workbenchAgentId(activePath);
   const activeSessionScope = workbenchSessionScope(activePath);
   const hasMatchingSessionNav = Boolean(activeSessionScope && navItems.some((item) => workbenchSessionScope(item.path) === activeSessionScope));
   const renderSessionSection = (item: WorkbenchShellNavItem) => {
@@ -334,7 +335,7 @@ export function WorkbenchShell({
       ? sessions.filter((session) => session.agentId === (itemSessionScope ?? activeSessionAgentId ?? activeSessionScope))
       : sessions.filter((session) => !session.agentId);
     const sessionTitle = itemSessionScope || isFallbackAgent ? (isCurrentAgent || isFallbackAgent ? activeSessionAgentLabel ?? item.label : item.label) : sessionsLabel ?? toggleCopy.recent;
-    const showSessionHeading = itemSessionScope !== "entry:writer" && itemSessionScope !== "entry:image-assistant";
+    const showSessionHeading = !itemSessionScope && !isFallbackAgent;
     return <section className="wb-sidebar-sessions" aria-label={sessionTitle}>
       {showSessionHeading ? <div className="wb-sidebar-session-heading">{sessionTitle}</div> : null}
       {onNewSession ? <button type="button" className="wb-sidebar-session-create" onClick={onNewSession} aria-label={newSessionLabel ?? toggleCopy.newSession} title={newSessionLabel ?? toggleCopy.newSession}><span aria-hidden="true">＋</span>{newSessionLabel ?? toggleCopy.newSession}</button> : null}
@@ -371,7 +372,7 @@ export function WorkbenchShell({
               if (item.section) lastSection = item.section;
               return <div key={item.path}>
             {showSection ? <h3 className="wb-nav-section">{item.section}</h3> : null}
-            <button type="button" className={`wb-nav-item ${isActive || assistantHighlighted ? "wb-nav-item-active" : ""} ${assistantHighlighted ? "wb-nav-item-active-assistant" : ""}`.trim()} title={item.label} aria-label={item.label} aria-current={isActive ? "page" : undefined} aria-expanded={(isSessionRoot || itemSessionScope) ? Boolean(!collapsed && assistantSessionsExpanded && isWorkbenchSessionPath(activePath) && sessionItemMatches) : undefined} data-agent-nav={item.label} onClick={() => { if (!isSessionRoot) { onNavigate(item.path); return; } if (isWorkbenchSessionPath(activePath) && sessionItemMatches) { setAssistantSessionsExpanded((current) => !current); return; } setAssistantSessionsExpanded(true); onNavigate(item.path); }}><span className="wb-nav-glyph" aria-hidden="true">{item.icon ?? item.glyph ?? item.label.slice(0, 1)}</span>{!collapsed ? <span className="wb-nav-label">{item.label}</span> : null}{(isSessionRoot || itemSessionScope) && !collapsed ? <span className="wb-nav-expander" aria-hidden="true">{Boolean(!collapsed && assistantSessionsExpanded && isWorkbenchSessionPath(activePath) && sessionItemMatches) ? "⌄" : "›"}</span> : null}</button>
+            <button type="button" className={`wb-nav-item ${isActive || assistantHighlighted ? "wb-nav-item-active" : ""} ${assistantHighlighted ? "wb-nav-item-active-assistant" : ""}`.trim()} title={item.label} aria-label={item.label} aria-current={isActive ? "page" : undefined} aria-expanded={(isSessionRoot || itemSessionScope) ? (!collapsed && assistantSessionsExpanded && isWorkbenchSessionPath(activePath) && sessionItemMatches) : undefined} data-agent-nav={item.label} onClick={() => { if (!(isSessionRoot || itemSessionScope)) { onNavigate(item.path); return; } if (isWorkbenchSessionPath(activePath) && sessionItemMatches) { setAssistantSessionsExpanded((current) => !current); return; } setAssistantSessionsExpanded(true); onNavigate(item.path); }}><span className="wb-nav-glyph" aria-hidden="true">{item.icon ?? item.glyph ?? item.label.slice(0, 1)}</span>{!collapsed ? <span className="wb-nav-label">{item.label}</span> : null}{(isSessionRoot || itemSessionScope) && !collapsed ? <span className="wb-nav-expander" aria-hidden="true">{assistantSessionsExpanded && isWorkbenchSessionPath(activePath) && sessionItemMatches ? "⌄" : "›"}</span> : null}</button>
             {renderSessionSection(item)}
           </div>;
             })}

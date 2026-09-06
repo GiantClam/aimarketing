@@ -109,7 +109,7 @@ export const mediaPlaceholderEnglish: Record<string, string> = {
   "仅 music-cover 需要：原曲或参考音频的可访问 URL": "Music cover only: accessible URL for the original or reference audio.",
   "例如：生成一段适合科技产品发布会转场的短音效。": "For example: create a short transition sound for a technology product launch.",
   "留空则自动生成，例如 voice_brand_host": "Leave blank to generate one automatically, e.g. voice_brand_host.",
-  "例如：欢迎来到 AI Marketing 新品发布会。": "For example: welcome to the AI Marketing product launch.",
+  "例如：欢迎来到 CoworkAny 新品发布会。": "For example: welcome to the CoworkAny product launch.",
   "上传示例音频时可填写。": "Optional when uploading a sample recording.",
   "从可用音色库选择": "Choose from the available voice library.",
   "输入需要合成的完整文本": "Enter the full text to synthesize.",
@@ -147,7 +147,7 @@ export const writerLanguageEnglish: Record<string, string> = { auto: "Auto-detec
 export const desktopWriterCopy = {
   zh: {
     skill: "内容写作 Skill", quick: "快捷开始", quickStart: "快速开始", you: "你", assistant: "写作助手",
-    preview: "预览", edit: "编辑内容", generateImage: "生成图片", copied: "已复制", rich: "复制富文本", markdown: "复制 Markdown",
+    preview: "预览", edit: "编辑内容", generateImage: "生成图片", copied: "已复制", rich: "复制富文本", markdown: "复制 Markdown", export: "导出 Markdown",
     status: "支持文案预览与配图生成", new: "新建", close: "关闭", done: "完成", send: "发送", stop: "停止",
     platform: "平台", content: "内容", mode: "模式", language: "语言", finalPreview: "最终预览",
     previewHint: "可继续编辑、导出或复制。", generateImageWithCopy: "生成图片配图",
@@ -155,7 +155,7 @@ export const desktopWriterCopy = {
   },
   en: {
     skill: "Content Writing Skill", quick: "Quick start", quickStart: "Quick start", you: "You", assistant: "Writing assistant",
-    preview: "Preview", edit: "Edit content", generateImage: "Generate image", copied: "Copied", rich: "Copy rich text", markdown: "Copy Markdown",
+    preview: "Preview", edit: "Edit content", generateImage: "Generate image", copied: "Copied", rich: "Copy rich text", markdown: "Copy Markdown", export: "Export Markdown",
     status: "Preview and image generation supported", new: "New", close: "Close", done: "Done", send: "Send", stop: "Stop",
     platform: "Platform", content: "Content", mode: "Mode", language: "Language", finalPreview: "Final preview",
     previewHint: "Continue editing, exporting, or copying.", generateImageWithCopy: "Generate image assets",

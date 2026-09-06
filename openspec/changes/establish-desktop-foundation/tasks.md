@@ -2,7 +2,7 @@
 
 - [x] 0.1 确认 `validate-windows-desktop-feasibility` 的 foundation decision 为 `approved`。✓ 2026-08-13 — `docs/desktop/windows-v1-feasibility-results.zh-CN.md` 明确记录 foundation 为 approved、release 为 pending。
 - [x] 0.2 确认 `extract-shared-application-core` 已归档或全部质量门禁通过。✓ 2026-08-13 — 所有 extract tasks 已完成，shared boundary/provenance、SaaS adapter parity、desktop tests、root typecheck/lint/production build 均通过。
-- [x] 0.3 链接 foundation architecture decision、runtime contracts 和 WorkbenchClient；runtime spike 仅作诊断参考。✓ 2026-08-13 — foundation 仅消费 `@aimarketing/runtime-contracts` 与 `@aimarketing/workbench-client` 的稳定导出；可行性文档将 spike 明确限定为诊断证据。
+- [x] 0.3 链接 foundation architecture decision、runtime contracts 和 WorkbenchClient；runtime spike 仅作诊断参考。✓ 2026-08-13 — foundation 仅消费 `@coworkany/runtime-contracts` 与 `@coworkany/workbench-client` 的稳定导出；可行性文档将 spike 明确限定为诊断证据。
 - [x] 0.4 任一依赖不满足时停止实施，不创建替代协议或复制核心。✓ 2026-08-13 — 前置 status 已重验；桌面 adapter 继续经 shared contracts/ports 工作，不引入替代协议或 legacy shared imports。
 
 **Blocking Quality Gate:**

@@ -1,4 +1,4 @@
-# Implementation Tasks: Upgrade the AI Marketing Workbench to the Official AI Elements Component System
+# Implementation Tasks: Upgrade the CoworkAny Workbench to the Official AI Elements Component System
 
 **Change ID:** `upgrade-ai-elements-component-system`
 
@@ -92,7 +92,7 @@
 
 - [x] 6.1 运行 lint、build、typecheck、workbench-ui tests、adapter tests、shared boundary/provenance checks。✓ 2026-08-21（lint、production build、root/desktop typecheck、37 项 workbench-ui 测试、desktop 219 项测试、shared checks）
 - [ ] 6.2 运行关键 Web/Desktop E2E：AI Entry、Agent、Task、Image、Workflow、Writer、Knowledge、Dify。
-  - **Partial:** AI Entry Agent selection smoke 与 dashboard/image/video/settings visual smoke 通过；Writer 已改为优先读取桌面 `%LOCALAPPDATA%/AIMarketing/config.json` 的 `defaults.text` profile，且本地 mock provider 首轮生成、availability 配置解析和 Writer UI 回归通过。
+  - **Partial:** AI Entry Agent selection smoke 与 dashboard/image/video/settings visual smoke 通过；Writer 已改为优先读取桌面 `%LOCALAPPDATA%/CoworkAny/config.json` 的 `defaults.text` profile，且本地 mock provider 首轮生成、availability 配置解析和 Writer UI 回归通过。
   - **Tauri real UI evidence (2026-08-21):** 已在 `pnpm tauri:dev` 的真实 Tauri 窗口中打开首页、Writer、设置页和 Provider 编辑器；Writer 原生 AI Elements `ModelSelector` 实际展示 `gpt-5.4` / `gpt-5.4-mini`，点击后切换到 `gpt-5.4-mini`，并从真实 `apps/desktop/src-tauri/target/debug/data/config.json` 验证 `providers.text-main.model` 已持久化，随后恢复原始配置。截图证据：`.artifacts/tauri-live-home.png`、`.artifacts/tauri-live-writer-open.png`、`.artifacts/tauri-live-writer-two-models.png`、`.artifacts/tauri-live-writer-model-switched.png`、`.artifacts/tauri-live-settings.png`。
   - **Tauri real scenario blocker:** 使用真实 Writer 中文请求分别以 `gpt-5.4-mini` 与 `gpt-5.4` 发送，UI 均进入 `正在准备本地会话…`，60 秒后显示“文本 Provider 请求超过 60 秒未响应”；同一 `config.json` 的 `/models` 查询可返回模型列表，但直接 `/chat/completions` 请求在 15 秒内也无响应。因此真实 Provider 生成不能标记为通过，证据为 `.artifacts/tauri-live-writer-generated-60s.png` 与 `.artifacts/tauri-live-writer-gpt54-20s.png`；需在 Provider 可用或替换为可响应的测试 Provider 后重跑完整真实生成、流式输出、保存草稿和恢复验证。
   - **Tauri task-center evidence (2026-08-21):** 真实桌面任务中心显示六态下拉筛选“排队中 / 运行中 / 等待中 / 已完成 / 失败 / 已取消”，失败运行显示“准备重试”；点击第一条失败运行的重试后真实恢复到 AI 对话，原始中文 Prompt 和失败过程均保留。截图证据：`.artifacts/tauri-task-center-corrected.png`、`.artifacts/tauri-task-status-filter-open.png`、`.artifacts/tauri-task-failed-filter2.png`、`.artifacts/tauri-task-retry-real.png`。Writer 页面回归加载并显示 `gpt-5.4` 模型选择器，证据：`.artifacts/tauri-writer-status-regression.png`。
@@ -120,8 +120,8 @@
 
 ### Verified so far
 
-- `pnpm --filter @aimarketing/workbench-ui typecheck`
-- `pnpm --filter @aimarketing/workbench-ui test` — 37 passed
+- `pnpm --filter @coworkany/workbench-ui typecheck`
+- `pnpm --filter @coworkany/workbench-ui test` — 37 passed
 - `pnpm test` from `apps/desktop` — 219 passed
 - `pnpm lint`
 - `pnpm run check:shared-boundaries`

@@ -7,9 +7,12 @@ export type OpenCodeCommandInput = { readonly modelHint?: string | null };
 export type OpenCodeRuntimeEvent =
   | { readonly event: "text_delta"; readonly delta: string; readonly runId: string }
   | { readonly event: "reasoning_delta"; readonly delta: string; readonly runId: string }
-  | { readonly event: "tool_event"; readonly tool: string; readonly toolCallId?: string; readonly phase: "started" | "progress" | "completed" | "failed"; readonly message?: string; readonly runId: string }
+  | { readonly event: "tool_event"; readonly tool: string; readonly toolCallId?: string; readonly phase: "started" | "progress" | "completed" | "failed"; readonly message?: string; readonly paths?: readonly string[]; readonly runId: string }
+  | { readonly event: "artifact"; readonly artifact: { readonly id: string; readonly relativePath: string; readonly title: string; readonly mimeType: string; readonly byteLength: number; readonly sha256: string }; readonly runId: string }
   | { readonly event: "usage"; readonly provider?: string; readonly model?: string; readonly inputTokens?: number; readonly outputTokens?: number; readonly costUsd?: number; readonly runId: string }
   | { readonly event: "runtime_warning"; readonly code: string; readonly message: string; readonly runId: string }
+  | { readonly event: "permission_request"; readonly permissionId: string; readonly sessionId: string; readonly toolName: string; readonly input?: unknown; readonly title?: string; readonly callId?: string; readonly runId: string }
+  | { readonly event: "permission_response"; readonly permissionId: string; readonly sessionId: string; readonly response: "once" | "always" | "reject"; readonly callId?: string; readonly runId: string }
   | { readonly event: "runtime_error"; readonly code: string; readonly message: string; readonly retryable: boolean; readonly runId: string }
   | { readonly event: "done"; readonly runId: string };
 
@@ -31,6 +34,11 @@ function readString(...values: unknown[]) {
   return values.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim() || null;
 }
 
+/** Preserve whitespace for streamed model content; block boundaries are data. */
+function readText(...values: unknown[]) {
+  return values.find((value): value is string => typeof value === "string" && value.length > 0) ?? null;
+}
+
 function readFiniteNumber(...values: unknown[]) {
   return values.find((value): value is number => typeof value === "number" && Number.isFinite(value)) ?? null;
 }
@@ -39,6 +47,25 @@ function sanitizeToolName(value: unknown) {
   const name = typeof value === "string" ? value.trim() : "";
   if (!name) return "tool";
   return name.replace(/[^a-zA-Z0-9._:-]/g, "_").slice(0, MAX_TOOL_NAME_LENGTH) || "tool";
+}
+
+const TOOL_FILE_PATH_KEYS = ["filePath", "file_path", "filename", "fileName", "path"] as const;
+
+function toolFilePaths(...values: unknown[]) {
+  const paths = new Set<string>();
+  const visit = (value: unknown, depth: number) => {
+    if (depth > 3 || value === null || value === undefined) return;
+    if (Array.isArray(value)) { value.slice(0, 16).forEach((item) => visit(item, depth + 1)); return; }
+    const record = readRecord(value);
+    if (!record) return;
+    for (const key of TOOL_FILE_PATH_KEYS) {
+      const path = record[key];
+      if (typeof path === "string" && path.trim()) paths.add(path.trim().slice(0, 2048));
+    }
+    for (const key of ["input", "output", "result", "metadata"] as const) visit(record[key], depth + 1);
+  };
+  values.forEach((value) => visit(value, 0));
+  return [...paths].slice(0, 16);
 }
 
 export interface OpenCodeServeModel {
@@ -76,9 +103,20 @@ export function openCodeServeSessionPath(sessionId: string, directory?: string, 
   return `/session/${encodeURIComponent(sessionId)}${suffix}${query}`;
 }
 
+/** Build the v1 OpenCode Serve permission reply endpoint. */
+export function openCodeServePermissionPath(sessionId: string, permissionId: string, directory?: string) {
+  const query = directory === undefined ? "" : `?directory=${encodeURIComponent(directory)}`;
+  return `/session/${encodeURIComponent(sessionId)}/permissions/${encodeURIComponent(permissionId)}${query}`;
+}
+
 /** Build the OpenCode Serve collection path for session creation/listing. */
 export function openCodeServeSessionsPath(directory: string) {
   return `/session?directory=${encodeURIComponent(directory)}`;
+}
+
+/** Build the directory-scoped OpenCode Serve session status endpoint. */
+export function openCodeServeSessionStatusPath(directory: string) {
+  return `/session/status?directory=${encodeURIComponent(directory)}`;
 }
 
 export function createOpenCodeServeSessionPayload(input: OpenCodeServeSessionPayloadInput) {
@@ -131,13 +169,14 @@ function parseEvent(runId: string, value: unknown): OpenCodeRuntimeEvent[] {
   const error = readRecord(record.error);
   const partType = readString(part?.type)?.toLowerCase();
 
-  if (type === "reasoning" || type === "thinking" || partType === "reasoning" || partType === "thinking") {
-    const text = readString(part?.text, part?.reasoning, record.text, record.delta);
+  const thinkingText = readText(part?.thinking, record.thinking, record.reasoning_content);
+  if (type === "reasoning" || type === "thinking" || partType === "reasoning" || partType === "thinking" || thinkingText) {
+    const text = thinkingText ?? readText(part?.text, part?.reasoning, record.text, record.delta);
     return text ? [{ event: "reasoning_delta", delta: text, runId }] : [];
   }
 
   if (type === "text") {
-    const text = readString(part?.text, record.text, record.delta);
+    const text = readText(part?.text, record.text, record.delta);
     return text ? [{ event: "text_delta", delta: text, runId }] : [];
   }
 
@@ -149,11 +188,13 @@ function parseEvent(runId: string, value: unknown): OpenCodeRuntimeEvent[] {
         ? "completed"
         : "started";
     const message = readString(state?.title, state?.message, part?.message, record.message);
+    const paths = toolFilePaths(state?.input, state?.output, part?.input, part?.output, record.input, record.output);
     return [{
       event: "tool_event",
       tool: sanitizeToolName(readString(part?.tool, part?.name, record.tool, record.toolName)),
       phase,
       ...(message ? { message: safeDiagnostic(message, "") } : {}),
+      ...(paths.length ? { paths } : {}),
       runId,
     }];
   }
@@ -257,19 +298,26 @@ export function createOpenCodeEventParser(runId: string) {
 /** Mutable per-run state used while normalizing OpenCode's serve SSE schema. */
 export interface OpenCodeServeEventState {
   readonly messageRoles: Map<string, string>;
+  /** OpenCode may send a part snapshot before its streaming deltas. */
+  readonly partTypes: Map<string, string>;
   readonly textByPartId: Map<string, string>;
+  readonly permissionCallIds: Map<string, string>;
 }
 
 export interface OpenCodeServeEventResult {
   readonly sessionId: string;
   readonly messageId?: string;
   readonly messageRole?: string;
+  readonly messageCompleted?: boolean;
+  readonly messageFinish?: string;
+  readonly sessionStatus?: "idle" | "busy" | "retry";
+  readonly sessionIdle?: boolean;
   readonly events: readonly OpenCodeRuntimeEvent[];
   readonly terminalError?: { readonly code: string; readonly message: string; readonly retryable: boolean };
 }
 
 export function createOpenCodeServeEventState(): OpenCodeServeEventState {
-  return { messageRoles: new Map(), textByPartId: new Map() };
+  return { messageRoles: new Map(), partTypes: new Map(), textByPartId: new Map(), permissionCallIds: new Map() };
 }
 
 /**
@@ -286,20 +334,60 @@ export function normalizeOpenCodeServeEvent(
   const record = readRecord(envelope?.payload) ?? envelope;
   const properties = readRecord(record?.properties);
   const part = readRecord(properties?.part);
+  const tool = readRecord(properties?.tool);
   const info = readRecord(properties?.info);
   // OpenCode has emitted both `sessionID` and `sessionId`, with the session
   // occasionally nested under the message metadata. Keep host routing tied to
   // this normalized value instead of duplicating a narrower parser per host.
-  const sessionId = readString(properties?.sessionID, properties?.sessionId, part?.sessionID, part?.sessionId, info?.sessionID, info?.sessionId) ?? "";
-  const messageId = readString(info?.id, part?.messageID, part?.messageId) ?? undefined;
+  const sessionId = readString(properties?.sessionID, properties?.sessionId, part?.sessionID, part?.sessionId, info?.sessionID, info?.sessionId, tool?.sessionID, tool?.sessionId) ?? "";
+  const messageId = readString(info?.id, part?.messageID, part?.messageId, tool?.messageID, tool?.messageId) ?? undefined;
   const messageRole = readString(info?.role) ?? undefined;
   const identity = { sessionId, ...(messageId ? { messageId } : {}), ...(messageRole ? { messageRole } : {}) };
   const type = readString(record?.type) ?? "";
+  if (type === "session.status") {
+    const status = readRecord(properties?.status);
+    const value = readString(status?.type);
+    if (value === "idle" || value === "busy" || value === "retry") {
+      return { ...identity, sessionStatus: value, sessionIdle: value === "idle", events: [] };
+    }
+    return { ...identity, events: [] };
+  }
+  if (type === "session.idle") return { ...identity, sessionStatus: "idle", sessionIdle: true, events: [] };
+  if (type === "permission.updated" || type === "permission.asked") {
+    const permission = readRecord(record?.properties) ?? readRecord(record?.permission) ?? record;
+    const permissionId = readString(permission?.id, permission?.permissionID);
+    const permissionSessionId = readString(permission?.sessionID, permission?.sessionId, sessionId);
+    if (!permissionId || !permissionSessionId) return { ...identity, events: [] };
+    const metadata = readRecord(permission?.metadata);
+    const toolInfo = readRecord(permission?.tool);
+    const toolName = sanitizeToolName(readString(permission?.permission, permission?.type, permission?.action, metadata?.toolName, metadata?.tool, toolInfo?.name, "permission"));
+    const input = metadata?.input ?? metadata?.args ?? metadata?.command ?? permission?.patterns ?? permission?.pattern;
+    const title = readString(permission?.title, metadata?.title);
+    const callId = readString(permission?.callID, permission?.callId, toolInfo?.callID, toolInfo?.callId, metadata?.callID, metadata?.callId);
+    if (callId) state.permissionCallIds.set(permissionId, callId);
+    return {
+      ...identity,
+      sessionId: permissionSessionId,
+      events: [{ event: "permission_request", permissionId, sessionId: permissionSessionId, toolName, ...(input === undefined ? {} : { input }), ...(title ? { title } : {}), ...(callId ? { callId } : {}), runId }],
+    };
+  }
+  if (type === "permission.replied") {
+    const permission = readRecord(record?.properties) ?? record;
+    const permissionId = readString(permission?.permissionID, permission?.permissionId, permission?.requestID);
+    const permissionSessionId = readString(permission?.sessionID, permission?.sessionId, sessionId);
+    const response = readString(permission?.response, permission?.reply)?.toLowerCase();
+    const callId = readString(permission?.callID, permission?.callId, readRecord(permission?.tool)?.callID, readRecord(permission?.tool)?.callId, state.permissionCallIds.get(permissionId ?? ""));
+    if (!permissionId || !permissionSessionId || !["once", "always", "reject"].includes(response ?? "")) return { ...identity, events: [] };
+    return { ...identity, sessionId: permissionSessionId, events: [{ event: "permission_response", permissionId, sessionId: permissionSessionId, response: response as "once" | "always" | "reject", ...(callId ? { callId } : {}), runId }] };
+  }
   if (type === "message.updated") {
     const messageId = readString(info?.id);
     const role = readString(info?.role);
     if (messageId && role) state.messageRoles.set(messageId, role);
-    return { ...identity, events: [] };
+    const time = readRecord(info?.time);
+    const completed = readFiniteNumber(time?.completed, info?.completed);
+    const finish = readString(info?.finish, info?.finishReason, info?.reason);
+    return { ...identity, messageCompleted: role === "assistant" && completed !== null, ...(finish ? { messageFinish: finish } : {}), events: [] };
   }
   if (type === "session.error") {
     const error = readRecord(properties?.error);
@@ -317,18 +405,23 @@ export function normalizeOpenCodeServeEvent(
     // OpenCode streams visible text and model reasoning through the same event
     // type. Keep reasoning separate from the assistant response so the UI can
     // show it as process context without leaking it into the transcript.
-    const field = readString(properties?.field)?.toLowerCase();
-    const delta = readString(properties?.delta);
-    const deltaMessageId = readString(properties?.messageID, properties?.messageId);
-    const deltaPartId = readString(properties?.partID, properties?.partId) ?? deltaMessageId ?? "text";
+    const deltaPart = readRecord(properties?.part) ?? part;
+    const field = readString(properties?.field, deltaPart?.field, deltaPart?.type)?.toLowerCase();
+    const delta = readText(properties?.delta, deltaPart?.delta, deltaPart?.thinking, deltaPart?.reasoning, deltaPart?.reasoning_content, record?.delta, record?.thinking, record?.reasoning_content);
+    const deltaMessageId = readString(properties?.messageID, properties?.messageId, deltaPart?.messageID, deltaPart?.messageId);
+    const deltaPartId = readString(properties?.partID, properties?.partId, deltaPart?.id) ?? deltaMessageId ?? "text";
+    const knownPartType = state.partTypes.get(deltaPartId);
+    const deltaPartType = readString(deltaPart?.type)?.toLowerCase();
+    if (deltaPartType) state.partTypes.set(deltaPartId, deltaPartType);
     if (!delta || (deltaMessageId && state.messageRoles.get(deltaMessageId) === "user")) return { ...identity, events: [] };
-    if (field === "reasoning" || field === "thinking" || field === "reasoning_content") {
+    if (field === "reasoning" || field === "thinking" || field === "reasoning_content" || knownPartType === "reasoning" || knownPartType === "thinking" || deltaPartType === "reasoning" || deltaPartType === "thinking") {
       state.textByPartId.set(deltaPartId, `${state.textByPartId.get(deltaPartId) ?? ""}${delta}`);
       return { ...identity, ...(deltaMessageId ? { messageId: deltaMessageId } : {}), events: [{ event: "reasoning_delta", delta, runId }] };
     }
     if (field && field !== "text") return { ...identity, events: [] };
     const previous = state.textByPartId.get(deltaPartId) ?? "";
-    state.textByPartId.set(deltaPartId, `${previous}${delta}`);
+    const accumulated = `${previous}${delta}`;
+    state.textByPartId.set(deltaPartId, accumulated);
     return {
       ...identity,
       ...(deltaMessageId ? { messageId: deltaMessageId } : {}),
@@ -339,21 +432,23 @@ export function normalizeOpenCodeServeEvent(
   const partMessageId = readString(part.messageID, part.messageId);
   if (partMessageId && state.messageRoles.get(partMessageId) === "user") return { ...identity, events: [] };
   const partType = readString(part.type)?.toLowerCase();
-  if (partType === "text") {
-    const partId = readString(part.id, partMessageId) ?? "text";
+  const partId = readString(part.id, partMessageId) ?? "text";
+  if (partType) state.partTypes.set(partId, partType);
+  const reasoningText = readText(part.thinking, part.reasoning, part.reasoning_content, part.reasoningText);
+  if (partType === "text" && !reasoningText) {
     const text = typeof part.text === "string" ? part.text : "";
     const previous = state.textByPartId.get(partId) ?? "";
     const delta = text.startsWith(previous) ? text.slice(previous.length) : text;
     state.textByPartId.set(partId, text);
     return { ...identity, events: delta ? [{ event: "text_delta", delta, runId }] : [] };
   }
-  if (partType === "reasoning" || partType === "thinking") {
-    const partId = readString(part.id, partMessageId) ?? "reasoning";
-    const text = typeof part.text === "string" ? part.text : typeof part.reasoning === "string" ? part.reasoning : "";
+  if (partType === "reasoning" || partType === "thinking" || reasoningText) {
+    const text = reasoningText ?? (typeof part.text === "string" ? part.text : "");
     const previous = state.textByPartId.get(partId) ?? "";
     const delta = text.startsWith(previous) ? text.slice(previous.length) : text;
     state.textByPartId.set(partId, text);
-    return { ...identity, events: delta ? [{ event: "reasoning_delta", delta, runId }] : [] };
+    if (!delta) return { ...identity, events: [] };
+    return { ...identity, events: [{ event: "reasoning_delta", delta, runId }] };
   }
   if (partType === "tool") {
     const partState = readRecord(part.state);
@@ -365,6 +460,7 @@ export function normalizeOpenCodeServeEvent(
         : "started";
     const toolCallId = readString(part.id);
     const message = readString(partState?.title, partState?.message);
+    const paths = toolFilePaths(partState?.input, partState?.output, part?.input, part?.output);
     return {
       ...identity,
       events: [{
@@ -373,6 +469,7 @@ export function normalizeOpenCodeServeEvent(
         ...(toolCallId ? { toolCallId } : {}),
         phase,
         ...(message ? { message: safeDiagnostic(message, "") } : {}),
+        ...(paths.length ? { paths } : {}),
         runId,
       }],
     };

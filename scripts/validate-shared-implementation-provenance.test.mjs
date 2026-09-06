@@ -7,12 +7,12 @@ test("detects desktop imports that bypass a shared compatibility surface", () =>
     scanDesktopSourceText('import { validateWorkflowDefinition } from "@/lib/workflows/workflow-definition-v2";', "desktop.ts"),
     [{ filePath: "desktop.ts", reason: "desktop_imports_legacy_shared_surface" }],
   );
-  assert.deepEqual(scanDesktopSourceText('import { validateWorkflowDefinition } from "@aimarketing/workflow-core";'), []);
+  assert.deepEqual(scanDesktopSourceText('import { validateWorkflowDefinition } from "@coworkany/workflow-core";'), []);
 });
 
 test("requires compatibility surfaces to name their shared owner", () => {
-  assert.equal(compatibilitySurfaceHasSharedOwner('export * from "@aimarketing/workflow-core";', "@aimarketing/workflow-core"), true);
-  assert.equal(compatibilitySurfaceHasSharedOwner('export const localCopy = true;', "@aimarketing/workflow-core"), false);
+  assert.equal(compatibilitySurfaceHasSharedOwner('export * from "@coworkany/workflow-core";', "@coworkany/workflow-core"), true);
+  assert.equal(compatibilitySurfaceHasSharedOwner('export const localCopy = true;', "@coworkany/workflow-core"), false);
 });
 
 test("ignores generated desktop bundles when scanning source provenance", () => {

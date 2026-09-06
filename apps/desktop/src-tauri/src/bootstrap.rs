@@ -38,8 +38,8 @@ pub(crate) enum StartupStage {
 impl StartupStage {
     fn message(self, chinese: bool) -> &'static str {
         match (self, chinese) {
-            (Self::Starting, true) => "正在启动 AI Marketing…",
-            (Self::Starting, false) => "Starting AI Marketing…",
+            (Self::Starting, true) => "正在启动 CoworkAny…",
+            (Self::Starting, false) => "Starting CoworkAny…",
             (Self::WebView, true) => "正在检查 WebView2 运行时…",
             (Self::WebView, false) => "Checking the WebView2 runtime…",
             (Self::Runtime, true) => "正在准备本地运行环境…",
@@ -63,15 +63,15 @@ impl StartupProgress {
         {
             use std::ptr::{null, null_mut};
             use windows_sys::Win32::UI::WindowsAndMessaging::{
-                CreateWindowExW, ShowWindow, WS_CAPTION, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+                CreateWindowExW, ShowWindow, WS_CAPTION, WS_EX_TOOLWINDOW,
                 WS_OVERLAPPED, WS_SYSMENU, SW_SHOW,
             };
 
             let class = wide("STATIC");
-            let title = wide(if chinese { "AI Marketing 启动中" } else { "AI Marketing starting" });
+            let title = wide(if chinese { "CoworkAny 启动中" } else { "CoworkAny starting" });
             let hwnd = unsafe {
                 CreateWindowExW(
-                    WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+                    WS_EX_TOOLWINDOW,
                     class.as_ptr(),
                     title.as_ptr(),
                     WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
@@ -141,7 +141,7 @@ pub fn ensure_webview2(progress: &StartupProgress) -> Result<(), String> {
     let chinese = startup_is_chinese();
     let progress_messages = webview_repair_progress_messages_for(chinese);
     progress.update(progress_messages[0]);
-    let bootstrapper = bundled_bootstrapper().unwrap_or_else(|| std::env::temp_dir().join("AI-Marketing-WebView2Bootstrapper.exe"));
+    let bootstrapper = bundled_bootstrapper().unwrap_or_else(|| std::env::temp_dir().join("CoworkAny-WebView2Bootstrapper.exe"));
     if !bootstrapper.is_file() {
         progress.update(progress_messages[1]);
         download_bootstrapper(&bootstrapper)?;
@@ -215,9 +215,9 @@ pub fn show_startup_error(error: &str) {
 
 fn startup_error_messages_for(chinese: bool, error: &str) -> (String, String) {
     if chinese {
-        ("AI Marketing 启动失败".to_string(), format!("无法准备 Windows 本地运行环境。\\n\\n{error}\\n请检查网络或运行时安装包后重新启动。"))
+        ("CoworkAny 启动失败".to_string(), format!("无法准备 Windows 本地运行环境。\\n\\n{error}\\n请检查网络或运行时安装包后重新启动。"))
     } else {
-        ("AI Marketing startup failed".to_string(), format!("Unable to prepare the Windows local runtime.\\n\\n{error}\\nCheck the network or runtime installer and restart the app."))
+        ("CoworkAny startup failed".to_string(), format!("Unable to prepare the Windows local runtime.\\n\\n{error}\\nCheck the network or runtime installer and restart the app."))
     }
 }
 
@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn font_probe_rejects_corrupt_files_and_accepts_valid_font_headers() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-font-probe-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-font-probe-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let font = root.join("msyh.ttc");
@@ -343,11 +343,11 @@ mod tests {
     #[test]
     fn startup_errors_follow_the_selected_locale() {
         assert_eq!(startup_error_messages_for(true, "runtime_install_incomplete"), (
-            "AI Marketing 启动失败".to_string(),
+            "CoworkAny 启动失败".to_string(),
             "无法准备 Windows 本地运行环境。\\n\\nruntime_install_incomplete\\n请检查网络或运行时安装包后重新启动。".to_string(),
         ));
         assert_eq!(startup_error_messages_for(false, "runtime_install_incomplete"), (
-            "AI Marketing startup failed".to_string(),
+            "CoworkAny startup failed".to_string(),
             "Unable to prepare the Windows local runtime.\\n\\nruntime_install_incomplete\\nCheck the network or runtime installer and restart the app.".to_string(),
         ));
     }

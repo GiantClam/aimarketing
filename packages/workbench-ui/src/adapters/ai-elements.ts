@@ -1,4 +1,4 @@
-import type { WorkbenchMessagePart, WorkbenchPartStatus, WorkbenchPlanStep, WorkbenchTaskStep } from "@aimarketing/workbench-client";
+import type { WorkbenchMessagePart, WorkbenchPartStatus, WorkbenchPlanStep, WorkbenchTaskStep } from "@coworkany/workbench-client";
 import type { AttachmentItem, AIElementStatus, ModelOption, PlanStep, TaskStep } from "../ai-elements/source";
 
 export function toAIElementStatus(status: WorkbenchPartStatus | undefined): AIElementStatus {

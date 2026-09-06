@@ -2,15 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { WorkbenchMessage } from "@aimarketing/workbench-client";
-import { WorkbenchMessageTimeline } from "../src/index";
-import { ConversationScrollButton } from "../src/ai-elements/index";
+import type { WorkbenchMessage } from "@coworkany/workbench-client";
+import { formatWorkbenchMessageTimestamp, WorkbenchMessageTimeline } from "../src/index";
+import { Conversation, ConversationContent, ConversationScrollButton } from "../src/ai-elements/index";
 
-test("conversation scroll button exposes the themed latest-message action", () => {
-  const markup = renderToStaticMarkup(<ConversationScrollButton aria-label="滚动到最新消息" title="滚动到最新消息" />);
-  assert.match(markup, /data-slot="conversation-scroll-button"/);
-  assert.match(markup, /aria-label="滚动到最新消息"/);
-  assert.match(markup, /aria-hidden="true"/);
+test("conversation uses the official stick-to-bottom composition", () => {
+  const markup = renderToStaticMarkup(<Conversation><ConversationContent><span>消息</span></ConversationContent><ConversationScrollButton aria-label="滚动到最新消息" title="滚动到最新消息" /></Conversation>);
+  assert.match(markup, /data-slot="conversation"/);
+  assert.match(markup, /data-slot="conversation-content"/);
+  assert.match(markup, /class="ai-elements-conversation-viewport"/);
+  assert.doesNotMatch(markup, /<button[^>]*data-slot="conversation-scroll-button"/);
 });
 
 test("shared message timeline renders stable ordered timestamps and accessible actions", () => {
@@ -28,7 +29,7 @@ test("shared message timeline renders stable ordered timestamps and accessible a
     ],
   }];
 
-  const markup = renderToStaticMarkup(<WorkbenchMessageTimeline messages={messages} locale="en" onArtifactOpen={() => undefined} />);
+  const markup = renderToStaticMarkup(<WorkbenchMessageTimeline messages={messages} locale="en" onArtifactOpen={() => undefined} onCopy={() => undefined} />);
   assert.match(markup, /<time dateTime="2026-08-12T00:00:00Z"/);
   assert.match(markup, /<time dateTime="2026-08-12T00:00:02Z"/);
   assert.match(markup, /data-sequence="2"/);
@@ -38,8 +39,34 @@ test("shared message timeline renders stable ordered timestamps and accessible a
   assert.match(markup, /class="[^"]*ai-elements-message ai-elements-message-assistant wb-ai-message wb-ai-message-assistant/);
   assert.match(markup, /class="ai-elements-message-content wb-ai-message-content[^"]*"/);
   assert.match(markup, /data-slot="message-actions"/);
+  assert.match(markup, /data-slot="message-toolbar"/);
   assert.match(markup, /aria-label="Open artifact: 分析报告"/);
   assert.match(markup, /data-status="completed"/);
+});
+
+test("message timeline renders the full local creation timestamp", () => {
+  const createdAt = "2026-08-12T00:00:00Z";
+  const markup = renderToStaticMarkup(<WorkbenchMessageTimeline messages={[{
+    id: "assistant-timestamp",
+    conversationId: "conversation-1",
+    role: "assistant",
+    content: "回答",
+    createdAt,
+  }]} locale="zh" />);
+
+  assert.match(markup, new RegExp(`<time dateTime="${createdAt}"[^>]*title="创建时间（本地时区）">${formatWorkbenchMessageTimestamp(createdAt, "zh")}</time>`));
+});
+
+test("shared message timeline omits copy controls when copying is not configured", () => {
+  const markup = renderToStaticMarkup(<WorkbenchMessageTimeline messages={[{
+    id: "assistant-without-copy",
+    conversationId: "conversation-1",
+    role: "assistant",
+    content: "answer",
+    createdAt: "2026-08-12T00:00:00Z",
+  }]} locale="en" />);
+  assert.doesNotMatch(markup, /data-slot="message-toolbar"/);
+  assert.doesNotMatch(markup, /data-slot="message-actions"/);
 });
 
 test("user timeline messages keep their high-contrast body class", () => {
@@ -55,6 +82,21 @@ test("user timeline messages keep their high-contrast body class", () => {
   assert.match(markup, /class="[^"]*ai-elements-message ai-elements-message-user wb-ai-message wb-ai-message-user/);
   assert.doesNotMatch(markup, /assistant-body/);
   assert.match(markup, /wb-chat-user-header/);
+});
+
+test("user timeline preserves Markdown-looking input as plain text", () => {
+  const content = "# 用户输入\n\n**原样保留**\n\n---";
+  const markup = renderToStaticMarkup(<WorkbenchMessageTimeline messages={[{
+    id: "user-plain-timeline",
+    conversationId: "conversation-1",
+    role: "user",
+    content,
+    createdAt: "2026-08-12T00:00:00Z",
+  }]} locale="zh" />);
+
+  assert.match(markup, /data-message-text-mode="plain"/);
+  assert.match(markup, /# 用户输入\n\n\*\*原样保留\*\*\n\n---/u);
+  assert.doesNotMatch(markup, /<h1|data-streamdown="strong"|<hr/);
 });
 
 test("assistant timelines separate streaming process evidence from rich results", () => {

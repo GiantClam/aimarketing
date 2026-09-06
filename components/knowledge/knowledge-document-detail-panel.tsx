@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea"
 import type { AppLocale } from "@/lib/i18n/config"
 import type { KnowledgeDocumentSnapshot } from "@/lib/knowledge/service"
 import type { KnowledgeChunk, KnowledgeChunkingConfig, KnowledgeScope } from "@/lib/knowledge/types"
-import { Context, InlineCitation, Source, Sources } from "@aimarketing/workbench-ui"
+import { Context, InlineCitation, Source, Sources } from "@coworkany/workbench-ui"
 
 const CHUNK_PREVIEW_PAGE_SIZE = 4
 

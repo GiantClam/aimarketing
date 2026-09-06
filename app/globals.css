@@ -1,5 +1,5 @@
 /* Do not let Tailwind recursively scan generated PPT/cache artifacts at repo root. */
-@import "@aimarketing/workbench-ui/styles.css";
+@import "@coworkany/workbench-ui/styles.css";
 @import "tailwindcss" source(none);
 @source "../app";
 @source "../components";
@@ -35,7 +35,7 @@
     "Microsoft YaHei",
     sans-serif;
 
-  /* AI Marketing command-center system */
+  /* CoworkAny command-center system */
   --background: #fdfdfb;
   --foreground: #111111;
   --card: #ffffff;
@@ -489,7 +489,7 @@
     text-transform: uppercase;
   }
 
-  /* Shared with @aimarketing/workbench-ui so Web and Tauri render the same message geometry. */
+  /* Shared with @coworkany/workbench-ui so Web and Tauri render the same message geometry. */
   .wb-message-frame { width: 100%; padding: 0.875rem 1rem; border-bottom: 1px solid var(--border); }
   .wb-message-inner { display: flex; width: 100%; max-width: 64rem; margin-inline: auto; gap: 0.75rem; }
   .wb-message-assistant { background: var(--card); color: var(--foreground); }

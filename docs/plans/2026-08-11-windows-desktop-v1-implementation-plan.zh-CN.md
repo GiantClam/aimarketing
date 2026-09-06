@@ -1,8 +1,8 @@
-# AIMarketing Windows Desktop v1 Implementation Plan
+# CoworkAny Windows Desktop v1 Implementation Plan
 
 > Use this plan to execute the work task-by-task with tight verification after each step.
 
-**Goal:** 在不复制 SaaS 业务核心的前提下，为 Windows 10 22H2/Windows 11 x64 交付面向个人与单机小团队的本地 AIMarketing 工作台。
+**Goal:** 在不复制 SaaS 业务核心的前提下，为 Windows 10 22H2/Windows 11 x64 交付面向个人与单机小团队的本地 CoworkAny 工作台。
 
 **Architecture:** 保留当前 Next.js SaaS，并把纯 TypeScript 协议、工作流引擎、模型目录和可复用 UI 抽入 workspace packages。桌面端采用 Tauri + React；Rust 主进程负责启动门禁、SQLite、LanceDB、文件系统和子进程监管，私有 Node `workflow-host` 运行共享 TypeScript 核心，OpenCode `serve` 承担全部文本对话与 Skill 执行，媒体能力通过共享 Provider adapters 直连用户配置的 API。
 
@@ -42,7 +42,7 @@
 - 应用不主动提权；需要管理员权限时由 Windows UAC 决定。
 - UI 实时展示工具步骤并提供紧急停止；关键工具事件持久化。
 - API Key 明文保存在可读 JSON 配置中；UI 明示风险，日志和诊断包必须脱敏。
-- 除用户主动配置的模型/媒体 Provider 和运行时下载源外，不连接 AIMarketing 业务后端。
+- 除用户主动配置的模型/媒体 Provider 和运行时下载源外，不连接 CoworkAny 业务后端。
 
 ## 2. 当前代码审计结论
 
@@ -75,7 +75,7 @@
 ## 3. 目标目录与进程拓扑
 
 ```text
-aimarketing/
+coworkany/
 ├─ app/ + components/ + lib/             # 现有 Next.js SaaS
 ├─ apps/
 │  ├─ desktop/                            # Tauri + React 桌面应用
@@ -122,7 +122,7 @@ Tauri Rust Host
 普通模式：
 
 ```text
-%LOCALAPPDATA%\AIMarketing\
+%LOCALAPPDATA%\CoworkAny\
 ├─ config.json
 ├─ app.db
 ├─ runtime\<component>\<version>\
@@ -151,7 +151,7 @@ Tauri Rust Host
 ```json
 {
   "schemaVersion": 1,
-  "workspaceDir": "D:\\AI Marketing Workspace",
+  "workspaceDir": "D:\\CoworkAny Workspace",
   "vaults": [{ "id": "vault-local-id", "path": "D:\\Notes", "enabled": true }],
   "providers": {
     "openaiCompatible": [{ "id": "default", "baseUrl": "https://api.example.com/v1", "apiKey": "plain-text", "models": ["model-id"] }],
@@ -218,7 +218,7 @@ CREATE TABLE vault_mappings(id TEXT PRIMARY KEY, vault_id TEXT NOT NULL, project
 
 顺序为阿里云 OSS/CDN → 腾讯云 COS/CDN → 清华镜像（仅其实际提供的组件）→ 官方源。所有来源必须匹配同一份离线签名 manifest 和 SHA-256；客户端内置公钥，不能信任下载源同桶提供的公钥。
 
-另行发布 `AIMarketing-Runtime-x64.zip`，支持从本地导入、校验和安装。主 ZIP 不内置完整运行环境；正常目标为 60–150MB，首次补齐环境后约 500MB–1.2GB，实际以 CI size budget 为准。
+另行发布 `CoworkAny-Runtime-x64.zip`，支持从本地导入、校验和安装。主 ZIP 不内置完整运行环境；正常目标为 60–150MB，首次补齐环境后约 500MB–1.2GB，实际以 CI size budget 为准。
 
 ## 6. 分阶段实施任务
 
@@ -418,7 +418,7 @@ export interface WorkflowRunRepository {
 2. 创建 Vite React 应用并接入共享 design tokens、UI primitives 和 workbench client provider。
 3. 创建 Tauri commands/events 薄层；UI 不接触文件路径或子进程句柄。
 4. 建立本地导航，只注册 v1 页面，完全不注册登录、企业、计费、Lead Hunter、市场和公开页面。
-5. 运行 `pnpm --filter @aimarketing/desktop test`、`typecheck` 和静态 build。
+5. 运行 `pnpm --filter @coworkany/desktop test`、`typecheck` 和静态 build。
 6. Commit intent: `Create the desktop host around shared workbench surfaces`。
 
 ### Task 7: 实现配置、路径和便携模式
@@ -539,7 +539,7 @@ export interface WorkflowRunRepository {
 
 1. 用 fake OpenCode server 写启动、握手、session、stream、tool、cancel 和 crash tests。
 2. 在 loopback 随机端口启动 `opencode serve`，生成随机 Basic Auth，关闭 CORS/mDNS。
-3. 使用 AIMarketing 私有 config/skills 目录，避免读取或修改用户全局 OpenCode 配置。
+3. 使用 CoworkAny 私有 config/skills 目录，避免读取或修改用户全局 OpenCode 配置。
 4. 将一个 conversation 稳定映射到一个 OpenCode session；SQLite 仍是消息事实源。
 5. 全部普通对话、写作和文本 workflow node 走此服务，禁止 desktop 直接调用文本模型 SDK。
 6. 把 normalized events 写入 UI、关键事件表和原始 JSONL。
@@ -590,7 +590,7 @@ export interface WorkflowRunRepository {
 4. 实现 watcher + 启动/唤醒 manifest/hash reconciliation，避免漏事件。
 5. 将模型 ID、维度、距离算法和 chunk schema 写入 `index-state.json`；不兼容时重建索引。
 6. 语义索引完成后启用 lexical + vector hybrid retrieval，并返回文件、标题、段落和行号引用。
-7. 默认只写 `Vault/AI Marketing/`；修改既有笔记必须使用目标路径、base hash、diff 和冲突提示。
+7. 默认只写 `Vault/CoworkAny/`；修改既有笔记必须使用目标路径、base hash、diff 和冲突提示。
 8. 默认 local embedding；只有用户显式启用远程 embedding 才发送 chunk。
 9. 只有用户在对话/工作流显式启用知识库时，才把 top-k 内容交给远程文本模型。
 10. Commit intent: `Use Obsidian files directly with an app-owned recoverable RAG index`。
@@ -738,16 +738,16 @@ export interface WorkflowRunRepository {
 ```powershell
 pnpm install --frozen-lockfile
 pnpm test:desktop:boundaries
-pnpm --filter @aimarketing/runtime-contracts test
-pnpm --filter @aimarketing/workflow-core test
-pnpm --filter @aimarketing/media-runtime test
-pnpm --filter @aimarketing/workflow-host test
-pnpm --filter @aimarketing/desktop test
-pnpm --filter @aimarketing/desktop typecheck
+pnpm --filter @coworkany/runtime-contracts test
+pnpm --filter @coworkany/workflow-core test
+pnpm --filter @coworkany/media-runtime test
+pnpm --filter @coworkany/workflow-host test
+pnpm --filter @coworkany/desktop test
+pnpm --filter @coworkany/desktop typecheck
 cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 pnpm lint
 pnpm build
-pnpm --filter @aimarketing/desktop build
+pnpm --filter @coworkany/desktop build
 ```
 
 所有命令必须通过；新增核心代码覆盖率目标 80% 以上。真实 Provider、Windows VM、长路径和离线安装结果记录在 release checklist。

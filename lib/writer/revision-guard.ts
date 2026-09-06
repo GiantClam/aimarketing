@@ -2,7 +2,7 @@ import {
   isIncompleteWriterRevisionContent,
   isWriterTitleOnlyRevisionRequest,
   reconcileWriterRevisionResult as reconcileSharedWriterRevisionResult,
-} from "@aimarketing/writer-core"
+} from "@coworkany/writer-core"
 
 import type { WriterActiveDraft } from "./runtime/session-runtime"
 import type { WriterSubmitResult } from "./writer-result"

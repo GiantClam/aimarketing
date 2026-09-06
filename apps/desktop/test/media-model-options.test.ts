@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { resolveWorkbenchMediaFeature, WORKBENCH_MEDIA_FEATURES } from "@aimarketing/workbench-ui"
+import { resolveWorkbenchMediaFeature, WORKBENCH_MEDIA_FEATURES } from "@coworkany/workbench-ui"
 import { applyConfiguredMediaModels } from "../src/media-model-options"
 
 test("media model fields expose the configured catalog and selected model", () => {

@@ -105,10 +105,10 @@ async function acquireWriteLock(target: string) {
   };
 }
 
-/** Writes only inside Vault/AI Marketing by default and refuses stale overwrites. */
+/** Writes only inside Vault/CoworkAny by default and refuses stale overwrites. */
 export async function writeObsidianNote(request: ObsidianWriteRequest): Promise<ObsidianWriteResult> {
   const root = resolve(request.vaultPath);
-  const requested = request.targetPath?.trim() || "AI Marketing/generated-note.md";
+  const requested = request.targetPath?.trim() || "CoworkAny/generated-note.md";
   const target = resolve(root, requested);
   if (target !== root && !target.startsWith(`${root}${sep}`)) throw new Error("obsidian_path_escape");
   const release = await acquireWriteLock(target);
@@ -162,7 +162,7 @@ async function collectMarkdown(directory: string, visited = new Set<string>(), r
 }
 
 function readIgnorePatterns(root: string): string[] {
-  return [".gitignore", ".aimarketingignore"].flatMap((filename) => {
+  return [".gitignore", ".coworkanyignore"].flatMap((filename) => {
     try {
       return readFileSync(join(resolve(root), filename), "utf8")
         .split(/\r?\n/u)

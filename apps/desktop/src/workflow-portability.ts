@@ -1,8 +1,8 @@
-import { parseAndMigrateWorkflowDefinition, type WorkflowDefinitionEnvelope } from "@aimarketing/workflow-core";
+import { parseAndMigrateWorkflowDefinition, type WorkflowDefinitionEnvelope } from "@coworkany/workflow-core";
 import { sanitizeWorkflowDefinitionForExport, sanitizeWorkflowDefinitionForStorage } from "./workflow-storage";
 
 export type WorkflowExportPayload = {
-  format: "aimarketing-workflow";
+  format: "coworkany-workflow";
   exportedAt: string;
   definition: WorkflowDefinitionEnvelope;
 };
@@ -13,7 +13,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function createWorkflowExportPayload(definition: WorkflowDefinitionEnvelope, exportedAt = new Date().toISOString()): WorkflowExportPayload {
   return {
-    format: "aimarketing-workflow",
+    format: "coworkany-workflow",
     exportedAt,
     definition: sanitizeWorkflowDefinitionForExport(definition),
   };

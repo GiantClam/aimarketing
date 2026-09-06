@@ -8,7 +8,7 @@ import { detectPresentationArtifacts } from "../runtime/presentation-artifacts";
 import { indexObsidianVault, searchVault, writeObsidianNote } from "../runtime/obsidian";
 
 test("local writing, PPT artifacts, Vault citations and conflict handling share one E2E flow", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-writing-ppt-rag-e2e-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-writing-ppt-rag-e2e-"));
   const runtimeDirectory = join(root, "runtime");
   const vault = join(root, "vault");
   const index = join(root, "index");

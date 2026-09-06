@@ -4,11 +4,11 @@ export {
   migrateLegacyWorkflowDefinition,
   migrateWorkflowDefinitionToCurrent,
   parseAndMigrateWorkflowDefinition,
-} from "@aimarketing/workflow-core"
+} from "@coworkany/workflow-core"
 
 export type {
   LegacyWorkflowDefinition,
   LegacyWorkflowDefinitionEdge,
   LegacyWorkflowDefinitionNode,
   WorkflowDefinitionMigrationOptions,
-} from "@aimarketing/workflow-core"
+} from "@coworkany/workflow-core"

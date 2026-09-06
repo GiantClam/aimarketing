@@ -1,1 +1,1 @@
-export { Agent, AgentHeader, AgentInstructions, AgentOutput, AgentTool, AgentTools } from "./source";
+export { Agent, AgentContent, AgentHeader, AgentInstructions, AgentOutput, AgentTool, AgentTools } from "./source";

@@ -79,9 +79,11 @@ export function getDesktopImageParameterSchema(model: string, locale: "zh" | "en
 }
 
 export function normalizeDesktopImageSettings(model: string, previous: Readonly<Record<string, unknown>> = {}): DesktopImageSettings {
+  const kind = resolveDesktopImageModelKind(model);
   const fields = getDesktopImageParameterSchema(model, "en");
   return Object.fromEntries(fields.map((field) => {
     const value = previous[field.id];
+    if (kind === "gpt-image-2" && field.id === "responseFormat") return [field.id, "url"];
     return [field.id, typeof value === "string" && (field.type !== "select" || field.options?.some((option) => option.value === value)) ? value : field.defaultValue ?? ""];
   }));
 }

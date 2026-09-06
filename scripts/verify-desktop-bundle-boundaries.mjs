@@ -7,7 +7,11 @@ const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 export const FORBIDDEN_BUNDLE_MARKERS = [
   { label: "SaaS API route", pattern: /\/api\/(?:billing|enterprise|lead-hunter|marketplace)(?:\/|["'`]|$)/iu },
   { label: "excluded desktop capability", pattern: /\b(?:lead[\s_-]*hunter|publish[\s_-]*as[\s_-]*agent|marketplace(?!\s+submission\s+pipeline)|enterprise[\s_-]+preset)\b/iu },
-  { label: "cloud-only integration", pattern: /\b(?:railway|cloudflare|ragflow|dify)\b/iu },
+  // Keep ordinary dependency feature detection (for example an SDK checking
+  // whether the browser user agent is Cloudflare) out of this integration
+  // boundary check. The desktop bundle must still reject actual cloud-host
+  // imports, endpoints, package names and runtime identifiers.
+  { label: "cloud-only integration", pattern: /\b(?:railway|ragflow|dify)\b|(?:@cloudflare[\\/]|https?:\/\/[^\s"'`]*cloudflare|cloudflare[-_.](?:api|opencode|sandbox|worker|runtime|deployment))\b/iu },
 ];
 
 export const DESKTOP_BUNDLE_TEXT_EXTENSIONS = new Set([".css", ".html", ".js", ".json", ".mjs", ".svg"]);

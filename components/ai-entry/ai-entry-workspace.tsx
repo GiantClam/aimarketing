@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import type { NavigationAdapter, WorkbenchClient } from "@aimarketing/workbench-client"
-import { WorkbenchCloudMessageShell, WorkbenchMessageTimeline } from "@aimarketing/workbench-ui"
+import { desktopUIMessageText } from "@coworkany/workbench-client"
+import type { NavigationAdapter, WorkbenchClient } from "@coworkany/workbench-client"
+import { WorkbenchCloudMessageShell, WorkbenchMessageTimeline } from "@coworkany/workbench-ui"
 import {
   ArrowRight,
   Check,
@@ -43,7 +44,7 @@ import {
   PromptInputAction,
   PromptInputActions,
   PromptInputTextarea,
-} from "@aimarketing/workbench-ui"
+} from "@coworkany/workbench-ui"
 import { useI18n } from "@/components/locale-provider"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
@@ -1672,8 +1673,8 @@ export function AiEntryWorkspace({
               return {
                 id: message.id,
                 role,
-                content: message.content,
-                createdAt: Date.parse(message.createdAt) || Date.now(),
+                content: desktopUIMessageText(message),
+                createdAt: Date.parse(message.metadata?.createdAt ?? "") || Date.now(),
               }
             }),
           taskRuns: [],
@@ -4219,7 +4220,7 @@ export function AiEntryWorkspace({
                     onChange={(event) => void handleAttachmentFiles(event.target.files)}
                   />
                   {renderSelectedAttachments()}
-                  <PromptInputTextarea placeholder={workspacePlaceholder} className="min-h-[120px] text-base" />
+                  <PromptInputTextarea aria-label={isZh ? "消息输入" : "Message input"} placeholder={workspacePlaceholder} className="min-h-[120px] text-base" />
                   <PromptInputActions>
                     <div className="flex items-center gap-2">
                       {renderAttachmentPicker()}
@@ -4283,6 +4284,7 @@ export function AiEntryWorkspace({
 
               <WorkbenchMessageTimeline
                 className="contents"
+                locale={displayLocale}
                 messages={displayMessages.map((message) => ({
                   id: message.id,
                   conversationId: conversationId ?? "new",
@@ -4351,7 +4353,7 @@ export function AiEntryWorkspace({
                   <WorkbenchCloudMessageShell
                     key={message.id}
                     role="assistant"
-                    label="AI RESPONSE"
+                    label={isZh ? "AI 回复" : "AI RESPONSE"}
                     timestamp={formatMessageTime(message.createdAt, displayLocale, browserTimeZone)}
                     footer={(bodyContent.trim() || artifactPart || parsedArtifact) ? (
                       <div className="message-actions message-feedback">
@@ -4533,7 +4535,7 @@ export function AiEntryWorkspace({
                 onChange={(event) => void handleAttachmentFiles(event.target.files)}
               />
               {renderSelectedAttachments()}
-              <PromptInputTextarea placeholder={workspacePlaceholder} className={cn("composer-input", compactEmbedded ? "min-h-[88px]" : undefined)} />
+              <PromptInputTextarea aria-label={isZh ? "消息输入" : "Message input"} placeholder={workspacePlaceholder} className={cn("composer-input", compactEmbedded ? "min-h-[88px]" : undefined)} />
               <PromptInputActions className="items-end gap-3 p-0">
                 <div className="flex items-center gap-2">
                   {renderAttachmentPicker()}

@@ -12,7 +12,7 @@ const execFileAsync = promisify(execFile);
 const installerPath = join(dirname(fileURLToPath(import.meta.url)), "install-desktop-runtime.ps1");
 
 async function runPowerShellDownload(functionSource, url, destination) {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-runtime-download-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-runtime-download-"));
   const wrapper = join(root, "download.ps1");
   const script = [
     "$ErrorActionPreference = 'Stop'",
@@ -42,7 +42,7 @@ test("runtime downloader resumes a partial file and handles servers that ignore 
   const end = source.indexOf("function Seed-BundledRuntime");
   assert.ok(start >= 0 && end > start, "download function should remain an isolated installer helper");
   const functionSource = source.slice(start, end);
-  const payload = Buffer.from("AIMarketing runtime payload with a resumable tail", "utf8");
+  const payload = Buffer.from("CoworkAny runtime payload with a resumable tail", "utf8");
   const requests = [];
   const server = createServer((request, response) => {
     requests.push({ range: request.headers.range ?? null, ignoreRange: request.url.includes("ignore") });
@@ -61,7 +61,7 @@ test("runtime downloader resumes a partial file and handles servers that ignore 
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   const port = typeof address === "object" && address ? address.port : 0;
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-runtime-download-fixture-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-runtime-download-fixture-"));
   try {
     const resumed = join(root, "resumed.bin");
     await writeFile(`${resumed}.part`, payload.subarray(0, 12));

@@ -66,6 +66,16 @@ export interface WorkbenchConversation {
   readonly agentId?: string;
 }
 
+export interface WorkbenchConversationMessageCursor {
+  readonly createdAt: string;
+  readonly id: string;
+}
+
+export interface WorkbenchConversationMessagesOptions {
+  readonly limit?: number;
+  readonly before?: WorkbenchConversationMessageCursor;
+}
+
 export interface WorkbenchRun {
   readonly id: string;
   readonly conversationId: string;
@@ -131,7 +141,7 @@ export type WorkbenchRunEvent = WorkbenchRunEventMetadata & (
   | { readonly type: "reasoning"; readonly delta: string }
   | { readonly type: "plan"; readonly plan: { readonly id: string; readonly title?: string; readonly steps: readonly WorkbenchPlanStep[]; readonly status: WorkbenchPartStatus } }
   | { readonly type: "task"; readonly task: { readonly id: string; readonly taskId?: string; readonly title: string; readonly steps?: readonly WorkbenchTaskStep[]; readonly status: WorkbenchPartStatus } }
-  | { readonly type: "tool_call"; readonly toolName: string; readonly toolCallId: string; readonly phase: "started" | "completed" | "failed" | "blocked"; readonly input?: unknown; readonly output?: unknown; readonly error?: string }
+  | { readonly type: "tool_call"; readonly toolName: string; readonly toolCallId: string; readonly phase: "started" | "completed" | "failed" | "blocked"; readonly input?: unknown; readonly output?: unknown; readonly error?: string; readonly approvalId?: string; readonly sessionId?: string }
   | { readonly type: "attachment"; readonly attachment: { readonly id: string; readonly name: string; readonly mediaType: string; readonly uri?: string; readonly status?: "queued" | "uploading" | "ready" | "failed" } }
   | { readonly type: "warning"; readonly code: string; readonly message: string }
   | { readonly type: "tool"; readonly tool: string; readonly phase: "started" | "completed" | "failed"; readonly message?: string }
@@ -203,9 +213,8 @@ export interface WorkbenchClient {
   };
   readonly conversations: {
     readonly list: () => Promise<readonly WorkbenchConversation[]>;
-    readonly create: (title?: string) => Promise<WorkbenchConversation>;
-    readonly messages: (conversationId: string) => Promise<readonly WorkbenchMessage[]>;
-    readonly uiMessages: (conversationId: string) => Promise<readonly DesktopUIMessage[]>;
+    readonly create: (title?: string, agentId?: string | null) => Promise<WorkbenchConversation>;
+    readonly messages: (conversationId: string, options?: WorkbenchConversationMessagesOptions) => Promise<readonly DesktopUIMessage[]>;
   };
   readonly workflows: {
     readonly list: () => Promise<readonly WorkbenchWorkflow[]>;

@@ -1,12 +1,12 @@
-import { WORKBENCH_MESSAGE_PARTS_VERSION, normalizeWorkbenchMessageParts } from "../../packages/workbench-client/src/index"
+import { createDesktopUIMessage, parseDesktopUIMessage } from "../../packages/workbench-client/src/uimessage"
 import type {
+  DesktopUIMessage,
   NavigationAdapter,
   WorkbenchArtifact,
   WorkbenchClient,
   WorkbenchConversation,
   WorkbenchKnowledgeIndex,
   WorkbenchKnowledgeResult,
-  WorkbenchMessage,
   WorkbenchRun,
   WorkbenchRunDetail,
   WorkbenchRunEvent,
@@ -50,8 +50,8 @@ function toIso(value: unknown) {
   return new Date(seconds > 1_000_000_000_000 ? seconds : seconds * 1_000).toISOString()
 }
 
-function messageRole(value: unknown): WorkbenchMessage["role"] {
-  return value === "assistant" || value === "system" || value === "tool" ? value : "user"
+function messageRole(value: unknown): DesktopUIMessage["role"] {
+  return value === "assistant" || value === "system" ? value : "user"
 }
 
 function consumeSseEvents(buffer: string) {
@@ -158,11 +158,16 @@ export function createWebWorkbenchClient(options: WebWorkbenchClientOptions): Wo
       async messages(conversationId) {
         const payload = await jsonOrError(await fetchImpl(`${apiBase}/messages?conversation_id=${encodeURIComponent(conversationId)}&limit=200`, { credentials: "same-origin" }))
         const data = Array.isArray(payload?.data) ? payload.data : []
-        return data.map((row): WorkbenchMessage => {
+        return data.map((row): DesktopUIMessage => {
           const value = row as Record<string, unknown>
           const content = String(value.content ?? "")
           const rawParts = Array.isArray(value.parts) ? value.parts : typeof value.parts_json === "string" ? (() => { try { const parsed = JSON.parse(value.parts_json as string); return Array.isArray(parsed) ? parsed : undefined } catch { return undefined } })() : undefined
-          return { id: String(value.id), conversationId: String(value.conversation_id ?? conversationId), role: messageRole(value.role), content, createdAt: toIso(value.created_at), partsVersion: WORKBENCH_MESSAGE_PARTS_VERSION, parts: normalizeWorkbenchMessageParts(rawParts as NonNullable<WorkbenchMessage["parts"]> | undefined, content) }
+          const id = String(value.id)
+          const createdAt = toIso(value.created_at)
+          const messageConversationId = String(value.conversation_id ?? conversationId)
+          return rawParts
+            ? parseDesktopUIMessage({ id, role: messageRole(value.role), parts: rawParts, metadata: { conversationId: messageConversationId, createdAt, updatedAt: createdAt } })
+            : createDesktopUIMessage({ id, role: messageRole(value.role), conversationId: messageConversationId, content, createdAt })
         })
       },
     },

@@ -63,3 +63,12 @@ test("accepts generic assets for media inputs but not text-only nodes", () => {
   assert.equal(canWorkflowNodeConnectValueKind("image_generate", "asset"), true);
   assert.equal(canWorkflowNodeConnectValueKind("writer", "asset"), false);
 });
+
+test("asset library node accepts generated text and every local media output", () => {
+  const store = workflowNodeRegistry.require("product_store");
+  assert.deepEqual(store.inputs.map((port) => port.id), ["text", "assets", "images", "videos", "audios", "presentations"]);
+  assert.deepEqual(resolveWorkflowPortConnection("writer", "product_store"), { sourcePortId: "text", targetPortId: "text" });
+  assert.deepEqual(resolveWorkflowPortConnection("image_generate", "product_store"), { sourcePortId: "image", targetPortId: "images" });
+  assert.deepEqual(resolveWorkflowPortConnection("audio_generate", "product_store"), { sourcePortId: "audio", targetPortId: "audios" });
+  assert.equal(store.configSchema.some((field) => field.id === "fileName"), true);
+});

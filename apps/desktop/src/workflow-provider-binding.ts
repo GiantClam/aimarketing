@@ -1,5 +1,5 @@
 import { capabilityForWorkflowAction, providerForCapability, type DesktopProviderConfig } from "./provider-config";
-import type { WorkflowDefinitionEnvelope, WorkflowNodeType } from "@aimarketing/workflow-core";
+import type { WorkflowDefinitionEnvelope, WorkflowNodeType } from "@coworkany/workflow-core";
 
 type WorkflowProviderConfig = {
   readonly provider: DesktopProviderConfig;
@@ -7,7 +7,11 @@ type WorkflowProviderConfig = {
   readonly defaults?: Partial<Record<"text" | "image" | "video" | "audio", string>>;
 };
 
-const MEDIA_NODE_TYPES = new Set<WorkflowNodeType>([
+const PROVIDER_NODE_TYPES = new Set<WorkflowNodeType>([
+  "writer",
+  "llm_generate",
+  "agent_execute",
+  "ppt_generate",
   "image_generate",
   "video_generate",
   "digital_human",
@@ -18,7 +22,7 @@ const MEDIA_NODE_TYPES = new Set<WorkflowNodeType>([
 ]);
 
 /**
- * Rebind media nodes only for the in-memory host request. Persisted/exported
+ * Rebind provider-backed nodes only for the in-memory host request. Persisted/exported
  * definitions are sanitized separately so Provider/model bindings never
  * become portable state. Each capability resolves its own configured profile,
  * which is required for mixed image/video/audio workflows.
@@ -27,7 +31,7 @@ export function bindWorkflowProviderDefaults(definition: WorkflowDefinitionEnvel
   return {
     ...definition,
     nodes: definition.nodes.map((node) => {
-      if (!MEDIA_NODE_TYPES.has(node.type as WorkflowNodeType)) return node;
+      if (!PROVIDER_NODE_TYPES.has(node.type as WorkflowNodeType)) return node;
       const provider = providerForCapability(config, capabilityForWorkflowAction(node.type as WorkflowNodeType));
       // Provider bindings are rebuilt from the current local profile. Remove
       // stale workflow IDs from imported definitions so a developer account's
@@ -40,15 +44,19 @@ export function bindWorkflowProviderDefaults(definition: WorkflowDefinitionEnvel
       const selectedMusicModel = node.type === "music_generate" && typeof nodeConfig.model === "string" && nodeConfig.model.trim() && /music/iu.test(nodeConfig.model)
         ? nodeConfig.model.trim()
         : undefined;
+      const boundModel = selectedMusicModel ?? provider.model;
       return {
         ...node,
         config: {
           ...nodeConfig,
           provider: provider.id,
-          model: selectedMusicModel ?? provider.model,
+          model: boundModel,
           baseUrl: provider.baseUrl,
           ...(provider.endpoint ? { endpoint: provider.endpoint } : {}),
           ...(provider.queryEndpoint ? { queryEndpoint: provider.queryEndpoint } : {}),
+          ...(node.type === "image_generate" && ("selectedProviderId" in nodeConfig || "selectedModelId" in nodeConfig)
+            ? { selectedProviderId: provider.id, selectedModelId: boundModel }
+            : {}),
         },
       };
     }),
@@ -56,5 +64,5 @@ export function bindWorkflowProviderDefaults(definition: WorkflowDefinitionEnvel
 }
 
 export function isMediaWorkflowNodeType(type: string): type is WorkflowNodeType {
-  return MEDIA_NODE_TYPES.has(type as WorkflowNodeType);
+  return PROVIDER_NODE_TYPES.has(type as WorkflowNodeType) && !["writer", "llm_generate", "agent_execute", "ppt_generate"].includes(type);
 }

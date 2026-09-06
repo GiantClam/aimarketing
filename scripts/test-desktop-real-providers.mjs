@@ -4,13 +4,13 @@ import { fileURLToPath } from "node:url";
 import { assertRealProviderConfig, buildRealProviderSmokeScope, defaultVideoPollBudget, hasExpectedSmokeResponse, resolveCapabilityProviderProfile, resolveNonSeedanceVideoProfile } from "./real-provider-config.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const configPath = resolve(process.env.AIMARKETING_REAL_PROVIDER_CONFIG ?? resolve(repoRoot, "apps/desktop/real-providers.test.local.json"));
+const configPath = resolve(process.env.COWORKANY_REAL_PROVIDER_CONFIG ?? resolve(repoRoot, "apps/desktop/real-providers.test.local.json"));
 const config = assertRealProviderConfig(JSON.parse(await readFile(configPath, "utf8")));
-const videoOnly = process.argv.includes("--video-only") || process.env.AIMARKETING_PROVIDER_SMOKE_VIDEO_ONLY === "1";
-const audioOnly = process.argv.includes("--audio-only") || process.env.AIMARKETING_PROVIDER_SMOKE_AUDIO_ONLY === "1";
-const imageOnly = process.argv.includes("--image-only") || process.env.AIMARKETING_PROVIDER_SMOKE_IMAGE_ONLY === "1";
-const musicOnly = process.argv.includes("--music-only") || process.env.AIMARKETING_PROVIDER_SMOKE_MUSIC_ONLY === "1";
-const includeVideo = videoOnly || process.argv.includes("--include-video") || process.env.AIMARKETING_PROVIDER_SMOKE_INCLUDE_VIDEO === "1";
+const videoOnly = process.argv.includes("--video-only") || process.env.COWORKANY_PROVIDER_SMOKE_VIDEO_ONLY === "1";
+const audioOnly = process.argv.includes("--audio-only") || process.env.COWORKANY_PROVIDER_SMOKE_AUDIO_ONLY === "1";
+const imageOnly = process.argv.includes("--image-only") || process.env.COWORKANY_PROVIDER_SMOKE_IMAGE_ONLY === "1";
+const musicOnly = process.argv.includes("--music-only") || process.env.COWORKANY_PROVIDER_SMOKE_MUSIC_ONLY === "1";
+const includeVideo = videoOnly || process.argv.includes("--include-video") || process.env.COWORKANY_PROVIDER_SMOKE_INCLUDE_VIDEO === "1";
 const smokeScope = buildRealProviderSmokeScope({ includeVideo, videoOnly, audioOnly, imageOnly, musicOnly });
 const supportedImageSizes = new Set(["256x256", "512x512", "1024x1024", "1536x1024", "1024x1536"]);
 
@@ -31,7 +31,7 @@ function boundedNonNegativeInt(value, fallback, maximum = Number.MAX_SAFE_INTEGE
 }
 
 async function request(label, url, apiKey, body, { method = "POST", headers = {} } = {}) {
-  const retries = Math.max(0, Number(process.env.AIMARKETING_PROVIDER_RETRIES ?? 2));
+  const retries = Math.max(0, Number(process.env.COWORKANY_PROVIDER_RETRIES ?? 2));
   const transientStatuses = new Set([408, 425, 429, 500, 502, 503, 504]);
   let lastResult;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
@@ -40,7 +40,7 @@ async function request(label, url, apiKey, body, { method = "POST", headers = {}
         method,
         headers: { authorization: `Bearer ${apiKey}`, ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        signal: AbortSignal.timeout(Number(process.env.AIMARKETING_PROVIDER_TIMEOUT_MS ?? 120000)),
+        signal: AbortSignal.timeout(Number(process.env.COWORKANY_PROVIDER_TIMEOUT_MS ?? 120000)),
       });
       const text = await response.text();
       let parsed;
@@ -95,8 +95,8 @@ function taskIdFromResponse(response) {
 }
 
 async function pollVideo(label, profile, taskId, source, queryPath) {
-  const maxPolls = Math.max(1, Number(process.env.AIMARKETING_PROVIDER_VIDEO_POLLS ?? defaultVideoPollBudget(profile, source)));
-  const delayMs = Math.max(0, Number(process.env.AIMARKETING_PROVIDER_VIDEO_POLL_DELAY_MS ?? 1500));
+  const maxPolls = Math.max(1, Number(process.env.COWORKANY_PROVIDER_VIDEO_POLLS ?? defaultVideoPollBudget(profile, source)));
+  const delayMs = Math.max(0, Number(process.env.COWORKANY_PROVIDER_VIDEO_POLL_DELAY_MS ?? 1500));
   let query;
   for (let attempt = 1; attempt <= maxPolls; attempt += 1) {
     const isRunningHub = source === "runninghub";
@@ -156,15 +156,15 @@ async function requestAudio(profile) {
   });
   const submittedTaskId = submit.response?.task_id;
   if (!submit.ok || submittedTaskId === undefined || submittedTaskId === null || submittedTaskId === 0) return submit;
-  const retries = Math.max(0, Number(process.env.AIMARKETING_PROVIDER_RETRIES ?? 2));
+  const retries = Math.max(0, Number(process.env.COWORKANY_PROVIDER_RETRIES ?? 2));
   const attempts = Math.max(3, retries + 1);
   const maxPolls = boundedPositiveInt(
-    process.env.AIMARKETING_PROVIDER_AUDIO_POLLS,
+    process.env.COWORKANY_PROVIDER_AUDIO_POLLS,
     attempts * 8,
     240,
   );
   const pollDelayMs = boundedNonNegativeInt(
-    process.env.AIMARKETING_PROVIDER_AUDIO_POLL_DELAY_MS,
+    process.env.COWORKANY_PROVIDER_AUDIO_POLL_DELAY_MS,
     1500,
     60_000,
   );
@@ -172,7 +172,7 @@ async function requestAudio(profile) {
   for (let attempt = 1; attempt <= maxPolls; attempt += 1) {
     const response = await fetch(endpoint(profile.baseUrl, "query/t2a_async_query_v2") + `?task_id=${encodeURIComponent(String(submittedTaskId))}`, {
       headers: { authorization: `Bearer ${profile.apiKey}` },
-      signal: AbortSignal.timeout(Number(process.env.AIMARKETING_PROVIDER_TIMEOUT_MS ?? 120000)),
+      signal: AbortSignal.timeout(Number(process.env.COWORKANY_PROVIDER_TIMEOUT_MS ?? 120000)),
     });
     const text = await response.text();
     let parsed;
@@ -213,7 +213,7 @@ const configuredVideoProfile = includeVideo ? resolveNonSeedanceVideoProfile(con
 const configuredImageProfile = resolveCapabilityProviderProfile(config, "image", "image");
 if (!configuredImageProfile) throw new Error("real_provider_config_image_profile_missing");
 const imageSmokeModel = resolveImageSmokeModel(configuredImageProfile);
-const imageSize = String(process.env.AIMARKETING_PROVIDER_IMAGE_SIZE ?? defaultImageSmokeSize(imageSmokeModel)).trim();
+const imageSize = String(process.env.COWORKANY_PROVIDER_IMAGE_SIZE ?? defaultImageSmokeSize(imageSmokeModel)).trim();
 if (!supportedImageSizes.has(imageSize)) throw new Error(`real_provider_image_size_unsupported:${imageSize}`);
 const results = includeVideo && !configuredVideoProfile
   ? [{ label: "video", ok: false, error: "real_provider_config_non_seedance_video_profile_missing" }]

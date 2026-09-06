@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { Chat, useChat } from "@ai-sdk/react";
 import type { ChatTransport } from "ai";
-import type { DesktopUIMessage } from "@aimarketing/workbench-client";
+import type { DesktopUIMessage } from "@coworkany/workbench-client";
 
 export type DesktopChatHookOptions = {
   readonly chatId: string | null;

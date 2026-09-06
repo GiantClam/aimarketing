@@ -6,22 +6,28 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { OpenCodeServeClient } from "../runtime/opencode-serve";
 
-test("desktop OpenCode uses the shared synchronous serve-session contract", () => {
+test("desktop OpenCode uses the asynchronous serve-session contract", () => {
   const source = readFileSync(resolve(process.cwd(), "runtime/opencode-serve.ts"), "utf8");
   const hostSource = readFileSync(resolve(process.cwd(), "runtime/host.ts"), "utf8");
   assert.match(source, /createOpenCodeServeSessionPayload/);
   assert.match(source, /createOpenCodeServePromptPayload/);
-  assert.match(source, /openCodeServeSessionPath\(sessionId, workspacePath, "message"\)/);
+  assert.match(source, /openCodeServeSessionPath\(sessionId, workspacePath, "prompt_async"\)/);
   assert.match(source, /normalizeOpenCodeServeEvent\("pending", payload/);
-  assert.match(source, /DEFAULT_PROMPT_TIMEOUT_MS = 60_000/);
+  assert.doesNotMatch(source, /DEFAULT_PROMPT_TIMEOUT_MS = 60_000/);
+  assert.match(source, /promptTimeoutMs\?: number/);
+  assert.match(source, /typeof timeoutMs === "number"/);
+  assert.match(source, /this\.promptTimeoutMs \?\? false/u);
   assert.match(source, /runtimeEnvironmentSignature/);
+  assert.match(source, /sessionCreateQueue/);
   assert.match(source, /opencode_prompt_timeout/);
   assert.match(source, /taskkill/);
   assert.match(source, /windowsHide: true/);
+  assert.equal(hostSource.includes("process.pid}.${randomUUID()}.tmp"), true);
   assert.match(source, /failActiveRuns\("provider_rate_limited"/u);
   assert.match(source, /Too Many Requests|rate limit exceeded|status\(\?:code\)\?\[=: \]\*429/u);
   assert.match(source, /failActiveRuns\("provider_access_forbidden"/u);
   assert.match(source, /"serve", "--pure", "--hostname", "127\.0\.0\.1"/u);
+  assert.doesNotMatch(source, /"serve", "--pure", "--auto"/u);
   assert.match(source, /OPENCODE_DISABLE_PROJECT_CONFIG: "1"/u);
   assert.match(source, /OPENCODE_DISABLE_EXTERNAL_SKILLS: "1"/u);
   assert.match(source, /OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: "1"/u);
@@ -31,8 +37,17 @@ test("desktop OpenCode uses the shared synchronous serve-session contract", () =
   assert.match(hostSource, /ProgramFiles/u);
   assert.match(hostSource, /USERPROFILE: isolatedHome/u);
   assert.match(hostSource, /XDG_CONFIG_HOME: isolatedConfigHome/u);
-  assert.match(hostSource, /AIMARKETING_DESKTOP_LOCAL: "1"/u);
-  assert.match(hostSource, /skills: \{ paths: \[\] \}/u);
+  assert.match(hostSource, /COWORKANY_DESKTOP_LOCAL: "1"/u);
+  assert.match(hostSource, /"\*": "allow", question: "deny"/u);
+  assert.match(hostSource, /provider\?\.timeout/u);
+  assert.match(hostSource, /provider\?\.chunkTimeout/u);
+  assert.match(hostSource, /record\.timeout === false/u);
+  assert.doesNotMatch(hostSource, /runDirectSessionPrompt/u);
+  assert.doesNotMatch(hostSource, /if \(isDeepSeekV4Flash\([\s\S]{0,220}runDirectSessionPrompt/u);
+  assert.match(hostSource, /skills: \{ paths: \[join\(configDirectory, "skills"\)\] \}/u);
+  assert.match(hostSource, /cp\(source, target, \{ recursive: true, force: true/u);
+  assert.doesNotMatch(hostSource, /preparedAgentWorkspaces/u);
+  assert.doesNotMatch(hostSource, /service_request_timeout/u);
   assert.match(hostSource, /OpenCode caches the Agent catalog/u);
   assert.match(hostSource, /cp\(agentsSource, target, \{ recursive: true/u);
   assert.match(hostSource, /\(\?:tools\|services\)/u);
@@ -41,11 +56,13 @@ test("desktop OpenCode uses the shared synchronous serve-session contract", () =
   assert.doesNotMatch(hostSource, /name:\s*\$\{agentId\}/u);
   assert.doesNotMatch(source, /"--mdns"/u);
   assert.doesNotMatch(source, /"--cors"/u);
-  assert.doesNotMatch(source, /prompt_async/);
+  assert.match(source, /sessionStatus === "busy"/u);
+  assert.match(source, /routing\.sessionIdle/u);
+  assert.doesNotMatch(hostSource, /Desktop workspace boundary/u);
 });
 
 test("OpenCode Serve turns a hanging provider request into a retryable runtime error", async () => {
-  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "aimarketing-opencode-timeout-"));
+  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "coworkany-opencode-timeout-"));
   const fixture = resolve(process.cwd(), "test/fixtures/fake-opencode-serve.mjs");
   const client = new OpenCodeServeClient(process.execPath, runtimeDirectory, [fixture], 80);
   const events: Array<{ event: string; [key: string]: unknown }> = [];
@@ -62,7 +79,7 @@ test("OpenCode Serve turns a hanging provider request into a retryable runtime e
 });
 
 test("OpenCode Serve recreates a lost persisted session and preserves streamed evidence", async () => {
-  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "aimarketing-opencode-serve-"));
+  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "coworkany-opencode-serve-"));
   const fixture = resolve(process.cwd(), "test/fixtures/fake-opencode-serve.mjs");
   const client = new OpenCodeServeClient(process.execPath, runtimeDirectory, [fixture]);
   const events: Array<{ event: string; [key: string]: unknown }> = [];
@@ -101,7 +118,7 @@ test("OpenCode Serve recreates a lost persisted session and preserves streamed e
 });
 
 test("OpenCode Serve parses CRLF-delimited SSE frames", async () => {
-  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "aimarketing-opencode-serve-crlf-"));
+  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "coworkany-opencode-serve-crlf-"));
   const fixture = resolve(process.cwd(), "test/fixtures/fake-opencode-serve.mjs");
   const client = new OpenCodeServeClient(process.execPath, runtimeDirectory, [fixture]);
   const events: Array<{ event: string; [key: string]: unknown }> = [];
@@ -117,13 +134,31 @@ test("OpenCode Serve parses CRLF-delimited SSE frames", async () => {
   }
 });
 
+test("OpenCode Serve continues every tool-call turn until the final answer", async () => {
+  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "coworkany-opencode-continuation-"));
+  const fixture = resolve(process.cwd(), "test/fixtures/fake-opencode-serve.mjs");
+  const client = new OpenCodeServeClient(process.execPath, runtimeDirectory, [fixture]);
+  const events: Array<{ event: string; [key: string]: unknown }> = [];
+  try {
+    const session = await client.createOrResumeSession(runtimeDirectory, undefined, { model: "configured/model" }, { FAKE_OPENCODE_MULTI_CONTINUATION: "1" });
+    await client.prompt(session.sessionId, runtimeDirectory, "multi-continuation-run", "Multi-turn tool task", { model: "configured/model" }, (event) => events.push(event));
+    assert.deepEqual(events.filter((event) => event.event === "text_delta").map((event) => event.delta), ["Tool turn 1 completed", "\n\n", "Tool turn 2 completed", "\n\n", "Multi-turn task completed"]);
+    assert.equal(events.some((event) => event.event === "text_delta" && event.delta === "Multi-turn task completed"), true);
+    assert.equal(events.some((event) => event.event === "done"), true);
+    assert.equal(events.filter((event) => event.event === "usage").length, 3);
+  } finally {
+    await client.stop();
+    await rm(runtimeDirectory, { recursive: true, force: true });
+  }
+});
+
 test("OpenCode Serve forwards the selected packaged Agency Agent", async () => {
-  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "aimarketing-opencode-agent-"));
+  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "coworkany-opencode-agent-"));
   const fixture = resolve(process.cwd(), "test/fixtures/fake-opencode-serve.mjs");
   const client = new OpenCodeServeClient(process.execPath, runtimeDirectory, [fixture]);
   const agentLog = resolve(runtimeDirectory, "agent.log");
   try {
-    const session = await client.createOrResumeSession(runtimeDirectory, undefined, { model: "configured/model" }, { FAKE_OPENCODE_AGENT_LOG: agentLog, AIMARKETING_OPENCODE_AGENT_ID: "agency-engineering-code-reviewer" });
+    const session = await client.createOrResumeSession(runtimeDirectory, undefined, { model: "configured/model" }, { FAKE_OPENCODE_AGENT_LOG: agentLog, COWORKANY_OPENCODE_AGENT_ID: "agency-engineering-code-reviewer" });
     await client.prompt(session.sessionId, runtimeDirectory, "agent-run", "Review this change", { model: "configured/model" }, () => undefined, undefined, "agency-engineering-code-reviewer");
     assert.equal(await readFile(agentLog, "utf8"), "agency-engineering-code-reviewer");
   } finally {
@@ -132,8 +167,23 @@ test("OpenCode Serve forwards the selected packaged Agency Agent", async () => {
   }
 });
 
+test("OpenCode Serve keeps Skill guidance in the native system field", async () => {
+  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "coworkany-opencode-system-"));
+  const fixture = resolve(process.cwd(), "test/fixtures/fake-opencode-serve.mjs");
+  const client = new OpenCodeServeClient(process.execPath, runtimeDirectory, [fixture]);
+  const systemLog = resolve(runtimeDirectory, "system.log");
+  try {
+    const session = await client.createOrResumeSession(runtimeDirectory, undefined, { model: "configured/model" }, { FAKE_OPENCODE_SYSTEM_LOG: systemLog });
+    await client.prompt(session.sessionId, runtimeDirectory, "system-run", "用户原始消息\n第二行", { model: "configured/model" }, () => undefined, undefined, undefined, undefined, "Use the native skill tool to load writer-orchestrator.");
+    assert.equal(await readFile(systemLog, "utf8"), "Use the native skill tool to load writer-orchestrator.");
+  } finally {
+    await client.stop();
+    await rm(runtimeDirectory, { recursive: true, force: true });
+  }
+});
+
 test("fake OpenCode E2E covers first chat, multi-turn, tool/artifact, cancel, crash and usage", async () => {
-  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "aimarketing-opencode-e2e-"));
+  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "coworkany-opencode-e2e-"));
   const fixture = resolve(process.cwd(), "test/fixtures/fake-opencode-serve.mjs");
   const client = new OpenCodeServeClient(process.execPath, runtimeDirectory, [fixture]);
   const abortLog = resolve(runtimeDirectory, "e2e-abort.log");
@@ -162,9 +212,11 @@ test("fake OpenCode E2E covers first chat, multi-turn, tool/artifact, cancel, cr
 
     const controller = new AbortController();
     const cancelEvents: Array<{ event: string; [key: string]: unknown }> = [];
+    const cancelStartedAt = Date.now();
     const cancelPromise = client.prompt(session.sessionId, runtimeDirectory, "cancel-run", "Long running", provider, (event) => cancelEvents.push(event), controller.signal);
     setTimeout(() => controller.abort(), 100);
     await cancelPromise;
+    assert.ok(Date.now() - cancelStartedAt < 1_000, "cancellation must not wait for the provider prompt to finish");
     assert.equal(cancelEvents.some((event) => event.event === "runtime_error" && event.code === "opencode_aborted"), true);
     assert.equal(await readFile(abortLog, "utf8"), "aborted");
 
@@ -179,7 +231,7 @@ test("fake OpenCode E2E covers first chat, multi-turn, tool/artifact, cancel, cr
 });
 
 test("OpenCode Serve reloads the selected model when a persistent conversation switches models", async () => {
-  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "aimarketing-opencode-model-switch-"));
+  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "coworkany-opencode-model-switch-"));
   const fixture = resolve(process.cwd(), "test/fixtures/fake-opencode-serve.mjs");
   const modelLog = resolve(runtimeDirectory, "model-switch.log");
   const client = new OpenCodeServeClient(process.execPath, runtimeDirectory, [fixture]);
@@ -198,7 +250,7 @@ test("OpenCode Serve reloads the selected model when a persistent conversation s
 });
 
 test("OpenCode Serve reuses one process across Agent sessions and routes same-session concurrent prompts", async () => {
-  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "aimarketing-opencode-concurrency-"));
+  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "coworkany-opencode-concurrency-"));
   const fixture = resolve(process.cwd(), "test/fixtures/fake-opencode-serve.mjs");
   const activityLog = resolve(runtimeDirectory, "activity.log");
   const environment = { FAKE_OPENCODE_CONCURRENCY_MODE: "1", FAKE_OPENCODE_ACTIVITY_LOG: activityLog };
@@ -231,7 +283,7 @@ test("OpenCode Serve reuses one process across Agent sessions and routes same-se
 
     const slowChat = run(chatSession.sessionId, "slow-chat", "slow-chat");
     await waitForActivity(":slow-chat");
-    const agentEnvironment = { ...environment, AIMARKETING_OPENCODE_AGENT_ID: "agency-engineering-code-reviewer" };
+    const agentEnvironment = { ...environment, COWORKANY_OPENCODE_AGENT_ID: "agency-engineering-code-reviewer" };
     const agentSession = await client.createOrResumeSession(runtimeDirectory, undefined, provider, agentEnvironment);
     const agentRun = run(agentSession.sessionId, "agent-chat", "agent-chat", "agency-engineering-code-reviewer");
     const [chatEvents, agentEvents] = await Promise.all([slowChat, agentRun]);

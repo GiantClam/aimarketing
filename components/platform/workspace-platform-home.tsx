@@ -3,7 +3,7 @@ import { AiEntryWorkspace } from "@/components/ai-entry/ai-entry-workspace"
 import type { AppLocale } from "@/lib/i18n/config"
 import type { PlatformRegistryControlEntry } from "@/lib/platform/control-plane"
 import type { PlatformRegistryEntryExecutionState } from "@/lib/platform/registry-entry-execution"
-import { WORKBENCH_HOME_COPY, WORKBENCH_HOME_GROUPS, WorkbenchRouteIcon } from "@aimarketing/workbench-ui"
+import { WORKBENCH_HOME_COPY, WORKBENCH_HOME_GROUPS, WorkbenchRouteIcon } from "@coworkany/workbench-ui"
 
 type HomeEntry = {
   label: string
@@ -199,7 +199,7 @@ export function WorkspacePlatformHome({
 
         <main className="home-main">
           <section className="home-welcome">
-            <div className="home-welcome-kicker">AI MARKETING WORKSPACE</div>
+            <div className="home-welcome-kicker">COWORKANY WORKSPACE</div>
             <h1>
               {homeCopy.welcomePrefix}{displayName || homeCopy.welcomeDefaultName}
               <span className="home-welcome-mark" aria-hidden="true">✦</span>

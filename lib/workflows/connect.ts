@@ -5,7 +5,7 @@ import {
   type WorkflowNodeType,
   type WorkflowPortDefinition,
   type WorkflowValueKind,
-} from "@aimarketing/workflow-core"
+} from "@coworkany/workflow-core"
 import type { WorkflowFeatures } from "@/lib/workflows/features"
 
 export {
@@ -14,8 +14,8 @@ export {
   resolveWorkflowPortConnection,
   workflowInputNameToValueKind,
   workflowValueKindToInputName,
-} from "@aimarketing/workflow-core"
-export type { WorkflowPortConnection } from "@aimarketing/workflow-core"
+} from "@coworkany/workflow-core"
+export type { WorkflowPortConnection } from "@coworkany/workflow-core"
 
 export function isWorkflowV2OnlyPort(port: WorkflowPortDefinition) {
   return port.role === "image.first_frame" || port.role === "image.last_frame" || port.role === "image.mask"

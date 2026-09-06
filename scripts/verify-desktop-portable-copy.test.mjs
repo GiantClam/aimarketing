@@ -14,7 +14,7 @@ test("portable copy verifier checks adjacent data and copied runtime fingerprint
   assert.match(script, /localAppDataCreated/u);
   assert.match(script, /tar\.exe/u);
   assert.match(script, /robocopy/u);
-  assert.match(script, /desktop-release\/AI-Marketing-Windows-x64-portable\.zip/u);
+  assert.match(script, /desktop-release\/CoworkAny-Windows-x64-portable\.zip/u);
   assert.match(script, /install-desktop-runtime\.ps1/u);
   assert.match(script, /runtime-manifest-crypto\.mjs/u);
 });

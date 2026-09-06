@@ -42,7 +42,7 @@ import { Button } from "@/components/ui/button"
 import { DashboardFilterToolbar } from "@/components/ui/dashboard-filter-toolbar"
 import type { EnterpriseUnifiedAssetLibraryItem } from "@/lib/platform/assets"
 import { cn } from "@/lib/utils"
-import { Artifact } from "@aimarketing/workbench-ui"
+import { Artifact } from "@coworkany/workbench-ui"
 
 type WorkspaceAssetLibraryItem = EnterpriseUnifiedAssetLibraryItem
 type AssetViewMode = "grid" | "table"
@@ -53,7 +53,7 @@ type AssetNotice = { tone: "success" | "error"; message: string } | null
 
 const DEFAULT_PAGE_SIZE = 12
 const DAY_MS = 24 * 60 * 60 * 1000
-const FAVORITES_STORAGE_KEY = "aimarketing:asset-library:favorites"
+const FAVORITES_STORAGE_KEY = "coworkany:asset-library:favorites"
 
 function parseDate(value: string | null) {
   if (!value) return null

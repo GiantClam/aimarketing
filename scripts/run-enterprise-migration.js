@@ -194,7 +194,7 @@ async function main() {
               enterprise_status = 'active',
               is_demo = TRUE,
               updated_at = CURRENT_TIMESTAMP
-          WHERE email IN ('demo@example.com', 'demo@aimarketing.vercel.app');
+          WHERE email IN ('demo@example.com', 'demo@coworkany.vercel.app');
         `,
         [expEntId],
       )

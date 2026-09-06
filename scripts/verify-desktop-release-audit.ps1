@@ -1,7 +1,7 @@
 param(
-  [string]$NormalZip = ".artifacts/desktop-release/AI-Marketing-Windows-x64-normal.zip",
-  [string]$PortableZip = ".artifacts/desktop-release/AI-Marketing-Windows-x64-portable.zip",
-  [string]$RuntimeZip = ".artifacts/desktop-runtime-release-retry/AIMarketing-Runtime-x64.zip",
+  [string]$NormalZip = ".artifacts/desktop-release/CoworkAny-Windows-x64-normal.zip",
+  [string]$PortableZip = ".artifacts/desktop-release/CoworkAny-Windows-x64-portable.zip",
+  [string]$RuntimeZip = ".artifacts/desktop-runtime-release-retry/CoworkAny-Runtime-x64.zip",
   [string]$ReleaseDir = "apps/desktop/src-tauri/target/release",
   [string]$PnpmAuditJson,
   [switch]$RequireAuthenticode,
@@ -29,13 +29,13 @@ function Read-ZipText([IO.Compression.ZipArchiveEntry]$entry) {
 }
 
 function Test-ManifestSignature([string]$manifestJson, [string]$source) {
-  $node = $env:AIMARKETING_NODE_PATH
+  $node = $env:COWORKANY_NODE_PATH
   if ([string]::IsNullOrWhiteSpace($node)) { $node = (Get-Command node -ErrorAction SilentlyContinue).Source }
   $verifier = Join-Path $repoRoot "scripts/runtime-manifest-crypto.mjs"
   if ([string]::IsNullOrWhiteSpace($node) -or -not (Test-Path -LiteralPath $node -PathType Leaf) -or -not (Test-Path -LiteralPath $verifier -PathType Leaf)) {
     throw "desktop_release_audit_manifest_verifier_missing:$source"
   }
-  $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) ("aimarketing-release-manifest-audit-" + [guid]::NewGuid().ToString("N"))
+  $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) ("coworkany-release-manifest-audit-" + [guid]::NewGuid().ToString("N"))
   $manifestPath = Join-Path $temporaryRoot "runtime-manifest.json"
   try {
     New-Item -ItemType Directory -Force -Path $temporaryRoot | Out-Null
@@ -122,7 +122,7 @@ function Audit-Archive([string]$path, [string]$source) {
 }
 
 function Resolve-SignTool() {
-  $configured = [Environment]::GetEnvironmentVariable("AIMARKETING_SIGNTOOL_PATH")
+  $configured = [Environment]::GetEnvironmentVariable("COWORKANY_SIGNTOOL_PATH")
   if (-not [string]::IsNullOrWhiteSpace($configured) -and (Test-Path -LiteralPath $configured -PathType Leaf)) { return [IO.Path]::GetFullPath($configured) }
   $command = Get-Command signtool.exe -ErrorAction SilentlyContinue
   if ($command -and (Test-Path -LiteralPath $command.Source -PathType Leaf)) { return $command.Source }
@@ -166,7 +166,7 @@ function Audit-Authenticode([string]$path) {
   $full = Resolve-RepoPath $path
   if (-not (Test-Path -LiteralPath $full -PathType Container)) { return [ordered]@{ status = "not_available"; path = $full; files = @() } }
   $candidates = @(
-    (Join-Path $full "ai-marketing.exe"),
+    (Join-Path $full "coworkany.exe"),
     (Get-ChildItem -LiteralPath $full -File -Filter "*.dll" | Select-Object -ExpandProperty FullName),
     (Join-Path $full "_up_\dist-runtime\runtime\node\node.exe"),
     (Join-Path $full "_up_\dist-runtime\runtime\opencode\opencode.exe")

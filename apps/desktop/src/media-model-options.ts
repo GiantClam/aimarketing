@@ -1,4 +1,4 @@
-import type { WorkbenchMediaFeature } from "@aimarketing/workbench-ui"
+import type { WorkbenchMediaFeature } from "@coworkany/workbench-ui"
 
 function normalizedModels(models: readonly string[] | undefined, fallback: readonly string[]) {
   const configured = (models || []).map((value) => value.trim()).filter(Boolean)

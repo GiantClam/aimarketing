@@ -70,7 +70,7 @@ function now() {
 }
 
 function providerMetadata(partId: string, sequence?: number) {
-  return { aimarketing: { [PART_ID_KEY]: partId, ...(sequence === undefined ? {} : { [SEQUENCE_KEY]: sequence }) } };
+  return { coworkany: { [PART_ID_KEY]: partId, ...(sequence === undefined ? {} : { [SEQUENCE_KEY]: sequence }) } };
 }
 
 function dataPart<K extends keyof DesktopDataParts>(name: K, id: string, data: DesktopDataParts[K]): Extract<DesktopUIMessagePart, { type: `data-${K}` }> {
@@ -101,7 +101,7 @@ function eventPart(event: WorkbenchRunEvent): DesktopUIMessagePart | undefined {
     case "tool_call": {
       const state = event.phase === "started" ? "input-available" : event.phase === "blocked" ? "approval-requested" : event.phase === "completed" ? "output-available" : "output-error";
       if (state === "input-available") return { type: "dynamic-tool", toolName: event.toolName, toolCallId: event.toolCallId, state, input: event.input };
-      if (state === "approval-requested") return { type: "dynamic-tool", toolName: event.toolName, toolCallId: event.toolCallId, state, input: event.input, approval: { id: `approval:${event.toolCallId}` } };
+      if (state === "approval-requested") return { type: "dynamic-tool", toolName: event.toolName, toolCallId: event.toolCallId, state, input: event.input, approval: { id: event.approvalId ? `approval:${event.approvalId}` : `approval:${event.toolCallId}` } };
       if (state === "output-available") return { type: "dynamic-tool", toolName: event.toolName, toolCallId: event.toolCallId, state, input: event.input, output: event.output };
       return { type: "dynamic-tool", toolName: event.toolName, toolCallId: event.toolCallId, state, input: event.input, errorText: event.error ?? "Tool execution failed" };
     }
@@ -130,17 +130,34 @@ function eventPart(event: WorkbenchRunEvent): DesktopUIMessagePart | undefined {
 function partIdentity(part: DesktopUIMessagePart): string | undefined {
   if (part.type === "dynamic-tool") return `tool:${part.toolCallId}`;
   if (part.type.startsWith("data-") && "id" in part && part.id) return `${part.type}:${part.id}`;
-  if ((part.type === "text" || part.type === "reasoning") && part.providerMetadata?.aimarketing?.[PART_ID_KEY]) return String(part.providerMetadata.aimarketing[PART_ID_KEY]);
+  if ((part.type === "text" || part.type === "reasoning") && part.providerMetadata?.coworkany?.[PART_ID_KEY]) return String(part.providerMetadata.coworkany[PART_ID_KEY]);
   return undefined;
 }
 
 function partSequence(part: DesktopUIMessagePart) {
-  if ((part.type === "text" || part.type === "reasoning") && part.providerMetadata?.aimarketing?.[SEQUENCE_KEY]) return Number(part.providerMetadata.aimarketing[SEQUENCE_KEY]);
+  if ((part.type === "text" || part.type === "reasoning") && part.providerMetadata?.coworkany?.[SEQUENCE_KEY]) return Number(part.providerMetadata.coworkany[SEQUENCE_KEY]);
   return undefined;
 }
 
 function isTerminalTool(part: DesktopUIMessagePart) {
   return part.type === "dynamic-tool" && (part.state === "output-available" || part.state === "output-error" || part.state === "output-denied");
+}
+
+export function mergeStreamingText(previous: string, incoming: string) {
+  if (!previous) return incoming;
+  if (incoming.startsWith(previous)) return incoming;
+  // Runtime responses are delivered at-least-once while the desktop host
+  // reconnects or more than one UI consumer is attached to a run. Treat an
+  // already-complete trailing fragment as idempotent, including short tokens
+  // such as "D", "PPT", or "skill". Without this, a repeated transport
+  // fragment becomes visible as `I'llI'llI'll` instead of one assistant turn.
+  if (previous.endsWith(incoming)) return previous;
+  const compactPrevious = previous.replace(/\s+/gu, "");
+  const compactIncoming = incoming.replace(/\s+/gu, "");
+  const isFullSnapshot = previous.length >= 16
+    && incoming.length > previous.length
+    && compactIncoming.startsWith(compactPrevious);
+  return isFullSnapshot ? incoming : `${previous}${incoming}`;
 }
 
 function mergePart(parts: readonly DesktopUIMessagePart[], incoming: DesktopUIMessagePart): DesktopUIMessagePart[] {
@@ -150,16 +167,24 @@ function mergePart(parts: readonly DesktopUIMessagePart[], incoming: DesktopUIMe
   const current = parts[index];
   if (isTerminalTool(current) && incoming.type === "dynamic-tool" && !isTerminalTool(incoming)) return [...parts];
   if (incoming.type === "text" && current.type === "text") {
-    const nextText = incoming.text.startsWith(current.text) ? incoming.text : `${current.text}${incoming.text}`;
+    const nextText = mergeStreamingText(current.text, incoming.text);
     const next = { ...current, ...incoming, text: nextText };
     return parts.map((part, partIndex) => partIndex === index ? next : part);
   }
   if (incoming.type === "reasoning" && current.type === "reasoning") {
-    const nextText = incoming.text.startsWith(current.text) ? incoming.text : `${current.text}${incoming.text}`;
+    const nextText = mergeStreamingText(current.text, incoming.text);
     const next = { ...current, ...incoming, text: nextText };
     return parts.map((part, partIndex) => partIndex === index ? next : part);
   }
   return parts.map((part, partIndex) => partIndex === index ? { ...part, ...incoming } as DesktopUIMessagePart : part);
+}
+
+/** Apply one host event to a UIMessage part list without introducing a second UI protocol. */
+export function applyDesktopUIMessageRunEventToParts(parts: readonly DesktopUIMessagePart[], event: WorkbenchRunEvent): DesktopUIMessagePart[] {
+  const lastSequence = parts.reduce((highest, part) => Math.max(highest, partSequence(part) ?? -1), -1);
+  const seed = createDesktopUIMessage({ id: "desktop-run-parts", role: "assistant", conversationId: "" });
+  const updated = applyWorkbenchRunEventToUIMessage({ ...seed, parts: [...parts], metadata: { conversationId: "", createdAt: seed.metadata?.createdAt ?? now(), updatedAt: now(), lastSequence } }, event);
+  return updated.parts;
 }
 
 function sortedParts(parts: readonly DesktopUIMessagePart[]) {
@@ -180,7 +205,8 @@ export function createDesktopUIMessage(input: {
   readonly branchOf?: string;
 }): DesktopUIMessage {
   const createdAt = input.createdAt ?? now();
-  const parts: DesktopUIMessagePart[] = input.content ? [{ type: "text", text: input.content, state: "done", providerMetadata: providerMetadata(`${input.role}:text`) }] : [];
+  const content = input.content;
+  const parts: DesktopUIMessagePart[] = content ? [{ type: "text", text: content, state: "done", providerMetadata: providerMetadata(`${input.role}:text`) }] : [];
   return {
     id: input.id,
     role: input.role,
@@ -223,10 +249,11 @@ function workbenchPartToUIMessagePart(part: WorkbenchMessagePart): DesktopUIMess
 
 export function workbenchMessageToDesktopUIMessage(message: WorkbenchMessage): DesktopUIMessage {
   const parts = (message.parts ?? []).map(workbenchPartToUIMessagePart).filter((part): part is DesktopUIMessagePart => Boolean(part));
+  const role = message.role === "system" || message.role === "tool" ? "assistant" : message.role;
   const createdAt = message.createdAt;
   return {
     id: message.id,
-    role: message.role === "system" || message.role === "tool" ? "assistant" : message.role,
+    role,
     parts: parts.length ? parts : (message.content ? [{ type: "text", text: message.content, state: "done", providerMetadata: providerMetadata(`${message.role}:text`) }] : []),
     metadata: { conversationId: message.conversationId, createdAt, updatedAt: createdAt, ...(message.status ? { runStatus: statusFromWorkbench(message.status) } : {}) },
   };
@@ -268,11 +295,32 @@ export function desktopUIMessageStorage(message: DesktopUIMessage) {
 }
 
 export function parseDesktopUIMessage(input: { readonly id: string; readonly role: DesktopUIMessage["role"]; readonly parts: unknown; readonly metadata?: unknown }): DesktopUIMessage {
-  const parts = Array.isArray(input.parts)
-    ? input.parts.filter((part): part is DesktopUIMessagePart => Boolean(part && typeof part === "object" && typeof (part as { type?: unknown }).type === "string"))
-    : [];
+  const parts = (Array.isArray(input.parts)
+    ? input.parts.map(normalizeDesktopUIMessagePart).filter(isDesktopUIMessagePart)
+    : []);
   const metadata = input.metadata && typeof input.metadata === "object" ? input.metadata as DesktopMessageMetadata : undefined;
   return { id: input.id, role: input.role, parts, ...(metadata ? { metadata } : {}) };
+}
+
+function normalizeDesktopUIMessagePart(part: unknown): unknown {
+  if (!part || typeof part !== "object") return part;
+  const value = part as { type?: unknown; text?: unknown; thinking?: unknown; state?: unknown };
+  if (value.type !== "thinking" && !(value.type === "reasoning" && typeof value.text !== "string" && typeof value.thinking === "string")) return part;
+  const text = typeof value.text === "string" ? value.text : typeof value.thinking === "string" ? value.thinking : "";
+  const { thinking: _thinking, ...rest } = value;
+  return { ...rest, type: "reasoning", text, state: value.state === "streaming" ? "streaming" : "done" };
+}
+
+function isDesktopUIMessagePart(part: unknown): part is DesktopUIMessagePart {
+  if (!part || typeof part !== "object") return false;
+  const value = part as { type?: unknown; text?: unknown; state?: unknown; data?: unknown; sourceId?: unknown; url?: unknown; mediaType?: unknown; name?: unknown; toolCallId?: unknown };
+  if (typeof value.type !== "string") return false;
+  if (value.type === "text" || value.type === "reasoning") return typeof value.text === "string" && (value.state === "streaming" || value.state === "done");
+  if (value.type === "dynamic-tool") return typeof value.toolCallId === "string" && typeof value.state === "string";
+  if (value.type === "source-url") return typeof value.sourceId === "string" && typeof value.url === "string";
+  if (value.type === "source-document") return typeof value.sourceId === "string" && typeof value.mediaType === "string";
+  if (value.type === "file") return typeof value.mediaType === "string" && typeof value.name === "string";
+  return value.type.startsWith("data-") && "data" in value;
 }
 
 export function desktopUIMessageToWorkbenchParts(message: DesktopUIMessage): WorkbenchMessagePart[] {
@@ -332,9 +380,27 @@ function toReadableStream(source: ReadableStream<DesktopUIMessageChunk> | AsyncI
 }
 
 export class DesktopChatTransport implements ChatTransport<DesktopUIMessage> {
+  private readonly activeStopHandlers = new Set<() => Promise<void>>();
+  private stopRequested = false;
+
   constructor(private readonly sendHandler: DesktopTransportHandler, private readonly reconnectHandler?: (request: { readonly chatId: string }) => Promise<ReadableStream<DesktopUIMessageChunk> | AsyncIterable<DesktopUIMessageChunk> | null>) {}
 
+  registerActiveStop(handler: () => Promise<void>) {
+    if (this.stopRequested) {
+      void handler().catch(() => undefined);
+      return () => undefined;
+    }
+    this.activeStopHandlers.add(handler);
+    return () => this.activeStopHandlers.delete(handler);
+  }
+
+  async stopCurrent() {
+    this.stopRequested = true;
+    await Promise.all([...this.activeStopHandlers].map((handler) => handler().catch(() => undefined)));
+  }
+
   sendMessages(request: DesktopTransportRequest) {
+    this.stopRequested = false;
     return this.sendHandler(request).then(toReadableStream);
   }
 
@@ -351,7 +417,8 @@ export type DesktopRunTransportAdapter = {
 
 /** Adapts the existing Tauri/OpenCode run lifecycle to the AI SDK ChatTransport stream. */
 export function createDesktopRunTransport(adapter: DesktopRunTransportAdapter) {
-  return new DesktopChatTransport(async ({ chatId, messages, abortSignal }) => {
+  let transport: DesktopChatTransport;
+  transport = new DesktopChatTransport(async ({ chatId, messages, abortSignal }) => {
     const message = messages.at(-1);
     if (!message || message.role !== "user") throw new Error("desktop_transport_requires_user_message");
     const { runId } = await adapter.start({ chatId, message, prompt: desktopUIMessageText(message), abortSignal });
@@ -360,6 +427,7 @@ export function createDesktopRunTransport(adapter: DesktopRunTransportAdapter) {
     let settled = false;
     let textOpen = false;
     let reasoningOpen = false;
+    let unregisterStop: () => void = () => undefined;
     const buffered: DesktopUIMessageChunk[] = [];
     const closeController = () => {
       if (controller) controller.close();
@@ -374,14 +442,16 @@ export function createDesktopRunTransport(adapter: DesktopRunTransportAdapter) {
         push({ type: "finish", finishReason: options.finishReason ?? "stop" });
       }
       settled = true;
+      unregisterStop();
       dispose?.();
       if (abortSignal) abortSignal.removeEventListener("abort", onAbort);
       closeController();
     };
-    const onAbort = () => {
-      void adapter.stop?.(runId);
+    const stopRun = () => {
       finish({ abortReason: "desktop_run_cancelled" });
+      return adapter.stop?.(runId) ?? Promise.resolve();
     };
+    const onAbort = () => { void stopRun(); };
     const push = (chunk: DesktopUIMessageChunk) => {
       if (settled) return;
       if (controller) controller.enqueue(chunk);
@@ -414,7 +484,9 @@ export function createDesktopRunTransport(adapter: DesktopRunTransportAdapter) {
       else if (event.type === "status" && ["failed", "interrupted"].includes(event.status)) finish({ finishReason: "error" });
       else if (event.type === "status" && event.status === "cancelled") finish({ abortReason: "desktop_run_cancelled" });
     });
+    unregisterStop = transport.registerActiveStop(stopRun);
     abortSignal?.addEventListener("abort", onAbort, { once: true });
     return stream;
   });
+  return transport;
 }

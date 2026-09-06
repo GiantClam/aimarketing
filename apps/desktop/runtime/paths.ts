@@ -23,7 +23,7 @@ export function detectDesktopPaths(options: { readonly executableDir?: string; r
   const isPortable = existsSync(portable);
   const root = isPortable
     ? join(executableDir, "data")
-    : join(options.localAppData ?? process.env.LOCALAPPDATA ?? join(process.env.TEMP ?? ".", "LocalAppData"), "AIMarketing");
+    : join(options.localAppData ?? process.env.LOCALAPPDATA ?? join(process.env.TEMP ?? ".", "LocalAppData"), "CoworkAny");
   return createPaths(root, isPortable ? "portable" : "normal");
 }
 

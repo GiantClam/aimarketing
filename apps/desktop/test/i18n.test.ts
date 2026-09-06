@@ -2,10 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { WORKBENCH_HOME_GROUPS, WORKBENCH_MEDIA_FEATURES, WORKBENCH_ROUTE_MANIFEST } from "@aimarketing/workbench-ui";
-import { validateWorkflowDefinition } from "@aimarketing/workflow-core";
+import { WORKBENCH_HOME_GROUPS, WORKBENCH_MEDIA_FEATURES, WORKBENCH_ROUTE_MANIFEST } from "@coworkany/workbench-ui";
+import { validateWorkflowDefinition } from "@coworkany/workflow-core";
 import { desktopCopy, desktopWriterCopy, detectDesktopLocale, homeGroupLabels, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaPlaceholderEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale } from "../src/i18n";
-import { buildWorkflowDefinition, localizeRuntimeStatus, localizedSkillInstruction, parseImageInputs, resolveDesktopSkillId } from "../src/App";
+import { buildWorkflowDefinition, desktopExecutionPrompt, isDesktopErrorStatus, localizeDesktopStatus, localizeRuntimeStatus, localizedSkillSystemPrompt, parseImageInputs, resolveDesktopSkillId } from "../src/App";
+import { promptRequestsArtifact } from "../src/artifact-intent";
 
 test("desktop locale follows Windows/WebView language by default", () => {
   assert.equal(detectDesktopLocale("zh-CN"), "zh");
@@ -20,6 +21,22 @@ test("desktop locale follows Windows/WebView language by default", () => {
 test("desktop locale preference overrides system language", () => {
   assert.equal(resolveDesktopLocale("zh", "en-US"), "zh");
   assert.equal(resolveDesktopLocale("en", "zh-CN"), "en");
+});
+
+test("desktop error statuses are promoted to the top tips surface", () => {
+  const timeout = "Text provider request timed out after 300 seconds";
+  const localized = localizeDesktopStatus(timeout, "zh");
+  assert.equal(localized, "文本 Provider 请求超时，请检查 Provider 地址、API Key，或切换其他文本模型后重试。");
+  assert.doesNotMatch(localized, /60|300/u);
+  assert.equal(localizeDesktopStatus("Text provider request timed out.", "zh"), "文本 Provider 请求超时，请检查 Provider 地址、API Key，或切换其他文本模型后重试。");
+  assert.equal(isDesktopErrorStatus(localized), true);
+  assert.equal(isDesktopErrorStatus("正在分析请求…"), false);
+  assert.equal(isDesktopErrorStatus("已发送，正在流式生成…"), false);
+  const source = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  assert.match(source, /function DesktopTopTip[\s\S]*?role="alert"/u);
+  assert.match(source, /showTopTip \? <DesktopTopTip message=\{topTipMessage\}/u);
+  assert.match(source, /const status = isDesktopErrorStatus\(rawStatus\) \? "" : rawStatus;/u);
+  assert.doesNotMatch(source, /workflow_host_response_timeout/u);
 });
 
 test("English desktop media fields do not leak untranslated Chinese placeholders", () => {
@@ -108,7 +125,8 @@ test("active Writer preview uses the bilingual copy contract", () => {
   const end = source.indexOf("type DesktopWorkflowWorkspaceProps", start);
   assert.ok(start >= 0 && end > start, "active Writer workspace source must be present");
   const activeWriter = source.slice(start, end);
-  assert.match(activeWriter, /WorkbenchMessageSurface messages=\{previewMessages\}/u);
+  assert.match(activeWriter, /WriterPlatformPreview platform=\{platform\} locale=\{locale\} content=\{assistantText\}/u);
+  assert.match(source, /function WriterPlatformPreview[\s\S]*?MessageResponse content=\{content\}/u);
   assert.match(activeWriter, /writerCopy\.edit/u);
   assert.doesNotMatch(activeWriter, /label="AI RESPONSE"/u);
 });
@@ -178,8 +196,16 @@ test("new workflow definitions use the active locale for persisted node titles",
   const provider = { id: "local", model: "demo", baseUrl: "http://127.0.0.1:11434" };
   const english = buildWorkflowDefinition("draft", "writer", provider, {}, "en");
   const chinese = buildWorkflowDefinition("撰写", "writer", provider, {}, "zh");
-  assert.deepEqual(english.nodes.map((node) => node.title), ["Input task", "Content writing", "Local artifact"]);
-  assert.deepEqual(chinese.nodes.map((node) => node.title), ["输入任务", "内容写作", "本地产物"]);
+  assert.deepEqual(english.nodes.map((node) => node.title), ["Input task", "Content writing", "Asset Library"]);
+  assert.deepEqual(chinese.nodes.map((node) => node.title), ["输入任务", "内容写作", "资产库存储"]);
+  assert.deepEqual(english.nodes.map((node) => node.type), ["text_input", "writer", "product_store"]);
+  assert.deepEqual(chinese.edges.at(-1), {
+    edgeKey: "capability-asset-library",
+    sourceNodeKey: "capability",
+    sourcePortId: "text",
+    targetNodeKey: "asset-library",
+    targetPortId: "text",
+  });
   assert.deepEqual(validateWorkflowDefinition(english), []);
   assert.deepEqual(validateWorkflowDefinition(chinese), []);
 });
@@ -201,16 +227,44 @@ test("new desktop workflow nodes initialize the online parameter contract", () =
   assert.deepEqual(validateWorkflowDefinition(ppt), []);
 });
 
-test("OpenCode Skill instructions follow the active locale", () => {
-  assert.equal(localizedSkillInstruction("auto", "en"), "");
-  assert.equal(localizedSkillInstruction("content-writing", "zh"), "\n\n请使用本地 content-writing Skill 完成本轮任务，并保持所有产物写入当前项目目录。");
-  assert.equal(localizedSkillInstruction("content-writing", "en"), "\n\nUse the local content-writing Skill for this task and keep all artifacts in the current project directory.");
-  assert.doesNotMatch(localizedSkillInstruction("ppt-master", "en"), /[\u4e00-\u9fff]/u);
+test("OpenCode loads the selected Skill without adding workflow rules", () => {
+  assert.equal(localizedSkillSystemPrompt("auto", "en"), "");
+  assert.match(localizedSkillSystemPrompt("writer-orchestrator", "zh"), /native skill tool/u);
+  assert.match(localizedSkillSystemPrompt("writer-orchestrator", "en"), /native skill tool/u);
+  assert.match(localizedSkillSystemPrompt("writer-orchestrator", "en"), /writer-orchestrator/u);
+  assert.doesNotMatch(localizedSkillSystemPrompt("writer-orchestrator", "zh"), /保持所有产物写入/u);
+  assert.doesNotMatch(localizedSkillSystemPrompt("writer-orchestrator", "en"), /keep all artifacts/u);
+  assert.doesNotMatch(localizedSkillSystemPrompt("ppt-master", "en"), /[\u4e00-\u9fff]/u);
 });
 
 test("ordinary desktop conversations do not inherit a persisted Skill", () => {
   assert.equal(resolveDesktopSkillId("/dashboard/ai", null), "auto");
   assert.equal(resolveDesktopSkillId("/dashboard/ai?agent=executive-ppt", "executive-ppt"), "ppt-master");
-  assert.equal(resolveDesktopSkillId("/dashboard/writer", null), "content-writing");
-  assert.equal(resolveDesktopSkillId("/dashboard/knowledge-base", null), "obsidian-rag");
+  assert.equal(resolveDesktopSkillId("/dashboard/ai?agent=executive-presentation-ppt", "executive-presentation-ppt"), "dashi-ppt");
+  assert.equal(resolveDesktopSkillId("/dashboard/ai?agent=executive-legal-risk", "executive-legal-risk"), "executive-consulting-suite");
+  assert.match(localizedSkillSystemPrompt("executive-consulting-suite", "en"), /executive-consulting-suite/u);
+  assert.equal(resolveDesktopSkillId("/dashboard/writer", null), "writer-orchestrator");
+  assert.equal(resolveDesktopSkillId("/dashboard/ai", "entry:writer"), "writer-orchestrator");
+  assert.equal(resolveDesktopSkillId("/dashboard/ai", "entry:image-assistant"), "auto");
+  assert.equal(resolveDesktopSkillId("/dashboard/knowledge-base", null), "auto");
+  assert.equal(resolveDesktopSkillId("/dashboard/writer", "content-writing"), "writer-orchestrator");
+});
+
+test("selected Skills own their interaction flow", () => {
+  const prompt = "先梳理演讲目标并提出必要问题，不要现在生成 PPTX。";
+  assert.equal(desktopExecutionPrompt("ppt-master", prompt, "zh"), prompt);
+  assert.equal(desktopExecutionPrompt("dashi-ppt", prompt, "zh"), prompt);
+  assert.equal(desktopExecutionPrompt("dashi-ppt", `  ${prompt}\n`, "zh"), `  ${prompt}\n`);
+  assert.match(localizedSkillSystemPrompt("ppt-master", "zh"), /native skill tool/u);
+  assert.match(localizedSkillSystemPrompt("ppt-master", "zh"), /authoritative/u);
+  assert.match(localizedSkillSystemPrompt("dashi-ppt", "en"), /dashi-ppt/u);
+  for (const systemPrompt of [localizedSkillSystemPrompt("ppt-master", "zh"), localizedSkillSystemPrompt("dashi-ppt", "en")]) {
+    assert.doesNotMatch(systemPrompt, /goal:scaffold|props:safe|template variants|bespoke variant|PPTX export|complete the generation workflow|Do not stop|ask the user/u);
+  }
+});
+
+test("artifact intent is opt-in for conversational prompts", () => {
+  assert.equal(promptRequestsArtifact("请列出合同审查时最需要关注的三项风险。"), false);
+  assert.equal(promptRequestsArtifact("请生成一份合同审查备忘录并保存为 Markdown 文件。"), true);
+  assert.equal(promptRequestsArtifact("Create a contract review memo and save it as a markdown file."), true);
 });

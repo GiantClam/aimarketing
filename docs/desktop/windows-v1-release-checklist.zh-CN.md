@@ -9,18 +9,18 @@
 
 | 产物 | 字节数 | SHA-256 | 状态 |
 | --- | ---: | --- | --- |
-| 普通 ZIP `.artifacts/desktop-release/AI-Marketing-Windows-x64-normal.zip` | 271,011,970 | `db57b0022f704cb9cddd4fcbb4025d79e5a952989a2a9fe00613de6a83aee8c0` | 已生成 |
-| 便携 ZIP `.artifacts/desktop-release/AI-Marketing-Windows-x64-portable.zip` | 271,077,590 | `4fdbd89aacb7c1ee76a378fb7679efd49a6c3b8e4b83b1d6917c61a4c1816f6d` | 已生成 |
-| Runtime ZIP `.artifacts/desktop-runtime-release-retry/AIMarketing-Runtime-x64.zip` | 411,848,658 | `37b08668bef57370588ab941129f76a63b6950404a211560a5fd77adde4b1030` | 已生成 |
-| Release EXE `apps/desktop/src-tauri/target/release/ai-marketing.exe` | 12,652,032 | `4f7fd256a5b408b9a82150eaec5a7386c016d3a5c55433b2e91b1471fc2cdff0` | 未签名开发构建 |
-| NSIS `apps/desktop/src-tauri/target/release/bundle/nsis/AI Marketing_0.1.0_x64-setup.exe` | 180,130,496 | `8e0abb127964e664dd497c0bfd85687ea8a92028006d20aded4dec2baa71b688` | 未签名开发构建 |
+| 普通 ZIP `.artifacts/desktop-release/CoworkAny-Windows-x64-normal.zip` | 271,011,970 | `db57b0022f704cb9cddd4fcbb4025d79e5a952989a2a9fe00613de6a83aee8c0` | 已生成 |
+| 便携 ZIP `.artifacts/desktop-release/CoworkAny-Windows-x64-portable.zip` | 271,077,590 | `4fdbd89aacb7c1ee76a378fb7679efd49a6c3b8e4b83b1d6917c61a4c1816f6d` | 已生成 |
+| Runtime ZIP `.artifacts/desktop-runtime-release-retry/CoworkAny-Runtime-x64.zip` | 411,848,658 | `37b08668bef57370588ab941129f76a63b6950404a211560a5fd77adde4b1030` | 已生成 |
+| Release EXE `apps/desktop/src-tauri/target/release/coworkany.exe` | 12,652,032 | `4f7fd256a5b408b9a82150eaec5a7386c016d3a5c55433b2e91b1471fc2cdff0` | 未签名开发构建 |
+| NSIS `apps/desktop/src-tauri/target/release/bundle/nsis/CoworkAny_0.1.0_x64-setup.exe` | 180,130,496 | `8e0abb127964e664dd497c0bfd85687ea8a92028006d20aded4dec2baa71b688` | 未签名开发构建 |
 
 ## 已通过矩阵
 
 | 范围 | 证据 |
 | --- | --- |
 | Desktop 单元/集成回归 | `pnpm desktop:test`：133/133 |
-| Desktop TypeScript、ESLint | `pnpm --filter @aimarketing/desktop typecheck`、根 `pnpm lint` |
+| Desktop TypeScript、ESLint | `pnpm --filter @coworkany/desktop typecheck`、根 `pnpm lint` |
 | Desktop Vite/runtime/Skill bundle | `pnpm desktop:build`、`pnpm desktop:verify-bundle` |
 | Runtime verifier/package contract | 最新 `_up_/dist-runtime` 和普通/便携 ZIP 均包含 `install-desktop-runtime.ps1`（22,816 bytes）与 `runtime-manifest-crypto.mjs`（2,651 bytes） |
 | 绿色 Runtime 安装/签名/离线回滚 | `pnpm test:desktop-runtime-installer`：19/19；真实 411,848,658-byte Runtime ZIP 在当前 Windows 主机离线完整安装/重复安装均返回 `status=ok`；完整 preflight 在未签名 manifest 处按预期 fail-closed |

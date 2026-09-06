@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { WorkflowDefinitionEnvelope } from "@aimarketing/workflow-core";
+import type { WorkflowDefinitionEnvelope } from "@coworkany/workflow-core";
 import { bindWorkflowProviderDefaults } from "../src/workflow-provider-binding";
 import { sanitizeWorkflowDefinitionForStorage } from "../src/workflow-storage";
 
@@ -57,6 +57,27 @@ test("provider binding keeps an explicitly selected music model", () => {
     defaults: { audio: "audio" },
   });
   assert.equal(bound.nodes.find((node) => node.nodeKey === "audio")?.config.model, "music-2.6");
+});
+
+test("provider binding replaces stale image provider and model selections from a Skill or imported workflow", () => {
+  const imageDefinition: WorkflowDefinitionEnvelope = {
+    ...definition,
+    nodes: definition.nodes.map((node) => node.nodeKey === "image"
+      ? { ...node, config: { ...node.config, selectedProviderId: "pptoken", selectedModelId: "gpt-image-2" } }
+      : node),
+  };
+  const bound = bindWorkflowProviderDefaults(imageDefinition, {
+    provider: { id: "text-main", source: "deepseek", model: "deepseek-v4-flash" },
+    providers: {
+      "image-main": { id: "image-main", source: "openai-compatible", model: "image/quality", models: ["image/fast", "image/quality"], baseUrl: "https://image.example.test" },
+    },
+    defaults: { image: "image-main" },
+  });
+  const image = bound.nodes.find((node) => node.nodeKey === "image")?.config ?? {};
+  assert.equal(image.provider, "image-main");
+  assert.equal(image.model, "image/quality");
+  assert.equal(image.selectedProviderId, "image-main");
+  assert.equal(image.selectedModelId, "image/quality");
 });
 
 test("provider binding keeps account-owned RunningHub workflow IDs in the local profile only", () => {

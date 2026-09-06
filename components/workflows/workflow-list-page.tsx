@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 
-import { WorkbenchWorkflowDirectory, type WorkbenchWorkflowDirectoryAction } from "@aimarketing/workbench-ui"
+import { WorkbenchWorkflowDirectory, type WorkbenchWorkflowDirectoryAction } from "@coworkany/workbench-ui"
 import type { PlatformRegistryEntryExecutionState } from "@/lib/platform/registry-entry-execution"
 import type { WorkflowDefinition } from "@/lib/workflows/store"
 

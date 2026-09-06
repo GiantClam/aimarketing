@@ -60,7 +60,7 @@ function startHost(desktopRoot: string, environment: Record<string, string | und
 
 test("built workflow-host completes a local file workflow without network egress", async () => {
   const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-  const workspace = await mkdtemp(join(tmpdir(), "aimarketing-host-offline-network-"));
+  const workspace = await mkdtemp(join(tmpdir(), "coworkany-host-offline-network-"));
   const guard = join(desktopRoot, "test", "fixtures", "deny-network-egress.cjs");
   const child = startHost(desktopRoot, { NODE_OPTIONS: `--require=${guard}` }, true);
   try {
@@ -94,13 +94,106 @@ test("built workflow-host completes a local file workflow without network egress
       await Promise.race([stopped, new Promise<void>((resolveClose) => setTimeout(resolveClose, 5_000))]);
     }
     child.child.stdin.destroy();
+    await rm(workspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  }
+});
+
+test("workflow-host keeps concurrent OpenCode sessions alive across provider configurations", async () => {
+  const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const workspace = await mkdtemp(join(tmpdir(), "coworkany-host-concurrent-opencode-"));
+  const fixture = join(desktopRoot, "test", "fixtures", "fake-opencode-serve.mjs");
+  const child = startHost(desktopRoot, {
+    COWORKANY_OPENCODE_PATH: fixture,
+    OPENCODE_RUNTIME_DIR: workspace,
+    FAKE_OPENCODE_CONCURRENCY_MODE: "1",
+  });
+  const send = (frame: Record<string, unknown>) => child.child.stdin.write(encodeRpcMessage(frame));
+  const providerA = { id: "provider-a", model: "configured/model-a" };
+  const providerB = { id: "provider-b", model: "configured/model-b" };
+  try {
+    const createA = randomUUID();
+    send({ version: 1, requestId: createA, type: "session.create", payload: { conversationId: "conversation-a", workspacePath: workspace, provider: providerA, model: providerA.model } });
+    const sessionAFrame = await child.waitFor((frame) => frame.requestId === createA);
+    assert.equal(sessionAFrame.ok, true, JSON.stringify(sessionAFrame));
+    const sessionA = String((sessionAFrame.data as Record<string, unknown>).sessionId);
+
+    const promptA = randomUUID();
+    send({ version: 1, requestId: promptA, runId: "provider-a-run", sessionId: sessionA, type: "session.prompt", payload: { prompt: "slow-provider-a" } });
+    await child.waitFor((frame) => frame.requestId === promptA);
+
+    const createB = randomUUID();
+    send({ version: 1, requestId: createB, type: "session.create", payload: { conversationId: "conversation-b", workspacePath: workspace, provider: providerB, model: providerB.model } });
+    const sessionBFrame = await child.waitFor((frame) => frame.requestId === createB);
+    assert.equal(sessionBFrame.ok, true, JSON.stringify(sessionBFrame));
+    const sessionB = String((sessionBFrame.data as Record<string, unknown>).sessionId);
+
+    const promptB = randomUUID();
+    send({ version: 1, requestId: promptB, runId: "provider-b-run", sessionId: sessionB, type: "session.prompt", payload: { prompt: "provider-b" } });
+    await child.waitFor((frame) => frame.requestId === promptB);
+
+    const terminalA = await child.waitFor((frame) => {
+      const event = (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined;
+      return event?.runId === "provider-a-run" && (event.event === "done" || event.event === "runtime_error");
+    });
+    const terminalB = await child.waitFor((frame) => {
+      const event = (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined;
+      return event?.runId === "provider-b-run" && (event.event === "done" || event.event === "runtime_error");
+    });
+    const eventA = (terminalA.data as Record<string, unknown>).event as Record<string, unknown>;
+    const eventB = (terminalB.data as Record<string, unknown>).event as Record<string, unknown>;
+    assert.equal(eventA.event, "done", JSON.stringify(eventA));
+    assert.equal(eventB.event, "done", JSON.stringify(eventB));
+  } finally {
+    if (child.child.exitCode === null) {
+      const stopped = new Promise<void>((resolveClose) => child.child.once("close", () => resolveClose()));
+      child.child.kill();
+      await Promise.race([stopped, new Promise<void>((resolveClose) => setTimeout(resolveClose, 5_000))]);
+    }
+    child.child.stdin.destroy();
     await rm(workspace, { recursive: true, force: true });
+  }
+});
+
+test("workflow-host cancels a persistent OpenCode session without waiting for the prompt response", async () => {
+  const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const workspace = await mkdtemp(join(tmpdir(), "coworkany-host-cancel-opencode-"));
+  const fixture = join(desktopRoot, "test", "fixtures", "fake-opencode-serve.mjs");
+  const child = startHost(desktopRoot, {
+    COWORKANY_OPENCODE_PATH: fixture,
+    OPENCODE_RUNTIME_DIR: workspace,
+  });
+  const send = (frame: Record<string, unknown>) => child.child.stdin.write(encodeRpcMessage(frame));
+  try {
+    const createRequestId = randomUUID();
+    send({ version: 1, requestId: createRequestId, type: "session.create", payload: { conversationId: "conversation-cancel", workspacePath: workspace, provider: { model: "configured/model" }, model: "configured/model" } });
+    const sessionFrame = await child.waitFor((frame) => frame.requestId === createRequestId && frame.ok === true);
+    const sessionId = String((sessionFrame.data as Record<string, unknown>).sessionId);
+    const runId = `cancelled-session-${randomUUID()}`;
+    const promptStartedAt = Date.now();
+    send({ version: 1, requestId: randomUUID(), runId, sessionId, type: "session.prompt", payload: { prompt: "Long running" } });
+    await child.waitFor((frame) => Boolean(frame.data) && (frame.data as Record<string, unknown>).runId === runId);
+    send({ version: 1, requestId: randomUUID(), runId, type: "run.cancel", payload: { runId } });
+    const terminal = await child.waitFor((frame) => {
+      const event = (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined;
+      return event?.runId === runId && event.event === "runtime_error";
+    }, 2_000);
+    const terminalEvent = (terminal.data as Record<string, unknown>).event as Record<string, unknown>;
+    assert.equal(terminalEvent.code, "opencode_aborted");
+    assert.ok(Date.now() - promptStartedAt < 1_500, "run.cancel must not wait for the provider prompt to finish");
+  } finally {
+    if (child.child.exitCode === null) {
+      const stopped = new Promise<void>((resolveClose) => child.child.once("close", () => resolveClose()));
+      child.child.kill();
+      await Promise.race([stopped, new Promise<void>((resolveClose) => setTimeout(resolveClose, 5_000))]);
+    }
+    child.child.stdin.destroy();
+    await rm(workspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }
 });
 
 test("workflow-host runs a mixed text, image, video, audio and PPT workflow with local providers", async () => {
   const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-  const workspace = await mkdtemp(join(tmpdir(), "aimarketing-host-mixed-media-"));
+  const workspace = await mkdtemp(join(tmpdir(), "coworkany-host-mixed-media-"));
   const fixture = join(desktopRoot, "test", "fixtures", "fake-opencode-serve.mjs");
   const outputs = new Map<string, { readonly contentType: string; readonly body: Buffer }>([
     ["/output.png", { contentType: "image/png", body: Buffer.from("mixed-image-fixture", "utf8") }],
@@ -127,7 +220,7 @@ test("workflow-host runs a mixed text, image, video, audio and PPT workflow with
   await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
   const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const providerKey = String.fromCharCode(102, 105, 120, 116, 117, 114, 101);
-  const child = startHost(desktopRoot, { AIMARKETING_OPENCODE_PATH: fixture, OPENCODE_RUNTIME_DIR: workspace });
+  const child = startHost(desktopRoot, { COWORKANY_OPENCODE_PATH: fixture, OPENCODE_RUNTIME_DIR: workspace });
   try {
     const runId = `mixed-media-${randomUUID()}`;
     child.child.stdin.write(encodeRpcMessage({ version: 1, requestId: randomUUID(), runId, type: "workflow.run", payload: {
@@ -144,6 +237,7 @@ test("workflow-host runs a mixed text, image, video, audio and PPT workflow with
           { nodeKey: "audio", type: "audio_generate", nodeVersion: 1, title: "Audio", positionX: 2, positionY: 1, config: { provider: "fixture", model: "fixture-audio" } },
           { nodeKey: "ppt", type: "ppt_generate", nodeVersion: 1, title: "PPT", positionX: 3, positionY: 1, config: {} },
           { nodeKey: "output", type: "output", nodeVersion: 1, title: "Output", positionX: 4, positionY: 0, config: {} },
+          { nodeKey: "asset-library", type: "product_store", nodeVersion: 1, title: "Asset Library", positionX: 5, positionY: 0, config: { fileName: "launch-story.md" } },
         ],
         edges: [
           { edgeKey: "input-llm", sourceNodeKey: "input", sourcePortId: "text", targetNodeKey: "llm", targetPortId: "text" },
@@ -156,6 +250,11 @@ test("workflow-host runs a mixed text, image, video, audio and PPT workflow with
           { edgeKey: "video-output", sourceNodeKey: "video", sourcePortId: "video", targetNodeKey: "output", targetPortId: "videos" },
           { edgeKey: "audio-output", sourceNodeKey: "audio", sourcePortId: "audio", targetNodeKey: "output", targetPortId: "audios" },
           { edgeKey: "ppt-output", sourceNodeKey: "ppt", sourcePortId: "ppt", targetNodeKey: "output", targetPortId: "presentations" },
+          { edgeKey: "llm-asset-library", sourceNodeKey: "llm", sourcePortId: "text", targetNodeKey: "asset-library", targetPortId: "text" },
+          { edgeKey: "image-asset-library", sourceNodeKey: "image", sourcePortId: "image", targetNodeKey: "asset-library", targetPortId: "images" },
+          { edgeKey: "video-asset-library", sourceNodeKey: "video", sourcePortId: "video", targetNodeKey: "asset-library", targetPortId: "videos" },
+          { edgeKey: "audio-asset-library", sourceNodeKey: "audio", sourcePortId: "audio", targetNodeKey: "asset-library", targetPortId: "audios" },
+          { edgeKey: "ppt-asset-library", sourceNodeKey: "ppt", sourcePortId: "ppt", targetNodeKey: "asset-library", targetPortId: "presentations" },
         ],
       },
     } }));
@@ -167,11 +266,17 @@ test("workflow-host runs a mixed text, image, video, audio and PPT workflow with
     assert.equal(terminalEvent.event, "done", JSON.stringify(terminalEvent));
     await new Promise((resolveEvents) => setTimeout(resolveEvents, 100));
     const events = child.frames.map((frame) => (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined).filter(Boolean) as Record<string, unknown>[];
-    for (const executorId of ["llm_generate", "image_generate", "video_generate", "audio_generate", "ppt_generate"]) {
+    for (const executorId of ["llm_generate", "image_generate", "video_generate", "audio_generate", "ppt_generate", "product_store"]) {
       assert.equal(events.some((event) => event.tool === "workflow:node_succeeded" && JSON.stringify(event).includes(executorId)), true, executorId);
     }
     for (const extension of [".png", ".mp4", ".mp3", ".pptx"]) {
       assert.equal(events.some((event) => String(event.tool).startsWith("artifact:") && String(event.message).toLowerCase().includes(extension)), true, extension);
+    }
+    const registrations = child.frames
+      .filter((frame) => frame.type === "service_request" && frame.method === "workflow.artifact.register")
+      .map((frame) => frame.payload as Record<string, unknown>);
+    for (const suffix of ["launch-story.md", ".png", ".mp3", ".pptx"]) {
+      assert.equal(registrations.some((payload) => String(payload.relativePath).endsWith(suffix)), true, suffix);
     }
     const pptx = readFileSync(join(workspace, "workflow-deck.pptx"));
     assert.deepEqual([...pptx.subarray(0, 4)], [0x50, 0x4b, 0x03, 0x04]);
@@ -213,9 +318,9 @@ test("workflow-host creates a stable session mapping through RPC", async () => {
 
 test("workflow-host reports the configured model when OpenCode usage omits the model", async () => {
   const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-  const workspace = await mkdtemp(join(tmpdir(), "aimarketing-host-usage-model-"));
+  const workspace = await mkdtemp(join(tmpdir(), "coworkany-host-usage-model-"));
   const fixture = join(desktopRoot, "test", "fixtures", "fake-opencode-serve.mjs");
-  const child = startHost(desktopRoot, { AIMARKETING_OPENCODE_PATH: fixture, OPENCODE_RUNTIME_DIR: workspace });
+  const child = startHost(desktopRoot, { COWORKANY_OPENCODE_PATH: fixture, OPENCODE_RUNTIME_DIR: workspace });
   const provider = { id: "configured", source: "openai-compatible", model: "configured/model" };
   try {
     const sessionRequestId = randomUUID();
@@ -237,10 +342,107 @@ test("workflow-host reports the configured model when OpenCode usage omits the m
   }
 });
 
+test("workflow-host emits one final artifact after a chat write tool completes", async () => {
+  const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const workspace = await mkdtemp(join(tmpdir(), "coworkany-host-chat-artifact-"));
+  const fixture = join(desktopRoot, "test", "fixtures", "fake-opencode-serve.mjs");
+  const child = startHost(desktopRoot, { COWORKANY_OPENCODE_PATH: fixture, OPENCODE_RUNTIME_DIR: workspace });
+  try {
+    const sessionRequestId = randomUUID();
+    const provider = { id: "configured", source: "openai-compatible", model: "configured/model" };
+    child.child.stdin.write(encodeRpcMessage({ version: 1, requestId: sessionRequestId, type: "session.create", payload: { conversationId: "conversation-chat-artifact", workspacePath: workspace, model: provider.model, provider, allowArtifacts: true } }));
+    const sessionResponse = await child.waitFor((frame) => frame.requestId === sessionRequestId && frame.ok === true);
+    const sessionId = String(((sessionResponse.data as Record<string, unknown> | undefined)?.sessionId) ?? "");
+    assert.ok(sessionId);
+    const runId = `chat-artifact-${randomUUID()}`;
+    child.child.stdin.write(encodeRpcMessage({ version: 1, requestId: runId, runId, sessionId, type: "session.prompt", payload: { prompt: "Create chat artifact", model: provider.model, provider, allowArtifacts: true } }));
+    await child.waitFor((frame) => {
+      const event = (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined;
+      return event?.event === "done" && event.runId === runId;
+    });
+    const events = child.frames.map((frame) => (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined).filter((event) => event?.runId === runId) as Record<string, unknown>[];
+    const artifacts = events.filter((event) => event.event === "artifact");
+    assert.equal(artifacts.length, 1);
+    assert.deepEqual(artifacts[0]?.artifact, { id: `${runId}:chat-final.md`, relativePath: "chat-final.md", title: "chat-final.md", mimeType: "text/markdown", byteLength: 20, sha256: "" });
+    assert.ok(events.findIndex((event) => event.event === "artifact") < events.findIndex((event) => event.event === "done"));
+    assert.equal(events.filter((event) => event.event === "artifact").length, 1);
+  } finally {
+    child.child.kill();
+    await rm(workspace, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  }
+});
+
+test("workflow-host registers a PPT artifact when the presentation skill writes through shell tools", async () => {
+  const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const workspace = await mkdtemp(join(tmpdir(), "coworkany-host-ppt-artifact-"));
+  const fixture = join(desktopRoot, "test", "fixtures", "fake-opencode-serve.mjs");
+  const child = startHost(desktopRoot, { COWORKANY_OPENCODE_PATH: fixture, OPENCODE_RUNTIME_DIR: workspace });
+  try {
+    const provider = { id: "configured", source: "openai-compatible", model: "configured/model" };
+    const sessionRequestId = randomUUID();
+    child.child.stdin.write(encodeRpcMessage({ version: 1, requestId: sessionRequestId, type: "session.create", payload: { conversationId: "conversation-ppt-artifact", workspacePath: workspace, model: provider.model, provider, allowArtifacts: true } }));
+    const sessionResponse = await child.waitFor((frame) => frame.requestId === sessionRequestId && frame.ok === true);
+    const sessionId = String((sessionResponse.data as Record<string, unknown>).sessionId ?? "");
+    const runId = `ppt-artifact-${randomUUID()}`;
+    child.child.stdin.write(encodeRpcMessage({ version: 1, requestId: runId, runId, sessionId, type: "session.prompt", payload: { prompt: "Create ppt-master artifact", model: provider.model, provider, allowArtifacts: true } }));
+    await child.waitFor((frame) => {
+      const event = (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined;
+      return event?.event === "done" && event.runId === runId;
+    });
+    const artifacts = child.frames
+      .map((frame) => (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined)
+      .filter((event) => event?.event === "artifact" && event.runId === runId);
+    assert.equal(artifacts.length, 1);
+    assert.deepEqual(artifacts[0]?.artifact, { id: `${runId}:workflow-deck.pptx`, relativePath: "workflow-deck.pptx", title: "workflow-deck.pptx", mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation", byteLength: 14, sha256: "" });
+    const registrations = child.frames
+      .filter((frame) => frame.type === "service_request" && frame.method === "workflow.artifact.register")
+      .map((frame) => frame.payload as Record<string, unknown>);
+    assert.equal(registrations.some((payload) => payload.runId === runId && payload.relativePath === "workflow-deck.pptx" && payload.mimeType === "application/vnd.openxmlformats-officedocument.presentationml.presentation"), true);
+  } finally {
+    if (child.child.exitCode === null) child.child.kill();
+    child.child.stdin.destroy();
+    await rm(workspace, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  }
+});
+
+test("workflow-host preserves a PPT artifact when a late turn error follows file creation", async () => {
+  const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const workspace = await mkdtemp(join(tmpdir(), "coworkany-host-ppt-late-error-"));
+  const fixture = join(desktopRoot, "test", "fixtures", "fake-opencode-serve.mjs");
+  const child = startHost(desktopRoot, { COWORKANY_OPENCODE_PATH: fixture, OPENCODE_RUNTIME_DIR: workspace });
+  try {
+    const provider = { id: "configured", source: "openai-compatible", model: "configured/model" };
+    const sessionRequestId = randomUUID();
+    child.child.stdin.write(encodeRpcMessage({ version: 1, requestId: sessionRequestId, type: "session.create", payload: { conversationId: "conversation-ppt-late-error", workspacePath: workspace, model: provider.model, provider, allowArtifacts: true } }));
+    const sessionResponse = await child.waitFor((frame) => frame.requestId === sessionRequestId && frame.ok === true);
+    const sessionId = String((sessionResponse.data as Record<string, unknown>).sessionId ?? "");
+    const runId = `ppt-late-error-${randomUUID()}`;
+    child.child.stdin.write(encodeRpcMessage({ version: 1, requestId: runId, runId, sessionId, type: "session.prompt", payload: { prompt: "Create ppt artifact then fail", model: provider.model, provider, allowArtifacts: true } }));
+    await child.waitFor((frame) => {
+      const event = (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined;
+      return event?.event === "runtime_error" && event.runId === runId;
+    });
+    await child.waitFor((frame) => {
+      const event = (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined;
+      return event?.event === "artifact" && event.runId === runId;
+    });
+    const events = child.frames
+      .map((frame) => (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined)
+      .filter((event) => event?.runId === runId);
+    const artifacts = events.filter((event) => event?.event === "artifact");
+    assert.equal(artifacts.length, 1);
+    assert.equal((artifacts[0]?.artifact as Record<string, unknown>)?.relativePath, "failed-workflow.pptx");
+  } finally {
+    if (child.child.exitCode === null) child.child.kill();
+    child.child.stdin.destroy();
+    await rm(workspace, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  }
+});
+
 test("workflow-host executes a v2 local file workflow and streams node lifecycle events", async () => {
   const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   const tsxCli = resolve(desktopRoot, "..", "..", "node_modules", "tsx", "dist", "cli.mjs");
-  const workspace = await mkdtemp(join(tmpdir(), "aimarketing-host-workflow-"));
+  const workspace = await mkdtemp(join(tmpdir(), "coworkany-host-workflow-"));
   const child = spawn(process.execPath, [tsxCli, join(desktopRoot, "runtime", "host.ts")], { cwd: desktopRoot, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
   const frames: Record<string, unknown>[] = [];
   let buffer: Uint8Array = new Uint8Array(0);
@@ -299,7 +501,7 @@ test("workflow-host executes a v2 local file workflow and streams node lifecycle
 test("workflow-host expands foreach items instead of passing one array to the body", async () => {
   const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   const tsxCli = resolve(desktopRoot, "..", "..", "node_modules", "tsx", "dist", "cli.mjs");
-  const workspace = await mkdtemp(join(tmpdir(), "aimarketing-host-foreach-"));
+  const workspace = await mkdtemp(join(tmpdir(), "coworkany-host-foreach-"));
   const child = spawn(process.execPath, [tsxCli, join(desktopRoot, "runtime", "host.ts")], { cwd: desktopRoot, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
   let buffer: Uint8Array = new Uint8Array(0); const events: Record<string, unknown>[] = []; let resolveDone: (() => void) | undefined;
   const done = new Promise<void>((resolveDonePromise) => { resolveDone = resolveDonePromise; });
@@ -361,7 +563,7 @@ test("workflow-host routes persisted provider tasks through workflow-core recove
 
 test("workflow-host resumes a persisted media task after a host restart without submitting again", async () => {
   const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-  const workspace = await mkdtemp(join(tmpdir(), "aimarketing-host-media-recovery-"));
+  const workspace = await mkdtemp(join(tmpdir(), "coworkany-host-media-recovery-"));
   let submitCount = 0;
   let queryCount = 0;
   const server = createServer((request, response) => {

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import { resolve } from "node:path";
 import { createDesktopChatTransport, createDesktopWorkbenchClient } from "../src/workbench-client";
-import { createDesktopUIMessage } from "@aimarketing/workbench-client";
+import { createDesktopUIMessage, desktopUIMessageText } from "@coworkany/workbench-client";
 
 test("desktop WorkbenchClient adapts conversations, workflows and file actions through Tauri", async () => {
   const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
@@ -15,10 +17,11 @@ test("desktop WorkbenchClient adapts conversations, workflows and file actions t
         role: "assistant",
         content: "已完成",
         parts_json: JSON.stringify([
-          { id: "part-text", type: "text", text: "已完成" },
-          { id: "part-tool", type: "tool", tool: "writer", status: "completed", sequence: 2, createdAt: "2026-08-12T00:00:02Z" },
-          { id: "part-artifact", type: "artifact", artifact: { id: "a1", relativePath: "artifacts/report.md", title: "报告", mimeType: "text/markdown", byteLength: 12, sha256: "hash-a" }, sequence: 3, createdAt: "2026-08-12T00:00:03Z" },
+          { type: "text", text: "已完成", state: "done" },
+          { type: "data-status", id: "part-tool", data: { status: "completed", message: "writer" } },
+          { type: "data-artifact", id: "part-artifact", data: { id: "a1", relativePath: "artifacts/report.md", title: "报告", mimeType: "text/markdown", byteLength: 12, sha256: "hash-a" } },
         ]),
+        metadata_json: JSON.stringify({ conversationId: "c1", createdAt: "2026-08-12T00:00:00Z", updatedAt: "2026-08-12T00:00:00Z" }),
         created_at: "2026-08-12T00:00:00Z",
       }] as T;
       if (command === "list_workflows") return [{ id: "w1", name: "内容工作流", definition_json: JSON.stringify({ schemaVersion: 2, revision: 3, definitionHash: "hash-1", nodes: [{ nodeKey: "input" }], edges: [] }), updated_at: "2026-08-12T00:00:00Z" }] as T;
@@ -35,11 +38,12 @@ test("desktop WorkbenchClient adapts conversations, workflows and file actions t
   assert.equal((await client.conversations.list())[0]?.opencodeSessionId, "session-c1");
   assert.equal((await client.conversations.list())[0]?.agentId, "executive-brand");
   const message = (await client.conversations.messages("c1"))[0];
-  assert.equal(message?.content, "已完成");
-  assert.equal(message?.createdAt, "2026-08-12T00:00:00Z");
-  assert.equal(message?.parts?.[1]?.type, "tool");
-  assert.equal(message?.parts?.[1]?.sequence, 2);
-  assert.equal(message?.parts?.[2]?.type, "artifact");
+  assert.equal(desktopUIMessageText(message!), "已完成");
+  assert.equal(message?.metadata?.createdAt, "2026-08-12T00:00:00Z");
+  assert.equal(message?.parts?.[1]?.type, "data-status");
+  assert.equal(message?.parts?.[2]?.type, "data-artifact");
+  await client.conversations.messages("c1", { limit: 10, before: { createdAt: "2026-08-12T00:00:00Z", id: "m1" } });
+  assert.deepEqual(calls.at(-1)?.args, { conversationId: "c1", limit: 10, beforeCreatedAt: "2026-08-12T00:00:00Z", beforeId: "m1" });
   const listedWorkflow = (await client.workflows.list())[0];
   assert.equal(listedWorkflow?.title, "内容工作流");
   assert.equal(listedWorkflow?.definition.definitionHash, "hash-1");
@@ -91,7 +95,7 @@ test("desktop WorkbenchClient restores UIMessage parts without projecting away m
         role: "assistant",
         content: "",
         parts_json: JSON.stringify([
-          { type: "text", text: "流式内容", state: "done", providerMetadata: { aimarketing: { partId: "text:1", sequence: 1 } } },
+          { type: "text", text: "流式内容", state: "done", providerMetadata: { coworkany: { partId: "text:1", sequence: 1 } } },
           { type: "data-media", id: "media:1", data: { kind: "image", title: "封面", mimeType: "image/png", relativePath: "artifacts/cover.png" } },
         ]),
         metadata_json: JSON.stringify({ conversationId: "c-ui", runId: "run-ui", providerId: "deepseek", modelId: "deepseek-v4-flash", modelLocked: true }),
@@ -101,12 +105,36 @@ test("desktop WorkbenchClient restores UIMessage parts without projecting away m
     async listen() { return () => undefined; },
   };
   const client = createDesktopWorkbenchClient(bridge, { go: () => undefined, replace: () => undefined, current: () => "/dashboard/ai" });
-  const uiMessage = (await client.conversations.uiMessages("c-ui"))[0];
+  const uiMessage = (await client.conversations.messages("c-ui"))[0];
   assert.equal(uiMessage?.metadata?.modelId, "deepseek-v4-flash");
   assert.equal(uiMessage?.parts[1]?.type, "data-media");
-  const projected = (await client.conversations.messages("c-ui"))[0];
-  assert.equal(projected?.content, "流式内容");
-  assert.equal(projected?.parts?.[0]?.type, "text");
+  assert.equal(desktopUIMessageText(uiMessage!), "流式内容");
+  assert.equal(uiMessage?.parts?.[0]?.type, "text");
+});
+
+test("desktop history preserves persisted text and keeps reasoning as a separate part", async () => {
+  const bridge = {
+    async invoke<T>(command: string) {
+      if (command !== "list_messages") return undefined as T;
+      return [{
+        id: "sales-history-legacy",
+        conversation_id: "c-sales",
+        role: "assistant",
+         content: "用户想检索销售策略相关的资料。我应该先看看本地有没有相关领域资料可以读取。检索结果显示暂无可靠记录，请补充app链接。",
+        parts_json: JSON.stringify([
+          { type: "reasoning", text: "用户想检索资料，我需要先核实信息来源。", state: "done" },
+          { type: "text", text: "用户想检索销售策略相关的资料。我应该先看看本地有没有相关领域资料可以读取。检索结果显示暂无可靠记录，请补充app链接。", state: "streaming" },
+        ]),
+        metadata_json: JSON.stringify({ conversationId: "c-sales" }),
+        created_at: "2026-09-02T07:19:20.809Z",
+      }] as T;
+    },
+    async listen() { return () => undefined; },
+  };
+  const client = createDesktopWorkbenchClient(bridge, { go: () => undefined, replace: () => undefined, current: () => "/dashboard/ai" });
+  const message = (await client.conversations.messages("c-sales"))[0];
+  assert.equal(desktopUIMessageText(message!), "用户想检索销售策略相关的资料。我应该先看看本地有没有相关领域资料可以读取。检索结果显示暂无可靠记录，请补充app链接。");
+  assert.equal(message?.parts.find((part) => part.type === "reasoning")?.type, "reasoning");
 });
 
 test("desktop ChatTransport forwards the locked config model and persists the UIMessage user turn", async () => {
@@ -122,13 +150,35 @@ test("desktop ChatTransport forwards the locked config model and persists the UI
     resolveProvider: () => ({ id: "deepseek", model: "deepseek-v4-flash" }),
     onRunStarted: (runId) => started.push(runId),
   });
-  const message = createDesktopUIMessage({ id: "ui-user-1", role: "user", conversationId: "c1", content: "你好", providerId: "deepseek", modelId: "deepseek-v4-flash" });
+  const content = "  你好\n\n**原样保留**  ";
+  const message = createDesktopUIMessage({ id: "ui-user-1", role: "user", conversationId: "c1", content, providerId: "deepseek", modelId: "deepseek-v4-flash" });
   await transport.sendMessages({ trigger: "submit-message", chatId: "c1", messageId: undefined, messages: [message], abortSignal: undefined });
   assert.deepEqual(calls.map((call) => call.command), ["create_run", "append_message", "host_start", "host_send"]);
   assert.equal((calls[0]?.args as { model?: string }).model, "deepseek-v4-flash");
-  const persisted = calls[1]?.args?.input as { metadata_json?: string };
+  const persisted = calls[1]?.args?.input as { content?: string; metadata_json?: string };
+  assert.equal(persisted.content, content);
   assert.match(String(persisted.metadata_json), /deepseek-v4-flash/);
+  const sentPrompt = ((calls[3]?.args?.message as { payload?: { prompt?: unknown } } | undefined)?.payload?.prompt);
+  assert.equal(sentPrompt, content);
   assert.equal(started.length, 1);
+});
+
+test("desktop ChatTransport forwards the PPT artifact policy on both session and prompt", async () => {
+  const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
+  const bridge = {
+    async invoke<T>(command: string, args?: Record<string, unknown>) { calls.push({ command, args }); return undefined as T; },
+    async listen() { return () => undefined; },
+  };
+  const workbenchClient = { runs: { subscribe: () => () => undefined } } as never;
+  const transport = createDesktopChatTransport(bridge, workbenchClient, {
+    resolveSessionId: async () => "session-ppt",
+    resolveProvider: () => ({ id: "configured", model: "configured/ppt" }),
+    resolveAllowArtifacts: (message) => message.metadata?.route === "/dashboard/ai?agent=executive-ppt",
+  });
+  const message = createDesktopUIMessage({ id: "ppt-user-1", role: "user", conversationId: "ppt-c1", content: "生成一页 PPT", route: "/dashboard/ai?agent=executive-ppt" });
+  await transport.sendMessages({ trigger: "submit-message", chatId: "ppt-c1", messageId: undefined, messages: [message], abortSignal: undefined });
+  const hostSend = calls.find((call) => call.command === "host_send")?.args?.message as { payload?: { allowArtifacts?: boolean } } | undefined;
+  assert.equal(hostSend?.payload?.allowArtifacts, true);
 });
 
 test("desktop ChatTransport lets the config/session adapter materialize a draft conversation before prompting", async () => {
@@ -151,6 +201,33 @@ test("desktop ChatTransport lets the config/session adapter materialize a draft 
   await transport.sendMessages({ trigger: "submit-message", chatId: "draft-chat-1", messageId: undefined, messages: [message], abortSignal: undefined });
   assert.deepEqual(ensured, { chatId: "draft-chat-1", sessionId: "draft-chat-1", model: "deepseek-v4-flash" });
   assert.deepEqual(calls, ["create_run", "append_message", "host_start", "host_send"]);
+});
+
+test("desktop ChatTransport keeps the user prompt intact and sends Skill guidance as system context", async () => {
+  let sentPrompt = "";
+  let sentSystemPrompt = "";
+  const bridge = {
+    async invoke<T>(command: string, args?: Record<string, unknown>) {
+      if (command === "host_send") {
+        const payload = (args?.message as { payload?: { prompt?: unknown; systemPrompt?: unknown } }).payload;
+        sentPrompt = String(payload?.prompt ?? "");
+        sentSystemPrompt = String(payload?.systemPrompt ?? "");
+      }
+      return undefined as T;
+    },
+    async listen() { return () => undefined; },
+  };
+  const workbenchClient = { runs: { subscribe: () => () => undefined } } as never;
+  const transport = createDesktopChatTransport(bridge, workbenchClient, {
+    resolveSessionId: async () => "session-skill",
+    resolveProvider: () => ({ id: "deepseek", model: "deepseek-v4-flash" }),
+    resolvePrompt: (_message, prompt) => prompt,
+    resolveSystemPrompt: () => "Use the native skill tool to load writer-orchestrator.",
+  });
+  const message = createDesktopUIMessage({ id: "skill-user-1", role: "user", conversationId: "skill-c1", content: "写一段文案" });
+  await transport.sendMessages({ trigger: "submit-message", chatId: "skill-c1", messageId: undefined, messages: [message], abortSignal: undefined });
+  assert.equal(sentPrompt, "写一段文案");
+  assert.equal(sentSystemPrompt, "Use the native skill tool to load writer-orchestrator.");
 });
 
 test("desktop WorkbenchClient streams text, tool, usage, cancellation and terminal events", async () => {
@@ -202,7 +279,7 @@ test("desktop WorkbenchClient routes Obsidian index and search through host RPC"
         const message = args?.message as { requestId: string; type: string };
         const data = message.type === "knowledge.index"
           ? { generation: 2, documents: 3, chunks: 8, indexPath: "vault/.index", semantic: true, embeddingModel: "local-hash-384-v1", embeddingDimension: 384, watcher: "active" }
-          : { indexPath: "vault/.index", query: "增长", results: [{ chunkId: "chunk-1", documentPath: "AI Marketing/增长.md", heading: "指标", excerpt: "转化率", score: 0.9, lineStart: 4, lineEnd: 5 }] };
+          : { indexPath: "vault/.index", query: "增长", results: [{ chunkId: "chunk-1", documentPath: "CoworkAny/增长.md", heading: "指标", excerpt: "转化率", score: 0.9, lineStart: 4, lineEnd: 5 }] };
         const body = JSON.stringify({ version: 1, requestId: message.requestId, ok: true, data });
         queueMicrotask(() => listener?.({ raw: `${Buffer.byteLength(body, "utf8")}:${body}` }));
       }
@@ -217,7 +294,13 @@ test("desktop WorkbenchClient routes Obsidian index and search through host RPC"
   const index = await client.knowledge.index({ vaultPath: "vault", indexPath: "vault/.index", embedding: { mode: "local", model: "local-hash-384-v1" } });
   assert.equal(index.documents, 3);
   const results = await client.knowledge.search({ indexPath: "vault/.index", query: "增长", limit: 8, embedding: { mode: "local", model: "local-hash-384-v1" } });
-  assert.equal(results[0]?.documentPath, "AI Marketing/增长.md");
+  assert.equal(results[0]?.documentPath, "CoworkAny/增长.md");
   assert.deepEqual(calls, ["host_start", "host_send", "host_start", "host_send"]);
   assert.equal(listener, undefined);
+});
+
+test("desktop long-running host RPCs do not impose a fixed response timeout", () => {
+  const source = readFileSync(resolve(process.cwd(), "src/workbench-client.ts"), "utf8");
+  assert.doesNotMatch(source, /workflow_host_response_timeout/u);
+  assert.doesNotMatch(source, /setTimeout\([\s\S]{0,180}60_000/u);
 });

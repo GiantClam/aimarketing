@@ -16,7 +16,7 @@ export {
   isWorkflowNodeType,
   isWorkflowValueKind,
   resolveWorkflowNodeTitle,
-} from "@aimarketing/workflow-core"
+} from "@coworkany/workflow-core"
 
 export type {
   WorkflowDefinitionEdge,
@@ -26,4 +26,4 @@ export type {
   WorkflowNodeInputName,
   WorkflowNodeType,
   WorkflowValueKind,
-} from "@aimarketing/workflow-core"
+} from "@coworkany/workflow-core"

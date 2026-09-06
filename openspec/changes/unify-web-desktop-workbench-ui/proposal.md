@@ -2,11 +2,11 @@
 
 Windows Desktop v1 已经具备可运行的本地宿主和若干工作台，但当前桌面 UI 仍在 `apps/desktop/src/App.tsx` 与 `styles.css` 中维护对话、媒体、工作流和资料库的独立实现。线上 `aimarketingsite.com` 则使用另一组 React 工作区，导致相同产品在消息时间线、图片助手、工作流、能力中心和智能体中心上持续分叉。仅复制 CSS 或 JSX 会把差异固化为第二套实现，无法满足后续同步维护。
 
-本 change 把当前线上 `/dashboard/*` 作为 UI 与交互基线，将可复用 React、CSS、消息模型与页面状态机收敛到现有 `@aimarketing/workbench-ui`，Web 与 Tauri 只保留宿主 adapter。它同时根据产品负责人的新批准，显式取代 `add-local-opencode-workbench` 中“Windows v1 不包含 Agent Platform/市场”的旧页面排除：Windows v1 新增只读本地智能体中心，但仍不包含发布、市场、企业管理或云绑定。
+本 change 把当前线上 `/dashboard/*` 作为 UI 与交互基线，将可复用 React、CSS、消息模型与页面状态机收敛到现有 `@coworkany/workbench-ui`，Web 与 Tauri 只保留宿主 adapter。它同时根据产品负责人的新批准，显式取代 `add-local-opencode-workbench` 中“Windows v1 不包含 Agent Platform/市场”的旧页面排除：Windows v1 新增只读本地智能体中心，但仍不包含发布、市场、企业管理或云绑定。
 
 ## What Changes
 
-- 扩展 `@aimarketing/workbench-ui` 为 Web/Desktop 共同消费的 React 与 CSS 单一来源，禁止在桌面复制线上工作区或建立第二个设计系统包。
+- 扩展 `@coworkany/workbench-ui` 为 Web/Desktop 共同消费的 React 与 CSS 单一来源，禁止在桌面复制线上工作区或建立第二个设计系统包。
 - 建立结构化 `WorkbenchMessage` / message-part 时间线契约，保留创建时间、事件顺序、工具状态、usage、产物与消息操作；流式完成不得重写 `createdAt`。
 - 让 Web 与 Desktop 复用对话消息组件和交互状态，由 Web API adapter 与 Tauri/OpenCode adapter 提供数据与动作。
 - 让 Desktop `/dashboard/image-assistant` 复用线上图片助手的会话、澄清、引用图续接、任务轮询/恢复、候选结果、Canvas/layers 与导出交互；本地 adapter 负责文件与 provider 能力。
@@ -31,7 +31,7 @@ Windows Desktop v1 已经具备可运行的本地宿主和若干工作台，但�
 ### In Scope
 
 - 当前线上 `/dashboard/ai`、`/dashboard/image-assistant`、`/dashboard/workflows`、`/dashboard/capabilities` 和 `/dashboard/agent-platform` 的共享 UI/交互抽取。
-- 现有 `@aimarketing/workbench-ui`、`@aimarketing/workbench-client`、Web adapters、Tauri adapters 与必要的本地 SQLite message parts 读写。
+- 现有 `@coworkany/workbench-ui`、`@coworkany/workbench-client`、Web adapters、Tauri adapters 与必要的本地 SQLite message parts 读写。
 - Windows 本地只读 Agent/Skill catalog 和启动本地对话动作。
 - 桌面分叉组件/CSS 的逐路由删除以及自动化 parity 证据。
 
@@ -51,7 +51,7 @@ Windows Desktop v1 已经具备可运行的本地宿主和若干工作台，但�
 
 ## Success Criteria
 
-- [ ] Web 与 Desktop 对五个目标工作区共同消费 `@aimarketing/workbench-ui` 导出的公共组件和 CSS。
+- [ ] Web 与 Desktop 对五个目标工作区共同消费 `@coworkany/workbench-ui` 导出的公共组件和 CSS。
 - [ ] 消息创建时间在持久化、恢复和流式完成前后稳定；工具、usage、产物和状态按 sequence 显示。
 - [ ] Desktop 图片助手支持线上交互状态和本地任务恢复/导出。
 - [ ] Desktop workflows 首屏与线上 `/dashboard/workflows` 一致，Builder 以共享 Canvas 为主。

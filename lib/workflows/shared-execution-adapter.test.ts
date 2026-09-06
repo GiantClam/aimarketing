@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { executeWorkflow, migrateWorkflowDefinitionToCurrent } from "@aimarketing/workflow-core"
+import { executeWorkflow, migrateWorkflowDefinitionToCurrent } from "@coworkany/workflow-core"
 import { runSaasWorkflowWithSharedCore } from "@/lib/workflows/shared-execution-adapter"
 
 test("shared core and SaaS adapter produce equivalent ordinary-DAG outputs", async () => {

@@ -22,14 +22,14 @@
 
 - [x] 2.1 定义 component/source/compatibility/hash/size/signature manifest schema
   - [x] `stage-desktop-runtime.ps1` 生成 Windows x64 manifest 元数据（manifestId、platform、architecture、compatibility、sha256/size、mirror sources、Ed25519 signature algorithm slot）；`install-desktop-runtime.ps1` 在任何下载、解压或替换前 fail-closed 校验 schema、目标架构、hash、size、来源和安全相对路径。
-  - [x] 2026-08-14 `pnpm test:desktop-runtime-installer` 通过 19/19（含 `-ValidateOnly` 不触碰 install root、镜像逐级回退、last-known-good 回滚、离线 manifest 一致性、签名篡改拒绝和 zip-slip 路径拒绝）；PowerShell parser 检查 installer/stager 通过；真实生成 manifest 验证 `aimarketing-runtime-windows-x64-v1`、Windows/x64、sha256 和 ed25519 元数据。
+  - [x] 2026-08-14 `pnpm test:desktop-runtime-installer` 通过 19/19（含 `-ValidateOnly` 不触碰 install root、镜像逐级回退、last-known-good 回滚、离线 manifest 一致性、签名篡改拒绝和 zip-slip 路径拒绝）；PowerShell parser 检查 installer/stager 通过；真实生成 manifest 验证 `coworkany-runtime-windows-x64-v1`、Windows/x64、sha256 和 ed25519 元数据。
   - [x] 2026-08-14 the embedded PPT probe now uses Python Unicode escapes for its Chinese text, avoiding legacy PowerShell ANSI reinterpretation; the full 19/19 runtime installer suite and explicit PowerShell parser check pass.
 - [x] 2.2 实现阿里云 → 腾讯云 → 清华适用源 → 官方源路由
   - [x] 2026-08-13 `install-desktop-runtime.ps1` keeps the ordered source list for each manifest asset and continues to the next source after a bounded download/hash failure; installer regression asserts the exact order and all source URLs remain manifest-controlled.
 - [x] 2.3 实现断点续传、代理、磁盘检查、临时目录和原子安装
   - [x] 2026-08-13 asset downloads use stable `.download.part` files with HTTP Range resume, optional explicit proxy forwarding for asset/npm/pip requests, preflight `DriveInfo.AvailableFreeSpace` checks, and existing staged-directory plus atomic install-root swap semantics.
 - [x] 2.4 使用离线私钥签署 manifest，客户端内置公钥验证
-  - [x] 2026-08-13 `runtime-manifest-crypto.mjs` signs canonical manifest content with an operator-supplied offline Ed25519 private-key path; staging signs only when `AIMARKETING_RUNTIME_SIGNING_KEY` is explicitly provided, while the installer embeds the trusted public key and verifies required signatures before download, extraction, or install-root replacement. Crypto, CLI, and Windows PowerShell tamper tests pass; unsigned development manifests remain explicitly non-required.
+  - [x] 2026-08-13 `runtime-manifest-crypto.mjs` signs canonical manifest content with an operator-supplied offline Ed25519 private-key path; staging signs only when `COWORKANY_RUNTIME_SIGNING_KEY` is explicitly provided, while the installer embeds the trusted public key and verifies required signatures before download, extraction, or install-root replacement. Crypto, CLI, and Windows PowerShell tamper tests pass; unsigned development manifests remain explicitly non-required.
 - [x] 2.5 实现 last-known-good 回退和“可用不主动升级”策略
   - [x] 2026-08-13 installer stages and verifies a candidate before swapping the install root, preserves `<root>.last-known-good`, and only runs from explicit bootstrap/repair flows rather than auto-updating a healthy runtime.
   - [x] 2026-08-14 PowerShell activation fixture forces staged activation to fail after moving the existing runtime; the installer restores the known-good sentinel and leaves the candidate staged for cleanup.
@@ -46,8 +46,8 @@
 
 ## 3. Offline runtime bundle
 
-- [x] 3.1 生成 `AIMarketing-Runtime-x64.zip` 和同一签名 manifest
-  - [x] 2026-08-13 使用 `scripts/package-desktop-runtime.ps1` 生成 `.artifacts/desktop-runtime-release-retry/AIMarketing-Runtime-x64.zip`（411,848,658 bytes，25,256 entries）；归档包含 root manifest、安装器、runtime/skills、解压后的 `runtime/python/python.exe`、PPTX/pathops 依赖，并沿用源 manifest 的 SHA-256 资产集合。签名校验仍由 2.2 覆盖。
+- [x] 3.1 生成 `CoworkAny-Runtime-x64.zip` 和同一签名 manifest
+  - [x] 2026-08-13 使用 `scripts/package-desktop-runtime.ps1` 生成 `.artifacts/desktop-runtime-release-retry/CoworkAny-Runtime-x64.zip`（411,848,658 bytes，25,256 entries）；归档包含 root manifest、安装器、runtime/skills、解压后的 `runtime/python/python.exe`、PPTX/pathops 依赖，并沿用源 manifest 的 SHA-256 资产集合。签名校验仍由 2.2 覆盖。
 - [x] 3.2 实现本地选择、验证、断点/重复安装和回滚
   - [x] 2026-08-13 `install-desktop-runtime.ps1 -OfflineZip` 使用 staging、manifest/size/hash 校验和 last-known-good 交换；离线安装返回 `status=ok`，重复执行使用独立 install root 验证幂等路径。
   - [x] 2026-08-14 offline 安装路径跳过 self-contained ZIP 不需要的 bundled runtime/skills 重复 staging，并使用带路径穿越校验的 .NET `ZipFile` 解压；真实 411,848,658-byte runtime ZIP 在当前 Windows 主机首次安装约 46 秒、重复安装约 32 秒，均返回 `status=ok`。
@@ -62,12 +62,12 @@
 - [x] 被篡改离线包不会修改当前 runtime
   - [x] 2026-08-13 `install-desktop-runtime.test.mjs` repacks a tampered embedded manifest, observes fail-closed `runtime_offline_manifest_mismatch`, and confirms no runtime file is created or replaced.
 - [x] 主程序 ZIP 不重复内置完整 runtime
-  - [x] 2026-08-14 `desktop:verify-packages` now fails closed if normal/portable archives contain embedded Python, Node/OpenCode `node_modules`, or a nested `AIMarketing-Runtime-x64.zip`; it now resolves the current `.artifacts/desktop-release/*.zip` outputs before legacy per-mode folders, and the latest release EXE archives pass with 271,011,970 / 271,077,590 compressed bytes.
+  - [x] 2026-08-14 `desktop:verify-packages` now fails closed if normal/portable archives contain embedded Python, Node/OpenCode `node_modules`, or a nested `CoworkAny-Runtime-x64.zip`; it now resolves the current `.artifacts/desktop-release/*.zip` outputs before legacy per-mode folders, and the latest release EXE archives pass with 271,011,970 / 271,077,590 compressed bytes.
 
 ## 4. Normal and portable packages
 
-- [x] 4.1 生成普通 ZIP，数据/runtime 默认位于 `%LOCALAPPDATA%\AIMarketing`
-  - [x] 2026-08-14 使用最新 Windows release EXE 生成并读取校验 `AI-Marketing-Windows-x64-normal.zip`（271,011,970 bytes）；归档含 EXE、host、knowledge service、Skill catalog、runtime manifest、安装器和 manifest verifier，且不含 `portable.flag`。README 标注 `%LOCALAPPDATA%\AIMarketing`、Win10 22H2/Win11 x64 和人工升级方式。
+- [x] 4.1 生成普通 ZIP，数据/runtime 默认位于 `%LOCALAPPDATA%\CoworkAny`
+  - [x] 2026-08-14 使用最新 Windows release EXE 生成并读取校验 `AI-Marketing-Windows-x64-normal.zip`（271,011,970 bytes）；归档含 EXE、host、knowledge service、Skill catalog、runtime manifest、安装器和 manifest verifier，且不含 `portable.flag`。README 标注 `%LOCALAPPDATA%\CoworkAny`、Win10 22H2/Win11 x64 和人工升级方式。
   - [x] `desktop:verify-packages` 优先校验打包脚本生成的 `.artifacts/desktop-release/*.zip`，并保留旧目录兼容回退；普通 ZIP 的必需条目、portable.flag 排除项及 EXE/host/catalog 字节长度通过。
 - [x] 4.2 生成含 `portable.flag` 的便携 ZIP，全部应用数据位于程序旁 `data/`
   - [x] 4.2a 打包脚本在压缩后检查 portable/runtime 必需条目，并核对可执行文件、host 和 Skill catalog 的归档字节长度。
@@ -91,7 +91,7 @@
 - [x] 第二实例无法并发写同一 SQLite/LanceDB
   - [x] 2026-08-13 Rust instance-lock and storage tests pass; README/portability docs explicitly state SQLite/LanceDB are single-machine state.
 - [x] 普通升级不覆盖 LocalAppData
-  - [x] 2026-08-13 normal package contains no portable flag and documents manual replacement; application data root remains outside the ZIP in `%LOCALAPPDATA%\\AIMarketing`.
+  - [x] 2026-08-13 normal package contains no portable flag and documents manual replacement; application data root remains outside the ZIP in `%LOCALAPPDATA%\\CoworkAny`.
 
 ## 5. Release hardening and verification
 
@@ -111,9 +111,9 @@
 - [ ] 5.5 执行 Authenticode、manifest 签名、依赖漏洞和许可证审计
   - [x] 2026-08-14 `scripts/sign-windows-release.ps1` and `pnpm desktop:sign-release` provide a fail-closed release entry point: the main Tauri executable and shipped Node/OpenCode binaries are signed with an operator-selected Authenticode certificate, then re-verified; runtime manifest verification is required when `-RequireManifestSignature` is used. The current host has the Windows SDK signing tool, but no operator certificate/private key; the release parent remains open.
   - [x] 2026-08-14 `runtime-manifest-crypto.mjs` now strips the UTF-8 BOM emitted by Windows PowerShell before JSON parsing; the signed-manifest CLI regression covers BOM input, and the current release `-VerifyOnly` audit reaches the unsigned-manifest/AuthentiCode checks instead of failing on encoding.
-  - [x] 2026-08-14 `desktop:release-audit` reads the current `.artifacts/desktop-release/*.zip`, performs real Ed25519 verification for any present manifest signature, and reports the current unsigned state accurately: normal/portable/runtime archives pass license evidence, Authenticode is `incomplete` (`ai-marketing.exe` and `ai_marketing_lib.dll` are `NotSigned`, while shipped Node/OpenCode are `Valid`), and manifests remain `development_unsigned` (`signatureVerified=false`).
+  - [x] 2026-08-14 `desktop:release-audit` reads the current `.artifacts/desktop-release/*.zip`, performs real Ed25519 verification for any present manifest signature, and reports the current unsigned state accurately: normal/portable/runtime archives pass license evidence, Authenticode is `incomplete` (`coworkany.exe` and `coworkany_lib.dll` are `NotSigned`, while shipped Node/OpenCode are `Valid`), and manifests remain `development_unsigned` (`signatureVerified=false`).
   - [x] 2026-08-14 release audit now falls back to the Windows SDK `signtool.exe` when `Microsoft.PowerShell.Security` cannot load; the current audit identifies Tauri EXE/DLL as `NotSigned`, bundled Node/OpenCode as `Valid`, dependency vulnerabilities as 0, and keeps unsigned Authenticode/manifest gates fail-closed.
-  - [x] 2026-08-14 `pnpm --filter @aimarketing/desktop tauri:build` completed on Windows and generated the optimized `ai-marketing.exe` release binary plus the x64 NSIS installer; the follow-up audit verifies the bundled Node/OpenCode signatures and identifies only the unsigned Tauri executable/DLL as the remaining Authenticode gap.
+  - [x] 2026-08-14 `pnpm --filter @coworkany/desktop tauri:build` completed on Windows and generated the optimized `coworkany.exe` release binary plus the x64 NSIS installer; the follow-up audit verifies the bundled Node/OpenCode signatures and identifies only the unsigned Tauri executable/DLL as the remaining Authenticode gap.
   - [x] 2026-08-14 after the current-source rebuild, both green ZIPs were regenerated and `scripts/verify-desktop-packages.ps1` passed; package contents and byte-level contracts are valid. Current archives are 271,011,970 / 271,077,590 bytes with SHA-256 `db57b0022f704cb9cddd4fcbb4025d79e5a952989a2a9fe00613de6a83aee8c0` / `4fdbd89aacb7c1ee76a378fb7679efd49a6c3b8e4b83b1d6917c61a4c1816f6d`. A valid operator Authenticode certificate/private key is still unavailable on this host, so the signing gate remains intentionally open.
   - [x] 2026-08-14 `pnpm audit --registry=https://registry.npmjs.org` plus generated overrides now reports 0 critical, 0 high, 0 moderate and 0 low vulnerabilities; the release audit records dependency status `pass` and license evidence remains 28/28 packages per archive. Authenticode is `incomplete` and manifests remain `development_unsigned`, so `-RequireAuthenticode` and `-RequireSignedManifest` continue to fail closed for release CI.
   - [x] 2026-08-14 latest `desktop:release-audit -PnpmAuditJson .artifacts/pnpm-audit-npmjs-final2.json` confirms all three current archives have 28/28 license evidence and zero vulnerabilities; bundled Node/OpenCode are `Valid`, while the Tauri EXE/DLL remain `NotSigned` and manifests remain `development_unsigned`, so the audit status is correctly `incomplete`.
@@ -122,7 +122,7 @@
   - [x] 2026-08-14 `tauri build --no-bundle` rebuilt the release resources after adding `runtime-manifest-crypto.mjs` to `tauri.conf.json`; the latest normal/portable ZIP contract verifies installer bytes 22,816 and manifest verifier bytes 2,651. NSIS remains outside the green ZIP target.
   - [x] 2026-08-14 sequential rerun (after avoiding concurrent bundle mutation) passed `pnpm desktop:build`, `pnpm desktop:tauri:check`, and `pnpm build`; the Desktop Vite bundle completed with 1,849 modules and Next generated all 425 routes.
   - [x] 2026-08-14 `pnpm desktop:test` now passes 133/133, including a built-host offline-egress test that exercises a local file workflow under fetch/http/https/net/tls/dns guards.
-  - [x] 2026-08-14 latest i18n source was rebuilt with `pnpm --filter @aimarketing/desktop exec tauri build --bundles nsis`; the x64 NSIS installer was generated at 180,130,496 bytes with SHA-256 `8e0abb127964e664dd497c0bfd85687ea8a92028006d20aded4dec2baa71b688`. The release EXE stayed alive for 8 seconds and both EXE/installer remain `NotSigned`; signed release evidence is still open.
+  - [x] 2026-08-14 latest i18n source was rebuilt with `pnpm --filter @coworkany/desktop exec tauri build --bundles nsis`; the x64 NSIS installer was generated at 180,130,496 bytes with SHA-256 `8e0abb127964e664dd497c0bfd85687ea8a92028006d20aded4dec2baa71b688`. The release EXE stayed alive for 8 seconds and both EXE/installer remain `NotSigned`; signed release evidence is still open.
   - [x] 2026-08-14 `desktop:release-preflight` now composes package, size, portable-copy, release-audit, signing, bundle-boundary and network-boundary gates; it fails closed on unsigned artifacts before any release result is emitted.
   - [x] 2026-08-14 running the full preflight against `.artifacts/pnpm-audit-npmjs-final2.json` completes the package/size/copy stages and stops with the expected `desktop_release_audit_manifest_signature_required`; no false release-pass JSON is emitted.
   - [x] 2026-08-14 latest normal/portable ZIP preflight repeats the package, size and portable-copy stages and stops at `desktop_release_audit_manifest_signature_required`; unsigned release artifacts still produce no pass result.

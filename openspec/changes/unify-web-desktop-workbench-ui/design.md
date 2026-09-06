@@ -19,7 +19,7 @@
 
 ## Decisions
 
-1. **扩展现有 `@aimarketing/workbench-ui`。** 公共组件、页面状态和 CSS 均从该 package 导出；不创建平行 design-system/workspace package。选择已有 package 可复用现有 route/icon/theme 契约并减少迁移层。
+1. **扩展现有 `@coworkany/workbench-ui`。** 公共组件、页面状态和 CSS 均从该 package 导出；不创建平行 design-system/workspace package。选择已有 package 可复用现有 route/icon/theme 契约并减少迁移层。
 2. **Ports 包围共享工作区。** Navigation、conversation/run、image task、workflow persistence、catalog、file/export 等均通过 typed props/clients 注入。共享 UI 不导入 Next route、Tauri API、SQLite 或 provider SDK。
 3. **结构化消息为 canonical model。** `WorkbenchMessage` 包含固定 `createdAt` 与有序 parts。文本、tool、status、usage、artifact/source/report 均是 part；旧 flat content 仍可映射为 text part。事件 sequence 与 timestamp 不能在 adapter 中丢失。
 4. **按 route 纵向切换。** 顺序为消息基础 → 对话 → Agent Center/能力目录 → workflow list/builder → 图片助手。每个 route 在同源测试、交互测试和视觉证据通过后删除桌面旧实现。

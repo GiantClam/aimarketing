@@ -15,7 +15,7 @@ import {
   areWorkflowPortsCompatible as sharedAreWorkflowPortsCompatible,
   resolveWorkflowPortConnection as sharedResolveWorkflowPortConnection,
   workflowInputNameToValueKind as sharedWorkflowInputNameToValueKind,
-} from "@aimarketing/workflow-core"
+} from "@coworkany/workflow-core"
 import { workflowNodeRegistry } from "./node-definitions/registry"
 
 test("workflowValueKindToInputName maps every value kind to its edge input name", () => {

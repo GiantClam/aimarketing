@@ -1,4 +1,4 @@
-import { hashWorkflowDefinition, type WorkflowDefinitionEnvelope } from "@aimarketing/workflow-core";
+import { hashWorkflowDefinition, type WorkflowDefinitionEnvelope } from "@coworkany/workflow-core";
 
 const SENSITIVE_CONFIG_KEY = /(?:^|[_-])(api[_-]?key|access[_-]?token|authorization|secret|password|token)(?:$|[_-])/iu;
 const NON_PORTABLE_CONFIG_KEY = /^(?:(?:referenced[_-]?)?artifact[_-]?ids?|checkpoint[_-]?key|conversation[_-]?id|idempotency[_-]?key|project[_-]?id|provider[_-]?task[_-]?id|run[_-]?id|session[_-]?id)$/iu;

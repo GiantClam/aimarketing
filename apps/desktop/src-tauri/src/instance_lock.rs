@@ -31,7 +31,7 @@ impl InstanceLock {
                     write_owner(&mut file).map_err(|write_error| format!("desktop_lock_write_failed: {write_error}"))?;
                     Ok(Self { path, file })
                 } else {
-                    Err(lock_conflict(&path, owner, "close the existing AI Marketing instance first"))
+                    Err(lock_conflict(&path, owner, "close the existing CoworkAny instance first"))
                 }
             }
             Err(error) => Err(format!("desktop_lock_open_failed: {error}")),
@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn only_one_writer_can_hold_a_path() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-instance-lock-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-instance-lock-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("instance.lock");
         let first = InstanceLock::acquire(path.clone()).expect("first lock");
@@ -130,7 +130,7 @@ mod tests {
         };
         assert!(error.contains("desktop_instance_already_running:"));
         assert!(error.contains(&format!("owner_pid={}", std::process::id())));
-        assert!(error.contains("close the existing AI Marketing instance first"));
+        assert!(error.contains("close the existing CoworkAny instance first"));
         first.release();
         let second = InstanceLock::acquire(path.clone()).expect("released lock can be reused");
         second.release();
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn lock_conflict_explains_unknown_owner() {
-        let message = lock_conflict(Path::new("C:/AIMarketing/data/instance.lock"), None, "repair the lock file");
+        let message = lock_conflict(Path::new("C:/CoworkAny/data/instance.lock"), None, "repair the lock file");
         assert!(message.contains("owner_pid=unknown"));
         assert!(message.contains("repair the lock file"));
     }

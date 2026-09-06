@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { WorkflowCanvasExecutionSnapshot, WorkflowCanvasNode } from "@aimarketing/workbench-ui";
+import type { WorkflowCanvasExecutionSnapshot, WorkflowCanvasNode } from "@coworkany/workbench-ui";
 import { isTauriBridgeAvailable, tauriBridge } from "./tauri";
 import type { WorkflowOutputItem } from "./workflow-output";
 import { normalizeWorkflowOutput } from "./workflow-output";

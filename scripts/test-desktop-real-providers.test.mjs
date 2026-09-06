@@ -23,12 +23,12 @@ function runSmoke(configPath, port, extraArgs = [], extraEnv = {}) {
       cwd: repoRoot,
       env: {
         ...process.env,
-        AIMARKETING_REAL_PROVIDER_CONFIG: configPath,
-        AIMARKETING_PROVIDER_TIMEOUT_MS: "5000",
-        AIMARKETING_PROVIDER_VIDEO_POLLS: "2",
-        AIMARKETING_PROVIDER_VIDEO_POLL_DELAY_MS: "0",
-        AIMARKETING_PROVIDER_AUDIO_POLLS: "8",
-        AIMARKETING_PROVIDER_AUDIO_POLL_DELAY_MS: "0",
+        COWORKANY_REAL_PROVIDER_CONFIG: configPath,
+        COWORKANY_PROVIDER_TIMEOUT_MS: "5000",
+        COWORKANY_PROVIDER_VIDEO_POLLS: "2",
+        COWORKANY_PROVIDER_VIDEO_POLL_DELAY_MS: "0",
+        COWORKANY_PROVIDER_AUDIO_POLLS: "8",
+        COWORKANY_PROVIDER_AUDIO_POLL_DELAY_MS: "0",
         ...extraEnv,
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -93,7 +93,7 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
   await once(server, "listening");
   const port = server.address().port;
   const rootUrl = `http://127.0.0.1:${port}`;
-  const tempRoot = await mkdtemp(join(tmpdir(), "aimarketing-provider-smoke-"));
+  const tempRoot = await mkdtemp(join(tmpdir(), "coworkany-provider-smoke-"));
   const configPath = join(tempRoot, "providers.json");
   const profile = (id, source, model, baseUrl, extra = {}) => ({ id, source, model, baseUrl, [credentialField]: fixtureCredential, ...extra });
   await writeFile(configPath, JSON.stringify({
@@ -150,7 +150,7 @@ test("real provider smoke executes a configured non-Seedance video profile", asy
     assert.deepEqual(musicOnlyReport.scope, { executed: ["music"], excluded: ["video", "seedance"] });
     assert.deepEqual(musicModels, ["music-2.6"]);
 
-    const invalidSizeResult = await runSmoke(configPath, port, ["--image-only"], { AIMARKETING_PROVIDER_IMAGE_SIZE: "2048x2048" });
+    const invalidSizeResult = await runSmoke(configPath, port, ["--image-only"], { COWORKANY_PROVIDER_IMAGE_SIZE: "2048x2048" });
     assert.equal(invalidSizeResult.code, 1);
     assert.match(`${invalidSizeResult.stdout}\n${invalidSizeResult.stderr}`, /real_provider_image_size_unsupported:2048x2048/u);
     assert.equal(imageSizes.length, 2, "invalid image size must fail before issuing a provider request");
@@ -188,7 +188,7 @@ test("real provider audio smoke honors a bounded polling budget", async () => {
   await once(server, "listening");
   const port = server.address().port;
   const rootUrl = `http://127.0.0.1:${port}`;
-  const tempRoot = await mkdtemp(join(tmpdir(), "aimarketing-provider-audio-smoke-"));
+  const tempRoot = await mkdtemp(join(tmpdir(), "coworkany-provider-audio-smoke-"));
   const configPath = join(tempRoot, "providers.json");
   const profile = (id, source, model, baseUrl) => ({ id, source, model, baseUrl, [credentialField]: fixtureCredential });
   await writeFile(configPath, JSON.stringify({
@@ -204,15 +204,15 @@ test("real provider audio smoke honors a bounded polling budget", async () => {
   }), "utf8");
   try {
     const bounded = await runSmoke(configPath, port, ["--audio-only"], {
-      AIMARKETING_PROVIDER_AUDIO_POLLS: "2",
-      AIMARKETING_PROVIDER_AUDIO_POLL_DELAY_MS: "0",
+      COWORKANY_PROVIDER_AUDIO_POLLS: "2",
+      COWORKANY_PROVIDER_AUDIO_POLL_DELAY_MS: "0",
     });
     assert.equal(bounded.code, 1, `${bounded.stdout}\n${bounded.stderr}`);
     assert.equal(JSON.parse(bounded.stdout).results[0].attempts, 2);
     pollCount = 0;
     const completed = await runSmoke(configPath, port, ["--audio-only"], {
-      AIMARKETING_PROVIDER_AUDIO_POLLS: "3",
-      AIMARKETING_PROVIDER_AUDIO_POLL_DELAY_MS: "0",
+      COWORKANY_PROVIDER_AUDIO_POLLS: "3",
+      COWORKANY_PROVIDER_AUDIO_POLL_DELAY_MS: "0",
     });
     assert.equal(completed.code, 0, `${completed.stdout}\n${completed.stderr}`);
     assert.equal(JSON.parse(completed.stdout).results[0].attempts, 3);

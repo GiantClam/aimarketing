@@ -1,18 +1,20 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type SetStateAction } from "react";
-import { AudioPlayer, Image, Queue, buildOnlineAgentGroups, formatWorkbenchModelLabel, getWorkbenchTaskStatusLabel, isWorkbenchTaskActive, isWorkbenchTaskRetryable, normalizeWorkbenchTaskStatus, resolveWorkbenchMediaFeature, workbenchSessionScope, WORKBENCH_HOME_COPY, WORKBENCH_HOME_GROUPS, WORKBENCH_MEDIA_FEATURES, WORKBENCH_MESSAGE_FRAME, WORKBENCH_ROUTE_MANIFEST, WORKBENCH_THEME, WORKBENCH_WRITER_CONTENT_TYPES, WORKBENCH_WRITER_LANGUAGES, WORKBENCH_WRITER_MODES, WORKBENCH_WRITER_PLATFORMS, WORKBENCH_WRITER_QUICK_PROMPTS, WORKFLOW_PALETTE_DRAG_EVENT, WORKFLOW_PALETTE_DROP_EVENT, WorkbenchAgentDirectory, WorkbenchCapabilityCenter, WorkbenchMessageSurface, WorkbenchPlan, WorkbenchPromptInput, WorkbenchRouteIcon, WorkbenchShell, WorkbenchTask, WorkbenchWorkflowCanvas, WorkbenchWorkflowDirectory, WorkbenchWorkflowParameterFields, type WorkbenchAgentDirectoryGroup, type WorkbenchCapabilityCenterGroup, type WorkbenchMediaFeatureId, type WorkbenchWorkflowDirectoryAction, type WorkbenchWorkflowDirectoryRun, type WorkbenchWorkflowDirectoryTemplate, type WorkbenchWorkflowDirectoryWorkflow } from "@aimarketing/workbench-ui";
-import type { WorkflowCanvasExecutionSnapshot } from "@aimarketing/workbench-ui";
+import { Copy as CopyIcon, Eye, FileText, ImagePlus, Maximize2, Trash2 } from "lucide-react";
+import { AudioPlayer, Image, MessageResponse, Queue, Suggestion, Suggestions, buildOnlineAgentGroups, formatWorkbenchModelLabel, getWorkbenchTaskStatusLabel, isWorkbenchTaskActive, isWorkbenchTaskRetryable, normalizeWorkbenchTaskStatus, resolveWorkbenchMediaFeature, workbenchSessionScope, WORKBENCH_HOME_COPY, WORKBENCH_HOME_GROUPS, WORKBENCH_MEDIA_FEATURES, WORKBENCH_MESSAGE_FRAME, WORKBENCH_ROUTE_MANIFEST, WORKBENCH_THEME, WORKBENCH_WRITER_CONTENT_TYPES, WORKBENCH_WRITER_LANGUAGES, WORKBENCH_WRITER_MODES, WORKBENCH_WRITER_PLATFORMS, WORKBENCH_WRITER_QUICK_PROMPTS, WORKFLOW_PALETTE_DRAG_EVENT, WORKFLOW_PALETTE_DROP_EVENT, WorkbenchAgentDirectory, WorkbenchCapabilityCenter, WorkbenchMessageSurface, WorkbenchPlan, WorkbenchPromptInput, WorkbenchRouteIcon, WorkbenchShell, WorkbenchTask, WorkbenchWorkflowCanvas, WorkbenchWorkflowDirectory, WorkbenchWorkflowParameterFields, type WorkbenchAgentDirectoryGroup, type WorkbenchCapabilityCenterGroup, type WorkbenchMediaFeatureId, type WorkbenchWorkflowDirectoryAction, type WorkbenchWorkflowDirectoryRun, type WorkbenchWorkflowDirectoryTemplate, type WorkbenchWorkflowDirectoryWorkflow } from "@coworkany/workbench-ui";
+import { MessageAction } from "@coworkany/workbench-ui";
+import type { WorkbenchArtifactSource, WorkbenchMediaSource, WorkflowCanvasExecutionSnapshot } from "@coworkany/workbench-ui";
 import { createUniqueWorkflowNodeKey, repairWorkflowNodeKeys } from "./workflow-node-keys";
 import { applyWorkflowNodeEvent, createWorkflowNodeSnapshots, finalizeWorkflowNodeSnapshots } from "./workflow-node-status";
 import { localFileUploadErrorCode, persistLocalFile } from "./local-file-upload";
-import { areWorkflowPortsCompatible, hashWorkflowDefinition, validateWorkflowDefinition, workflowNodeRegistry, type WorkflowDefinitionEnvelope, type WorkflowDefinitionNodeV2 } from "@aimarketing/workflow-core";
-import { applyWorkbenchRunEventToParts, createDesktopUIMessage, desktopUIMessageText, workbenchMessageToDesktopUIMessage } from "@aimarketing/workbench-client";
-import type { DesktopUIMessage, WorkbenchArtifact, WorkbenchKnowledgeResult, WorkbenchMessage, WorkbenchMessagePart, WorkbenchRun, WorkbenchRunDetail, WorkbenchWorkflow } from "@aimarketing/workbench-client";
+import { areWorkflowPortsCompatible, hashWorkflowDefinition, validateWorkflowDefinition, workflowNodeRegistry, type WorkflowDefinitionEnvelope, type WorkflowDefinitionNodeV2 } from "@coworkany/workflow-core";
+import { applyDesktopUIMessageRunEventToParts as applyWorkbenchRunEventToParts, createDesktopUIMessage, desktopUIMessageText, mergeStreamingText, parseDesktopUIMessage } from "@coworkany/workbench-client";
+import type { DesktopArtifactData, DesktopMediaData, DesktopUIMessage, DesktopUIMessagePart, WorkbenchArtifact, WorkbenchKnowledgeResult, WorkbenchRun, WorkbenchRunDetail, WorkbenchWorkflow } from "@coworkany/workbench-client";
 import type { ChatTransport } from "ai";
 import { isTauriBridgeAvailable, tauriBridge } from "./tauri";
 import { createDesktopChatTransport, createDesktopWorkbenchClient } from "./workbench-client";
 import { useDesktopChat } from "./use-desktop-chat";
 import { buildAgencyAgentGroups } from "./agency-agent-catalog";
-import { closeDesktopMediaTab, createDesktopMediaTab, openDesktopMediaTab, type DesktopMediaTabState } from "./media-tabs";
+import { closeDesktopMediaTab, createDesktopMediaTab, openDesktopMediaTab, syncDesktopMediaTabModel, type DesktopMediaTabState } from "./media-tabs";
 import { PROVIDER_PLATFORM_OPTIONS, platformIdForProvider, providerPlatformForId } from "./provider-platforms";
 import { capabilityEnglish, desktopCopy, desktopWriterCopy, homeGroupLabels, mediaEnglish, mediaFieldEnglish, mediaOptionEnglish, mediaPlaceholderEnglish, mediaSubmitEnglish, mediaSummaryEnglish, quickPromptsForDesktopRoute, resolveDesktopLocale, workflowActionEnglish, writerContentTypeEnglish, writerLanguageEnglish, writerModeEnglish, writerPlatformEnglish, type DesktopLocalePreference } from "./i18n";
 import { capabilityForWorkflowAction, configuredModelOptions, isDevelopmentRunningHubWorkflowId, isMediaProviderConfigured, modelOptionsForProvider, preferredConfiguredModel, providerForCapability, providerForId, requiresConfiguredProviderForWorkflowAction, supportsProviderCapability, type DesktopProviderConfig, type DesktopProviderDefaults, type DesktopProviderProfiles, type ProviderCapability } from "./provider-config";
@@ -24,14 +26,39 @@ import { sanitizeWorkflowDefinitionForStorage } from "./workflow-storage";
 import { parseWorkflowImportText, serializeWorkflowExport } from "./workflow-portability";
 import { resolveDesktopRunAction, workflowActionForMediaFeature } from "./route-actions";
 import { resolveVideoMediaCapabilities, supportsVideoMediaRole } from "../runtime/media-capabilities";
-import type { MiniMaxVoiceOption } from "@aimarketing/media-runtime";
+import type { MiniMaxVoiceOption } from "@coworkany/media-runtime";
 import { buildConversationTitleFromPrompt, defaultConversationTitle, resolveConversationTitleUpdate } from "./conversation-title";
-import { mergeConversationMessages } from "./conversation-history";
+import { mergeConversationMessages, mergeDesktopUIMessageViews } from "./conversation-history";
+import { replayPersistedRunToConversationMessage } from "./conversation-run-replay";
 import { WorkflowOutputPreview } from "./workflow-output-view";
 import { createRunningHubWorkflowRegistration, migrateLegacyRunningHubWorkflows, parseRunningHubWorkflowJson, runningHubWorkflowIdFromUrl, type RunningHubWorkflowCapability, type RunningHubWorkflowRegistration } from "./runninghub-workflow";
+import { promptRequestsArtifact } from "./artifact-intent";
+import { filterAssetLibraryItems, type AssetLibraryTab } from "./asset-library-filter";
 
 function escapeWriterHtml(value: string) {
   return value.replace(/[&<>\"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[character] ?? character).replace(/\r?\n/g, "<br />");
+}
+
+function createDesktopChatUserMessage(input: {
+  readonly conversationId: string;
+  readonly text: string;
+  readonly providerId: string;
+  readonly modelId: string;
+  readonly route: string;
+}): DesktopUIMessage {
+  const message = createDesktopUIMessage({
+    id: `message-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`,
+    role: "user",
+    conversationId: input.conversationId,
+    content: input.text,
+    providerId: input.providerId,
+    modelId: input.modelId,
+    route: input.route,
+    capability: "text",
+    createdAt: new Date().toISOString(),
+  });
+  const createdAt = message.metadata?.createdAt ?? new Date().toISOString();
+  return { ...message, metadata: { conversationId: input.conversationId, ...(message.metadata ?? {}), createdAt, updatedAt: message.metadata?.updatedAt ?? createdAt, modelLocked: true } };
 }
 
 async function copyWriterContent(text: string, html?: string) {
@@ -149,7 +176,7 @@ const workbenchThemeStyle = {
   "--wb-message-avatar-radius": WORKBENCH_MESSAGE_FRAME.avatarRadius,
 } as CSSProperties;
 
-type WorkspaceMode = "chat" | "writer" | "workflow" | "library";
+type WorkspaceMode = "home" | "chat" | "writer" | "workflow" | "library";
 type SkillId = string;
 type WorkflowAction = "upload" | "text_input" | "file_create" | "writer" | "llm_generate" | "agent_execute" | "ppt_generate" | "image_generate" | "video_generate" | "digital_human" | "music_generate" | "voice_synthesis" | "voice_clone" | "audio_generate" | "knowledge_retrieve" | "knowledge_write" | "product_store" | "foreach" | "collect" | "output";
 type MediaFeatureId = WorkbenchMediaFeatureId;
@@ -174,6 +201,36 @@ type LocalMediaPreview = { mimeType: string; data: number[] };
 type RunRow = { id: string; conversation_id?: string | null; status: string; model?: string | null; started_at: string; finished_at?: string | null };
 type RunDetail = { run: RunRow; nodes: Array<{ node_key: string; status: string; output_json?: string | null; updated_at: string }>; events: Array<{ sequence: number; event_type: string; payload_json: string; created_at: string }>; usage: Array<{ provider?: string | null; model: string; input_tokens?: number | null; output_tokens?: number | null; provider_cost?: number | null; estimated_cost?: number | null; created_at: string }> };
 type DesktopTaskMetadata = { kind: "workflow" | "media" | "agent"; featureId?: string; entryPath?: string; workflowId?: string; definitionHash?: string };
+
+async function resolveDesktopMediaSource(media: DesktopMediaData): Promise<WorkbenchMediaSource | null> {
+  if (!media.relativePath) return null;
+  if (!isTauriBridgeAvailable()) return media.relativePath;
+  const payload = await tauriBridge.invoke<LocalMediaPreview>("read_artifact", { relativePath: media.relativePath, mimeType: media.mimeType });
+  const url = URL.createObjectURL(new Blob([new Uint8Array(payload.data)], { type: payload.mimeType || media.mimeType }));
+  return { url, revoke: () => URL.revokeObjectURL(url) };
+}
+
+function isTextArtifact(mimeType: string, relativePath: string) {
+  const normalizedMime = mimeType.toLowerCase().split(";", 1)[0] ?? "";
+  const extension = relativePath.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase() ?? "";
+  return normalizedMime.startsWith("text/") || ["md", "markdown", "mdown", "json", "csv", "tsv", "xml", "yaml", "yml", "js", "jsx", "ts", "tsx", "css"].includes(extension);
+}
+
+async function resolveDesktopArtifactSource(artifact: DesktopArtifactData): Promise<WorkbenchArtifactSource | null> {
+  if (!artifact.relativePath) return null;
+  if (!isTauriBridgeAvailable()) return { url: artifact.relativePath };
+  const payload = await tauriBridge.invoke<LocalMediaPreview>("read_artifact", { relativePath: artifact.relativePath, mimeType: artifact.mimeType });
+  const bytes = new Uint8Array(payload.data);
+  const mimeType = payload.mimeType || artifact.mimeType;
+  const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+  return {
+    url,
+    mimeType,
+    text: isTextArtifact(mimeType, artifact.relativePath) ? new TextDecoder().decode(bytes) : undefined,
+    revoke: () => URL.revokeObjectURL(url),
+  };
+}
+
 type WorkflowRetryState = { completed: Record<string, Record<string, unknown>>; recoveryDefinitionHash: string };
 type WorkflowRunTracking = {
   runId: string;
@@ -182,9 +239,19 @@ type WorkflowRunTracking = {
   status: string;
 };
 type KnowledgeResult = WorkbenchKnowledgeResult;
-type DesktopConversationMessage = WorkbenchMessage & { role: "user" | "assistant" };
+type DesktopConversationMessage = {
+  readonly id: string;
+  readonly conversationId: string;
+  readonly role: "user" | "assistant";
+  readonly content: string;
+  readonly createdAt: string;
+  readonly status?: "queued" | "running" | "waiting" | "succeeded" | "failed" | "cancelled" | "interrupted";
+  readonly parts?: readonly DesktopUIMessagePart[];
+};
+const CONVERSATION_PAGE_SIZE = 10;
+type ConversationHistoryCursor = { readonly createdAt: string; readonly id: string };
 type DesktopConversationSummary = { id: string; title: string; updated_at: string; opencode_session_id?: string | null; agent_id?: string | null };
-type LocalAttachment = { id: string; name: string; size: number; mediaType: string; relativePath?: string; text?: string; textCharCount?: number; truncated?: boolean };
+type LocalAttachment = { id: string; name: string; size: number; mediaType: string; relativePath?: string; previewUrl?: string; text?: string; textCharCount?: number; truncated?: boolean; status?: "queued" | "uploading" | "ready" | "failed"; error?: string };
 type WorkflowLocalFile = { fileName: string; mimeType: string; byteLength: number; localPath?: string; relativePath?: string };
 
 type DesktopMediaHistoryContextValue = {
@@ -202,15 +269,34 @@ const DesktopMediaHistoryContext = createContext<DesktopMediaHistoryContextValue
 function mediaArtifactsForConversation(history: DesktopMediaHistoryContextValue | null): ArtifactRow[] {
   if (!history || history.scope !== "entry:image-assistant" || !history.conversationId) return [];
   const artifactIds = new Set(
-    history.messages.flatMap((message) => (message.parts ?? []).flatMap((part) => part.type === "artifact" ? [part.artifact.id] : [])),
+    history.messages.flatMap((message) => (message.parts ?? []).filter((part): part is Extract<DesktopUIMessagePart, { type: "data-artifact" }> => part.type === "data-artifact").map((part) => part.data.id)),
   );
   const runIds = new Set(history.runs.filter((run) => run.conversation_id === history.conversationId).map((run) => run.id));
   return history.artifacts.filter((artifact) => artifactIds.has(artifact.id) || [...runIds].some((runId) => artifact.id.startsWith(`${runId}:`)));
 }
 
+function desktopConversationMessageToUIMessage(message: DesktopConversationMessage): DesktopUIMessage {
+  const base = createDesktopUIMessage({ id: message.id, role: message.role, conversationId: message.conversationId, content: message.content, createdAt: message.createdAt });
+  const metadata = { conversationId: message.conversationId, createdAt: message.createdAt, updatedAt: message.createdAt, ...(message.status ? { runStatus: message.status === "succeeded" ? "completed" as const : message.status === "interrupted" ? "cancelled" as const : message.status } : {}) };
+  return parseDesktopUIMessage({ id: base.id, role: base.role, parts: message.parts?.length ? message.parts : base.parts, metadata });
+}
+
+function desktopUIMessageToConversationMessage(message: DesktopUIMessage): DesktopConversationMessage {
+  const runStatus = message.metadata?.runStatus;
+  return {
+    id: message.id,
+    conversationId: message.metadata?.conversationId ?? "",
+    role: message.role === "user" ? "user" : "assistant",
+    content: desktopUIMessageText(message),
+    createdAt: message.metadata?.createdAt ?? new Date().toISOString(),
+    status: runStatus === "completed" ? "succeeded" : runStatus,
+    parts: message.parts,
+  };
+}
+
 type LocalSkillCatalog = { schemaVersion: 1; skills: Array<{ id: string; relativePath: string }> };
 
-type DesktopRoute = { path: string; label: string; description: string; mode: WorkspaceMode; section?: string; glyph?: string; iconKey?: string; placement?: "main" | "footer" | "hidden" };
+type DesktopRoute = { path: string; label: string; description: string; mode: WorkspaceMode; section?: string; glyph?: string; iconKey?: string; placement?: "main" | "footer" | "hidden"; conversationLoading?: boolean };
 
 const LOCAL_ATTACHMENT_MAX_TEXT_CHARS = 80_000;
 
@@ -286,7 +372,7 @@ function ModelControls({
   const configuredModels = configuredModelOptions({ model, models });
   const modelOptions = configuredModels.length ? configuredModels : (model ? [model] : []);
   return <div className="model-controls" aria-label={copy.aria}>
-    {showSkill ? <label className="model-select-control"><span>{copy.skill}</span><select value={skillId} onChange={(event) => onSkillChange(event.target.value as SkillId)}><option value="auto">{copy.automatic}</option><option value="content-writing">{copy.writing}</option><option value="marketing-analysis">{copy.analysis}</option><option value="ppt-master">ppt-master</option><option value="obsidian-rag">Obsidian RAG</option></select></label> : null}
+    {showSkill ? <label className="model-select-control"><span>{copy.skill}</span><select value={skillId} onChange={(event) => onSkillChange(event.target.value as SkillId)}><option value="auto">{copy.automatic}</option><option value="writer-orchestrator">{copy.writing}</option><option value="content-analyzer">{copy.analysis}</option><option value="ppt-master">ppt-master</option><option value="dashi-ppt">dashi-ppt</option><option value="khazix-writer">khazix-writer</option></select></label> : null}
     {!hideModel ? <label className="model-select-control"><span>{copy.model}</span><select value={model} onChange={(event) => onModelChange(event.target.value)}>{modelOptions.length ? modelOptions.map((option) => <option key={option} value={option}>{showSkill ? option : formatWorkbenchModelLabel(option, { zh: "本地模型", en: "Local model" }, activeLocale)}</option>) : <option value="">{showSkill ? copy.unconfigured : providerLabel}</option>}</select></label> : null}
     <label className="model-select-control"><span>{copy.reasoning}</span><select value={reasoningEffort} onChange={(event) => onReasoningChange(event.target.value)}><option value="auto">{copy.automatic}</option><option value="low">{copy.low}</option><option value="medium">{copy.medium}</option><option value="high">{copy.high}</option></select></label>
   </div>;
@@ -317,7 +403,7 @@ function RouteIcon({ name, size = 16 }: { name?: string; size?: number }) {
 }
 
 function buildRoutes(locale: "zh" | "en"): DesktopRoute[] {
-  return WORKBENCH_ROUTE_MANIFEST.map((route) => ({ path: route.path, label: route.label[locale], description: route.description[locale], mode: route.mode === "home" ? "library" : route.mode, ...(route.section ? { section: route.section[locale] } : {}), ...(route.glyph ? { glyph: route.glyph } : {}), ...(route.placement ? { placement: route.placement } : {}), iconKey: routeIconKeys[route.path] }));
+  return WORKBENCH_ROUTE_MANIFEST.map((route) => ({ path: route.path, label: route.label[locale], description: route.description[locale], mode: route.mode, ...(route.section ? { section: route.section[locale] } : {}), ...(route.glyph ? { glyph: route.glyph } : {}), ...(route.placement ? { placement: route.placement } : {}), iconKey: routeIconKeys[route.path] }));
 }
 
 export function localizeRuntimeStatus(status: string, locale: "zh" | "en") {
@@ -392,15 +478,15 @@ function DesktopBootstrapScreen({ locale, status, phase, style }: { locale: "zh"
    </main>;
 }
 
-function localizeDesktopStatus(status: string, locale: "zh" | "en") {
+export function localizeDesktopStatus(status: string, locale: "zh" | "en") {
   if (/^Provider rate limit reached \(HTTP 429\)/u.test(status)) {
     return locale === "zh"
       ? "文本 Provider 返回 HTTP 429 限流，请切换已配置的文本模型后重试。"
       : status;
   }
-  if (/^Text provider request timed out after \d+ seconds/u.test(status)) {
+  if (/^Text provider request timed out(?: after \d+ seconds)?(?:\.|$)/u.test(status)) {
     return locale === "zh"
-      ? "文本 Provider 请求超过 60 秒未响应，请检查 Provider 地址、API Key，或切换其他文本模型后重试。"
+      ? "文本 Provider 请求超时，请检查 Provider 地址、API Key，或切换其他文本模型后重试。"
       : status;
   }
   if (locale === "zh") return status;
@@ -420,8 +506,21 @@ function localizeDesktopStatus(status: string, locale: "zh" | "en") {
   return map[status] ?? status;
 }
 
+export function isDesktopErrorStatus(status: string) {
+  return /(?:error|failed|failure|timed out|timeout|unable|cannot|could not|not available|超时|失败|异常退出|未响应|未能|不可用|无法|限流|拒绝)/iu.test(status);
+}
+
+function DesktopTopTip({ message, locale }: { message: string; locale: "zh" | "en" }) {
+  return <div className="desktop-top-tip" data-tip-kind="error" role="alert" aria-live="assertive">
+    <span className="desktop-top-tip-icon" aria-hidden="true">!</span>
+    <span className="desktop-top-tip-message">{message}</span>
+    <span className="sr-only">{locale === "zh" ? "异常提示" : "Error notification"}</span>
+  </div>;
+}
+
 function routeWorkflowAction(path: string): WorkflowAction | null {
   if (path.includes("executive-ppt")) return "ppt_generate";
+  if (path.includes("executive-presentation-ppt")) return "ppt_generate";
   if (path === "/dashboard/writer") return "writer";
   if (path === "/dashboard/image-assistant") return "image_generate";
   if (path === "/dashboard/video") return "video_generate";
@@ -475,6 +574,13 @@ function conversationScopeFromPath(path: string) {
   return workbenchSessionScope(path) ?? null;
 }
 
+export function conversationAgentIdFromPath(path: string, conversations: ReadonlyArray<{ id: string; agent_id?: string | null }>) {
+  const routeScope = conversationScopeFromPath(path);
+  if (routeScope) return routeScope;
+  const conversationId = conversationIdFromPath(path);
+  return conversationId ? conversations.find((conversation) => conversation.id === conversationId)?.agent_id?.trim() ?? null : null;
+}
+
 function conversationRoute(conversation: { id: string; agent_id?: string | null }, basePath = "/dashboard/ai") {
   const scope = conversation.agent_id?.trim();
   if (scope === "entry:writer") return `/dashboard/writer/${encodeURIComponent(conversation.id)}`;
@@ -494,6 +600,35 @@ function conversationAwareRoute(path: string, conversations: Array<{ id: string;
   if (!match) return path;
   const conversation = conversations.find((item) => item.id === decodeURIComponent(match[1]));
   return conversation ? conversationRoute(conversation) : path;
+}
+
+type DesktopRunContext = {
+  readonly kind: "conversation" | "media" | "workflow";
+  readonly launchPath: string;
+  readonly conversationId?: string;
+  readonly mediaScope?: string;
+  readonly workflowKey?: string;
+};
+
+function mediaRunScopeFromPath(path: string) {
+  const [pathname, rawQuery = ""] = path.split("?", 2);
+  const feature = new URLSearchParams(rawQuery).get("feature") ?? "";
+  return `${pathname}|${feature}`;
+}
+
+function mediaRunScopeForFeature(path: string, featureId?: string) {
+  if (!featureId || featureId === "image_generate") return mediaRunScopeFromPath(path);
+  const feature = mediaFeatureCatalog.find((item) => item.id === featureId);
+  if (!feature) return mediaRunScopeFromPath(path);
+  return `${feature.group === "audio" ? "/dashboard/capabilities" : "/dashboard/video"}|${featureId}`;
+}
+
+function desktopRunIsVisible(context: DesktopRunContext | undefined, path: string, activeConversationId: string | null, workflowKey: string | null) {
+  if (!context) return false;
+  if (context.kind === "workflow") return context.workflowKey === workflowKey && path.split("?", 1)[0] === "/dashboard/workflows";
+  if (context.kind === "media") return context.mediaScope === mediaRunScopeFromPath(path);
+  const routeConversationId = conversationIdFromPath(path);
+  return routeConversationId === context.conversationId || (routeConversationId === null && activeConversationId === context.conversationId);
 }
 
 function readDesktopTaskMetadata(detail: RunDetail): DesktopTaskMetadata | null {
@@ -563,11 +698,11 @@ export function buildWorkflowDefinition(prompt: string, actionId: WorkflowAction
     nodes: [
       { nodeKey: "input", type: "text_input", nodeVersion: 1, title: locale === "en" ? "Input task" : "输入任务", positionX: 0, positionY: 0, config: buildDesktopWorkflowNodeConfig("text_input", prompt, provider.model ?? "", provider.id) },
       { nodeKey: "capability", type: actionId, nodeVersion: 1, title, positionX: 408, positionY: 0, config: capabilityConfig },
-      { nodeKey: "output", type: "output", nodeVersion: 1, title: locale === "en" ? "Local artifact" : "本地产物", positionX: 816, positionY: 0, config: buildDesktopWorkflowNodeConfig("output", prompt, provider.model ?? "", provider.id) },
+      { nodeKey: "asset-library", type: "product_store", nodeVersion: 1, title: locale === "en" ? "Asset Library" : "资产库存储", positionX: 816, positionY: 0, config: buildDesktopWorkflowNodeConfig("product_store", prompt, provider.model ?? "", provider.id) },
     ],
     edges: [
       { edgeKey: "input-capability", sourceNodeKey: "input", sourcePortId: "text", targetNodeKey: "capability", targetPortId: workflowNodeRegistry.get(actionId)?.inputs[0]?.id ?? "text" },
-      { edgeKey: "capability-output", sourceNodeKey: "capability", sourcePortId: action.output, targetNodeKey: "output", targetPortId: outputInputPort(action.output) },
+      { edgeKey: "capability-asset-library", sourceNodeKey: "capability", sourcePortId: action.output, targetNodeKey: "asset-library", targetPortId: outputInputPort(action.output) },
     ],
   };
   return { ...definition, definitionHash: hashWorkflowDefinition(definition) };
@@ -637,11 +772,23 @@ export function parseImageInputs(prompt: string): Record<string, unknown> {
 }
 
 const fallbackLocalSkills: LocalSkillCatalog["skills"] = [
-  { id: "content-writing", relativePath: "content-writing/SKILL.md" },
-  { id: "marketing-analysis", relativePath: "marketing-analysis/SKILL.md" },
-  { id: "obsidian-rag", relativePath: "obsidian-rag/SKILL.md" },
+  { id: "writer-orchestrator", relativePath: "writer-orchestrator/SKILL.md" },
+  { id: "content-analyzer", relativePath: "content-analyzer/SKILL.md" },
+  { id: "khazix-writer", relativePath: "khazix-writer/SKILL.md" },
   { id: "ppt-master", relativePath: "ppt-master/SKILL.md" },
+  { id: "dashi-ppt", relativePath: "dashi-ppt/SKILL.md" },
 ];
+
+const LEGACY_SKILL_ALIASES: Record<string, SkillId> = {
+  "content-writing": "writer-orchestrator",
+  "marketing-analysis": "content-analyzer",
+  "obsidian-rag": "auto",
+};
+
+function canonicalDesktopSkillId(skillId: string) {
+  const normalized = skillId.trim();
+  return LEGACY_SKILL_ALIASES[normalized] ?? normalized;
+}
 
 function localSkillTitle(id: string) {
   return id.split(/[/_-]+/u).filter(Boolean).map((part) => part.length <= 3 ? part.toUpperCase() : `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`).join(" ");
@@ -674,21 +821,33 @@ function buildLocalAgentGroups(skills: LocalSkillCatalog["skills"], locale: "zh"
   })).filter((group) => group.cards.length);
 }
 
-export function localizedSkillInstruction(skillId: SkillId, locale: "zh" | "en") {
+export function desktopExecutionPrompt(_skillId: SkillId, prompt: string, _locale: "zh" | "en") {
+  // The selected Skill owns the task workflow. Do not append desktop-specific
+  // generation, artifact, or confirmation rules to the user's message.
+  return prompt;
+}
+
+export function localizedSkillSystemPrompt(skillId: SkillId, _locale: "zh" | "en") {
   if (skillId === "auto") return "";
-  return locale === "zh"
-    ? `\n\n请使用本地 ${skillId} Skill 完成本轮任务，并保持所有产物写入当前项目目录。`
-    : `\n\nUse the local ${skillId} Skill for this task and keep all artifacts in the current project directory.`;
+  return `Use the native skill tool to load the local ${skillId} Skill. The selected Skill is authoritative for this task's behavior and response flow.`;
 }
 
 export function resolveDesktopSkillId(path: string, requestedAgentId: string | null): SkillId {
   if (path.includes("executive-ppt")) return "ppt-master";
+  if (path.includes("executive-presentation-ppt")) return "dashi-ppt";
   // Agency Agents are packaged as native OpenCode agents, not Skills. The
   // selected agent is sent separately as `agentId` on the session prompt.
   if (requestedAgentId?.startsWith("agency-")) return "auto";
-  if (requestedAgentId?.trim()) return requestedAgentId.trim();
-  if (path === "/dashboard/writer") return "content-writing";
-  if (path === "/dashboard/knowledge-base") return "obsidian-rag";
+  if (requestedAgentId === "entry:writer") return "writer-orchestrator";
+  if (requestedAgentId === "entry:image-assistant") return "auto";
+  // Executive agents are specializations of the single bundled consulting
+  // Skill. Their catalog IDs are routing identifiers, not on-disk Skill
+  // directory names, so never ask OpenCode to resolve e.g.
+  // `executive-legal-risk` as a standalone Skill.
+  if (requestedAgentId?.startsWith("executive-")) return "executive-consulting-suite";
+  if (requestedAgentId?.trim()) return canonicalDesktopSkillId(requestedAgentId);
+  if (path === "/dashboard/writer") return "writer-orchestrator";
+  if (path === "/dashboard/knowledge-base") return "auto";
   // A persisted provider skill is not a default for ordinary AI chat. Chat
   // sessions must opt into a Skill through an explicit route or Agent.
   return "auto";
@@ -750,6 +909,7 @@ function DesktopConversationWorkspace({
   onKnowledgeToggle,
   onAssistantTextChange,
   onSaveDraft,
+  onExportDraft,
   artifacts,
   onArtifactOpen,
   model,
@@ -762,6 +922,8 @@ function DesktopConversationWorkspace({
   onModelChange,
   onReasoningChange,
   onSkillChange,
+  onToolApproval,
+  onReachTop,
   locale,
 }: {
   route: DesktopRoute;
@@ -769,14 +931,15 @@ function DesktopConversationWorkspace({
   onPromptChange: (value: string) => void;
   runStatus: string;
   activeRunId: string | null;
-  onRun: (value?: string) => void;
+  onRun: (value?: string, displayedValue?: string) => void;
   onGenerateImages?: () => void;
   onCancel: () => void;
   activePrompt: string;
   activePromptAt?: string;
   assistantText: string;
   onAssistantTextChange: (value: string) => void;
-  onSaveDraft: (value: string) => void | Promise<void>;
+  onSaveDraft: (value: string) => void | Promise<unknown>;
+  onExportDraft?: (value: string) => void | Promise<void>;
   assistantAt?: string;
   messages: DesktopConversationMessage[];
   conversationId: string | null;
@@ -784,7 +947,7 @@ function DesktopConversationWorkspace({
   chatReady: boolean;
   providerId: string;
   onArtifactDownload?: (artifactId: string) => void;
-  activeAssistantParts?: readonly WorkbenchMessagePart[];
+  activeAssistantParts?: readonly DesktopUIMessagePart[];
   toolEvents: string[];
   conversations: Array<{ id: string; title: string; updated_at: string; agent_id?: string | null }>;
   onNavigate: (path: string) => void;
@@ -803,14 +966,27 @@ function DesktopConversationWorkspace({
   onModelChange: (value: string) => void;
   onReasoningChange: (value: string) => void;
   onSkillChange: (value: SkillId) => void;
+  onToolApproval?: (message: DesktopUIMessage, part: Extract<DesktopUIMessagePart, { type: "dynamic-tool" }>, decision: "approve" | "reject") => void | Promise<void>;
+  onReachTop?: (viewport: HTMLDivElement) => void;
   locale: "zh" | "en";
 }) {
-  const initialUIMessages = useMemo(() => messages.map(workbenchMessageToDesktopUIMessage), [messages]);
+  const visibleMessages = useMemo(() => conversationId ? messages.filter((message) => message.conversationId === conversationId) : [], [conversationId, messages]);
+  const conversationLoading = route.conversationLoading === true;
+  const initialUIMessages = useMemo(() => visibleMessages.map(desktopConversationMessageToUIMessage), [visibleMessages]);
   const desktopChat = useDesktopChat({ chatId: conversationId, transport: chatTransport, initialMessages: initialUIMessages, resume: false });
+  const stopChat = useCallback(() => {
+    // The AI SDK chat owns the AbortController for the direct ChatTransport
+    // path.  The legacy run id is intentionally unset for that path, so the
+    // shell-level emergency stop alone cannot cancel a plain conversation.
+    void desktopChat.stop();
+    void (chatTransport as ChatTransport<DesktopUIMessage> & { stopCurrent?: () => Promise<void> }).stopCurrent?.();
+    void onCancel();
+  }, [chatTransport, desktopChat.stop, onCancel]);
   const resolvedChatReady = chatReady || !conversationId;
   const isWriter = route.mode === "writer";
   const copy = desktopCopy[locale];
-  const localizedRunStatus = localizeDesktopStatus(runStatus, locale);
+  const localizedStatus = localizeDesktopStatus(runStatus, locale);
+  const localizedRunStatus = isDesktopErrorStatus(localizedStatus) ? "" : localizedStatus;
   const quickPrompts = quickPromptsForDesktopRoute(route.path, locale);
   const isPlainChat = route.path === "/dashboard/ai";
   const chatSubtitle = isPlainChat
@@ -819,21 +995,32 @@ function DesktopConversationWorkspace({
   const chatPlaceholder = isPlainChat
     ? (locale === "zh" ? "输入你的问题..." : "Ask anything...")
     : (isWriter ? (locale === "zh" ? "描述你要写作的主题、平台和语气……" : "Describe the topic, platform, and tone you want to write for…") : (locale === "zh" ? "输入你的营销任务……" : "Describe your marketing task…"));
-  if (isWriter) return <DesktopWriterCloudWorkspace locale={locale} route={route} prompt={prompt} onPromptChange={onPromptChange} runStatus={runStatus} activeRunId={activeRunId} onRun={(value) => onRun(value)} onSubmitMessage={(value) => {
-    if (resolvedChatReady && !attachments.length && !knowledgeEnabled && value.trim()) {
-      const createdAt = new Date().toISOString();
-      void desktopChat.sendMessage({ text: value.trim(), metadata: { conversationId: desktopChat.chatId, providerId, modelId: model, route: route.path, capability: "text", createdAt, updatedAt: createdAt, modelLocked: true } });
-      onPromptChange("");
-      return;
-    }
-    onRun(value);
-  }} onGenerateImages={onGenerateImages} onCancel={onCancel} activePrompt={activePrompt} activePromptAt={activePromptAt} assistantText={assistantText} onAssistantTextChange={onAssistantTextChange} onSaveDraft={onSaveDraft} assistantAt={assistantAt} messages={messages} uiMessages={desktopChat.messages} activeAssistantParts={activeAssistantParts} toolEvents={toolEvents} artifacts={artifacts} onArtifactOpen={onArtifactOpen} onArtifactDownload={onArtifactDownload} model={model} models={models} reasoningEffort={reasoningEffort} skillId={skillId} attachments={attachments} onAddAttachments={onAddAttachments} onRemoveAttachment={onRemoveAttachment} knowledgeEnabled={knowledgeEnabled} onKnowledgeToggle={onKnowledgeToggle} onModelChange={onModelChange} onReasoningChange={onReasoningChange} onSkillChange={onSkillChange} />;
-  const showLanding = messages.length === 0 && !activePrompt && !assistantText && !activeRunId;
-  const baseMessages = messages.length ? messages : [
+  const showLanding = !conversationLoading && visibleMessages.length === 0 && !activePrompt && !assistantText && !activeRunId;
+  const chatSectionRef = useRef<HTMLElement>(null);
+  const composerDockRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (isWriter) return;
+    const section = chatSectionRef.current;
+    const dock = composerDockRef.current;
+    if (!section || !dock) return;
+    const updateComposerClearance = () => {
+      // The message surface remains full-height behind this dock. Reserve the
+      // measured dock height in the scroll content so the final message never
+      // lands underneath the floating composer, including with attachments.
+      section.style.setProperty("--chat-composer-clearance", `${Math.ceil(dock.getBoundingClientRect().height + 16)}px`);
+    };
+    updateComposerClearance();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(updateComposerClearance);
+    observer.observe(dock);
+    return () => observer.disconnect();
+  }, [isWriter, showLanding]);
+  if (isWriter) return <DesktopWriterCloudWorkspace locale={locale} route={route} prompt={prompt} onPromptChange={onPromptChange} runStatus={runStatus} activeRunId={activeRunId} onRun={(value, displayedValue) => onRun(value, displayedValue)} onGenerateImages={onGenerateImages} onCancel={stopChat} activePrompt={activePrompt} activePromptAt={activePromptAt} assistantText={assistantText} onAssistantTextChange={onAssistantTextChange} onSaveDraft={onSaveDraft} onExportDraft={onExportDraft} assistantAt={assistantAt} messages={visibleMessages} uiMessages={desktopChat.messages} activeAssistantParts={activeAssistantParts} toolEvents={toolEvents} artifacts={artifacts} onArtifactOpen={onArtifactOpen} onArtifactDownload={onArtifactDownload} model={model} models={models} reasoningEffort={reasoningEffort} skillId={skillId} attachments={attachments} onAddAttachments={onAddAttachments} onRemoveAttachment={onRemoveAttachment} knowledgeEnabled={knowledgeEnabled} onKnowledgeToggle={onKnowledgeToggle} onModelChange={onModelChange} onReasoningChange={onReasoningChange} onSkillChange={onSkillChange} onToolApproval={onToolApproval} onReachTop={onReachTop} />;
+  const baseMessages = conversationLoading ? [] : visibleMessages.length ? visibleMessages : [
     ...(activePrompt ? [{ id: "active-user", conversationId: "active", role: "user" as const, content: activePrompt, createdAt: activePromptAt ?? new Date(0).toISOString() }] : []),
   ];
   const hasPersistedAssistant = !activeRunId && baseMessages.some((message) => message.role === "assistant" && message.content === assistantText);
-  const hasCurrentAssistant = Boolean(assistantText || activeRunId || activeAssistantParts?.length) && !hasPersistedAssistant;
+  const hasCurrentAssistant = !conversationLoading && Boolean(assistantText || activeRunId || activeAssistantParts?.length) && !hasPersistedAssistant;
   const displayedMessages: DesktopConversationMessage[] = hasCurrentAssistant ? [...baseMessages, {
     id: "active-assistant",
     conversationId: "active",
@@ -842,32 +1029,33 @@ function DesktopConversationWorkspace({
     createdAt: assistantAt ?? activePromptAt ?? new Date(0).toISOString(),
     status: activeRunId ? "running" : "succeeded",
     parts: activeAssistantParts?.length ? activeAssistantParts : [
-      ...(assistantText ? [{ id: "active-assistant:text", type: "text" as const, text: assistantText }] : []),
-      ...toolEvents.map((item, index) => ({ id: `active-assistant:tool:${index}`, type: "tool" as const, tool: item.split(" · ")[0] || "tool", message: item, status: "running" as const, sequence: index + 1 })),
-      ...artifacts.map((artifact, index) => ({ id: `active-assistant:artifact:${artifact.id}`, type: "artifact" as const, artifact: { id: artifact.id, title: artifact.relative_path, relativePath: artifact.relative_path, mimeType: artifact.mime_type, byteLength: artifact.byte_length ?? 0, sha256: "" }, sequence: toolEvents.length + index + 1 })),
+      ...(assistantText ? [{ type: "text" as const, text: assistantText, state: "streaming" as const }] : []),
+      ...toolEvents.map((item, index) => ({ type: "data-status" as const, id: `active-assistant:tool:${index}`, data: { status: "running" as const, message: item } })),
+      ...artifacts.map((artifact) => ({ type: "data-artifact" as const, id: `active-assistant:artifact:${artifact.id}`, data: { id: artifact.id, title: artifact.relative_path, relativePath: artifact.relative_path, mimeType: artifact.mime_type, byteLength: artifact.byte_length ?? 0, sha256: "" } })),
     ],
   }] : baseMessages;
   const modelOptions = (models ?? []).map((item) => ({ id: item, label: formatWorkbenchModelLabel(item, { zh: "本地模型", en: "Local model" }, locale), provider: locale === "zh" ? "已配置模型" : "Configured models" }));
-  const renderedUIMessages = !activeRunId && desktopChat.messages.length ? desktopChat.messages : displayedMessages.map(workbenchMessageToDesktopUIMessage);
+  const displayedUIMessages = displayedMessages.map(desktopConversationMessageToUIMessage);
+  const renderedUIMessages = mergeDesktopUIMessageViews(displayedUIMessages, desktopChat.messages);
   const submitMessage = () => {
-    if (resolvedChatReady && !attachments.length && !knowledgeEnabled && prompt.trim()) {
-      const createdAt = new Date().toISOString();
-      void desktopChat.sendMessage({ text: prompt.trim(), metadata: { conversationId: desktopChat.chatId, providerId, modelId: model, route: route.path, capability: "text", createdAt, updatedAt: createdAt, modelLocked: true } });
+    if (conversationId && resolvedChatReady && !attachments.length && !knowledgeEnabled && prompt.trim()) {
+      void desktopChat.sendMessage(createDesktopChatUserMessage({ conversationId: desktopChat.chatId, text: prompt, providerId, modelId: model, route: route.path }));
       onPromptChange("");
       return;
     }
     onRun();
   };
   return <div className="chat-canvas flex h-full min-h-0 justify-center">
-    <section className={`chat-workspace-section ${showLanding ? "landing-active" : ""}`.trim()}>
+    <section ref={chatSectionRef} className={`chat-workspace-section ${showLanding ? "landing-active" : ""}`.trim()}>
       {!showLanding ? <header className="chat-page-header"><div><h1 className="chat-page-title">{route.label}</h1><p className="chat-page-subtitle">{chatSubtitle}</p></div></header> : null}
       <div className="chat-message-scroll">
         <div className="chat-message-column">
-          <WorkbenchMessageSurface messages={renderedUIMessages} locale={locale} pendingMessageId={activeRunId ? "active-assistant" : undefined} onCopy={(message) => navigator.clipboard?.writeText(desktopUIMessageText(message))} onArtifactOpen={(artifact) => onArtifactOpen(artifact.relativePath, artifact.mimeType)} onArtifactDownload={onArtifactDownload} />
-          {showLanding ? <div className="chat-landing" data-cloud-surface="ai-entry"><div className="chat-landing-kicker"><span className="public-signal" aria-hidden="true" /><span className="dashboard-kicker">AI WORKSPACE</span></div><h1 className="dashboard-title">{route.label}</h1><p>{locale === "zh" ? "你说需求，我来生成第一版方案" : "Describe it once, and I'll generate the first draft"}</p><div className="chat-quick-start-grid">{quickPrompts.map((item) => <button key={item} type="button" className="dashboard-panel home-quick-start-card" onClick={() => onPromptChange(item)}><span className="dashboard-kicker">✦ {locale === "zh" ? "快速提问" : "Quick tips"}</span><span>{item}</span></button>)}</div></div> : null}
+          <WorkbenchMessageSurface messages={renderedUIMessages} locale={locale} pendingMessageId={activeRunId || desktopChat.status === "submitted" || desktopChat.status === "streaming" ? "active-assistant" : undefined} onReachTop={onReachTop} onCopy={(message) => navigator.clipboard?.writeText(desktopUIMessageText(message))} onRetry={(message) => { const index = renderedUIMessages.findIndex((item) => item.id === message.id); const previous = [...renderedUIMessages.slice(0, index)].reverse().find((item) => item.role === "user"); const retryPrompt = previous ? desktopUIMessageText(previous) : activePrompt; if (retryPrompt.trim()) onRun(retryPrompt); }} onToolApproval={onToolApproval} onArtifactOpen={(artifact) => onArtifactOpen(artifact.relativePath, artifact.mimeType)} onArtifactDownload={onArtifactDownload} resolveMediaSource={resolveDesktopMediaSource} resolveArtifactSource={resolveDesktopArtifactSource} />
+          {conversationLoading ? <div className="chat-conversation-loading muted" role="status">{locale === "zh" ? "正在加载会话…" : "Loading conversation…"}</div> : null}
+          {showLanding ? <div className="chat-landing" data-cloud-surface="ai-entry"><div className="chat-landing-kicker"><span className="public-signal" aria-hidden="true" /><span className="dashboard-kicker">AI WORKSPACE</span></div><h1 className="dashboard-title">{route.label}</h1><p>{locale === "zh" ? "你说需求，我来生成第一版方案" : "Describe it once, and I'll generate the first draft"}</p><Suggestions className="chat-ai-suggestions" data-cloud-surface="prompt-suggestions" aria-label={locale === "zh" ? "快速提问" : "Quick prompts"}>{quickPrompts.map((item) => <Suggestion key={item} suggestion={item} onClick={onPromptChange}>{item}</Suggestion>)}</Suggestions></div> : null}
         </div>
       </div>
-       <div className="chat-composer-dock"><div className="chat-composer" data-cloud-surface="composer"><WorkbenchPromptInput value={prompt} onValueChange={onPromptChange} onSubmit={submitMessage} attachments={attachments.map((attachment) => ({ id: attachment.id, name: attachment.name, mediaType: attachment.mediaType }))} onAddAttachments={onAddAttachments} onRemoveAttachment={onRemoveAttachment} models={modelOptions} model={model} onModelChange={onModelChange} placeholder={chatPlaceholder} status={activeRunId || desktopChat.status === "submitted" || desktopChat.status === "streaming" ? "streaming" : "ready"} onStop={onCancel} locale={locale}>{route.path.includes("?") ? <div className="composer-selected-agent">{locale === "zh" ? "当前 Agent" : "Selected Agent"}：<strong>{route.label}</strong></div> : null}{!showLanding && !displayedMessages.length && !activeRunId ? <div className="composer-prompt-chips" data-cloud-surface="prompt-suggestions">{quickPrompts.map((quickPrompt) => <button key={quickPrompt} type="button" className="dashboard-chip composer-prompt-chip" title={quickPrompt} onClick={() => onPromptChange(quickPrompt)}>{quickPrompt}</button>)}</div> : null}{knowledgeEnabled ? <div className="composer-knowledge-control"><button type="button" className="composer-knowledge-button" onClick={onKnowledgeToggle}>{locale === "zh" ? "⌑ Obsidian 知识库" : "⌑ Obsidian context"}</button><button type="button" className="composer-knowledge-close" aria-label={locale === "zh" ? "关闭 Obsidian 知识库上下文" : "Disable Obsidian knowledge"} onClick={onKnowledgeToggle}>×</button></div> : <button type="button" className="composer-knowledge-button" onClick={onKnowledgeToggle}>{locale === "zh" ? "⌑ 添加 Obsidian 知识库" : "⌑ Add Obsidian context"}</button>}<div className="composer-ai-controls"><span className="muted composer-hint">{localizedRunStatus || (locale === "zh" ? "Enter 发送 · Shift+Enter 换行" : "Enter to send · Shift+Enter for a new line")}</span><ModelControls locale={locale} model={model} models={models} reasoningEffort={reasoningEffort} skillId={skillId} showSkill={false} hideModel onModelChange={onModelChange} onReasoningChange={onReasoningChange} onSkillChange={onSkillChange} /></div></WorkbenchPromptInput></div></div>
+       <div ref={composerDockRef} className="chat-composer-dock"><div className="chat-composer" data-cloud-surface="composer"><WorkbenchPromptInput value={prompt} onValueChange={onPromptChange} onSubmit={submitMessage} attachments={attachments.map((attachment) => ({ id: attachment.id, name: attachment.name, mediaType: attachment.mediaType, status: attachment.status, error: attachment.error }))} onAddAttachments={onAddAttachments} onRemoveAttachment={onRemoveAttachment} models={modelOptions} model={model} onModelChange={onModelChange} placeholder={chatPlaceholder} status={activeRunId || desktopChat.status === "submitted" || desktopChat.status === "streaming" ? "streaming" : "ready"} onStop={stopChat} locale={locale}>{route.path.includes("?") ? <div className="composer-selected-agent">{locale === "zh" ? "当前 Agent" : "Selected Agent"}：<strong>{route.label}</strong></div> : null}{!showLanding && !displayedMessages.length && !activeRunId ? <div className="composer-prompt-chips" data-cloud-surface="prompt-suggestions">{quickPrompts.map((quickPrompt) => <button key={quickPrompt} type="button" className="dashboard-chip composer-prompt-chip" title={quickPrompt} onClick={() => onPromptChange(quickPrompt)}>{quickPrompt}</button>)}</div> : null}{knowledgeEnabled ? <div className="composer-knowledge-control"><button type="button" className="composer-knowledge-button" onClick={onKnowledgeToggle}>{locale === "zh" ? "⌑ Obsidian 知识库" : "⌑ Obsidian context"}</button><button type="button" className="composer-knowledge-close" aria-label={locale === "zh" ? "关闭 Obsidian 知识库上下文" : "Disable Obsidian knowledge"} onClick={onKnowledgeToggle}>×</button></div> : <button type="button" className="composer-knowledge-button" onClick={onKnowledgeToggle}>{locale === "zh" ? "⌑ 添加 Obsidian 知识库" : "⌑ Add Obsidian context"}</button>}<div className="composer-ai-controls"><span className="muted composer-hint">{localizedRunStatus || (locale === "zh" ? "Enter 发送 · Shift+Enter 换行" : "Enter to send · Shift+Enter for a new line")}</span><ModelControls locale={locale} model={model} models={models} reasoningEffort={reasoningEffort} skillId={skillId} showSkill={false} hideModel onModelChange={onModelChange} onReasoningChange={onReasoningChange} onSkillChange={onSkillChange} /></div></WorkbenchPromptInput></div></div>
     </section>
   </div>;
 }
@@ -879,20 +1067,20 @@ type DesktopWriterCloudWorkspaceProps = {
   onPromptChange: (value: string) => void;
   runStatus: string;
   activeRunId: string | null;
-  onRun: (value: string) => void;
-  onSubmitMessage?: (value: string) => void;
+  onRun: (value: string, displayedValue?: string) => void;
   onGenerateImages?: () => void;
   onCancel: () => void;
   activePrompt: string;
   activePromptAt?: string;
   assistantText: string;
   onAssistantTextChange: (value: string) => void;
-  onSaveDraft: (value: string) => void | Promise<void>;
+  onSaveDraft: (value: string) => void | Promise<unknown>;
+  onExportDraft?: (value: string) => void | Promise<void>;
   assistantAt?: string;
   messages: DesktopConversationMessage[];
   uiMessages: readonly DesktopUIMessage[];
   onArtifactDownload?: (artifactId: string) => void;
-  activeAssistantParts?: readonly WorkbenchMessagePart[];
+  activeAssistantParts?: readonly DesktopUIMessagePart[];
   toolEvents: string[];
   artifacts: Array<{ id: string; relative_path: string; mime_type: string; byte_length?: number }>;
   onArtifactOpen: (relativePath: string, mimeType: string) => void;
@@ -908,6 +1096,8 @@ type DesktopWriterCloudWorkspaceProps = {
   onModelChange: (value: string) => void;
   onReasoningChange: (value: string) => void;
   onSkillChange: (value: SkillId) => void;
+  onToolApproval?: (message: DesktopUIMessage, part: Extract<DesktopUIMessagePart, { type: "dynamic-tool" }>, decision: "approve" | "reject") => void | Promise<void>;
+  onReachTop?: (viewport: HTMLDivElement) => void;
 };
 
 function writerOptionLabel(kind: "platform" | "content" | "mode" | "language", item: { id: string; label: string }, locale: "zh" | "en") {
@@ -916,11 +1106,54 @@ function writerOptionLabel(kind: "platform" | "content" | "mode" | "language", i
   return maps[kind][item.id] ?? item.label;
 }
 
+function WriterPlatformPreview({ platform, locale, content }: { platform: string; locale: "zh" | "en"; content: string }) {
+  const platformOption = WORKBENCH_WRITER_PLATFORMS.find((item) => item.id === platform) ?? WORKBENCH_WRITER_PLATFORMS[0];
+  const platformLabel = writerOptionLabel("platform", platformOption, locale);
+  const layout = ["xiaohongshu", "douyin", "instagram", "tiktok"].includes(platform) ? "mobile" : ["weibo", "x", "linkedin", "facebook", "reddit"].includes(platform) ? "social" : "article";
+  const accountName = locale === "zh" ? "CoworkAny 周刊" : "CoworkAny Weekly";
+  const body = <MessageResponse content={content} className="writer-platform-preview-markdown" />;
+  const chrome = <div className="writer-platform-preview-chrome" aria-hidden="true"><span /><span /><span /></div>;
+
+  if (platform === "wechat") {
+    return <div className={`writer-platform-preview writer-platform-preview-${platform} writer-platform-preview-layout-${layout}`} data-testid="writer-platform-preview" data-platform={platform} data-layout={layout}>
+      {chrome}
+      <div className="writer-platform-preview-wechat-header"><strong>{platformLabel}</strong><span>{accountName} · {locale === "zh" ? "公众号文章" : "Official account article"}</span></div>
+      <article className="writer-platform-preview-body">{body}</article>
+    </div>;
+  }
+
+  if (platform === "xiaohongshu") {
+    return <div className={`writer-platform-preview writer-platform-preview-${platform} writer-platform-preview-layout-${layout}`} data-testid="writer-platform-preview" data-platform={platform} data-layout={layout}>
+      {chrome}
+      <div className="writer-platform-preview-mobile-account"><span className="writer-platform-preview-avatar">A</span><strong>{accountName}</strong><span>{locale === "zh" ? "关注" : "Follow"}</span></div>
+      <article className="writer-platform-preview-body">{body}</article>
+      <div className="writer-platform-preview-footer">{locale === "zh" ? "收藏  ·  评论  ·  分享" : "Save  ·  Comment  ·  Share"}</div>
+    </div>;
+  }
+
+  if (["weibo", "x", "linkedin", "facebook", "reddit"].includes(platform)) {
+    return <div className={`writer-platform-preview writer-platform-preview-${platform} writer-platform-preview-layout-${layout}`} data-testid="writer-platform-preview" data-platform={platform} data-layout={layout}>
+      {chrome}
+      <div className="writer-platform-preview-social-account"><span className="writer-platform-preview-avatar">A</span><div><strong>{accountName}</strong><span>@coworkany · {locale === "zh" ? "刚刚" : "Just now"}</span></div></div>
+      <article className="writer-platform-preview-body">{body}</article>
+      <div className="writer-platform-preview-footer">♡  128   ↻  42   {locale === "zh" ? "分享" : "Share"}</div>
+    </div>;
+  }
+
+  return <div className={`writer-platform-preview writer-platform-preview-${platform} writer-platform-preview-layout-${layout}`} data-testid="writer-platform-preview" data-platform={platform} data-layout={layout}>
+    {chrome}
+    <div className="writer-platform-preview-header"><strong>{platformLabel}</strong><span>{locale === "zh" ? "正文预览" : "Body preview"}</span></div>
+    <article className="writer-platform-preview-body">{body}</article>
+    <div className="writer-platform-preview-footer">{platform === "generic" ? (locale === "zh" ? "通用内容" : "Generic content") : platformLabel}</div>
+  </div>;
+}
+
 function DesktopWriterCloudWorkspace(props: DesktopWriterCloudWorkspaceProps) {
-  const { locale, route, prompt, onPromptChange, runStatus, activeRunId, onRun, onSubmitMessage, onGenerateImages, onCancel, activePrompt, activePromptAt, assistantText, onAssistantTextChange, onSaveDraft, assistantAt, messages, uiMessages, onArtifactDownload, activeAssistantParts, toolEvents, artifacts, onArtifactOpen, model, models, reasoningEffort, skillId, attachments, onAddAttachments, onRemoveAttachment, knowledgeEnabled, onKnowledgeToggle, onModelChange, onReasoningChange, onSkillChange } = props;
+  const { locale, route, prompt, onPromptChange, runStatus, activeRunId, onRun, onGenerateImages, onCancel, activePrompt, activePromptAt, assistantText, onAssistantTextChange, onSaveDraft, onExportDraft, assistantAt, messages, uiMessages, onArtifactDownload, activeAssistantParts, toolEvents, artifacts, onArtifactOpen, model, models, reasoningEffort, skillId, attachments, onAddAttachments, onRemoveAttachment, knowledgeEnabled, onKnowledgeToggle, onModelChange, onReasoningChange, onSkillChange, onToolApproval, onReachTop } = props;
   const writerCopy = desktopWriterCopy[locale];
   const writerQuickPrompts = locale === "zh" ? WORKBENCH_WRITER_QUICK_PROMPTS : ["Write a high-converting campaign article", "Turn this brief into a social media thread", "Create a concise product launch email"];
-  const localizedRunStatus = localizeDesktopStatus(runStatus, locale);
+  const localizedStatus = localizeDesktopStatus(runStatus, locale);
+  const localizedRunStatus = isDesktopErrorStatus(localizedStatus) ? "" : localizedStatus;
   const [platform, setPlatform] = useState("wechat");
   const [contentType, setContentType] = useState("longform");
   const [mode, setMode] = useState("article");
@@ -929,6 +1162,7 @@ function DesktopWriterCloudWorkspace(props: DesktopWriterCloudWorkspaceProps) {
   const [previewEditing, setPreviewEditing] = useState(false);
   const [previewDraft, setPreviewDraft] = useState(assistantText);
   const [copyKind, setCopyKind] = useState<"rich" | "markdown" | null>(null);
+  const messageSurfaceRef = useRef<HTMLDivElement>(null);
   const previewContentRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (!previewEditing) setPreviewDraft(assistantText); }, [assistantText, previewEditing]);
   const commitPreviewDraft = () => { const next = previewDraft.trim(); if (!next) return; onAssistantTextChange(next); setPreviewEditing(false); void onSaveDraft(next); };
@@ -936,33 +1170,34 @@ function DesktopWriterCloudWorkspace(props: DesktopWriterCloudWorkspaceProps) {
   const hasPersistedAssistant = !activeRunId && baseMessages.some((message) => message.role === "assistant" && message.content === assistantText);
   const currentAssistant = Boolean(assistantText || activeRunId) && !hasPersistedAssistant;
   const displayedMessages: DesktopConversationMessage[] = currentAssistant ? [...baseMessages, { id: "active-assistant", conversationId: "active", role: "assistant" as const, content: assistantText, createdAt: assistantAt ?? activePromptAt ?? new Date(0).toISOString(), status: activeRunId ? "running" as const : "succeeded" as const, parts: activeAssistantParts?.length ? activeAssistantParts : [
-    ...(assistantText ? [{ id: "active-assistant:text", type: "text" as const, text: assistantText }] : []),
-    ...toolEvents.map((item, index) => ({ id: `active-assistant:tool:${index}`, type: "tool" as const, tool: item.split(" · ")[0] || "tool", message: item, status: "running" as const, sequence: index + 1 })),
-    ...artifacts.map((artifact, index) => ({ id: `active-assistant:artifact:${artifact.id}`, type: "artifact" as const, artifact: { id: artifact.id, title: artifact.relative_path, relativePath: artifact.relative_path, mimeType: artifact.mime_type, byteLength: artifact.byte_length ?? 0, sha256: "" }, sequence: toolEvents.length + index + 1 })),
+    ...(assistantText ? [{ type: "text" as const, text: assistantText, state: "streaming" as const }] : []),
+    ...toolEvents.map((item, index) => ({ type: "data-status" as const, id: `active-assistant:tool:${index}`, data: { status: "running" as const, message: item } })),
+    ...artifacts.map((artifact) => ({ type: "data-artifact" as const, id: `active-assistant:artifact:${artifact.id}`, data: { id: artifact.id, title: artifact.relative_path, relativePath: artifact.relative_path, mimeType: artifact.mime_type, byteLength: artifact.byte_length ?? 0, sha256: "" } })),
   ] }] : baseMessages;
-  const renderedUIMessages = activeRunId || activeAssistantParts?.length ? displayedMessages.map(workbenchMessageToDesktopUIMessage) : (uiMessages.length ? uiMessages : displayedMessages.map(workbenchMessageToDesktopUIMessage));
+  const displayedUIMessages = displayedMessages.map(desktopConversationMessageToUIMessage);
+  const renderedUIMessages = mergeDesktopUIMessageViews(displayedUIMessages, uiMessages);
   const hasMessages = displayedMessages.length > 0;
-  const runArtifacts = artifacts.map((item) => ({ id: item.id, title: item.relative_path, relativePath: item.relative_path, mimeType: item.mime_type, byteLength: item.byte_length ?? 0, sha256: "" }));
   const previewMessages = useMemo<DesktopUIMessage[]>(() => assistantText.trim() ? [{
     id: "writer-preview",
     role: "assistant",
     parts: [
       { type: "text", text: assistantText, state: "done" },
-      ...runArtifacts.map((artifact) => ({ type: "data-artifact" as const, id: `preview:${artifact.id}`, data: artifact })),
     ],
     metadata: { conversationId: "writer-preview", route: route.path, capability: "text", createdAt: assistantAt ?? new Date(0).toISOString(), updatedAt: assistantAt ?? new Date(0).toISOString() },
-  }] : [], [assistantAt, assistantText, route.path, runArtifacts]);
-  const submit = () => (onSubmitMessage ?? onRun)([
+  }] : [], [assistantAt, assistantText, route.path]);
+  const submit = () => onRun([
     `${writerCopy.platform}: ${writerOptionLabel("platform", WORKBENCH_WRITER_PLATFORMS.find((item) => item.id === platform) ?? { id: platform, label: platform }, locale)}`,
     `${writerCopy.content}: ${writerOptionLabel("content", WORKBENCH_WRITER_CONTENT_TYPES.find((item) => item.id === contentType) ?? { id: contentType, label: contentType }, locale)}`,
     `${writerCopy.mode}: ${writerOptionLabel("mode", WORKBENCH_WRITER_MODES.find((item) => item.id === mode) ?? { id: mode, label: mode }, locale)}`,
     `${writerCopy.language}: ${writerOptionLabel("language", WORKBENCH_WRITER_LANGUAGES.find((item) => item.id === language) ?? { id: language, label: language }, locale)}`,
     assistantText.trim() ? `${locale === "zh" ? "当前已编辑草稿" : "Current edited draft"}:\n${assistantText.trim()}` : "",
     prompt.trim(),
-  ].filter(Boolean).join("\n"));
-  const copyText = async (kind: "rich" | "markdown") => {
-    const text = previewEditing ? previewDraft : assistantText;
-    const renderedHtml = previewContentRef.current?.querySelector(".wb-writer-message-markdown")?.innerHTML;
+  ].filter(Boolean).join("\n"), prompt);
+  const copyText = async (kind: "rich" | "markdown", message: DesktopUIMessage) => {
+    const text = previewEditing ? previewDraft : desktopUIMessageText(message);
+    const messageRow = Array.from(messageSurfaceRef.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? []).find((row) => row.dataset.messageId === message.id);
+    const renderedHtml = messageRow?.querySelector(".ai-elements-message-response")?.innerHTML
+      ?? previewContentRef.current?.querySelector(".ai-elements-message-response")?.innerHTML;
     const html = kind === "rich" ? renderedHtml ?? `<div>${escapeWriterHtml(text)}</div>` : undefined;
     try {
       if (await copyWriterContent(text, html)) {
@@ -977,12 +1212,20 @@ function DesktopWriterCloudWorkspace(props: DesktopWriterCloudWorkspaceProps) {
         <header className="chat-page-header"><div><h1 className="chat-page-title">{route.label}</h1><p className="chat-page-subtitle">{route.description}</p></div></header>
         <div className="writer-cloud-scroll chat-message-scroll"><div className="chat-message-column">
           {!hasMessages ? <div className="writer-quick-start"><div className="dashboard-kicker">{writerCopy.quick}</div><div className="writer-quick-start-grid">{writerQuickPrompts.map((item) => <button key={item} type="button" className="home-quick-start-card" onClick={() => onPromptChange(item)}><span className="dashboard-kicker">✦ {writerCopy.quickStart}</span><span>{item}</span></button>)}</div></div> : null}
-          <WorkbenchMessageSurface messages={renderedUIMessages} locale={locale} pendingMessageId={activeRunId ? "active-assistant" : undefined} onCopy={(message) => navigator.clipboard?.writeText(desktopUIMessageText(message))} onArtifactOpen={(artifact) => onArtifactOpen(artifact.relativePath, artifact.mimeType)} onArtifactDownload={onArtifactDownload} />
-          {assistantText || activeRunId ? <div className="writer-message-actions" data-testid="writer-message-actions"><button type="button" className="dashboard-button-secondary" onClick={() => setPreviewOpen(true)} disabled={!assistantText}>{writerCopy.preview}</button><button type="button" className="dashboard-button-primary" onClick={onGenerateImages} disabled={!assistantText || Boolean(activeRunId)}>{writerCopy.generateImage}</button><button type="button" className="dashboard-button-secondary" onClick={() => void copyText("rich")} disabled={!assistantText}>{copyKind === "rich" ? writerCopy.copied : writerCopy.rich}</button><button type="button" className="dashboard-button-secondary" onClick={() => void copyText("markdown")} disabled={!assistantText}>{copyKind === "markdown" ? writerCopy.copied : writerCopy.markdown}</button></div> : null}
+          <div ref={messageSurfaceRef} className="writer-cloud-message-shell"><WorkbenchMessageSurface className="writer-cloud-message-surface" messages={renderedUIMessages} locale={locale} pendingMessageId={activeRunId ? "active-assistant" : undefined} onReachTop={onReachTop} onRetry={(message) => { const index = renderedUIMessages.findIndex((item) => item.id === message.id); const previous = [...renderedUIMessages.slice(0, index)].reverse().find((item) => item.role === "user"); const retryPrompt = previous ? desktopUIMessageText(previous) : activePrompt; if (retryPrompt.trim()) onRun(retryPrompt); }} renderAssistantActions={(message) => {
+            const bodyText = desktopUIMessageText(message);
+            if (!bodyText.trim()) return null;
+            return <>
+              <MessageAction label={writerCopy.preview} title={writerCopy.preview} onClick={() => setPreviewOpen(true)}><Eye size={14} aria-hidden="true" /></MessageAction>
+              <MessageAction label={writerCopy.generateImage} title={writerCopy.generateImage} onClick={onGenerateImages} disabled={!onGenerateImages || Boolean(activeRunId)}><ImagePlus size={14} aria-hidden="true" /></MessageAction>
+              <MessageAction label={copyKind === "rich" ? writerCopy.copied : writerCopy.rich} title={copyKind === "rich" ? writerCopy.copied : writerCopy.rich} onClick={() => void copyText("rich", message)}><CopyIcon size={14} aria-hidden="true" /></MessageAction>
+              <MessageAction label={copyKind === "markdown" ? writerCopy.copied : writerCopy.markdown} title={copyKind === "markdown" ? writerCopy.copied : writerCopy.markdown} onClick={() => void copyText("markdown", message)}><FileText size={14} aria-hidden="true" /></MessageAction>
+            </>;
+          }} onToolApproval={onToolApproval} onArtifactOpen={(artifact) => onArtifactOpen(artifact.relativePath, artifact.mimeType)} onArtifactDownload={onArtifactDownload} resolveMediaSource={resolveDesktopMediaSource} resolveArtifactSource={resolveDesktopArtifactSource} /></div>
           {!hasMessages && localizedRunStatus ? <div className="writer-status-message">{localizedRunStatus}</div> : null}
         </div></div>
-        <div className="chat-composer-dock"><div className="chat-composer writer-cloud-composer"><WorkbenchPromptInput value={prompt} onValueChange={onPromptChange} onSubmit={submit} attachments={attachments.map((attachment) => ({ id: attachment.id, name: attachment.name, mediaType: attachment.mediaType }))} onAddAttachments={onAddAttachments} onRemoveAttachment={onRemoveAttachment} models={(models ?? []).map((item) => ({ id: item, label: formatWorkbenchModelLabel(item, { zh: "本地模型", en: "Local model" }, locale), provider: locale === "zh" ? "已配置模型" : "Configured models" }))} model={model} onModelChange={onModelChange} placeholder={writerCopy.placeholder} status={activeRunId ? "streaming" : "ready"} onStop={onCancel} locale={locale}><div className="writer-composer-options"><span>{writerOptionLabel("platform", WORKBENCH_WRITER_PLATFORMS.find((item) => item.id === platform) ?? { id: platform, label: platform }, locale)} / {writerOptionLabel("mode", WORKBENCH_WRITER_MODES.find((item) => item.id === mode) ?? { id: mode, label: mode }, locale)} / {writerOptionLabel("language", WORKBENCH_WRITER_LANGUAGES.find((item) => item.id === language) ?? { id: language, label: language }, locale)} / {writerCopy.previewHint}</span>{knowledgeEnabled ? <span className="composer-knowledge-control"><button type="button" className="composer-knowledge-button" onClick={onKnowledgeToggle}>{locale === "zh" ? "⌑ Obsidian 知识库" : "⌑ Obsidian context"}</button><button type="button" className="composer-knowledge-close" aria-label={locale === "zh" ? "关闭 Obsidian 知识库上下文" : "Disable Obsidian knowledge"} onClick={onKnowledgeToggle}>×</button></span> : <button type="button" className="composer-knowledge-button" onClick={onKnowledgeToggle}>{locale === "zh" ? "⌑ 添加 Obsidian 知识库" : "⌑ Add Obsidian context"}</button>}<ModelControls locale={locale} model={model} models={models} providerSource={formatWorkbenchModelLabel(model, { zh: "本地模型", en: "Local model" }, locale)} reasoningEffort={reasoningEffort} skillId={skillId} showSkill={false} hideModel onModelChange={onModelChange} onReasoningChange={onReasoningChange} onSkillChange={onSkillChange} /></div></WorkbenchPromptInput></div></div>
-        {previewOpen ? <div className="writer-preview-overlay" role="dialog" aria-modal="true" aria-labelledby="writer-preview-title"><section className="writer-preview-sheet"><header><div><div className="dashboard-kicker">{writerCopy.preview}</div><h2 id="writer-preview-title">{writerCopy.finalPreview}</h2><p className="writer-preview-description">{writerCopy.previewHint}</p></div><button type="button" className="ghost" onClick={() => setPreviewOpen(false)}>{writerCopy.close}</button></header>{previewEditing ? <textarea className="writer-preview-editor" data-testid="writer-preview-editor" aria-label={writerCopy.edit} autoFocus value={previewDraft} onChange={(event) => setPreviewDraft(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); commitPreviewDraft(); } if (event.key === "Escape") { event.preventDefault(); setPreviewDraft(assistantText); setPreviewEditing(false); } }} /> : <div ref={previewContentRef} className="writer-preview-content" data-testid="writer-preview-content"><WorkbenchMessageSurface messages={previewMessages} locale={locale} onCopy={async (message) => { await copyWriterContent(desktopUIMessageText(message)); }} onArtifactOpen={(artifact) => onArtifactOpen(artifact.relativePath, artifact.mimeType)} onArtifactDownload={onArtifactDownload} /></div>}<div className="writer-preview-actions"><button type="button" className="dashboard-button-secondary" data-testid="writer-preview-edit" onClick={() => { if (previewEditing) commitPreviewDraft(); else setPreviewEditing(true); }} disabled={!assistantText}>{previewEditing ? writerCopy.done : writerCopy.edit}</button><button type="button" className="dashboard-button-primary" data-testid="writer-preview-copy-rich" onClick={() => void copyText("rich")}>{copyKind === "rich" ? writerCopy.copied : writerCopy.rich}</button><button type="button" className="dashboard-button-secondary" data-testid="writer-preview-copy-markdown" onClick={() => void copyText("markdown")}>{copyKind === "markdown" ? writerCopy.copied : writerCopy.markdown}</button><button type="button" className="dashboard-button-secondary" onClick={() => { setPreviewOpen(false); onGenerateImages?.(); }}>{writerCopy.generateImageWithCopy}</button><button type="button" className="ghost" onClick={() => setPreviewOpen(false)}>{writerCopy.done}</button></div></section></div> : null}
+        <div className="chat-composer-dock"><div className="chat-composer writer-cloud-composer"><WorkbenchPromptInput value={prompt} onValueChange={onPromptChange} onSubmit={submit} attachments={attachments.map((attachment) => ({ id: attachment.id, name: attachment.name, mediaType: attachment.mediaType, status: attachment.status, error: attachment.error }))} onAddAttachments={onAddAttachments} onRemoveAttachment={onRemoveAttachment} models={(models ?? []).map((item) => ({ id: item, label: formatWorkbenchModelLabel(item, { zh: "本地模型", en: "Local model" }, locale), provider: locale === "zh" ? "已配置模型" : "Configured models" }))} model={model} onModelChange={onModelChange} placeholder={writerCopy.placeholder} status={activeRunId ? "streaming" : "ready"} onStop={onCancel} locale={locale}><div className="writer-composer-options"><span>{writerOptionLabel("platform", WORKBENCH_WRITER_PLATFORMS.find((item) => item.id === platform) ?? { id: platform, label: platform }, locale)} / {writerOptionLabel("mode", WORKBENCH_WRITER_MODES.find((item) => item.id === mode) ?? { id: mode, label: mode }, locale)} / {writerOptionLabel("language", WORKBENCH_WRITER_LANGUAGES.find((item) => item.id === language) ?? { id: language, label: language }, locale)} / {writerCopy.previewHint}</span>{knowledgeEnabled ? <span className="composer-knowledge-control"><button type="button" className="composer-knowledge-button" onClick={onKnowledgeToggle}>{locale === "zh" ? "⌑ Obsidian 知识库" : "⌑ Obsidian context"}</button><button type="button" className="composer-knowledge-close" aria-label={locale === "zh" ? "关闭 Obsidian 知识库上下文" : "Disable Obsidian knowledge"} onClick={onKnowledgeToggle}>×</button></span> : <button type="button" className="composer-knowledge-button" onClick={onKnowledgeToggle}>{locale === "zh" ? "⌑ 添加 Obsidian 知识库" : "⌑ Add Obsidian context"}</button>}<ModelControls locale={locale} model={model} models={models} providerSource={formatWorkbenchModelLabel(model, { zh: "本地模型", en: "Local model" }, locale)} reasoningEffort={reasoningEffort} skillId={skillId} showSkill={false} hideModel onModelChange={onModelChange} onReasoningChange={onReasoningChange} onSkillChange={onSkillChange} /></div></WorkbenchPromptInput></div></div>
+        {previewOpen ? <div className="writer-preview-overlay" role="dialog" aria-modal="true" aria-labelledby="writer-preview-title"><section className="writer-preview-sheet"><header><div><div className="dashboard-kicker">{writerCopy.preview}</div><h2 id="writer-preview-title">{writerCopy.finalPreview}</h2><p className="writer-preview-description">{writerCopy.previewHint}</p></div><button type="button" className="ghost" onClick={() => setPreviewOpen(false)}>{writerCopy.close}</button></header>{previewEditing ? <textarea className="writer-preview-editor" data-testid="writer-preview-editor" aria-label={writerCopy.edit} autoFocus value={previewDraft} onChange={(event) => setPreviewDraft(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); commitPreviewDraft(); } if (event.key === "Escape") { event.preventDefault(); setPreviewDraft(assistantText); setPreviewEditing(false); } }} /> : <div ref={previewContentRef} className="writer-preview-content" data-testid="writer-preview-content"><WriterPlatformPreview platform={platform} locale={locale} content={assistantText} /></div>}<div className="writer-preview-actions"><button type="button" className="dashboard-button-secondary" data-testid="writer-preview-edit" onClick={() => { if (previewEditing) commitPreviewDraft(); else setPreviewEditing(true); }} disabled={!assistantText}>{previewEditing ? writerCopy.done : writerCopy.edit}</button><button type="button" className="dashboard-button-primary" data-testid="writer-preview-copy-rich" onClick={() => void copyText("rich", previewMessages[0])} disabled={!previewMessages.length}>{copyKind === "rich" ? writerCopy.copied : writerCopy.rich}</button><button type="button" className="dashboard-button-secondary" data-testid="writer-preview-copy-markdown" onClick={() => void copyText("markdown", previewMessages[0])} disabled={!previewMessages.length}>{copyKind === "markdown" ? writerCopy.copied : writerCopy.markdown}</button>{onExportDraft ? <button type="button" className="dashboard-button-secondary" data-testid="writer-preview-export" onClick={() => void onExportDraft(previewEditing ? previewDraft : assistantText)} disabled={!assistantText}>{writerCopy.export}</button> : null}<button type="button" className="dashboard-button-secondary" onClick={() => { setPreviewOpen(false); onGenerateImages?.(); }}>{writerCopy.generateImageWithCopy}</button><button type="button" className="ghost" onClick={() => setPreviewOpen(false)}>{writerCopy.done}</button></div></section></div> : null}
       </section>
     </div>
   );
@@ -1195,157 +1438,6 @@ function DesktopWorkflowCanvas({
   />;
 }
 
-function LegacyDesktopWorkflowCanvas({
-  nodes,
-  edges,
-  selectedNodeKey,
-  onSelectNode,
-  onMoveNode,
-  providerConfigured = activeMediaProviderConfigured,
-  providerConfiguredForNode = () => providerConfigured,
-  locale,
-}: {
-  nodes: WorkflowDefinitionNodeV2[];
-  edges: WorkflowDefinitionEnvelope["edges"];
-  selectedNodeKey: string | null;
-  onSelectNode: (nodeKey: string) => void;
-  onMoveNode: (nodeKey: string, position: { x: number; y: number }) => void;
-  providerConfigured?: boolean;
-  providerConfiguredForNode?: (nodeType: string) => boolean;
-  locale: "zh" | "en";
-}) {
-  const [viewport, setViewport] = useState({ x: 24, y: 24, scale: 1 });
-  const viewportRef = useRef<HTMLDivElement | null>(null);
-  const nodeElementsRef = useRef(new Map<string, HTMLButtonElement>());
-  const nodeRefCallbacks = useRef(new Map<string, (element: HTMLButtonElement | null) => void>());
-  const [nodeSizes, setNodeSizes] = useState<Record<string, { width: number; height: number }>>({});
-  const [dragPreview, setDragPreview] = useState<{ nodeKey: string; x: number; y: number } | null>(null);
-  const dragRef = useRef<{ kind: "node" | "pan"; nodeKey?: string; startClientX: number; startClientY: number; startX: number; startY: number; currentX?: number; currentY?: number } | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const renderedNodes = useMemo(() => dragPreview ? nodes.map((node) => dragPreview.nodeKey === node.nodeKey ? { ...node, positionX: dragPreview.x, positionY: dragPreview.y } : node) : nodes, [dragPreview, nodes]);
-  const nodeByKey = useMemo(() => new Map(renderedNodes.map((node) => [node.nodeKey, node])), [renderedNodes]);
-  const fallbackNodeSize = { width: 214, height: 126 };
-  const nodeRef = (nodeKey: string) => {
-    const existing = nodeRefCallbacks.current.get(nodeKey);
-    if (existing) return existing;
-    const callback = (element: HTMLButtonElement | null) => {
-      if (element) nodeElementsRef.current.set(nodeKey, element);
-      else nodeElementsRef.current.delete(nodeKey);
-    };
-    nodeRefCallbacks.current.set(nodeKey, callback);
-    return callback;
-  };
-  const measureNodes = useCallback(() => {
-    const nextSizes: Record<string, { width: number; height: number }> = {};
-    for (const [nodeKey, element] of nodeElementsRef.current) nextSizes[nodeKey] = { width: element.offsetWidth, height: element.offsetHeight };
-    setNodeSizes((current) => {
-      const currentKeys = Object.keys(current);
-      const nextKeys = Object.keys(nextSizes);
-      if (currentKeys.length === nextKeys.length && nextKeys.every((key) => current[key]?.width === nextSizes[key]?.width && current[key]?.height === nextSizes[key]?.height)) return current;
-      return nextSizes;
-    });
-  }, []);
-  useEffect(() => {
-    measureNodes();
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const observer = new ResizeObserver(measureNodes);
-    for (const element of nodeElementsRef.current.values()) observer.observe(element);
-    return () => observer.disconnect();
-  }, [measureNodes, nodes]);
-  const startNodeDrag = (event: React.PointerEvent<HTMLButtonElement>, node: WorkflowDefinitionNodeV2) => {
-    event.preventDefault();
-    event.stopPropagation();
-    onSelectNode(node.nodeKey);
-    if (event.button !== 0) return;
-    dragRef.current = { kind: "node", nodeKey: node.nodeKey, startClientX: event.clientX, startClientY: event.clientY, startX: node.positionX, startY: node.positionY };
-    setDragPreview({ nodeKey: node.nodeKey, x: node.positionX, y: node.positionY });
-    viewportRef.current?.setPointerCapture(event.pointerId);
-    setDragging(true);
-  };
-  const startPan = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
-    event.preventDefault();
-    setDragPreview(null);
-    dragRef.current = { kind: "pan", startClientX: event.clientX, startClientY: event.clientY, startX: viewport.x, startY: viewport.y };
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setDragging(true);
-  };
-  const movePointer = (event: React.PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    if (drag.kind === "pan") setViewport((current) => ({ ...current, x: drag.startX + event.clientX - drag.startClientX, y: drag.startY + event.clientY - drag.startClientY }));
-    else if (drag.nodeKey) {
-      const position = { x: Math.max(0, Math.round(drag.startX + (event.clientX - drag.startClientX) / viewport.scale)), y: Math.max(0, Math.round(drag.startY + (event.clientY - drag.startClientY) / viewport.scale)) };
-      drag.currentX = position.x;
-      drag.currentY = position.y;
-      setDragPreview({ nodeKey: drag.nodeKey, ...position });
-    }
-  };
-  const endPointer = (event?: React.PointerEvent<HTMLDivElement>, commitNode = true) => {
-    const drag = dragRef.current;
-    if (commitNode && drag?.kind === "node" && drag.nodeKey && drag.currentX !== undefined && drag.currentY !== undefined) onMoveNode(drag.nodeKey, { x: drag.currentX, y: drag.currentY });
-    if (event && viewportRef.current?.hasPointerCapture(event.pointerId)) viewportRef.current.releasePointerCapture(event.pointerId);
-    dragRef.current = null;
-    setDragPreview(null);
-    setDragging(false);
-  };
-  const adjustZoom = (delta: number) => setViewport((current) => ({ ...current, scale: Math.max(0.55, Math.min(1.45, Number((current.scale + delta).toFixed(2)))) }));
-  const fitCanvas = () => {
-    if (!nodes.length) return;
-    const minX = Math.min(...nodes.map((node) => node.positionX));
-    const minY = Math.min(...nodes.map((node) => node.positionY));
-    const maxX = Math.max(...nodes.map((node) => node.positionX + (nodeSizes[node.nodeKey]?.width ?? fallbackNodeSize.width)));
-    const maxY = Math.max(...nodes.map((node) => node.positionY + (nodeSizes[node.nodeKey]?.height ?? fallbackNodeSize.height)));
-    setViewport({ x: Math.max(18, (620 - (maxX - minX)) / 2 - minX), y: Math.max(18, (260 - (maxY - minY)) / 2 - minY), scale: Math.max(0.55, Math.min(1.1, 620 / Math.max(620, maxX - minX + 80))) });
-  };
-  const nodeTitle = (node: WorkflowDefinitionNodeV2) => {
-    if (locale === "zh") return node.title;
-    if (node.nodeKey === "input") return "Input task";
-    if (node.nodeKey === "output") return "Local artifact";
-    return workflowActionEnglish[node.type] ?? node.title;
-  };
-  const sceneWidth = Math.max(1000, ...renderedNodes.map((node) => node.positionX + (nodeSizes[node.nodeKey]?.width ?? fallbackNodeSize.width) + 320));
-  const sceneHeight = Math.max(700, ...renderedNodes.map((node) => node.positionY + (nodeSizes[node.nodeKey]?.height ?? fallbackNodeSize.height) + 260));
-  return <div ref={viewportRef} className={`workflow-canvas-viewport ${dragging ? "is-dragging" : ""}`} onPointerDown={startPan} onPointerMove={movePointer} onPointerUp={endPointer} onPointerCancel={(event) => endPointer(event, false)}>
-    <div className="workflow-canvas-grid" />
-    <div className="workflow-canvas-tools" aria-label={locale === "en" ? "Canvas controls" : "画布控制"}>
-      <button type="button" className="canvas-tool-button" onClick={() => adjustZoom(-0.12)} aria-label={locale === "en" ? "Zoom out" : "缩小"}>−</button>
-      <span className="canvas-zoom-label">{Math.round(viewport.scale * 100)}%</span>
-      <button type="button" className="canvas-tool-button" onClick={() => adjustZoom(0.12)} aria-label={locale === "en" ? "Zoom in" : "放大"}>＋</button>
-      <button type="button" className="canvas-tool-button" onClick={fitCanvas}>{locale === "en" ? "Fit" : "适配"}</button>
-    </div>
-    <div className="workflow-canvas-scene" style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}>
-      <svg className="workflow-canvas-edges" style={{ width: sceneWidth, height: sceneHeight }} aria-hidden="true">
-        {edges.map((edge) => {
-          const source = nodeByKey.get(edge.sourceNodeKey);
-          const target = nodeByKey.get(edge.targetNodeKey);
-          if (!source || !target) return null;
-          const sourceSize = nodeSizes[source.nodeKey] ?? fallbackNodeSize;
-          const targetSize = nodeSizes[target.nodeKey] ?? fallbackNodeSize;
-          const sourcePorts = workflowNodeRegistry.get(source.type)?.outputs ?? [];
-          const targetPorts = workflowNodeRegistry.get(target.type)?.inputs ?? [];
-          const sourceIndex = Math.max(0, sourcePorts.findIndex((port) => port.id === edge.sourcePortId));
-          const targetIndex = Math.max(0, targetPorts.findIndex((port) => port.id === edge.targetPortId));
-          const y1 = source.positionY + sourceSize.height * ((sourceIndex + 1) / (sourcePorts.length + 1));
-          const y2 = target.positionY + targetSize.height * ((targetIndex + 1) / (targetPorts.length + 1));
-          const x1 = source.positionX + sourceSize.width;
-          const x2 = target.positionX;
-          const bend = Math.max(42, Math.abs(x2 - x1) / 2);
-          return <path key={edge.edgeKey} d={`M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`} />;
-        })}
-      </svg>
-      {renderedNodes.map((node, index) => {
-        const definition = workflowNodeRegistry.get(node.type);
-        const parameterViews = getWorkflowParameterViews(node, locale).filter((item) => formatWorkflowParameterValue(item.value)).slice(0, 3);
-        return <button key={node.nodeKey} ref={nodeRef(node.nodeKey)} type="button" className={`workflow-node workflow-canvas-node ${selectedNodeKey === node.nodeKey ? "workflow-node-active" : ""}`} style={{ left: node.positionX, top: node.positionY }} onPointerDown={(event) => startNodeDrag(event, node)} onClick={() => onSelectNode(node.nodeKey)}>
-          <span>{index + 1}</span><strong>{nodeTitle(node)}</strong><small>{node.type}</small>{parameterViews.length ? <div className="workflow-node-params">{parameterViews.map((item) => <span key={item.key} title={`${item.label}: ${formatWorkflowParameterValue(item.value)}`}>{item.label}: {formatWorkflowParameterValue(item.value).slice(0, 24)}</span>)}</div> : null}{!providerConfiguredForNode(node.type) && requiresConfiguredProviderForWorkflowAction(node.type) ? <em>{locale === "en" ? "Configuration required" : "需要配置"}</em> : null}<div className="workflow-node-port-stack workflow-node-input-ports">{(definition?.inputs ?? []).map((port, portIndex) => <i key={port.id} title={port.id} style={{ top: `${((portIndex + 1) / ((definition?.inputs.length ?? 0) + 1)) * 100}%` }} aria-hidden="true" />)}</div><div className="workflow-node-port-stack workflow-node-output-ports">{(definition?.outputs ?? []).map((port, portIndex) => <i key={port.id} title={port.id} style={{ top: `${((portIndex + 1) / ((definition?.outputs.length ?? 0) + 1)) * 100}%` }} aria-hidden="true" />)}</div>
-        </button>;
-      })}
-    </div>
-    {nodes.some((node) => requiresConfiguredProviderForWorkflowAction(node.type) && !providerConfiguredForNode(node.type)) ? <div className="workflow-provider-warning"><strong>{locale === "en" ? "Configuration required" : "需要配置 Provider"}</strong><span>{locale === "en" ? "A media node is visible but cannot run until its Provider and configured model are set." : "媒体节点仍可编辑，但需先配置 Provider 和已配置模型才可运行。"}</span><button type="button" className="link-button" onClick={openWorkflowProviderSettings}>{locale === "en" ? "Open model settings" : "打开模型配置"}</button></div> : null}
-  </div>;
-}
-
 type WorkflowBuilderSurfaceProps = {
   route: DesktopRoute;
   onBack: () => void;
@@ -1467,7 +1559,7 @@ function DesktopWorkflowBuilderSurface(props: WorkflowBuilderSurfaceProps) {
   </div>;
 }
 
-function DesktopWorkflowWorkspace({ route, onBack, prompt: _prompt, onPromptChange: _onPromptChange, runStatus: _runStatus, activeRunId: _activeRunId, onRun: _onRun, onRerun: providedOnRerun, onContinue: providedOnContinue, onCancel, lastRunStatus, savedWorkflows, workflowAction, onWorkflowAction, definition, onDefinitionChange, workflowMetadata: initialWorkflowMetadata, onWorkflowMetaChange, onSave, onExport, onImport, model, models, reasoningEffort, skillId, onModelChange, onReasoningChange, onSkillChange, providerConfiguredForNode, providerSourceForNode, onSelectWorkflowFiles, nodeExecutionSnapshots, locale }: DesktopWorkflowWorkspaceProps & { locale: "zh" | "en" }) {
+function DesktopWorkflowWorkspace({ route, onBack, prompt: _prompt, onPromptChange: _onPromptChange, runStatus: _runStatus, activeRunId: _activeRunId, onRun: _onRun, onRerun: providedOnRerun, onContinue: providedOnContinue, onCancel, lastRunStatus, savedWorkflows, workflowAction, onWorkflowAction, definition, onDefinitionChange, workflowMetadata: initialWorkflowMetadata, onWorkflowMetaChange, onSave, onExport, onImport, model, models, reasoningEffort, skillId, onModelChange, onReasoningChange, onSkillChange = onReasoningChange, providerConfiguredForNode, providerSourceForNode, onSelectWorkflowFiles, nodeExecutionSnapshots, locale }: DesktopWorkflowWorkspaceProps & { locale: "zh" | "en" }) {
   const [selectedNodeKey, setSelectedNodeKey] = useState("capability");
   const [localDefinition, setLocalDefinition] = useState<WorkflowDefinitionEnvelope>(() => definition ? normalizeWorkflowDefinitionLayout(definition) : buildWorkflowDefinition("", workflowAction, { id: "local", model: "" }, {}, locale));
   const [workflowEditorPrompt, setWorkflowEditorPrompt] = useState(() => String(localDefinition.nodes.find((node) => node.nodeKey === "input")?.config.text ?? ""));
@@ -1777,6 +1869,7 @@ function DesktopMediaWorkspaceBody({
   artifactRows: allArtifactRows,
   providerConfigured: configuredProp,
   onOpenSettings,
+  onOpenTasks,
   onArtifactReveal,
   onArtifactPreview,
   onAddAttachments,
@@ -1810,9 +1903,10 @@ function DesktopMediaWorkspaceBody({
   artifactRows: ArtifactRow[];
   providerConfigured: boolean;
   onOpenSettings: () => void;
+  onOpenTasks?: () => void;
   onArtifactReveal: (relativePath: string, mimeType: string) => void;
   onArtifactPreview?: (relativePath: string, mimeType: string) => Promise<LocalMediaPreview>;
-   onAddAttachments?: (files: FileList | null) => void;
+  onAddAttachments?: (files: FileList | readonly File[] | null) => void | Promise<readonly LocalAttachment[]>;
    onRemoveAttachment?: (id: string) => void;
    attachments?: LocalAttachment[];
   model: string;
@@ -1837,6 +1931,8 @@ function DesktopMediaWorkspaceBody({
   const providerConfigured = configuredProp;
   const isVideo = route.path.includes("video");
   const isImage = route.path.includes("image-assistant");
+  const previewPanelRef = useRef<HTMLElement | null>(null);
+  const [previewTab, setPreviewTab] = useState<"preview" | "history" | "artifacts">("preview");
   const mediaHistory = useContext(DesktopMediaHistoryContext);
   const sessionArtifactRows = isImage ? mediaArtifactsForConversation(mediaHistory) : [];
   const artifactRows = isImage && mediaHistory?.scope === "entry:image-assistant" ? sessionArtifactRows : allArtifactRows;
@@ -1853,6 +1949,11 @@ function DesktopMediaWorkspaceBody({
   const [isRecording, setIsRecording] = useState(false);
   const recordingRef = useRef<MediaRecorder | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
+  useEffect(() => {
+    const panel = document.querySelector<HTMLElement>(".media-workspace-grid .media-preview-panel");
+    previewPanelRef.current = panel;
+    return () => { previewPanelRef.current = null; };
+  }, []);
   const toggleReferenceRecording = async () => {
     if (isRecording && recordingRef.current) {
       recordingRef.current.stop();
@@ -1929,6 +2030,11 @@ function DesktopMediaWorkspaceBody({
     setLocalFieldValues(localFieldValuesByFeature[activeFeatureBase.id] ?? Object.fromEntries(activeFeatureBase.fields.map((field) => [field.id, field.defaultValue ?? ""])));
   }, [activeFeatureBase.id, localFieldValuesByFeature, tabState]);
   useEffect(() => {
+    if (!tabState || !onTabStateChange) return;
+    const synced = syncDesktopMediaTabModel(tabState, activeFeature);
+    if (synced !== tabState) onTabStateChange(() => synced);
+  }, [activeFeature, onTabStateChange, tabState]);
+  useEffect(() => {
     if (!isImage) return;
     const normalized = normalizeDesktopImageSettings(model, imageSettings);
     if (JSON.stringify(normalized) === JSON.stringify(imageSettings)) return;
@@ -1958,6 +2064,16 @@ function DesktopMediaWorkspaceBody({
     }
     setLocalImageSettings(updater);
   };
+  const appendImageReferencePaths = (paths: readonly string[]) => {
+    const normalizedPaths = paths.map((path) => path.trim()).filter(Boolean);
+    const fieldId = imageParameterFields.some((field) => field.id === "referenceImages") ? "referenceImages" : imageParameterFields.some((field) => field.id === "inputImageUrl") ? "inputImageUrl" : null;
+    if (!normalizedPaths.length || !fieldId) return;
+    updateImageSettings((current) => {
+      const existing = typeof current[fieldId] === "string" ? current[fieldId].split(",").map((path) => path.trim()).filter(Boolean) : [];
+      const nextPaths = fieldId === "inputImageUrl" ? [existing[0] ?? normalizedPaths[0]] : [...new Set([...existing, ...normalizedPaths])];
+      return normalizeDesktopImageSettings(model, { ...current, [fieldId]: nextPaths.join(",") });
+    });
+  };
   const handleMediaModelChange = (value: string) => {
     onModelChange(value);
     if (activeFeature.fields.some((field) => field.id === "model")) updateField("model", value);
@@ -1982,7 +2098,8 @@ function DesktopMediaWorkspaceBody({
   const hasImageArtifacts = isImage && artifactRows.some((artifact) => artifact.mime_type.startsWith("image/"));
   const hasMediaArtifacts = isVideo && artifactRows.some((artifact) => artifact.mime_type.startsWith("video/") || artifact.mime_type.startsWith("audio/"));
   const simpleOptions = workflowActions.filter((item) => ["ppt_generate", "image_generate", "writer"].includes(item.id));
-  const localizedRunStatus = localizeDesktopStatus(runStatus, locale);
+  const localizedStatus = localizeDesktopStatus(runStatus, locale);
+  const localizedRunStatus = isDesktopErrorStatus(localizedStatus) ? "" : localizedStatus;
   const updateWorkspacePrompt = (value: string) => {
     if (tabState && onTabStateChange) {
       onTabStateChange((current) => ({ ...current, prompt: value }));
@@ -1996,21 +2113,35 @@ function DesktopMediaWorkspaceBody({
     if (locale === "zh") return category === "system" ? "系统音色" : category === "voice_cloning" ? "复刻音色" : "生成音色";
     return category === "system" ? "System" : category === "voice_cloning" ? "Cloned" : "Generated";
   };
+  const togglePreviewFullscreen = async () => {
+    const panel = previewPanelRef.current;
+    if (!panel) return;
+    try {
+      if (document.fullscreenElement === panel) await document.exitFullscreen();
+      else await panel.requestFullscreen();
+    } catch {
+      // Fullscreen is a progressive enhancement in browser preview mode.
+    }
+  };
 
   return <div className="media-workspace">
     <input
       className="sr-only"
       type="file"
       id="desktop-media-upload"
-      accept="audio/*,video/*,image/*"
+      accept={isImage ? "image/*" : "audio/*,video/*,image/*"}
       onChange={(event) => {
         const files = event.target.files;
-        const file = files?.[0];
+        const selectedFiles = files ? Array.from(files) : [];
+        const file = selectedFiles[0];
         event.currentTarget.value = "";
         if (!file) return;
         if (tabState && onTabStateChange) onTabStateChange((current) => ({ ...current, uploadedFileName: file.name }));
         else setUploadedFiles((current) => ({ ...current, [activeFeature.id]: file.name }));
-        onAddAttachments?.(files);
+        void (async () => {
+          const savedAttachments = await onAddAttachments?.(selectedFiles);
+          if (isImage) appendImageReferencePaths((savedAttachments ?? []).filter((attachment) => attachment.status === "ready" && attachment.relativePath).map((attachment) => attachment.relativePath as string));
+        })();
       }}
     />
     <header className={showHeader ? "workflow-page-header" : "workflow-page-header sr-only"}>
@@ -2034,18 +2165,36 @@ function DesktopMediaWorkspaceBody({
           {activeFeature.id === "voice-synthesis" && voiceOptions.length > 0 ? <div className="voice-recommendations"><span>{locale === "en" ? "Recommended" : "推荐音色"}</span><div className="voice-chip-list">{voiceOptions.slice(0, 6).map((voice) => <button key={`${voice.category}-${voice.voiceId}`} type="button" className="voice-chip" onClick={() => updateField("voiceId", voice.voiceId)}>{voice.voiceName} · {voiceCategoryLabel(voice.category)}</button>)}</div></div> : null}
         </div> : null}
          {isVideo ? <div className="media-field-grid">{activeFeature.fields.filter((field) => field.id !== "prompt" && field.id !== "model").map((field) => <label key={field.id} className="media-field"><span>{field.label}</span>{activeFeature.id === "voice-synthesis" && field.id === "voiceId" ? <select value={fieldValues[field.id] ?? ""} onChange={(event) => updateField(field.id, event.target.value)}><option value="">{locale === "en" ? "Select a voice" : "选择音色"}</option>{voiceOptions.map((voice) => <option key={`${voice.category}-${voice.voiceId}`} value={voice.voiceId}>{voice.voiceName} · {voiceCategoryLabel(voice.category)}</option>)}</select> : field.type === "textarea" ? <textarea value={fieldValues[field.id] ?? ""} onChange={(event) => updateField(field.id, event.target.value)} placeholder={field.placeholder} /> : field.type === "select" ? <select value={fieldValues[field.id] ?? field.defaultValue ?? ""} onChange={(event) => updateField(field.id, event.target.value)}>{field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <input type={field.type === "number" ? "number" : "text"} value={fieldValues[field.id] ?? ""} onChange={(event) => updateField(field.id, event.target.value)} placeholder={field.placeholder} />}{field.type === "url" && artifactRows.length ? <div className="media-asset-picker">{artifactRows.slice(0, 3).map((artifact) => <button key={`${field.id}-${artifact.id}`} type="button" onClick={() => updateField(field.id, artifact.relative_path)}>{artifact.relative_path}</button>)}</div> : null}{activeFeature.id === "voice-synthesis" && field.id === "voiceId" && fieldValues[field.id] ? <small className="voice-selected-description">{voiceOptions.find((voice) => voice.voiceId === fieldValues[field.id])?.description?.[0] ?? fieldValues[field.id]}</small> : null}</label>)}</div> : isImage ? <div className="image-field-grid" data-image-model-kind={imageModelKind}>
-           {imageParameterFields.map((field) => <label key={field.id} className={`media-field ${field.type === "text" ? "image-field-wide" : ""}`} data-image-parameter={field.id}><span>{field.label}</span>{field.type === "select" ? <select value={imageSettings[field.id] ?? field.defaultValue ?? ""} onChange={(event) => updateImageSettings((current) => normalizeDesktopImageSettings(model, { ...current, [field.id]: event.target.value }))}>{field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <input type={field.type === "number" ? "number" : "text"} min={field.min} max={field.max} value={imageSettings[field.id] ?? ""} onChange={(event) => updateImageSettings((current) => normalizeDesktopImageSettings(model, { ...current, [field.id]: event.target.value }))} placeholder={field.placeholder} />}{field.type === "text" && artifactRows.length ? <div className="media-asset-picker">{artifactRows.slice(0, 3).map((artifact) => <button key={`${field.id}-${artifact.id}`} type="button" onClick={() => updateImageSettings((current) => normalizeDesktopImageSettings(model, { ...current, [field.id]: field.id === "referenceImages" && current[field.id] ? `${current[field.id]},${artifact.relative_path}` : artifact.relative_path }))}>{artifact.relative_path}</button>)}</div> : null}</label>)}
+           {imageParameterFields.map((field) => <label key={field.id} className={`media-field ${field.type === "text" ? "image-field-wide" : ""}`} data-image-parameter={field.id}><span>{field.label}{field.id === "responseFormat" ? (locale === "en" ? " · fixed" : "（固定）") : ""}</span>{field.id === "referenceImages" || field.id === "inputImageUrl" ? <button type="button" className="media-reference-dropzone" onClick={() => document.getElementById("desktop-media-upload")?.click()}><span aria-hidden="true">↥</span><strong>{locale === "en" ? "Click or drop an image here" : "点击或拖拽图片到此处上传"}</strong><small>{locale === "en" ? "JPG, PNG or WEBP · up to 10 MB" : "支持 JPG、PNG、WEBP，单张不超过 10MB"}</small></button> : null}{isImage && (field.id === "referenceImages" || field.id === "inputImageUrl") && attachments?.some((attachment) => attachment.mediaType.startsWith("image/")) ? <div className="image-reference-cards" aria-label={locale === "en" ? "Uploaded reference images" : "已上传的参考图片"}>{attachments.filter((attachment) => attachment.mediaType.startsWith("image/")).map((attachment) => <div className="image-reference-card" data-status={attachment.status} key={attachment.id}><div className="image-reference-thumbnail">{attachment.previewUrl ? <img src={attachment.previewUrl} alt={attachment.name} /> : <span aria-hidden="true">▧</span>}</div><div className="image-reference-copy"><strong title={attachment.name}>{attachment.name}</strong><small>{attachment.status === "failed" ? (locale === "en" ? "Upload failed" : "上传失败") : `${Math.max(1, Math.ceil(attachment.size / 1024))} KB`}</small></div><button type="button" className="image-reference-remove" aria-label={`${locale === "en" ? "Remove" : "移除"} ${attachment.name}`} onClick={() => onRemoveAttachment?.(attachment.id)}>×</button></div>)}</div> : null}{field.type === "select" ? <select value={imageSettings[field.id] ?? field.defaultValue ?? ""} disabled={field.id === "responseFormat"} aria-readonly={field.id === "responseFormat" || undefined} onChange={(event) => updateImageSettings((current) => normalizeDesktopImageSettings(model, { ...current, [field.id]: event.target.value }))}>{field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <input type={field.type === "number" ? "number" : "text"} min={field.min} max={field.max} value={imageSettings[field.id] ?? ""} onChange={(event) => updateImageSettings((current) => normalizeDesktopImageSettings(model, { ...current, [field.id]: event.target.value }))} placeholder={field.placeholder} />}{field.type === "text" && artifactRows.length ? <div className="media-asset-picker">{artifactRows.slice(0, 3).map((artifact) => <button key={`${field.id}-${artifact.id}`} type="button" onClick={() => updateImageSettings((current) => normalizeDesktopImageSettings(model, { ...current, [field.id]: field.id === "referenceImages" && current[field.id] ? `${current[field.id]},${artifact.relative_path}` : artifact.relative_path }))}>{artifact.relative_path}</button>)}</div> : null}</label>)}
          </div> : null}
          {isImage ? <div data-image-parameter="model" className="sr-only" aria-hidden="true" /> : null}<div data-image-parameter={isImage ? "model" : undefined}><WorkbenchPromptInput value={workspacePrompt} onValueChange={updateWorkspacePrompt} onSubmit={() => onRun(isVideo ? buildMediaPrompt() : isImage ? buildImagePrompt() : undefined, isVideo ? activeFeature.id : undefined, isVideo ? { ...Object.fromEntries(Object.entries(fieldValues).filter(([, value]) => value.trim())), ...(localAttachmentPaths.length ? { localAttachments: localAttachmentPaths } : {}) } : isImage ? buildDesktopImageRunInput(model, imageSettings, localAttachmentPaths) : undefined)} attachments={mediaAttachmentItems} onAddAttachments={onAddAttachments} onRemoveAttachment={onRemoveAttachment} models={isImage ? imageModelOptions : mediaModelOptions} model={isImage ? model : activeMediaModel} onModelChange={isImage ? handleMediaModelChange : (value) => updateField("model", value)} placeholder={isImage ? (locale === "en" ? "Describe the subject, composition, style and safe areas…" : "描述主体、构图、风格和需要保留的安全区域……") : isVideo ? mediaUi.describe : mediaUi.describe} status={activeRunId ? "streaming" : /失败|failed|error/iu.test(runStatus) ? "error" : "ready"} onStop={onCancel} disabled={!providerConfigured || imageRequiredInputMissing} submitLabel={isVideo ? activeFeature.submitLabel : mediaUi.generate} locale={locale} /></div>
          {!isImage ? <WorkbenchTask title={isVideo ? activeFeature.title : (locale === "en" ? "Media task" : "媒体任务")} status={taskStatus} steps={[{ id: "submit", title: localizedRunStatus || (locale === "en" ? "Waiting for submission" : "等待提交"), status: taskStatus }]} locale={locale} /> : null}
       </section>
       <section className="media-preview-panel">
-        <div className="section-title"><span>{isVideo ? mediaUi.latest : mediaUi.preview}</span><span className="muted">{artifactRows.length} {locale === "en" ? "files" : "个"}</span></div>
+        <div className="media-preview-heading">
+          <div className="section-title"><span>{isVideo ? mediaUi.latest : mediaUi.preview}</span><span className="muted">{artifactRows.length} {locale === "en" ? "files" : "个"}</span></div>
+          <button type="button" className="media-preview-fullscreen" onClick={() => void togglePreviewFullscreen()} aria-label={locale === "en" ? "Open preview fullscreen" : "全屏预览"}>
+            <span aria-hidden="true">⛶</span>{locale === "en" ? "Fullscreen" : "全屏预览"}
+          </button>
+        </div>
         {isImage ? <DesktopImageArtifactPreview artifactRows={artifactRows} locale={locale} onArtifactReveal={onArtifactReveal} /> : null}
         {isVideo && hasMediaArtifacts ? <DesktopMediaResultPreview compact artifactRows={artifactRows} locale={locale} onArtifactReveal={onArtifactReveal} onArtifactPreview={onArtifactPreview} /> : null}
         {!hasImageArtifacts && !hasMediaArtifacts ? <div className="media-preview-placeholder"><span>{isVideo ? "▶" : route.path.includes("image") ? "▧" : "▣"}</span><strong>{artifactRows.length ? mediaUi.ready : mediaUi.afterRun}</strong><p>{mediaUi.notUploaded}</p></div> : null}
         {isImage ? <WorkbenchTask title={locale === "en" ? "Image generation" : "图片生成"} status={taskStatus} steps={[{ id: "submit", title: localizedRunStatus || (locale === "en" ? "Waiting for submission" : "等待提交"), status: taskStatus }]} locale={locale} /> : null}
         <div className="capability-status-ready media-result-status"><span className="capability-status-dot" />{localizedRunStatus || (locale === "en" ? "Ready" : "就绪")}</div>
+        {isImage ? <>
+          <div className="media-output-toolbar" id="image-output-shelf">
+            <div className="media-output-tabs" role="tablist" aria-label={locale === "en" ? "Image output views" : "图片产物视图"}>
+              <button type="button" role="tab" aria-selected={previewTab === "preview"} className={previewTab === "preview" ? "active" : ""} onClick={() => setPreviewTab("preview")}><span aria-hidden="true">▦</span>{locale === "en" ? "Preview" : "预览"}</button>
+              <button type="button" role="tab" aria-selected={previewTab === "history"} className={previewTab === "history" ? "active" : ""} onClick={() => { setPreviewTab("history"); onOpenTasks?.(); }}><span aria-hidden="true">◷</span>{locale === "en" ? "History" : "历史"}</button>
+              <button type="button" role="tab" aria-selected={previewTab === "artifacts"} className={previewTab === "artifacts" ? "active" : ""} onClick={() => { setPreviewTab("artifacts"); document.getElementById("image-output-shelf")?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }}><span aria-hidden="true">▱</span>{locale === "en" ? "Artifacts" : "产物"}</button>
+            </div>
+            <span className="media-output-sort">{locale === "en" ? "Newest first" : "最新优先"}<span aria-hidden="true">↕</span></span>
+          </div>
+          {!hasImageArtifacts ? <div className="media-empty-output-grid" aria-label={locale === "en" ? "Empty image output slots" : "空图片产物位"}>
+            {Array.from({ length: 4 }, (_, index) => <div className="media-empty-output-card" key={index}><span aria-hidden="true">▧</span><small>{locale === "en" ? "No image yet" : "暂无图片"}</small></div>)}
+          </div> : null}
+        </> : null}
         {!isImage && !hasMediaArtifacts && artifactRows.length ? <div className="media-artifact-list">{artifactRows.slice(0, 6).map((artifact) => <button key={artifact.id} type="button" className="media-artifact-row" onClick={() => onArtifactReveal(artifact.relative_path, artifact.mime_type)}><span>{artifact.relative_path}</span><small>{artifact.mime_type} · {Math.ceil(artifact.byte_length / 1024)} KB</small></button>)}</div> : null}
       </section>
     </div>
@@ -2290,95 +2439,34 @@ function isPreviewableArtifact(artifact: ArtifactRow) {
   return /^(image|audio|video)\//iu.test(artifact.mime_type);
 }
 
-function DesktopArtifactPreviewModalLegacy({ artifact, onClose, onOpen, onOpenFolder, onOpenWith, locale }: { artifact: ArtifactRow; onClose: () => void; onOpen: () => Promise<void>; onOpenFolder: () => Promise<void>; onOpenWith: () => Promise<void>; locale: "zh" | "en" }) {
-  const [source, setSource] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const sourceRef = useRef<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const payload = await tauriBridge.invoke<LocalMediaPreview>("read_artifact", { relativePath: artifact.relative_path, mimeType: artifact.mime_type });
-        if (cancelled) return;
-        const objectUrl = URL.createObjectURL(new Blob([new Uint8Array(payload.data)], { type: payload.mimeType || artifact.mime_type }));
-        sourceRef.current = objectUrl;
-        setSource(objectUrl);
-      } catch {
-        if (!cancelled) setError(locale === "zh" ? "无法读取本地产物，请使用外部应用打开。" : "The local artifact could not be read. Open it with an external app instead.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; if (sourceRef.current) URL.revokeObjectURL(sourceRef.current); };
-  }, [artifact.id, artifact.mime_type, artifact.relative_path, locale]);
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-  const title = artifact.relative_path.split(/[\\/]/).pop() ?? artifact.relative_path;
-  return <div className="artifact-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}><section className="artifact-preview-dialog" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}><header><div><strong>{title}</strong><small>{artifact.mime_type} · {Math.max(1, Math.ceil(artifact.byte_length / 1024))} KB</small></div><button type="button" className="link-button" onClick={onClose}>{locale === "zh" ? "关闭" : "Close"}</button></header><div className="artifact-preview-stage">{loading ? <p>{locale === "zh" ? "正在加载预览…" : "Loading preview…"}</p> : error ? <p className="media-preview-error">{error}</p> : source && artifact.mime_type.startsWith("image/") ? <img src={source} alt={title} /> : source && artifact.mime_type.startsWith("video/") ? <video controls autoPlay preload="metadata" src={source} /> : source ? <audio controls autoPlay preload="metadata" src={source} /> : null}</div><footer><button type="button" className="ghost" onClick={() => void onOpenFolder()}>{locale === "zh" ? "打开所在文件夹" : "Open containing folder"}</button><button type="button" className="ghost" onClick={() => void onOpenWith()}>{locale === "zh" ? "选择已安装应用打开" : "Open with installed app"}</button><button type="button" className="primary" onClick={() => void onOpen()}>{locale === "zh" ? "使用默认应用打开" : "Open with default app"}</button></footer></section></div>;
-}
 
-function DesktopAssetLibrarySurfaceLegacy({ artifactRows, onArtifactRemove, onArtifactReveal, onArtifactOpen, onArtifactOpenFolder, onArtifactOpenWith, locale }: { artifactRows: ArtifactRow[]; onArtifactRemove: (artifactId: string) => void; onArtifactReveal: (relativePath: string, mimeType: string) => void; onArtifactOpen: (relativePath: string, mimeType: string) => Promise<void>; onArtifactOpenFolder: (relativePath: string, mimeType: string) => Promise<void>; onArtifactOpenWith: (relativePath: string, mimeType: string) => Promise<void>; locale: "zh" | "en" }) {
-  const [query, setQuery] = useState("");
-  const [tab, setTab] = useState<"all" | "recent" | "documents">("all");
-  const [view, setView] = useState<"grid" | "list">("grid");
-  const [previewArtifact, setPreviewArtifact] = useState<ArtifactRow | null>(null);
-  const [actionError, setActionError] = useState("");
-  const copy = locale === "en"
-    ? { eyebrow: "ASSET LIBRARY", title: "Asset library", description: "Browse local files produced by writing, PPT, workflows, and media runs.", all: "All assets", recent: "Recent", documents: "Documents", search: "Search local assets…", grid: "Grid", list: "List", empty: "No local artifacts yet", emptyHint: "Artifacts appear here after writing, PPT, or media runs.", unavailable: "Unavailable", remove: "Remove record", preview: "Preview", open: "Open", openWith: "Open with…", folder: "Folder" }
-    : { eyebrow: "资产库", title: "资产库", description: "浏览写作、PPT、工作流和媒体任务生成的本地文件。", all: "全部资产", recent: "最近", documents: "文档", search: "搜索本地产物……", grid: "网格", list: "列表", empty: "还没有本地产物", emptyHint: "运行写作、PPT 或媒体任务后，文件会显示在这里。", unavailable: "文件不可用", remove: "移除记录", preview: "预览", open: "默认应用打开", openWith: "选择已安装应用", folder: "打开文件夹" };
-  const filtered = artifactRows.filter((item) => {
-    const matchesQuery = !query.trim() || `${item.relative_path} ${item.mime_type}`.toLowerCase().includes(query.trim().toLowerCase());
-    const matchesTab = tab === "all" || (tab === "documents" ? /text|json|pdf|word|markdown|presentation|spreadsheet/i.test(item.mime_type) : Date.now() - new Date(item.created_at).getTime() < 7 * 24 * 60 * 60 * 1000);
-    return matchesQuery && matchesTab;
-  });
-  const runFileAction = async (action: () => Promise<void>) => { setActionError(""); try { await action(); } catch (error) { setActionError(error instanceof Error ? error.message : String(error)); } };
-  return <div className="library-workspace asset-library-surface"><header className="asset-library-header"><div><div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.description}</p></div><div className="asset-library-header-meta"><span className="chat-runtime-badge">{artifactRows.length} {locale === "en" ? "files" : "个文件"}</span><button type="button" className={`view-toggle ${view === "grid" ? "active" : ""}`.trim()} onClick={() => setView("grid")}>{copy.grid}</button><button type="button" className={`view-toggle ${view === "list" ? "active" : ""}`.trim()} onClick={() => setView("list")}>{copy.list}</button></div></header><div className="asset-library-toolbar"><div className="asset-library-tabs">{(["all", "recent", "documents"] as const).map((item) => <button key={item} type="button" className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{copy[item]}</button>)}</div><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={copy.search} aria-label={copy.search} /></div>{actionError ? <p className="media-preview-error" role="status">{actionError}</p> : null}{filtered.length ? <div className={`asset-library-grid ${view === "list" ? "list-view" : ""}`.trim()}>{filtered.map((item) => { const previewable = isPreviewableArtifact(item); return <article key={item.id} className="asset-library-card"><div className="asset-library-card-icon">{item.mime_type.startsWith("image/") ? "▧" : item.mime_type.startsWith("video/") ? "▶" : item.mime_type.startsWith("audio/") ? "♫" : item.mime_type.includes("presentation") ? "P" : "▤"}</div><div className="asset-library-card-body"><strong title={item.relative_path}>{item.relative_path.split(/[\\/]/).pop() ?? item.relative_path}</strong><small>{item.mime_type} · {Math.max(1, Math.ceil(item.byte_length / 1024))} KB</small><time>{new Date(item.created_at).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}</time></div><div className="asset-library-card-actions">{previewable ? <button type="button" className="link-button" disabled={item.available === false} onClick={() => setPreviewArtifact(item)}>{copy.preview}</button> : null}<button type="button" className="link-button" disabled={item.available === false} onClick={() => void runFileAction(() => onArtifactOpen(item.relative_path, item.mime_type))}>{item.available === false ? copy.unavailable : copy.open}</button>{item.available !== false ? <><button type="button" className="link-button" onClick={() => void runFileAction(() => onArtifactOpenWith(item.relative_path, item.mime_type))}>{copy.openWith}</button><button type="button" className="link-button" onClick={() => void runFileAction(() => onArtifactOpenFolder(item.relative_path, item.mime_type))}>{copy.folder}</button></> : <button type="button" className="link-button" onClick={() => onArtifactRemove(item.id)}>{copy.remove}</button>}</div></article>; })}</div> : <div className="empty-state asset-library-empty"><div className="empty-icon">▱</div><strong>{copy.empty}</strong><p>{copy.emptyHint}</p></div>}{previewArtifact ? <DesktopArtifactPreviewModalLegacy artifact={previewArtifact} onClose={() => setPreviewArtifact(null)} onOpen={() => runFileAction(() => onArtifactOpen(previewArtifact.relative_path, previewArtifact.mime_type))} onOpenFolder={() => runFileAction(() => onArtifactOpenFolder(previewArtifact.relative_path, previewArtifact.mime_type))} onOpenWith={() => runFileAction(() => onArtifactOpenWith(previewArtifact.relative_path, previewArtifact.mime_type))} locale={locale} /> : null}</div>;
-}
+type DesktopAssetLibraryCopy = { preview: string; open: string; folder: string; unavailable: string; remove: string; removeConfirm: string };
 
-type DesktopAssetLibraryCopy = { preview: string; open: string; openWith: string; folder: string; unavailable: string; remove: string };
-
-function DesktopArtifactLibraryCard({ item, copy, onPreview, onArtifactRemove, onArtifactOpen, onArtifactOpenFolder, onArtifactOpenWith, runFileAction }: { item: ArtifactRow; copy: DesktopAssetLibraryCopy; onPreview: (artifact: ArtifactRow) => void; onArtifactRemove: (artifactId: string) => void; onArtifactOpen: (relativePath: string, mimeType: string) => Promise<void>; onArtifactOpenFolder: (relativePath: string, mimeType: string) => Promise<void>; onArtifactOpenWith: (relativePath: string, mimeType: string) => Promise<void>; runFileAction: (action: () => Promise<void>) => Promise<void> }) {
-  const [mediaSource, setMediaSource] = useState<string | null>(null);
-  const mediaSourceRef = useRef<string | null>(null);
+function DesktopArtifactLibraryCard({ item, copy, onPreview, onArtifactRemove, onArtifactOpen, onArtifactOpenFolder, runFileAction }: { item: ArtifactRow; copy: DesktopAssetLibraryCopy; onPreview: (artifact: ArtifactRow) => void; onArtifactRemove: (artifactId: string) => void; onArtifactOpen: (relativePath: string, mimeType: string) => Promise<void>; onArtifactOpenFolder: (relativePath: string, mimeType: string) => Promise<void>; runFileAction: (action: () => Promise<void>) => Promise<void> }) {
   const previewable = isPreviewableArtifact(item);
   const imageArtifact = item.mime_type.startsWith("image/");
   const videoArtifact = item.mime_type.startsWith("video/");
   const audioArtifact = item.mime_type.startsWith("audio/");
   const title = item.relative_path.split(/[\\/]/).pop() ?? item.relative_path;
   const icon = item.mime_type.startsWith("video/") ? "▶" : item.mime_type.startsWith("audio/") ? "♫" : item.mime_type.includes("presentation") ? "P" : item.mime_type.startsWith("image/") ? "▧" : "▤";
-  useEffect(() => {
-    if (!previewable || item.available === false) return undefined;
-    let cancelled = false;
-    void tauriBridge.invoke<LocalMediaPreview>("read_artifact", { relativePath: item.relative_path, mimeType: item.mime_type }).then((payload) => {
-      if (cancelled) return;
-      const objectUrl = URL.createObjectURL(new Blob([new Uint8Array(payload.data)], { type: payload.mimeType || item.mime_type }));
-      mediaSourceRef.current = objectUrl;
-      setMediaSource(objectUrl);
-    }).catch(() => undefined);
-    return () => {
-      cancelled = true;
-      if (mediaSourceRef.current) URL.revokeObjectURL(mediaSourceRef.current);
-      mediaSourceRef.current = null;
-    };
-  }, [item.available, item.id, item.mime_type, item.relative_path, previewable]);
+  const confirmRemove = () => {
+    if (window.confirm(`${copy.removeConfirm} “${title}”？`)) onArtifactRemove(item.id);
+  };
   return <article className="asset-library-card">
     <div className={`asset-library-card-media ${imageArtifact ? "is-image" : videoArtifact ? "is-video" : audioArtifact ? "is-audio" : ""}`.trim()}>
-      {mediaSource && imageArtifact ? <img src={mediaSource} alt={title} /> : mediaSource && videoArtifact ? <video controls preload="metadata" src={mediaSource} aria-label={title} /> : mediaSource && audioArtifact ? <audio controls preload="metadata" src={mediaSource} aria-label={title} /> : <span className="asset-library-card-icon" aria-hidden="true">{icon}</span>}
+      <span className="asset-library-card-icon" aria-hidden="true">{icon}</span>
+      {previewable && item.available !== false ? <button type="button" className="asset-library-card-preview" onClick={() => onPreview(item)} aria-label={`${copy.preview}: ${title}`} title={copy.preview}><Maximize2 size={14} aria-hidden="true" /><span>{copy.preview}</span></button> : null}
     </div>
     <div className="asset-library-card-body"><strong title={item.relative_path}>{title}</strong><small>{item.mime_type}</small></div>
     <div className="asset-library-card-actions">
-      {previewable ? <button type="button" className="link-button" disabled={item.available === false} onClick={() => onPreview(item)}>{copy.preview}</button> : null}
-      <button type="button" className="link-button" disabled={item.available === false} onClick={() => void runFileAction(() => onArtifactOpen(item.relative_path, item.mime_type))}>{item.available === false ? copy.unavailable : copy.open}</button>
-      {item.available !== false ? <><button type="button" className="link-button" onClick={() => void runFileAction(() => onArtifactOpenWith(item.relative_path, item.mime_type))}>{copy.openWith}</button><button type="button" className="link-button" onClick={() => void runFileAction(() => onArtifactOpenFolder(item.relative_path, item.mime_type))}>{copy.folder}</button></> : <button type="button" className="link-button" onClick={() => onArtifactRemove(item.id)}>{copy.remove}</button>}
+      <button type="button" className="asset-library-card-action" disabled={item.available === false} onClick={() => void runFileAction(() => onArtifactOpen(item.relative_path, item.mime_type))}>{item.available === false ? copy.unavailable : copy.open}</button>
+      {item.available !== false ? <button type="button" className="asset-library-card-action" onClick={() => void runFileAction(() => onArtifactOpenFolder(item.relative_path, item.mime_type))}>{copy.folder}</button> : null}
+      <button type="button" className="asset-library-card-action asset-library-card-action-danger" onClick={confirmRemove} aria-label={`${copy.remove}: ${title}`} title={copy.remove}><Trash2 size={13} aria-hidden="true" /><span>{copy.remove}</span></button>
     </div>
   </article>;
 }
 
-function DesktopArtifactPreviewModal({ artifact, onClose, onOpen, onOpenFolder, onOpenWith, locale }: { artifact: ArtifactRow; onClose: () => void; onOpen: () => Promise<void>; onOpenFolder: () => Promise<void>; onOpenWith: () => Promise<void>; locale: "zh" | "en" }) {
+function DesktopArtifactPreviewModal({ artifact, onClose, onOpen, onOpenFolder, locale }: { artifact: ArtifactRow; onClose: () => void; onOpen: () => Promise<void>; onOpenFolder: () => Promise<void>; locale: "zh" | "en" }) {
   const [source, setSource] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -2406,25 +2494,21 @@ function DesktopArtifactPreviewModal({ artifact, onClose, onOpen, onOpenFolder, 
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
   const title = artifact.relative_path.split(/[\\/]/).pop() ?? artifact.relative_path;
-  return <div className="artifact-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}><section className="artifact-preview-dialog" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}><header><div><strong>{title}</strong><small>{artifact.mime_type} · {Math.max(1, Math.ceil(artifact.byte_length / 1024))} KB</small></div><button type="button" className="link-button" onClick={onClose}>{locale === "zh" ? "关闭" : "Close"}</button></header><div className="artifact-preview-stage"><div className="artifact-preview-content">{loading ? <p>{locale === "zh" ? "正在加载预览…" : "Loading preview…"}</p> : error ? <p className="media-preview-error">{error}</p> : source && artifact.mime_type.startsWith("image/") ? <img src={source} alt={title} /> : source && artifact.mime_type.startsWith("video/") ? <video controls autoPlay preload="metadata" src={source} /> : source ? <audio controls autoPlay preload="metadata" src={source} /> : null}</div><footer><button type="button" className="ghost" onClick={() => void onOpenFolder()}>{locale === "zh" ? "打开所在文件夹" : "Open containing folder"}</button><button type="button" className="ghost" onClick={() => void onOpenWith()}>{locale === "zh" ? "选择已安装应用打开" : "Open with installed app"}</button><button type="button" className="primary" onClick={() => void onOpen()}>{locale === "zh" ? "使用默认应用打开" : "Open with default app"}</button></footer></div></section></div>;
+  return <div className="artifact-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}><section className="artifact-preview-dialog" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}><header><div><strong>{title}</strong><small>{artifact.mime_type} · {Math.max(1, Math.ceil(artifact.byte_length / 1024))} KB</small></div><button type="button" className="link-button" onClick={onClose}>{locale === "zh" ? "关闭" : "Close"}</button></header><div className="artifact-preview-stage"><div className="artifact-preview-content">{loading ? <p>{locale === "zh" ? "正在加载预览…" : "Loading preview…"}</p> : error ? <p className="media-preview-error">{error}</p> : source && artifact.mime_type.startsWith("image/") ? <img src={source} alt={title} /> : source && artifact.mime_type.startsWith("video/") ? <video controls autoPlay preload="metadata" src={source} /> : source ? <audio controls autoPlay preload="metadata" src={source} /> : null}</div><footer><button type="button" className="ghost" onClick={() => void onOpenFolder()}>{locale === "zh" ? "打开所在文件夹" : "Open containing folder"}</button><button type="button" className="primary" onClick={() => void onOpen()}>{locale === "zh" ? "使用默认应用打开" : "Open with default app"}</button></footer></div></section></div>;
 }
 
-function DesktopAssetLibrarySurface({ artifactRows, onArtifactRemove, onArtifactReveal: _onArtifactReveal, onArtifactOpen, onArtifactOpenFolder, onArtifactOpenWith, locale }: { artifactRows: ArtifactRow[]; onArtifactRemove: (artifactId: string) => void; onArtifactReveal: (relativePath: string, mimeType: string) => void; onArtifactOpen: (relativePath: string, mimeType: string) => Promise<void>; onArtifactOpenFolder: (relativePath: string, mimeType: string) => Promise<void>; onArtifactOpenWith: (relativePath: string, mimeType: string) => Promise<void>; locale: "zh" | "en" }) {
+function DesktopAssetLibrarySurface({ artifactRows, onArtifactRemove, onArtifactReveal: _onArtifactReveal, onArtifactOpen, onArtifactOpenFolder, locale }: { artifactRows: ArtifactRow[]; onArtifactRemove: (artifactId: string) => void; onArtifactReveal: (relativePath: string, mimeType: string) => void; onArtifactOpen: (relativePath: string, mimeType: string) => Promise<void>; onArtifactOpenFolder: (relativePath: string, mimeType: string) => Promise<void>; locale: "zh" | "en" }) {
   const [query, setQuery] = useState("");
-  const [tab, setTab] = useState<"all" | "recent" | "documents">("all");
+  const [tab, setTab] = useState<AssetLibraryTab>("all");
   const [view, setView] = useState<"grid" | "list">("grid");
   const [previewArtifact, setPreviewArtifact] = useState<ArtifactRow | null>(null);
   const [actionError, setActionError] = useState("");
   const copy = locale === "en"
-    ? { eyebrow: "ASSET LIBRARY", title: "Asset library", description: "Browse local files produced by writing, PPT, workflows, and media runs.", all: "All assets", recent: "Recent", documents: "Documents", search: "Search local assets…", grid: "Grid", list: "List", empty: "No local artifacts yet", emptyHint: "Artifacts appear here after writing, PPT, or media runs.", unavailable: "Unavailable", remove: "Remove record", preview: "Preview", open: "Open", openWith: "Open with…", folder: "Folder" }
-    : { eyebrow: "资产库", title: "资产库", description: "浏览写作、PPT、工作流和媒体任务生成的本地文件。", all: "全部资产", recent: "最近", documents: "文档", search: "搜索本地产物……", grid: "网格", list: "列表", empty: "还没有本地产物", emptyHint: "运行写作、PPT 或媒体任务后，文件会显示在这里。", unavailable: "文件不可用", remove: "移除记录", preview: "预览", open: "默认应用打开", openWith: "选择已安装应用", folder: "打开文件夹" };
-  const filtered = artifactRows.filter((item) => {
-    const matchesQuery = !query.trim() || `${item.relative_path} ${item.mime_type}`.toLowerCase().includes(query.trim().toLowerCase());
-    const matchesTab = tab === "all" || (tab === "documents" ? /text|json|pdf|word|markdown|presentation|spreadsheet/i.test(item.mime_type) : Date.now() - new Date(item.created_at).getTime() < 7 * 24 * 60 * 60 * 1000);
-    return matchesQuery && matchesTab;
-  });
+    ? { eyebrow: "ASSET LIBRARY", title: "Asset library", description: "Browse local files produced by writing, PPT, workflows, and media runs.", all: "All assets", recent: "Recent", documents: "Documents", search: "Search local assets…", grid: "Grid", list: "List", empty: "No local artifacts yet", emptyHint: "Artifacts appear here after writing, PPT, or media runs.", unavailable: "Unavailable", remove: "Delete", removeConfirm: "Delete this asset from the library", preview: "Enlarge preview", open: "Open", folder: "Folder" }
+    : { eyebrow: "资产库", title: "资产库", description: "浏览写作、PPT、工作流和媒体任务生成的本地文件。", all: "全部资产", recent: "最近", documents: "文档", search: "搜索本地产物……", grid: "网格", list: "列表", empty: "还没有本地产物", emptyHint: "运行写作、PPT 或媒体任务后，文件会显示在这里。", unavailable: "文件不可用", remove: "删除", removeConfirm: "确认从资产库删除", preview: "放大预览", open: "默认应用打开", folder: "打开文件夹" };
+  const filtered = useMemo(() => filterAssetLibraryItems(artifactRows, tab, query), [artifactRows, query, tab]);
   const runFileAction = async (action: () => Promise<void>) => { setActionError(""); try { await action(); } catch (error) { setActionError(error instanceof Error ? error.message : String(error)); } };
-  return <div className="library-workspace asset-library-surface"><header className="asset-library-header"><div><div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.description}</p></div><div className="asset-library-header-meta"><span className="chat-runtime-badge">{artifactRows.length} {locale === "en" ? "files" : "个文件"}</span><button type="button" className={`view-toggle ${view === "grid" ? "active" : ""}`.trim()} onClick={() => setView("grid")}>{copy.grid}</button><button type="button" className={`view-toggle ${view === "list" ? "active" : ""}`.trim()} onClick={() => setView("list")}>{copy.list}</button></div></header><div className="asset-library-toolbar"><div className="asset-library-tabs">{(["all", "recent", "documents"] as const).map((item) => <button key={item} type="button" className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{copy[item]}</button>)}</div><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={copy.search} aria-label={copy.search} /></div>{actionError ? <p className="media-preview-error" role="status">{actionError}</p> : null}{filtered.length ? <div className={`asset-library-grid ${view === "list" ? "list-view" : ""}`.trim()}>{filtered.map((item) => <DesktopArtifactLibraryCard key={item.id} item={item} copy={copy} onPreview={setPreviewArtifact} onArtifactRemove={onArtifactRemove} onArtifactOpen={onArtifactOpen} onArtifactOpenFolder={onArtifactOpenFolder} onArtifactOpenWith={onArtifactOpenWith} runFileAction={runFileAction} />)}</div> : <div className="empty-state asset-library-empty"><div className="empty-icon">▱</div><strong>{copy.empty}</strong><p>{copy.emptyHint}</p></div>}{previewArtifact ? <DesktopArtifactPreviewModal artifact={previewArtifact} onClose={() => setPreviewArtifact(null)} onOpen={() => runFileAction(() => onArtifactOpen(previewArtifact.relative_path, previewArtifact.mime_type))} onOpenFolder={() => runFileAction(() => onArtifactOpenFolder(previewArtifact.relative_path, previewArtifact.mime_type))} onOpenWith={() => runFileAction(() => onArtifactOpenWith(previewArtifact.relative_path, previewArtifact.mime_type))} locale={locale} /> : null}</div>;
+  return <div className="library-workspace asset-library-surface"><header className="asset-library-header"><div><div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.description}</p></div><div className="asset-library-header-meta"><span className="chat-runtime-badge">{artifactRows.length} {locale === "en" ? "files" : "个文件"}</span><button type="button" className={`view-toggle ${view === "grid" ? "active" : ""}`.trim()} onClick={() => setView("grid")}>{copy.grid}</button><button type="button" className={`view-toggle ${view === "list" ? "active" : ""}`.trim()} onClick={() => setView("list")}>{copy.list}</button></div></header><div className="asset-library-toolbar"><div className="asset-library-tabs">{(["all", "recent", "documents"] as const).map((item) => <button key={item} type="button" className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{copy[item]}</button>)}</div><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={copy.search} aria-label={copy.search} /></div>{actionError ? <p className="media-preview-error" role="status">{actionError}</p> : null}{filtered.length ? <div className={`asset-library-grid ${view === "list" ? "list-view" : ""}`.trim()}>{filtered.map((item) => <DesktopArtifactLibraryCard key={item.id} item={item} copy={copy} onPreview={setPreviewArtifact} onArtifactRemove={onArtifactRemove} onArtifactOpen={onArtifactOpen} onArtifactOpenFolder={onArtifactOpenFolder} runFileAction={runFileAction} />)}</div> : <div className="empty-state asset-library-empty"><div className="empty-icon">▱</div><strong>{copy.empty}</strong><p>{copy.emptyHint}</p></div>}{previewArtifact ? <DesktopArtifactPreviewModal artifact={previewArtifact} onClose={() => setPreviewArtifact(null)} onOpen={() => runFileAction(() => onArtifactOpen(previewArtifact.relative_path, previewArtifact.mime_type))} onOpenFolder={() => runFileAction(() => onArtifactOpenFolder(previewArtifact.relative_path, previewArtifact.mime_type))} locale={locale} /> : null}</div>;
 }
 
 function DesktopTaskCenterSurfaceContent({ runs, conversations, onNavigate: navigatePath, onRetryRun, onInspectRun, locale }: { runs: RunRow[]; conversations: Array<{ id: string; agent_id?: string | null }>; onNavigate: (path: string) => void; onRetryRun: (run: RunRow) => void; onInspectRun: (runId: string) => Promise<RunDetail>; locale: "zh" | "en" }) {
@@ -2436,8 +2520,8 @@ function DesktopTaskCenterSurfaceContent({ runs, conversations, onNavigate: navi
   const [detailError, setDetailError] = useState("");
   const [entryLoadingId, setEntryLoadingId] = useState<string | null>(null);
   const copy = locale === "en"
-    ? { eyebrow: "TASK CENTER", title: "Task Center", description: "Review local workflow, media, tool, and agent activity as grouped tasks.", total: "Total tasks", active: "Active", healthy: "Healthy", review: "Needs review", search: "Search task name or run ID…", all: "All status", empty: "No task history", emptyHint: "Chat, writing, and workflow run states are stored here.", view: "Open task", evidence: "View evidence", retry: "Prepare retry", loading: "Loading run evidence…", nodes: "Nodes", events: "Events", usage: "Usage", noEvidence: "No persisted execution evidence", close: "Close" }
-    : { eyebrow: "任务中心", title: "任务中心", description: "按任务查看本地工作流、媒体、工具和 Agent 的执行情况。", total: "任务总数", active: "进行中", healthy: "运行健康", review: "需要关注", search: "搜索任务名称或运行 ID……", all: "全部状态", empty: "暂无任务记录", emptyHint: "普通对话、写作和工作流的运行状态会保存在这里。", view: "打开任务", evidence: "查看执行证据", retry: "准备重试", loading: "正在加载运行证据…", nodes: "节点", events: "事件", usage: "用量", noEvidence: "暂无已持久化的执行证据", close: "关闭" };
+    ? { eyebrow: "TASK CENTER", title: "Task Center", description: "Review local workflow, media, tool, and agent activity as grouped tasks. Historical records are retained.", total: "Total tasks", active: "Active", healthy: "No review items (history included)", review: "Needs review (history included)", search: "Search task name or run ID…", all: "All status", empty: "No task history", emptyHint: "Chat, writing, and workflow run states are stored here.", view: "Open task", evidence: "View evidence", retry: "Prepare retry", loading: "Loading run evidence…", nodes: "Nodes", events: "Events", usage: "Usage", noEvidence: "No persisted execution evidence", close: "Close", historyNote: "Historical failures are retained for audit. This view does not claim that historical P0/P1 records are zero; assess the current acceptance run from its evidence." }
+    : { eyebrow: "任务中心", title: "任务中心", description: "按任务查看本地工作流、媒体、工具和 Agent 的执行情况。历史记录会保留。", total: "任务总数", active: "进行中", healthy: "无需关注（含历史）", review: "需要关注（含历史）", search: "搜索任务名称或运行 ID……", all: "全部状态", empty: "暂无任务记录", emptyHint: "普通对话、写作和工作流的运行状态会保存在这里。", view: "打开任务", evidence: "查看执行证据", retry: "准备重试", loading: "正在加载运行证据…", nodes: "节点", events: "事件", usage: "用量", noEvidence: "暂无已持久化的执行证据", close: "关闭", historyNote: "历史失败记录会保留以便审计。本页面不会声称历史 P0/P1 记录为零；本轮验收请以对应运行的截图、日志和证据为准。" };
   const label = (value: string) => getWorkbenchTaskStatusLabel(normalizeWorkbenchTaskStatus(value), locale);
   const filtered = runs.filter((run) => {
     const normalizedStatus = normalizeWorkbenchTaskStatus(run.status);
@@ -2492,7 +2576,7 @@ function DesktopLibraryWorkspace({ route, artifactRows, savedWorkflows, conversa
   const isSettings = route.path === "/dashboard/settings";
   const routeForConversationId = (id: string) => conversationRoute(conversations.find((conversation) => conversation.id === id) ?? { id });
   const onNavigate = (path: string) => navigatePath(conversationAwareRoute(path, conversations));
-  if (isAssets) return <DesktopAssetLibrarySurface artifactRows={artifactRows} onArtifactRemove={onArtifactRemove} onArtifactReveal={onArtifactReveal} onArtifactOpen={(relativePath, mimeType) => tauriBridge.invoke("open_artifact_default", { relativePath, mimeType }).then(() => undefined)} onArtifactOpenFolder={(relativePath, mimeType) => tauriBridge.invoke("open_artifact_folder", { relativePath, mimeType }).then(() => undefined)} onArtifactOpenWith={(relativePath, mimeType) => tauriBridge.invoke("open_artifact_with", { relativePath, mimeType }).then(() => undefined)} locale={locale} />;
+  if (isAssets) return <DesktopAssetLibrarySurface artifactRows={artifactRows} onArtifactRemove={onArtifactRemove} onArtifactReveal={onArtifactReveal} onArtifactOpen={(relativePath, mimeType) => tauriBridge.invoke("open_artifact_default", { relativePath, mimeType }).then(() => undefined)} onArtifactOpenFolder={(relativePath, mimeType) => tauriBridge.invoke("open_artifact_folder", { relativePath, mimeType }).then(() => undefined)} locale={locale} />;
   if (isTasks) return <DesktopTaskCenterSurface runs={runs} conversations={conversations} onNavigate={onNavigate} onRetryRun={onRetryRun} onInspectRun={onInspectRun} locale={locale} />;
   const ui = locale === "en" ? { localData: "Local data", localStats: "Local stats", countOnly: "Stats only; no billing", artifacts: "Local artifacts", vault: "Obsidian Vault", skills: "Local Skills", tasks: "Task runs", recent: "Recent activity", live: "Live", files: "files", records: "records", noTasks: "No task history", noArtifacts: "No local artifacts yet", noRecords: "No local records", configureVault: "Configure Vault", modelRuntime: "Model & runtime", settingsHint: "Edit config.json from the model settings dialog; ordinary chat and workflows both use OpenCode.", tasksLabel: "Tasks", artifactLabel: "Artifacts", providerCost: "Provider cost", estimated: "Estimated cost", unknown: "Cost unknown" } : { localData: "本地数据", localStats: "本地统计", countOnly: "只统计，不扣费", artifacts: "本地产物", vault: "Obsidian Vault", skills: "本地 Skills", tasks: "任务运行", recent: "最近活动", live: "实时", files: "个文件", records: "条记录", noTasks: "暂无任务记录", noArtifacts: "还没有本地产物", noRecords: "暂无本地记录", configureVault: "配置 Vault", modelRuntime: "模型与运行环境", settingsHint: "使用右上角“模型配置”编辑 config.json；普通对话和工作流均经过 OpenCode。", tasksLabel: "任务", artifactLabel: "产物", providerCost: "Provider 返回成本", estimated: "本地预估成本", unknown: "成本未知" };
   const sectionLabel = isAssets ? ui.artifacts : isKnowledge ? ui.vault : isCapabilities ? ui.skills  : isSettings ? ui.modelRuntime : ui.recent;
@@ -2650,7 +2734,7 @@ function DesktopSettingsPanel({
   onPickDirectory,
   onRepairRuntime,
   onExportDiagnostics,
-  status,
+  status: rawStatus,
 }: {
   config: DesktopConfig;
   locale: "zh" | "en";
@@ -2666,6 +2750,7 @@ function DesktopSettingsPanel({
   onExportDiagnostics: () => void;
   status: string;
 }) {
+  const status = isDesktopErrorStatus(rawStatus) ? "" : rawStatus;
   const ui = locale === "zh" ? {
     title: "本地模型与项目配置", close: "关闭", workspace: "工作目录", workspacePlaceholder: "项目文件夹绝对路径", vault: "Obsidian Vault", vaultPlaceholder: "可选 Vault 绝对路径", removeVault: "解除绑定", index: "Vault 索引目录", indexPlaceholder: "manifest.json 所在目录", embeddingMode: "Embedding 位置", localEmbedding: "仅本地（默认）", remoteEmbedding: "远程（发送片段）", embeddingBaseUrl: "远程 Embedding URL", embeddingModel: "远程 Embedding 模型", embeddingApiKey: "远程 Embedding API Key", localEmbeddingHint: "默认仅在本机生成 embedding，不会发送 Vault 内容。", remoteEmbeddingHint: "仅在明确选择远程后，待索引 Markdown 片段才会发送到此 HTTPS 端点。", provider: "Provider", profiles: "Provider profiles（JSON）", profilesHint: "按能力选择不同 Provider；保留 provider 字段作为兼容回退。", textDefault: "生文默认 Provider", imageDefault: "生图默认 Provider", videoDefault: "生视频/数字人默认 Provider", audioDefault: "音频/声音默认 Provider", model: "Model", modelPlaceholder: "默认模型", reasoning: "推理强度", low: "低", medium: "中", high: "高", baseUrl: "Base URL", baseUrlPlaceholder: "可选 OpenAI-compatible URL", endpoint: "媒体提交 Endpoint", endpointPlaceholder: "可选，例如 /videos/generations", queryEndpoint: "媒体查询 Endpoint", queryEndpointPlaceholder: "可选，例如 /api/v1/tasks", apiKey: "API Key", offline: "离线运行时 ZIP", offlinePlaceholder: "可选：本地运行时 ZIP 绝对路径", warning: "API Key 按已确认方案以明文保存在本地 config.json；不会写入 SQLite、日志或诊断包。内置 Obsidian 写入会做路径与 base hash 冲突保护，但 Full Access OpenCode 文件工具仍可直接改动文件，工具事件会实时展示。", save: "保存配置", rebuild: "扫描/重建 Obsidian 索引", import: "导入离线运行时", diagnostics: "导出诊断包", imported: "已导入离线运行时并完成复检", failed: "离线运行时导入失败"
   } : {
@@ -2726,6 +2811,7 @@ export function App() {
   const [prompt, setPrompt] = useState("");
   const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
   const [attachmentsPreparing, setAttachmentsPreparing] = useState(false);
+  const attachmentFilesRef = useRef(new Map<string, File>());
   const [knowledgeContextEnabled, setKnowledgeContextEnabled] = useState(false);
   const [runtimeStatus, setRuntimeStatus] = useState("检查本地运行环境…");
   const [runtimePhase, setRuntimePhase] = useState<DesktopBootstrapPhase>("bridge");
@@ -2748,20 +2834,24 @@ export function App() {
   const [assistantAt, setAssistantAt] = useState<string | undefined>();
   const [conversationMessages, setConversationMessages] = useState<DesktopConversationMessage[]>([]);
   const conversationMessagesRef = useRef<DesktopConversationMessage[]>([]);
-  const updateConversationMessages = (updater: SetStateAction<DesktopConversationMessage[]>) => {
+  const updateConversationMessages = useCallback((updater: SetStateAction<DesktopConversationMessage[]>) => {
     setConversationMessages((current) => {
       const next = typeof updater === "function" ? updater(current) : updater;
       conversationMessagesRef.current = next;
       return next;
     });
-  };
+  }, []);
+  const updateVisibleConversationMessages = useCallback((conversationId: string, updater: SetStateAction<DesktopConversationMessage[]>) => {
+    if (conversationIdFromPath(activePathRef.current) !== conversationId && activeConversationRef.current !== conversationId) return;
+    updateConversationMessages(updater);
+  }, [updateConversationMessages]);
   const [localSkills, setLocalSkills] = useState<LocalSkillCatalog["skills"]>(fallbackLocalSkills);
   const assistantCreatedAtRef = useRef(new Map<string, string>());
   const workflowOutputsRef = useRef(new Map<string, string>());
   // Kept as a compatibility marker for older source-level smoke tests; actual
   // output text is keyed by run id in workflowOutputsRef for parallel runs.
   const workflowOutputRef = useRef("");
-  const assistantPartsRef = useRef(new Map<string, WorkbenchMessagePart[]>());
+  const assistantPartsRef = useRef(new Map<string, DesktopUIMessagePart[]>());
   const runModelsRef = useRef(new Map<string, string>());
   const [toolEvents, setToolEvents] = useState<string[]>([]);
   const [taskCount, setTaskCount] = useState(0);
@@ -2777,6 +2867,10 @@ export function App() {
   const [knowledgeStatus, setKnowledgeStatus] = useState("");
   const [conversations, setConversations] = useState<DesktopConversationSummary[]>([]);
   const conversationsRef = useRef<DesktopConversationSummary[]>([]);
+  const conversationHistoryCursorRef = useRef(new Map<string, ConversationHistoryCursor>());
+  const conversationHistoryHasMoreRef = useRef(new Map<string, boolean>());
+  const conversationHistoryLoadingRef = useRef(new Set<string>());
+  const [conversationLoadedId, setConversationLoadedId] = useState<string | null>(null);
   const [menuAgentIds, setMenuAgentIds] = useState<string[]>([]);
   const menuAgentIdsRef = useRef<string[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -2791,6 +2885,7 @@ export function App() {
   const activeConversationRef = useRef<string | null>(null);
   const activeRunRef = useRef<string | null>(null);
   const standaloneMediaRunsRef = useRef(new Set<string>());
+  const runContextsRef = useRef(new Map<string, DesktopRunContext>());
   const runConversationIdsRef = useRef(new Map<string, string>());
   const activeRunsByConversationRef = useRef(new Map<string, string>());
   const conversationLoadRequestRef = useRef(0);
@@ -2863,13 +2958,16 @@ export function App() {
     }
   };
   const reasoningEffort = activeProvider.reasoningEffort ?? "auto";
-  const requestedAgentId = activePath.startsWith("/dashboard/ai") ? new URLSearchParams(activePath.split("?", 2)[1] ?? "").get("agent") : null;
-  const conversationScope = conversationScopeFromPath(activePath);
+  const routeConversationScope = conversationScopeFromPath(activePath);
+  const conversationScope = routeConversationScope ?? conversationAgentIdFromPath(activePath, conversations);
+  const requestedAgentId = activePath.startsWith("/dashboard/ai")
+    ? (new URLSearchParams(activePath.split("?", 2)[1] ?? "").get("agent")?.trim() || (conversationScope?.startsWith("entry:") ? null : conversationScope))
+    : null;
   const effectiveSkillId: SkillId = resolveDesktopSkillId(selected.path, requestedAgentId);
   const localAgentGroups = useMemo(() => [...buildOnlineAgentGroups(locale, Boolean(activeModel.trim())), ...buildAgencyAgentGroups(locale, Boolean(activeModel.trim())), ...buildLocalAgentGroups(localSkills, locale, Boolean(activeModel.trim()))], [activeModel, localSkills, locale]);
   const agentCardsById = useMemo(() => new Map(localAgentGroups.flatMap((group) => group.cards.map((card) => [card.id, card] as const))), [localAgentGroups]);
   const activeAgentCard = requestedAgentId ? agentCardsById.get(requestedAgentId) : undefined;
-  const activeChatRoute = activeAgentCard ? { ...selected, path: activePath, label: activeAgentCard.title, description: activeAgentCard.description } : selected;
+  const activeChatRoute = { ...(activeAgentCard ? { ...selected, path: activePath, label: activeAgentCard.title, description: activeAgentCard.description } : selected), conversationLoading: Boolean(conversationIdFromPath(activePath) && conversationLoadedId !== conversationIdFromPath(activePath)) };
   const builtInMenuAgentIds = useMemo(() => new Set(["general", ...routes.map((route) => new URLSearchParams(route.path.split("?", 2)[1] ?? "").get("agent")).filter((id): id is string => Boolean(id))]), [routes]);
   const menuAgentRoutes = useMemo(() => menuAgentIds.flatMap((id) => {
     if (builtInMenuAgentIds.has(id)) return [];
@@ -2938,27 +3036,61 @@ export function App() {
     window.history.pushState({}, "", canonicalPath);
     setActivePath(canonicalPath);
     const conversationId = conversationIdFromPath(canonicalPath);
-    if (conversationId) setActiveRunId(activeRunsByConversationRef.current.get(conversationId) ?? null);
-    else if (/^\/dashboard\/(?:ai|writer|image-assistant)(?:$|\?|\/)/u.test(canonicalPath)) {
+    if (conversationId) {
+      activeConversationRef.current = conversationId;
+      setActiveConversationId(conversationId);
+      setConversationLoadedId(null);
+      setActiveRunId(activeRunsByConversationRef.current.get(conversationId) ?? null);
+      setActivePrompt("");
+      setActivePromptAt(undefined);
+      setAssistantText("");
+      setAssistantAt(undefined);
+      updateConversationMessages([]);
+      setToolEvents([]);
+      setPrompt("");
+    } else if (/^\/dashboard\/(?:ai|writer|image-assistant)(?:$|\?|\/)/u.test(canonicalPath)) {
       activeConversationRef.current = null;
       setActiveConversationId(null);
+      setConversationLoadedId(null);
+      setActiveRunId(null);
+      setActivePrompt("");
+      setActivePromptAt(undefined);
+      setAssistantText("");
+      setAssistantAt(undefined);
+      updateConversationMessages([]);
+      setToolEvents([]);
+      setPrompt("");
+    } else {
+      setConversationLoadedId(null);
       setActiveRunId(null);
     }
-  }, []);
+  }, [updateConversationMessages]);
 
   const workbenchClient = useMemo(() => createDesktopWorkbenchClient(tauriBridge, {
     go: navigate,
     replace: navigate,
     current: () => activePathRef.current,
   }), [navigate]);
-  const desktopChatTransport = useMemo(() => createDesktopChatTransport(tauriBridge, workbenchClient, {
+  const desktopChatTransport = useMemo(() => {
+    const resolveChatAction = (message: DesktopUIMessage): WorkflowAction => {
+      const route = typeof message.metadata?.route === "string" ? message.metadata.route : "";
+      return (routeWorkflowAction(route) ?? "llm_generate") as WorkflowAction;
+    };
+    const resolveChatProvider = (message: DesktopUIMessage) => providerForCapability(configRef.current, capabilityForWorkflowAction(resolveChatAction(message)));
+    const resolveChatArtifactPolicy = (message: DesktopUIMessage) => {
+      const route = typeof message.metadata?.route === "string" ? message.metadata.route : "";
+      return promptRequestsArtifact(desktopUIMessageText(message)) || /(?:executive-ppt|executive-presentation-ppt)/u.test(route);
+    };
+    return createDesktopChatTransport(tauriBridge, workbenchClient, {
     resolveSessionId: async (chatId) => conversationsRef.current.find((item) => item.id === chatId)?.opencode_session_id ?? chatId,
-    resolveProvider: () => providerForCapability(configRef.current, "text"),
+    resolveProvider: resolveChatProvider,
     ensureSession: async ({ chatId, sessionId, provider, message }) => {
+      const existingConversation = conversationsRef.current.find((item) => item.id === chatId);
+      const conversationAgentId = existingConversation?.agent_id?.trim() ?? requestedAgentId ?? conversationScope ?? null;
       if (!conversationsRef.current.some((item) => item.id === chatId)) {
         const title = buildConversationTitleFromPrompt(desktopUIMessageText(message), locale);
-        const created = await tauriBridge.invoke<{ id: string; title: string; updated_at: string; opencode_session_id?: string | null; agent_id?: string | null }>("create_conversation", { input: { id: chatId, title, project_id: null, agent_id: requestedAgentId ?? null } });
-        const pendingConversation = { id: created.id, title: created.title, updated_at: created.updated_at, opencode_session_id: created.opencode_session_id ?? null, agent_id: created.agent_id ?? requestedAgentId ?? null };
+        const created = await tauriBridge.invoke<{ id: string; title: string; updated_at: string; opencode_session_id?: string | null; agent_id?: string | null }>("create_conversation", { input: { id: chatId, title, project_id: null, agent_id: conversationAgentId } });
+        const pendingConversation = { id: created.id, title: created.title, updated_at: created.updated_at, opencode_session_id: created.opencode_session_id ?? null, agent_id: created.agent_id ?? conversationAgentId };
         conversationsRef.current = [pendingConversation, ...conversationsRef.current.filter((item) => item.id !== chatId)];
         setConversations((current) => [pendingConversation, ...current.filter((item) => item.id !== chatId)]);
       }
@@ -2973,7 +3105,8 @@ export function App() {
           workspacePath: configRef.current.workspacePath,
           model: message.metadata?.modelId ?? provider.model,
           provider,
-          ...(requestedAgentId ? { agentId: requestedAgentId } : {}),
+          ...(conversationAgentId?.startsWith("agency-") ? { agentId: conversationAgentId } : {}),
+          allowArtifacts: resolveChatArtifactPolicy(message),
         },
       });
       if (response.ok !== true) {
@@ -2987,27 +3120,115 @@ export function App() {
       void tauriBridge.invoke("set_conversation_session", { conversationId: chatId, sessionId: resolvedSessionId }).catch(() => undefined);
       return resolvedSessionId;
     },
-    resolveSkillId: () => effectiveSkillId,
-    resolveAgentId: () => requestedAgentId ?? undefined,
+    resolveSkillId: (message) => {
+      const messageConversationId = message.metadata?.conversationId;
+      const messageAgentId = typeof messageConversationId === "string" ? conversationsRef.current.find((item) => item.id === messageConversationId)?.agent_id?.trim() : undefined;
+      const selectedAgentId = messageAgentId ?? requestedAgentId;
+      // Resolve from the message's persisted agent when a background run
+      // finishes after the user has navigated elsewhere. Entry agents (Writer
+      // and Image Assistant) are valid route-level skill selectors too.
+      return resolveDesktopSkillId(activePathRef.current, selectedAgentId);
+    },
+    resolvePrompt: (message, promptText) => {
+      const messageConversationId = message.metadata?.conversationId;
+      const messageAgentId = typeof messageConversationId === "string" ? conversationsRef.current.find((item) => item.id === messageConversationId)?.agent_id?.trim() : undefined;
+      const selectedAgentId = messageAgentId ?? requestedAgentId;
+      return desktopExecutionPrompt(resolveDesktopSkillId(activePathRef.current, selectedAgentId), promptText, locale);
+    },
+    resolveAllowArtifacts: resolveChatArtifactPolicy,
+    resolveSystemPrompt: (message) => {
+      const messageConversationId = message.metadata?.conversationId;
+      const messageAgentId = typeof messageConversationId === "string" ? conversationsRef.current.find((item) => item.id === messageConversationId)?.agent_id?.trim() : undefined;
+      const selectedAgentId = messageAgentId ?? requestedAgentId;
+      const skillId = resolveDesktopSkillId(activePathRef.current, selectedAgentId);
+      return localizedSkillSystemPrompt(skillId, locale);
+    },
+    resolveAgentId: (message) => {
+      const messageConversationId = message.metadata?.conversationId;
+      const messageAgentId = typeof messageConversationId === "string" ? conversationsRef.current.find((item) => item.id === messageConversationId)?.agent_id?.trim() : undefined;
+      const selectedAgentId = messageAgentId ?? requestedAgentId;
+      return selectedAgentId?.startsWith("agency-") ? selectedAgentId : undefined;
+    },
     onRunStarted: (runId, chatId, message) => {
-      const keepDraftChatStable = !conversationIdFromPath(activePathRef.current) && activeConversationRef.current === null;
       const createdAt = message.metadata?.createdAt ?? new Date().toISOString();
+      const optimisticUserMessage = desktopUIMessageToConversationMessage(message);
+      updateVisibleConversationMessages(chatId, (current) => current.some((item) => item.id === optimisticUserMessage.id)
+        ? current
+        : [...current, optimisticUserMessage]);
       runConversationIdsRef.current.set(runId, chatId);
       activeRunsByConversationRef.current.set(chatId, runId);
+      runContextsRef.current.set(runId, { kind: "conversation", launchPath: activePathRef.current, conversationId: chatId });
       runModelsRef.current.set(runId, message.metadata?.modelId ?? activeModel);
-      assistantCreatedAtRef.current.set(runId, createdAt);
-      assistantPartsRef.current.set(runId, [{ id: `${runId}:status`, type: "status", status: "running", message: locale === "zh" ? "正在等待模型响应…" : "Waiting for the model response…", sequence: 0, createdAt }]);
-      if (!keepDraftChatStable) setActiveConversationId(chatId);
-      activeConversationRef.current = chatId;
-      setActiveRunId(runId);
-      setAssistantText("");
-      setAssistantAt(createdAt);
-      setActivePrompt(desktopUIMessageText(message));
-      setActivePromptAt(createdAt);
-      setToolEvents([]);
-      setRunStatus(locale === "zh" ? "已发送，正在流式生成…" : "Sent; streaming response…");
+      assistantPartsRef.current.set(runId, [{ type: "data-status", id: `${runId}:status`, data: { status: "running", message: locale === "zh" ? "正在等待模型响应…" : "Waiting for the model response…" } }]);
+      const visible = conversationIdFromPath(activePathRef.current) === chatId || activeConversationRef.current === chatId;
+      if (visible) {
+        activeRunRef.current = runId;
+        setActiveConversationId(chatId);
+        activeConversationRef.current = chatId;
+        setActiveRunId(runId);
+        setAssistantText("");
+        setAssistantAt(undefined);
+        setActivePrompt(desktopUIMessageText(message));
+        setActivePromptAt(createdAt);
+        setToolEvents([]);
+        setRunStatus(locale === "zh" ? "已发送，正在流式生成…" : "Sent; streaming response…");
+      }
     },
-  }), [activeModel, effectiveSkillId, locale, requestedAgentId, workbenchClient]);
+    });
+  }, [activeModel, conversationScope, locale, requestedAgentId, updateConversationMessages, workbenchClient]);
+  const loadConversationMessages = useCallback(async (conversationId: string, options?: { readonly limit?: number; readonly before?: ConversationHistoryCursor }) => {
+    const history = await workbenchClient.conversations.messages(conversationId, options);
+    const loadedMessages = history.filter((message) => message.role === "user" || message.role === "assistant").map(desktopUIMessageToConversationMessage);
+    const existingAssistantIds = new Set(loadedMessages.filter((message) => message.role === "assistant").map((message) => message.id));
+    // Replay all terminal runs for this conversation. A prior app session may
+    // have persisted an incomplete assistant row before HMR/navigation, and
+    // replaying the same id lets the durable event log repair its parts and
+    // timestamp without duplicating the visible turn.
+    const relatedRuns = (await workbenchClient.runs.list()).filter((run) => run.conversationId === conversationId);
+    const replayed = (await Promise.all(relatedRuns.map(async (run) => {
+      try {
+        const detail = toRunDetail(await workbenchClient.runs.inspect(run.id));
+        return replayPersistedRunToConversationMessage(detail.run, detail.events, conversationId);
+      } catch {
+        return null;
+      }
+    }))).filter((message): message is NonNullable<typeof message> => Boolean(message));
+    for (const message of replayed.filter((item) => !existingAssistantIds.has(item.id))) {
+      void tauriBridge.invoke("append_message", { input: { id: message.id, conversation_id: conversationId, role: message.role, content: message.content, parts_json: JSON.stringify(message.parts), created_at: message.createdAt } }).catch(() => undefined);
+    }
+    return { history, messages: [...loadedMessages, ...replayed] };
+  }, [workbenchClient]);
+  const loadOlderConversationMessages = useCallback((conversationId: string, viewport: HTMLDivElement) => {
+    if (activeConversationRef.current !== conversationId || conversationHistoryLoadingRef.current.has(conversationId)) return;
+    if (conversationHistoryHasMoreRef.current.get(conversationId) === false) return;
+    const cursor = conversationHistoryCursorRef.current.get(conversationId);
+    if (!cursor) return;
+    conversationHistoryLoadingRef.current.add(conversationId);
+    const previousHeight = viewport.scrollHeight;
+    const previousTop = viewport.scrollTop;
+    void (async () => {
+      try {
+        const page = await workbenchClient.conversations.messages(conversationId, { limit: CONVERSATION_PAGE_SIZE, before: cursor });
+        if (activeConversationRef.current !== conversationId || !viewport.isConnected) return;
+        const loadedMessages = page.filter((message) => message.role === "user" || message.role === "assistant").map(desktopUIMessageToConversationMessage);
+        updateConversationMessages((current) => mergeConversationMessages(current, loadedMessages, conversationId));
+        const oldest = page[0];
+        if (oldest) {
+          const createdAt = oldest.metadata?.createdAt ?? new Date(0).toISOString();
+          conversationHistoryCursorRef.current.set(conversationId, { createdAt, id: oldest.id });
+        }
+        conversationHistoryHasMoreRef.current.set(conversationId, page.length >= CONVERSATION_PAGE_SIZE);
+        window.requestAnimationFrame(() => {
+          if (!viewport.isConnected) return;
+          viewport.scrollTop = viewport.scrollHeight - previousHeight + previousTop;
+        });
+      } catch {
+        // Keep the current page usable; the next upward scroll can retry.
+      } finally {
+        conversationHistoryLoadingRef.current.delete(conversationId);
+      }
+    })();
+  }, [updateConversationMessages, workbenchClient]);
   const workflowDirectoryWorkflows = useMemo<WorkbenchWorkflowDirectoryWorkflow[]>(() => savedWorkflows.map((workflow) => {
     const definition = parseSavedWorkflowDefinition(workflow);
     const capabilities = definition?.nodes.filter((node) => node.nodeKey !== "input" && node.nodeKey !== "output") ?? [];
@@ -3040,42 +3261,58 @@ export function App() {
     setLocalePreference(locale === "zh" ? "en" : "zh");
   }
 
-  async function addAttachments(files: FileList | null) {
-    if (!files?.length) return;
+  async function addAttachments(files: FileList | readonly File[] | null) {
+    if (!files?.length) return [];
     setAttachmentsPreparing(true);
     const selected = Array.from(files).slice(0, 4);
     const next: LocalAttachment[] = [];
     try {
       for (const file of selected) {
-        const attachment = { id: `${file.name}-${file.lastModified}-${file.size}`, name: file.name, size: file.size, mediaType: file.type || "application/octet-stream" };
+        const attachment = { id: `${file.name}-${file.lastModified}-${file.size}`, name: file.name, size: file.size, mediaType: file.type || "application/octet-stream", ...(file.type.startsWith("image/") ? { previewUrl: URL.createObjectURL(file) } : {}), status: "uploading" as const };
+        attachmentFilesRef.current.set(attachment.id, file);
         try {
           const saved = await persistLocalFile(file, tauriBridge);
           if (isTextAttachment(file)) {
             const rawText = (await file.text()).replace(/\u0000/g, "").replace(/\r\n?/g, "\n").trim();
-            next.push({ ...attachment, relativePath: saved.relativePath, text: rawText.slice(0, LOCAL_ATTACHMENT_MAX_TEXT_CHARS), textCharCount: rawText.length, truncated: rawText.length > LOCAL_ATTACHMENT_MAX_TEXT_CHARS });
+            next.push({ ...attachment, status: "ready", relativePath: saved.relativePath, text: rawText.slice(0, LOCAL_ATTACHMENT_MAX_TEXT_CHARS), textCharCount: rawText.length, truncated: rawText.length > LOCAL_ATTACHMENT_MAX_TEXT_CHARS });
           } else if (/\.(docx|pdf)$/iu.test(file.name) || /^(application\/pdf|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document)$/iu.test(file.type)) {
             try {
               await tauriBridge.invoke("host_start");
               const response = await sendHostMessage({ version: 1, requestId: `attachment:${attachment.id}`, type: "attachment.extract", payload: { workspacePath: config.workspacePath, relativePath: saved.relativePath, fileName: file.name, mediaType: file.type } });
               const data = response.data && typeof response.data === "object" ? response.data as { text?: unknown; textCharCount?: unknown; truncated?: unknown } : {};
               const text = typeof data.text === "string" ? data.text : "";
-              next.push({ ...attachment, relativePath: saved.relativePath, ...(text ? { text, textCharCount: typeof data.textCharCount === "number" ? data.textCharCount : text.length, truncated: data.truncated === true } : {}) });
+              next.push({ ...attachment, status: "ready", relativePath: saved.relativePath, ...(text ? { text, textCharCount: typeof data.textCharCount === "number" ? data.textCharCount : text.length, truncated: data.truncated === true } : {}) });
             } catch {
-              next.push({ ...attachment, relativePath: saved.relativePath });
+              next.push({ ...attachment, status: "ready", relativePath: saved.relativePath });
             }
           } else {
-            next.push({ ...attachment, relativePath: saved.relativePath });
+            next.push({ ...attachment, status: "ready", relativePath: saved.relativePath });
           }
-        } catch {
-          // Browser preview remains usable; the prompt still carries metadata.
-          next.push(attachment);
+        } catch (error) {
+          next.push({ ...attachment, status: "failed", error: localFileUploadErrorCode(error) || (locale === "zh" ? "附件上传失败" : "Attachment upload failed") });
         }
       }
-      setAttachments((current) => [...current, ...next].slice(0, 4));
+      setAttachments((current) => [...current.filter((item) => !next.some((replacement) => replacement.id === item.id)), ...next].slice(0, 4));
     } finally {
       setAttachmentsPreparing(false);
     }
+    return next;
   }
+
+  useEffect(() => {
+    const onRetryAttachment = (event: Event) => {
+      const id = (event as CustomEvent<{ id?: unknown }>).detail?.id;
+      if (typeof id !== "string") return;
+      const file = attachmentFilesRef.current.get(id);
+      if (!file) {
+        setRunStatus(locale === "zh" ? "原始附件已不可用，请重新选择文件" : "The original attachment is no longer available; choose the file again");
+        return;
+      }
+      void addAttachments([file]);
+    };
+    window.addEventListener("coworkany:attachment-retry", onRetryAttachment);
+    return () => window.removeEventListener("coworkany:attachment-retry", onRetryAttachment);
+  }, [locale]);
 
   async function selectWorkflowFiles() {
     if (!isTauriBridgeAvailable()) throw new Error("desktop_file_selection_unavailable");
@@ -3083,12 +3320,21 @@ export function App() {
   }
 
   function removeAttachment(id: string) {
-    setAttachments((current) => current.filter((attachment) => attachment.id !== id));
+    setAttachments((current) => {
+      const removed = current.find((attachment) => attachment.id === id);
+      if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+      return current.filter((attachment) => attachment.id !== id);
+    });
+    attachmentFilesRef.current.delete(id);
   }
 
   async function startNewConversation() {
+    return startNewConversationForAgent();
+  }
+
+  async function startNewConversationForAgent(agentIdOverride?: string | null) {
     const sourcePath = activePathRef.current;
-    const conversationAgentId = conversationScopeFromPath(sourcePath);
+    const conversationAgentId = agentIdOverride === undefined ? conversationAgentIdFromPath(sourcePath, conversationsRef.current) : agentIdOverride;
     const conversationId = `conversation-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
     const createdAt = new Date().toISOString();
     const pendingConversation: DesktopConversationSummary = {
@@ -3140,6 +3386,7 @@ export function App() {
     const requestId = ++conversationLoadRequestRef.current;
     const match = activePath.match(/^\/dashboard\/(?:ai|writer|image-assistant)\/([^/?]+)/);
     if (!match) {
+      setConversationLoadedId(null);
       const activeBasePath = activePath.split("?", 1)[0].replace(/\/+$/u, "") || "/";
       if (activeBasePath === "/dashboard/ai" || activeBasePath === "/dashboard/writer" || activeBasePath === "/dashboard/image-assistant") {
         setActiveConversationId(null);
@@ -3159,8 +3406,11 @@ export function App() {
     // leave the previous conversation interactive while the new transcript is
     // being fetched.
     activeConversationRef.current = conversationId;
+    setConversationLoadedId(null);
     setActiveConversationId(conversationId);
     setActiveRunId(activeRunsByConversationRef.current.get(conversationId) ?? null);
+    conversationHistoryCursorRef.current.delete(conversationId);
+    conversationHistoryHasMoreRef.current.delete(conversationId);
     const optimisticMessages = conversationMessagesRef.current.filter((message) => message.conversationId === conversationId);
     updateConversationMessages(optimisticMessages);
     setActivePrompt("");
@@ -3170,13 +3420,16 @@ export function App() {
     if (!isTauriBridgeAvailable()) {
       setPrompt("");
       setRunStatus("");
+      setConversationLoadedId(conversationId);
       return;
     }
-    void workbenchClient.conversations.messages(conversationId).then((history) => {
+    void loadConversationMessages(conversationId, { limit: CONVERSATION_PAGE_SIZE }).then(({ history, messages: loadedMessages }) => {
       if (requestId !== conversationLoadRequestRef.current || activePathRef.current !== activePath) return;
-      const loadedMessages = history.filter((message): message is typeof message & { role: "user" | "assistant" } => message.role === "user" || message.role === "assistant");
       const mergedMessages = mergeConversationMessages(conversationMessagesRef.current, loadedMessages, conversationId);
       updateConversationMessages(mergedMessages);
+      const oldest = history[0];
+      if (oldest) conversationHistoryCursorRef.current.set(conversationId, { createdAt: oldest.metadata?.createdAt ?? new Date(0).toISOString(), id: oldest.id });
+      conversationHistoryHasMoreRef.current.set(conversationId, history.length >= CONVERSATION_PAGE_SIZE);
       const latestUser = [...mergedMessages].reverse().find((message) => message.role === "user");
       const latestAssistant = [...mergedMessages].reverse().find((message) => message.role === "assistant");
       setActiveConversationId(conversationId);
@@ -3189,8 +3442,13 @@ export function App() {
       setToolEvents([]);
       setActiveRunId(activeRunsByConversationRef.current.get(conversationId) ?? null);
       setRunStatus("");
-    }).catch(() => setRunStatus(locale === "zh" ? "会话历史加载失败" : "Unable to load conversation history"));
-  }, [activePath, locale, workbenchClient]);
+      setConversationLoadedId(conversationId);
+    }).catch(() => {
+      if (requestId !== conversationLoadRequestRef.current || activePathRef.current !== activePath) return;
+      setConversationLoadedId(conversationId);
+      setRunStatus(locale === "zh" ? "会话历史加载失败" : "Unable to load conversation history");
+    });
+  }, [activePath, loadConversationMessages, locale]);
 
   useEffect(() => {
     const onPopState = () => setActivePath(`${window.location.pathname}${window.location.search}`);
@@ -3201,19 +3459,20 @@ export function App() {
   useEffect(() => {
     setSettingsOpen(activePath === "/dashboard/settings");
     const [pathname, rawQuery = ""] = activePath.split("?", 2);
+    const requestedAgent = new URLSearchParams(rawQuery).get("agent")?.trim();
     const mediaAction = (pathname === "/dashboard/video" || pathname === "/dashboard/capabilities")
       ? workflowActionForMediaFeature(new URLSearchParams(rawQuery).get("feature"))
       : null;
     if (mediaAction) setWorkflowAction(mediaAction as WorkflowAction);
-    else if (pathname.includes("executive-ppt")) setWorkflowAction("ppt_generate");
-    else if (pathname.includes("executive-presentation-ppt")) setWorkflowAction("ppt_generate");
+    else if (pathname.includes("executive-ppt") || requestedAgent === "executive-ppt" || requestedAgent === "executive-presentation-ppt") setWorkflowAction("ppt_generate");
     else if (pathname === "/dashboard/image-assistant") setWorkflowAction("image_generate");
     else if (pathname === "/dashboard/video") setWorkflowAction("video_generate");
     else if (pathname === "/dashboard/knowledge-base") setWorkflowAction("knowledge_retrieve");
     else if (pathname === "/dashboard/writer") setWorkflowAction("writer");
-    if (pathname.startsWith("/dashboard/writer")) setSkillId("content-writing");
-    else if (pathname.includes("executive-ppt")) setSkillId("ppt-master");
-    else if (pathname === "/dashboard/knowledge-base") setSkillId("obsidian-rag");
+    if (pathname.startsWith("/dashboard/writer")) setSkillId("writer-orchestrator");
+    else if (pathname.includes("executive-ppt") || requestedAgent === "executive-ppt") setSkillId("ppt-master");
+    else if (pathname.includes("executive-presentation-ppt") || requestedAgent === "executive-presentation-ppt") setSkillId("dashi-ppt");
+    else if (pathname === "/dashboard/knowledge-base") setSkillId("auto");
     if (pathname !== "/dashboard/workflows") {
       setWorkflowDefinition(null);
       setWorkflowBuilderOpen(false);
@@ -3221,6 +3480,14 @@ export function App() {
   }, [activePath]);
 
   useEffect(() => {
+    if (!isTauriBridgeAvailable()) {
+      setRuntimePhase("ready");
+      setRuntimeStatus(locale === "zh" ? "浏览器预览模式 · Tauri 未连接" : "Browser preview mode · Tauri is not connected");
+      setRuntimeReady(true);
+      setShellReady(true);
+      return;
+    }
+
     void (async () => {
       try {
         setRuntimePhase("bridge");
@@ -3281,8 +3548,7 @@ export function App() {
          if (latestConversation) {
            setActiveConversationId(latestConversation.id);
            activeConversationRef.current = latestConversation.id;
-           void workbenchClient.conversations.messages(latestConversation.id).then((history) => {
-             const loadedMessages = history.filter((message): message is typeof message & { role: "user" | "assistant" } => message.role === "user" || message.role === "assistant");
+           void loadConversationMessages(latestConversation.id).then(({ messages: loadedMessages }) => {
              const mergedMessages = mergeConversationMessages(conversationMessagesRef.current, loadedMessages, latestConversation.id);
              updateConversationMessages(mergedMessages);
              const latestUser = [...mergedMessages].reverse().find((message) => message.role === "user");
@@ -3401,37 +3667,44 @@ export function App() {
       if (listenersDisposed) unlisten();
       else disposeRuntimeProgress = unlisten;
     }).catch(() => undefined);
+    const markRunInterrupted = (runId: string, detail: string) => {
+      const workflowKey = workflowRunKeysRef.current.get(runId);
+      const isWorkflowRun = Boolean(workflowKey);
+      const conversationId = runConversationIdsRef.current.get(runId);
+      const visible = desktopRunIsVisible(runContextsRef.current.get(runId), activePathRef.current, activeConversationRef.current, workflowCanvasKeyRef.current);
+      const createdAt = new Date().toISOString();
+      if (activeRunRef.current === runId) activeRunRef.current = null;
+      if (isWorkflowRun && workflowKey) {
+        updateWorkflowTracking(workflowKey, (current) => ({ ...current, status: detail, snapshots: finalizeWorkflowNodeSnapshots(current.snapshots, "failed") }));
+        removeWorkflowTracking(workflowKey);
+        if (visible) setWorkflowRunStatus(detail);
+      } else if (visible) {
+        setActiveRunId(null);
+        setRunStatus(detail);
+      }
+      setRuns((current) => current.map((run) => run.id === runId ? { ...run, status: "interrupted", finished_at: createdAt } : run));
+      if (conversationId && !isWorkflowRun) {
+        const content = locale === "zh" ? `本地 Agent 未能完成这次请求：${detail}` : `The local Agent could not complete this request: ${detail}`;
+        const parts: DesktopUIMessagePart[] = [...(assistantPartsRef.current.get(runId) ?? []).map((part) => part.type === "reasoning" ? { ...part, state: "done" as const } : part), { type: "data-status", id: `${runId}:status:interrupted`, data: { status: "failed" as const, message: detail } }];
+        if (visible) updateConversationMessages((current) => [...current.filter((message) => message.id !== `assistant-${runId}`), { id: `assistant-${runId}`, conversationId, role: "assistant", content, createdAt, status: "failed", parts }]);
+        void tauriBridge.invoke("append_message", { input: { id: `assistant-${runId}`, conversation_id: conversationId, role: "assistant", content, parts_json: JSON.stringify(parts), created_at: createdAt } }).catch(() => undefined);
+        if (activeRunsByConversationRef.current.get(conversationId) === runId) activeRunsByConversationRef.current.delete(conversationId);
+      }
+      runConversationIdsRef.current.delete(runId);
+      standaloneMediaRunsRef.current.delete(runId);
+      runContextsRef.current.delete(runId);
+      void tauriBridge.invoke("finish_run", { runId, status: "interrupted" });
+    };
     void tauriBridge.listen<{ raw: string }>("desktop://runtime-log", (payload) => {
       if (!payload.raw.includes("workflow_host_exit")) return;
       void tauriBridge.invoke("host_start").catch((error) => {
         setRunStatus(locale === "zh" ? `本地 Agent 重启失败：${error instanceof Error ? error.message : String(error)}` : `Local Agent restart failed: ${error instanceof Error ? error.message : String(error)}`);
       });
-      const runId = workflowNodeRunIdRef.current ?? activeRunRef.current;
-      if (!runId) return;
-      const workflowKey = workflowRunKeysRef.current.get(runId);
-      const isWorkflowRun = Boolean(workflowKey);
-      const conversationId = runConversationIdsRef.current.get(runId);
-      const createdAt = new Date().toISOString();
       const detail = locale === "zh"
         ? "本地 Agent 异常退出，当前请求未完成。请重试或检查运行日志。"
         : "The local Agent exited unexpectedly before completing this request. Retry or inspect the runtime logs.";
-      if (isWorkflowRun && workflowKey) {
-        updateWorkflowTracking(workflowKey, (current) => ({ ...current, status: detail, snapshots: finalizeWorkflowNodeSnapshots(current.snapshots, "failed") }));
-        removeWorkflowTracking(workflowKey);
-      } else setActiveRunId(null);
-      setRuns((current) => current.map((run) => run.id === runId ? { ...run, status: "interrupted", finished_at: new Date().toISOString() } : run));
-      if (!isWorkflowRun) setRunStatus(detail);
-      if (conversationId && !isWorkflowRun) {
-        const content = locale === "zh" ? `本地 Agent 未能完成这次请求：${detail}` : `The local Agent could not complete this request: ${detail}`;
-        const parts: WorkbenchMessagePart[] = [...(assistantPartsRef.current.get(runId) ?? []).map((part) => part.type === "reasoning" ? { ...part, status: "failed" as const } : part), { id: `${runId}:status:interrupted`, type: "status", status: "failed", message: detail, sequence: 0, createdAt }];
-        if (conversationId === activeConversationRef.current) {
-          updateConversationMessages((current) => [...current.filter((message) => message.id !== `assistant-${runId}`), { id: `assistant-${runId}`, conversationId, role: "assistant", content, createdAt, status: "failed", parts }]);
-        }
-        void tauriBridge.invoke("append_message", { input: { id: `assistant-${runId}`, conversation_id: conversationId, role: "assistant", content, parts_json: JSON.stringify(parts), created_at: createdAt } }).catch(() => undefined);
-        runConversationIdsRef.current.delete(runId);
-        activeRunsByConversationRef.current.delete(conversationId);
-      }
-      void tauriBridge.invoke("finish_run", { runId, status: "interrupted" });
+      const runIds = new Set([...runContextsRef.current.keys(), ...runConversationIdsRef.current.keys()]);
+      runIds.forEach((runId) => markRunInterrupted(runId, detail));
     }).then((unlisten) => {
       if (listenersDisposed) unlisten();
       else disposeRuntimeLog = unlisten;
@@ -3439,10 +3712,12 @@ export function App() {
     void tauriBridge.listen<{ raw: string }>("desktop://runtime-response", (payload) => {
       try {
         const separator = payload.raw.indexOf(":");
-        const frame = JSON.parse(payload.raw.slice(separator + 1)) as { requestId?: string; ok?: boolean; data?: { sessionId?: string; event?: { event?: string; provider?: string; model?: string; delta?: string; runId?: string; inputTokens?: number; outputTokens?: number; costUsd?: number; code?: string; message?: string } } };
+        const frame = JSON.parse(payload.raw.slice(separator + 1)) as { requestId?: string; ok?: boolean; data?: { sessionId?: string; event?: { event?: string; provider?: string; model?: string; delta?: string; runId?: string; inputTokens?: number; outputTokens?: number; costUsd?: number; code?: string; message?: string; permissionId?: string; sessionId?: string; callId?: string; toolName?: string; input?: unknown; response?: string; artifact?: unknown } } };
         if (frame.requestId) responseWaiters.current.get(frame.requestId)?.(frame as unknown as Record<string, unknown>);
         if (frame.requestId && frame.data?.sessionId) {
-          const conversationId = frame.requestId.endsWith(":session") ? frame.requestId.slice(0, -":session".length) : "";
+          const sessionMarker = ":session:";
+          const sessionMarkerIndex = frame.requestId.indexOf(sessionMarker);
+          const conversationId = sessionMarkerIndex > 0 ? frame.requestId.slice(0, sessionMarkerIndex) : "";
           if (conversationId) {
             void tauriBridge.invoke("set_conversation_session", { conversationId, sessionId: frame.data.sessionId });
             setConversations((current) => current.map((item) => item.id === conversationId ? { ...item, opencode_session_id: frame.data?.sessionId } : item));
@@ -3450,46 +3725,73 @@ export function App() {
         }
         const event = frame.data?.event;
         const eventConversationId = event?.runId ? runConversationIdsRef.current.get(event.runId) : undefined;
-        const isVisibleMediaEvent = Boolean(event?.runId && standaloneMediaRunsRef.current.has(event.runId) && /^\/dashboard\/(?:capabilities|video)(?:[/?]|$)/u.test(activePathRef.current));
-        const isVisibleEvent = Boolean((eventConversationId && eventConversationId === activeConversationRef.current) || isVisibleMediaEvent);
-        if (event?.event === "text_delta" && event.delta) {
+        const runContext = event?.runId ? runContextsRef.current.get(event.runId) : undefined;
+        const isVisibleRoute = Boolean(event?.runId && desktopRunIsVisible(runContext, activePathRef.current, activeConversationRef.current, workflowCanvasKeyRef.current));
+        const currentMediaRunId = new URLSearchParams(activePathRef.current.split("?", 2)[1] ?? "").get("runId") ?? activeRunRef.current;
+        const isDisplayedRun = runContext?.kind === "conversation"
+          ? Boolean(event?.runId && eventConversationId && activeRunsByConversationRef.current.get(eventConversationId) === event.runId)
+          : runContext?.kind === "workflow"
+            ? Boolean(event?.runId && runContext.workflowKey && workflowRunsRef.current.get(runContext.workflowKey)?.runId === event.runId)
+            : runContext?.kind === "media"
+              ? currentMediaRunId === event?.runId
+              : false;
+        const isVisibleEvent = isVisibleRoute && isDisplayedRun;
+        const eventType = event?.event ?? "unknown";
+        const sequence = event?.runId ? (sequences.get(event.runId) ?? 0) + 1 : undefined;
+        if (event?.runId && sequence !== undefined) sequences.set(event.runId, sequence);
+        if (event?.event === "text_delta" && typeof event.delta === "string" && event.delta.length > 0) {
           const runId = event.runId ?? "active";
-          const content = `${assistantBuffers.get(runId) ?? ""}${event.delta}`;
+          const content = mergeStreamingText(assistantBuffers.get(runId) ?? "", event.delta);
           assistantBuffers.set(runId, content);
           const createdAt = assistantCreatedAtRef.current.get(runId) ?? new Date().toISOString();
           assistantCreatedAtRef.current.set(runId, createdAt);
           const existing = assistantPartsRef.current.get(runId) ?? [];
-          assistantPartsRef.current.set(runId, applyWorkbenchRunEventToParts(existing, { type: "text", delta: event.delta, sequence: sequences.get(runId), createdAt }));
+          assistantPartsRef.current.set(runId, applyWorkbenchRunEventToParts(existing, { type: "text", delta: event.delta, sequence, createdAt }));
           if (isVisibleEvent) {
             setAssistantAt(createdAt);
             setAssistantText(content);
           }
         }
-        if (event?.event === "reasoning_delta" && event.delta) {
+        if (event?.event === "reasoning_delta" && typeof event.delta === "string" && event.delta.length > 0) {
           const runId = event.runId ?? "active";
           const existing = assistantPartsRef.current.get(runId) ?? [];
+          const createdAt = assistantCreatedAtRef.current.get(runId) ?? new Date().toISOString();
+          assistantCreatedAtRef.current.set(runId, createdAt);
+          if (isVisibleEvent) setAssistantAt(createdAt);
           const reasoningSequence = (sequences.get(runId) ?? 0) + 1;
-          const reasoningCreatedAt = new Date().toISOString();
-          assistantPartsRef.current.set(runId, applyWorkbenchRunEventToParts(existing, { type: "reasoning", delta: event.delta, sequence: reasoningSequence, createdAt: reasoningCreatedAt }));
+          assistantPartsRef.current.set(runId, applyWorkbenchRunEventToParts(existing, { type: "reasoning", delta: event.delta, sequence: reasoningSequence, createdAt }));
           if (isVisibleEvent) setRunStatus(locale === "zh" ? "正在分析请求…" : "Analyzing the request…");
         }
         if (event?.event === "runtime_warning" && event.runId) {
           const runId = event.runId;
           const existing = assistantPartsRef.current.get(runId) ?? [];
-          const warningPart: WorkbenchMessagePart = {
+          const warningPart: Extract<DesktopUIMessagePart, { type: "data-warning" }> = {
+            type: "data-warning",
             id: `${runId}:warning:${event.code ?? "runtime_warning"}:${sequences.get(runId) ?? 0}`,
-            type: "warning",
-            message: event.message ?? (locale === "zh" ? "运行时提示" : "Runtime warning"),
-            sequence: (sequences.get(runId) ?? 0) + 1,
-            createdAt: new Date().toISOString(),
+            data: { code: String(event.code ?? "runtime_warning"), message: event.message ?? (locale === "zh" ? "运行时提示" : "Runtime warning") },
           };
           assistantPartsRef.current.set(runId, [...existing, warningPart]);
-          if (isVisibleEvent) setRunStatus(warningPart.message);
+          if (isVisibleEvent) setRunStatus(warningPart.data.message);
         }
         if (event?.runId) {
-          const eventType = event.event ?? "unknown";
-          const sequence = (sequences.get(event.runId) ?? 0) + 1; sequences.set(event.runId, sequence);
-          void tauriBridge.invoke("append_run_event", { runId: event.runId, sequence, eventType, payloadJson: JSON.stringify(event) });
+          void tauriBridge.invoke("append_run_event", { runId: event.runId, sequence: sequence ?? 0, eventType, payloadJson: JSON.stringify(event) });
+          if (eventType === "permission_request" || eventType === "permission_response") {
+            const parts = assistantPartsRef.current.get(event.runId) ?? [];
+            const response = event.response === "reject" ? "failed" : "started";
+            assistantPartsRef.current.set(event.runId, applyWorkbenchRunEventToParts(parts, {
+              type: "tool_call",
+              toolName: event.toolName ?? "permission",
+              toolCallId: event.callId ?? event.permissionId ?? "permission",
+              phase: eventType === "permission_request" ? "blocked" : response,
+              input: event.input,
+              error: eventType === "permission_response" && event.response === "reject" ? "Permission rejected" : undefined,
+              approvalId: event.permissionId,
+              sessionId: event.sessionId,
+              sequence,
+              createdAt: new Date().toISOString(),
+            }));
+            if (isVisibleEvent) setRunStatus(locale === "zh" ? (eventType === "permission_request" ? "工具调用等待审批" : event.response === "reject" ? "已拒绝工具调用" : "已批准工具调用，继续执行…") : (eventType === "permission_request" ? "Tool call awaiting approval" : event.response === "reject" ? "Tool call rejected" : "Tool approved; continuing…"));
+          }
           if (eventType === "usage") {
             const provider = event.provider ?? configRef.current.provider.id;
             const model = event.model?.trim() || runModelsRef.current.get(event.runId) || configRef.current.provider.model || "unknown";
@@ -3537,10 +3839,15 @@ export function App() {
               createdAt: toolCallCreatedAt,
             }));
           }
-          if (eventType === "tool_event" && typeof (event as { tool?: string }).tool === "string" && (event as { tool: string }).tool.startsWith("artifact:")) setArtifactCount((current) => current + 1);
-          if (eventType === "tool_event" && typeof (event as { tool?: string }).tool === "string" && (event as { tool: string }).tool.startsWith("artifact:")) {
+          const eventTool = typeof (event as { tool?: string }).tool === "string" ? (event as { tool: string }).tool : "";
+          const isLegacyArtifactEvent = eventType === "tool_event" && eventTool.startsWith("artifact:");
+          const isArtifactEvent = eventType === "artifact" && Boolean((event as { artifact?: unknown }).artifact && typeof (event as { artifact?: unknown }).artifact === "object");
+          if (isLegacyArtifactEvent || isArtifactEvent) setArtifactCount((current) => current + 1);
+          if (isLegacyArtifactEvent || isArtifactEvent) {
             try {
-              const artifact = JSON.parse((event as { message?: string }).message ?? "{}");
+              const artifact = isArtifactEvent
+                ? (event as { artifact: Record<string, unknown> }).artifact
+                : JSON.parse((event as { message?: string }).message ?? "{}");
               const relativePath = typeof artifact.relativePath === "string" ? artifact.relativePath : "";
               if (relativePath) {
                 const artifactRunId = event.runId!;
@@ -3551,28 +3858,26 @@ export function App() {
                 const artifactPartId = `${artifactRunId}:artifact:${artifactRelativePath}`;
                 const createdAt = new Date().toISOString();
                 const parts = assistantPartsRef.current.get(event.runId) ?? [];
-                const artifactPart: WorkbenchMessagePart = {
+                const artifactPart: Extract<DesktopUIMessagePart, { type: "data-artifact" }> = {
+                  type: "data-artifact",
                   id: artifactPartId,
-                  type: "artifact",
-                  artifact: { id: artifactId, title: artifactRelativePath.split("/").pop() || artifactRelativePath, relativePath: artifactRelativePath, mimeType, byteLength: typeof artifact.bytes === "number" ? artifact.bytes : 0, sha256: typeof artifact.sha256 === "string" ? artifact.sha256 : "", createdAt },
-                  sequence,
-                  createdAt,
+                  data: { id: artifactId, title: artifactRelativePath.split("/").pop() || artifactRelativePath, relativePath: artifactRelativePath, mimeType, byteLength: typeof artifact.bytes === "number" ? artifact.bytes : 0, sha256: typeof artifact.sha256 === "string" ? artifact.sha256 : "", createdAt },
                 };
-                assistantPartsRef.current.set(artifactRunId, [...parts.filter((part) => part.id !== artifactPartId), artifactPart]);
+                assistantPartsRef.current.set(artifactRunId, [...parts.filter((part) => !("id" in part) || part.id !== artifactPartId), artifactPart]);
                 void tauriBridge.invoke<{ relative_path: string; mime_type: string; byte_length: number; sha256: string }>("register_artifact", { artifactId, projectId: null, relativePath: artifactRelativePath, mimeType }).then((metadata) => {
                   setArtifactRows((current) => [...current.filter((item) => item.id !== artifactId), { id: artifactId, relative_path: metadata.relative_path, mime_type: metadata.mime_type, byte_length: metadata.byte_length, sha256: metadata.sha256, created_at: new Date().toISOString(), available: true }]);
                   const currentParts = assistantPartsRef.current.get(artifactRunId) ?? [];
-                  const registeredPart: WorkbenchMessagePart = {
+                  const registeredPart: Extract<DesktopUIMessagePart, { type: "data-artifact" }> = {
                     ...artifactPart,
-                    artifact: { id: artifactId, title: artifactRelativePath.split("/").pop() || artifactRelativePath, relativePath: metadata.relative_path, mimeType: metadata.mime_type, byteLength: metadata.byte_length, sha256: metadata.sha256, createdAt },
+                    data: { id: artifactId, title: artifactRelativePath.split("/").pop() || artifactRelativePath, relativePath: metadata.relative_path, mimeType: metadata.mime_type, byteLength: metadata.byte_length, sha256: metadata.sha256, createdAt },
                   };
-                  assistantPartsRef.current.set(artifactRunId, [...currentParts.filter((part) => part.id !== artifactPartId), registeredPart]);
+                  assistantPartsRef.current.set(artifactRunId, [...currentParts.filter((part) => !("id" in part) || part.id !== artifactPartId), registeredPart]);
                   setArtifactCount((current) => Math.max(current, 1));
                 }).catch(() => undefined);
               }
             } catch { /* malformed artifact metadata remains in run_events */ }
           }
-          const tool = typeof (event as { tool?: string }).tool === "string" ? (event as { tool: string }).tool : "";
+          const tool = eventTool;
           const workflowKey = event.runId ? workflowRunKeysRef.current.get(event.runId) : undefined;
           if (workflowKey && tool.startsWith("workflow:node_")) {
             const message = typeof (event as { message?: string }).message === "string" ? (event as { message: string }).message : "";
@@ -3615,8 +3920,10 @@ export function App() {
             const conversationId = runConversationIdsRef.current.get(event.runId);
             const workflowKey = workflowRunKeysRef.current.get(event.runId);
             const isWorkflowEvent = Boolean(workflowKey);
-            activeRunsByConversationRef.current.delete(conversationId ?? "");
-            if (conversationId === activeConversationRef.current || activeRunRef.current === event.runId) setActiveRunId(null);
+            if (conversationId && activeRunsByConversationRef.current.get(conversationId) === event.runId) activeRunsByConversationRef.current.delete(conversationId);
+            const wasActiveRun = activeRunRef.current === event.runId;
+            if (wasActiveRun) activeRunRef.current = null;
+            if (isVisibleEvent) setActiveRunId(conversationId ? activeRunsByConversationRef.current.get(conversationId) ?? null : null);
             if (isWorkflowEvent && workflowKey) updateWorkflowTracking(workflowKey, (current) => ({ ...current, status: locale === "zh" ? "工作流已完成" : "Workflow completed", snapshots: finalizeWorkflowNodeSnapshots(current.snapshots, "succeeded") }));
             setTaskCount((current) => current + 1);
             if (isVisibleEvent && activePathRef.current === "/dashboard/workflows") {
@@ -3628,13 +3935,13 @@ export function App() {
             const assistant = assistantBuffers.get(event.runId) ?? "";
             if (assistant && conversationId) {
               const createdAt = assistantCreatedAtRef.current.get(event.runId) ?? new Date().toISOString();
-              const parts = [...(assistantPartsRef.current.get(event.runId) ?? []).filter((part) => part.id !== `${event.runId}:status`).map((part) => part.type === "reasoning" ? { ...part, status: "completed" as const } : part), { id: `${event.runId}:status`, type: "status" as const, status: "succeeded" as const, sequence, createdAt: new Date().toISOString() }];
+              const parts: DesktopUIMessagePart[] = [...(assistantPartsRef.current.get(event.runId) ?? []).filter((part) => !("id" in part) || part.id !== `${event.runId}:status`).map((part) => part.type === "reasoning" ? { ...part, state: "done" as const } : part), { type: "data-status", id: `${event.runId}:status`, data: { status: "completed" as const } }];
               if (conversationId === activeConversationRef.current) updateConversationMessages((current) => [...current, { id: `assistant-${event.runId}`, conversationId, role: "assistant", content: assistant, createdAt, status: "succeeded", parts }]);
               void tauriBridge.invoke("append_message", { input: { id: `assistant-${event.runId}`, conversation_id: conversationId, role: "assistant", content: assistant, parts_json: JSON.stringify(parts), created_at: createdAt } });
             } else if (conversationId) {
               const createdAt = new Date().toISOString();
               const content = locale === "zh" ? "任务已完成，但模型没有返回可展示的文本。请在任务中心查看运行事件。" : "The task completed, but the model returned no displayable text. Check Tasks for the run events.";
-              const parts: WorkbenchMessagePart[] = [...(assistantPartsRef.current.get(event.runId) ?? []).filter((part) => part.id !== `${event.runId}:status`).map((part) => part.type === "reasoning" ? { ...part, status: "completed" as const } : part), { id: `${event.runId}:status`, type: "status", status: "succeeded", sequence, createdAt }];
+              const parts: DesktopUIMessagePart[] = [...(assistantPartsRef.current.get(event.runId) ?? []).filter((part) => !("id" in part) || part.id !== `${event.runId}:status`).map((part) => part.type === "reasoning" ? { ...part, state: "done" as const } : part), { type: "data-status", id: `${event.runId}:status`, data: { status: "completed" as const } }];
               if (conversationId === activeConversationRef.current) updateConversationMessages((current) => [...current, { id: `assistant-${event.runId}`, conversationId, role: "assistant", content, createdAt, status: "succeeded", parts }]);
               void tauriBridge.invoke("append_message", { input: { id: `assistant-${event.runId}`, conversation_id: conversationId, role: "assistant", content, parts_json: JSON.stringify(parts), created_at: createdAt } });
             }
@@ -3644,6 +3951,7 @@ export function App() {
             runModelsRef.current.delete(event.runId);
             runConversationIdsRef.current.delete(event.runId);
             standaloneMediaRunsRef.current.delete(event.runId);
+            runContextsRef.current.delete(event.runId);
             void tauriBridge.invoke("finish_run", { runId: event.runId, status: "succeeded" });
             if (workflowKey) removeWorkflowTracking(workflowKey);
           }
@@ -3651,8 +3959,10 @@ export function App() {
             const conversationId = runConversationIdsRef.current.get(event.runId);
             const workflowKey = workflowRunKeysRef.current.get(event.runId);
             const isWorkflowEvent = Boolean(workflowKey);
-            activeRunsByConversationRef.current.delete(conversationId ?? "");
-            if (conversationId === activeConversationRef.current || activeRunRef.current === event.runId) setActiveRunId(null);
+            if (conversationId && activeRunsByConversationRef.current.get(conversationId) === event.runId) activeRunsByConversationRef.current.delete(conversationId);
+            const wasActiveRun = activeRunRef.current === event.runId;
+            if (wasActiveRun) activeRunRef.current = null;
+            if (isVisibleEvent) setActiveRunId(conversationId ? activeRunsByConversationRef.current.get(conversationId) ?? null : null);
             const code = (event as { code?: string }).code;
             const status = code === "opencode_aborted" || code === "workflow_cancelled" || code === "media_cancelled" ? "cancelled" : "failed";
             const rawDetail = typeof (event as { message?: string }).message === "string" ? (event as { message: string }).message : (locale === "zh" ? "本地 Agent 未能完成这次请求。" : "The local Agent could not complete this request.");
@@ -3664,7 +3974,7 @@ export function App() {
             if (conversationId) {
               const createdAt = assistantCreatedAtRef.current.get(event.runId) ?? new Date().toISOString();
               const content = currentAssistant || (locale === "zh" ? `本地 Agent 未能完成这次请求：${detail}` : `The local Agent could not complete this request: ${detail}`);
-              const parts = [...(assistantPartsRef.current.get(event.runId) ?? []).filter((part) => part.id !== `${event.runId}:status`).map((part) => part.type === "reasoning" ? { ...part, status: "failed" as const } : part), { id: `${event.runId}:status`, type: "status" as const, status: status === "cancelled" ? "cancelled" as const : "failed" as const, message: detail, sequence, createdAt: new Date().toISOString() }];
+              const parts: DesktopUIMessagePart[] = [...(assistantPartsRef.current.get(event.runId) ?? []).filter((part) => !("id" in part) || part.id !== `${event.runId}:status`).map((part) => part.type === "reasoning" ? { ...part, state: "done" as const } : part), { type: "data-status", id: `${event.runId}:status`, data: { status: status === "cancelled" ? "cancelled" as const : "failed" as const, message: detail } }];
               if (conversationId === activeConversationRef.current) updateConversationMessages((current) => [...current.filter((message) => message.id !== `assistant-${event.runId}`), { id: `assistant-${event.runId}`, conversationId, role: "assistant", content, createdAt, status, parts }]);
               void tauriBridge.invoke("append_message", { input: { id: `assistant-${event.runId}`, conversation_id: conversationId, role: "assistant", content, parts_json: JSON.stringify(parts), created_at: createdAt } });
             }
@@ -3674,6 +3984,7 @@ export function App() {
             runModelsRef.current.delete(event.runId);
             runConversationIdsRef.current.delete(event.runId);
             standaloneMediaRunsRef.current.delete(event.runId);
+            runContextsRef.current.delete(event.runId);
             void tauriBridge.invoke("finish_run", { runId: event.runId, status });
             if (workflowKey) removeWorkflowTracking(workflowKey);
           }
@@ -3689,7 +4000,35 @@ export function App() {
       disposeRuntimeLog?.();
       disposeRuntimeProgress?.();
     };
-  }, [workbenchClient]);
+  }, [loadConversationMessages, workbenchClient]);
+
+  useEffect(() => {
+    if (!runtimeReady || !isTauriBridgeAvailable()) return;
+    let disposed = false;
+    const reconcileRuns = async () => {
+      try {
+        const latest = (await workbenchClient.runs.list()).map(toRunRow);
+        if (disposed) return;
+        const latestById = new Map(latest.map((run) => [run.id, run] as const));
+        setRuns((current) => current.map((run) => latestById.get(run.id) ?? run));
+        const activeRunId = activeRunRef.current;
+        if (!activeRunId) return;
+        const persisted = latestById.get(activeRunId);
+        if (!persisted || isWorkbenchTaskActive(normalizeWorkbenchTaskStatus(persisted.status))) return;
+        activeRunRef.current = null;
+        activeRunsByConversationRef.current.delete(persisted.conversation_id ?? "");
+        setActiveRunId((current) => current === activeRunId ? null : current);
+      } catch {
+        // The event stream remains authoritative while SQLite is briefly busy.
+      }
+    };
+    void reconcileRuns();
+    const interval = window.setInterval(() => { void reconcileRuns(); }, 2000);
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+    };
+  }, [runtimeReady, workbenchClient]);
 
   async function saveSettings() {
     try { const nextConfig = { ...config, locale: localePreference }; setConfig(nextConfig); await tauriBridge.invoke("write_config", { value: nextConfig }); if (activePath !== "/dashboard/settings") setSettingsOpen(false); setRunStatus(locale === "zh" ? "模型配置已保存到本机 config.json" : "Model settings saved to local config.json"); }
@@ -3703,7 +4042,7 @@ export function App() {
       const selectedPath = await tauriBridge.invoke<string | null>("pick_directory", { initialPath });
       if (!selectedPath) { setRunStatus(locale === "zh" ? "未选择目录" : "No directory selected"); return; }
       if (kind === "workspace") setConfig((current) => ({ ...current, workspacePath: selectedPath }));
-      else setConfig((current) => ({ ...current, obsidianVaultPath: selectedPath, obsidianIndexPath: current.obsidianIndexPath || `${selectedPath}\\.ai-marketing-index` }));
+      else setConfig((current) => ({ ...current, obsidianVaultPath: selectedPath, obsidianIndexPath: current.obsidianIndexPath || `${selectedPath}\\.coworkany-index` }));
       setRunStatus(locale === "zh" ? "目录已更新，保存配置后生效" : "Directory updated; save settings to apply it");
     } catch (error) {
       setRunStatus(error instanceof Error ? error.message : (locale === "zh" ? "目录选择失败" : "Directory picker failed"));
@@ -3717,9 +4056,20 @@ export function App() {
       setArtifactRows((current) => [row, ...current.filter((item) => item.relative_path !== row.relative_path)]);
       setArtifactCount((current) => current + 1);
       setRunStatus(locale === "zh" ? `写作草稿已保存：${metadata.relative_path}` : `Writer draft saved: ${metadata.relative_path}`);
+      return metadata;
     } catch (error) {
       setRunStatus(locale === "zh" ? `写作草稿保存失败：${error instanceof Error ? error.message : String(error)}` : `Writer draft save failed: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
     }
+  }
+
+  async function exportWriterDraft(content: string): Promise<void> {
+    const metadata = await saveWriterDraft(content);
+    if (!metadata) return;
+    setRunStatus(locale === "zh" ? `写作 Markdown 已导出：${metadata.relative_path}` : `Writer Markdown exported: ${metadata.relative_path}`);
+    void workbenchClient.files.open(metadata.relative_path, metadata.mime_type).catch((error) => {
+      setRunStatus(locale === "zh" ? `写作 Markdown 已保存，但打开失败：${error instanceof Error ? error.message : String(error)}` : `Writer Markdown saved, but opening failed: ${error instanceof Error ? error.message : String(error)}`);
+    });
   }
 
   async function prepareRunRetry(run: RunRow) {
@@ -3753,7 +4103,7 @@ export function App() {
       if (!latestUser) { setRunStatus(locale === "zh" ? "未找到原始用户指令，无法准备重试" : "The original user instruction was not found"); return; }
       setActiveConversationId(run.conversation_id);
       activeConversationRef.current = run.conversation_id;
-      setPrompt(latestUser.content);
+      setPrompt(desktopUIMessageText(latestUser));
       setRunStatus(locale === "zh" ? "已载入原始指令，确认后可重新发送" : "The original instruction is loaded; confirm to send again");
       navigate(`/dashboard/ai/${run.conversation_id}`);
     } catch (error) { setRunStatus(error instanceof Error ? error.message : (locale === "zh" ? "重试准备失败" : "Unable to prepare retry")); }
@@ -3775,12 +4125,46 @@ export function App() {
     const requestId = String(message.requestId ?? globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
     const frame = { ...message, requestId };
     const response = new Promise<Record<string, unknown>>((resolve, reject) => {
-      const timer = setTimeout(() => { responseWaiters.current.delete(requestId); reject(new Error("workflow_host_response_timeout")); }, 60_000);
-      responseWaiters.current.set(requestId, (value) => { clearTimeout(timer); responseWaiters.current.delete(requestId); resolve(value); });
+      responseWaiters.current.set(requestId, (value) => { responseWaiters.current.delete(requestId); resolve(value); });
     });
-    await tauriBridge.invoke("host_send", { message: frame });
-    return response;
+    try {
+      await tauriBridge.invoke("host_send", { message: frame });
+      return await response;
+    } catch (error) {
+      responseWaiters.current.delete(requestId);
+      throw error;
+    }
   }
+
+  async function respondToPermission(permissionId: string, decision: "approve" | "reject") {
+    const normalizedPermissionId = permissionId.replace(/^approval:/u, "").trim();
+    const conversationId = conversationIdFromPath(activePathRef.current) ?? activeConversationRef.current;
+    const sessionId = conversationsRef.current.find((conversation) => conversation.id === conversationId)?.opencode_session_id ?? "";
+    if (!normalizedPermissionId || !sessionId) {
+      setRunStatus(locale === "zh" ? "审批请求已失效，请重新运行 Agent" : "This approval request is no longer available; rerun the Agent");
+      return;
+    }
+    try {
+      await sendHostMessage({ version: 1, type: "permission.respond", sessionId, payload: { sessionId, permissionId: normalizedPermissionId, response: decision === "approve" ? "once" : "reject" } });
+      setRunStatus(locale === "zh" ? (decision === "approve" ? "已批准工具调用，继续执行…" : "已拒绝工具调用") : (decision === "approve" ? "Tool approved; continuing…" : "Tool call rejected"));
+    } catch (error) {
+      setRunStatus(error instanceof Error ? error.message : (locale === "zh" ? "审批响应失败" : "Unable to respond to the approval request"));
+    }
+  }
+
+  async function respondToToolApproval(_message: DesktopUIMessage, part: Extract<DesktopUIMessagePart, { type: "dynamic-tool" }>, decision: "approve" | "reject") {
+    await respondToPermission(part.approval?.id ?? "", decision);
+  }
+
+  useEffect(() => {
+    const onApproval = (event: Event) => {
+      const detail = (event as CustomEvent<{ approvalId?: unknown; decision?: unknown }>).detail;
+      if (typeof detail?.approvalId !== "string" || !["approve", "reject"].includes(String(detail.decision))) return;
+      void respondToPermission(detail.approvalId, detail.decision as "approve" | "reject");
+    };
+    window.addEventListener("coworkany:tool-approval", onApproval);
+    return () => window.removeEventListener("coworkany:tool-approval", onApproval);
+  }, [locale]);
 
   async function loadDesktopVoices() {
     const audioProvider = providerForCapability(config, "audio");
@@ -3842,10 +4226,11 @@ export function App() {
   }
 
   function currentWorkflowDefinition(definitionOverride?: WorkflowDefinitionEnvelope) {
-    const base = definitionOverride ?? workflowDefinition ?? buildWorkflowDefinition(workflowPrompt, workflowAction, config.provider, {}, locale);
+    const defaultProvider = providerForCapability(configRef.current, capabilityForWorkflowAction(workflowAction));
+    const base = definitionOverride ?? workflowDefinition ?? buildWorkflowDefinition(workflowPrompt, workflowAction, defaultProvider, {}, locale);
     return sanitizeWorkflowDefinitionForStorage({ ...base, metadata: { ...(base.metadata ?? {}), description: workflowMetadata.description, status: workflowMetadata.status }, nodes: base.nodes.map((node) => {
       const title = node.nodeKey === "input" ? (locale === "en" ? "Input task" : "输入任务") : node.nodeKey === "output" ? (locale === "en" ? "Local artifact" : "本地产物") : (locale === "en" ? workflowActionEnglish[node.type] ?? node.title : node.title);
-      const nodeProvider = providerForCapability(config, capabilityForWorkflowAction(node.type));
+      const nodeProvider = providerForCapability(configRef.current, capabilityForWorkflowAction(node.type));
       return node.nodeKey === "input" ? { ...node, title, config: { ...node.config, text: workflowPrompt } } : node.nodeKey !== "output" ? { ...node, title, config: { ...node.config, prompt: workflowPrompt, script: workflowPrompt, text: workflowPrompt, provider: nodeProvider.id, model: nodeProvider.model, baseUrl: nodeProvider.baseUrl, endpoint: nodeProvider.endpoint, queryEndpoint: nodeProvider.queryEndpoint } } : { ...node, title };
     }) });
   }
@@ -3891,7 +4276,7 @@ export function App() {
       setVisibleWorkflowCanvas(`draft:${globalThis.crypto?.randomUUID?.() ?? Date.now()}`);
       savedWorkflowHashRef.current = null;
       setWorkflowPrompt("");
-      setWorkflowDefinition(null);
+       setWorkflowDefinition(buildWorkflowDefinition("", "writer", providerForCapability(configRef.current, "text"), {}, locale));
       setWorkflowMetadata({ title: locale === "zh" ? "未命名工作流" : "Untitled workflow", description: "", status: "draft" });
       setWorkflowAction("writer");
       setWorkflowBuilderOpen(true);
@@ -4009,7 +4394,7 @@ export function App() {
 
   async function exportCurrentWorkflow(definitionOverride?: WorkflowDefinitionEnvelope) {
     const content = serializeWorkflowExport(currentWorkflowDefinition(definitionOverride));
-    const fileName = `ai-marketing-workflow-${Date.now()}.json`;
+    const fileName = `coworkany-workflow-${Date.now()}.json`;
     if (isTauriBridgeAvailable()) {
       try {
         const savedPath = await tauriBridge.invoke<string | null>("save_workflow_export", { content, suggestedName: fileName });
@@ -4053,8 +4438,23 @@ export function App() {
     } catch (error) { setRunStatus(locale === "zh" ? `工作流导入失败：${error instanceof Error ? error.message : String(error)}` : `Workflow import failed: ${error instanceof Error ? error.message : String(error)}`); }
   }
 
-  async function runAgent(promptOverride?: string, mediaFeatureId?: MediaFeatureId | "image_generate", mediaInputs?: Record<string, unknown>, workflowOverride?: unknown, workflowRetry?: WorkflowRetryState) {
-    const isWorkflowRun = selected.path === "/dashboard/workflows" || isWorkflowDefinition(workflowOverride);
+  async function runAgent(promptOverride?: string, mediaFeatureId?: MediaFeatureId | "image_generate", mediaInputs?: Record<string, unknown>, workflowOverride?: unknown, workflowRetry?: WorkflowRetryState, displayedPromptOverride?: string) {
+    // Snapshot launch context before any attachment/knowledge await. A user can
+    // switch to another agent or workspace while a long-running preparation is
+    // in flight; that run must keep its original conversation and skill.
+    const launchPath = activePathRef.current;
+    const launchSelectedPath = selected.path;
+    const launchRouteAction = routeAction;
+    const launchWorkflowAction = workflowAction;
+    const launchConversationScope = conversationScope;
+    const launchEffectiveSkillId = effectiveSkillId;
+    const launchConfig = configRef.current;
+    const isWorkflowRun = launchSelectedPath === "/dashboard/workflows" || isWorkflowDefinition(workflowOverride);
+    const launchWorkflowId = currentWorkflowIdRef.current;
+    const launchWorkflowMetadata = workflowMetadata;
+    const launchWorkflowDefinition = isWorkflowRun
+      ? (isWorkflowDefinition(workflowOverride) ? workflowOverride : currentWorkflowDefinition())
+      : undefined;
     const isStandaloneMediaTask = Boolean(mediaFeatureId && mediaFeatureId !== "image_generate");
     if (!runtimeReady) {
       const message = locale === "zh" ? "本地运行环境仍在准备中，请稍候再运行" : "The local runtime is still preparing; try running again in a moment.";
@@ -4064,7 +4464,7 @@ export function App() {
     const workflowKey = isWorkflowRun
       ? workflowCanvasKeyRef.current
         ?? currentWorkflowIdRef.current
-        ?? `draft:${hashWorkflowDefinition(isWorkflowDefinition(workflowOverride) ? workflowOverride : currentWorkflowDefinition())}`
+        ?? `draft:${hashWorkflowDefinition(launchWorkflowDefinition ?? currentWorkflowDefinition())}`
       : undefined;
     if (workflowKey && (workflowRunsRef.current.has(workflowKey) || workflowLaunchLocksRef.current.has(workflowKey))) {
       setWorkflowRunStatus(locale === "zh" ? "当前工作流正在运行，请勿重复提交" : "This workflow is already running; duplicate submission was ignored.");
@@ -4073,18 +4473,23 @@ export function App() {
     if (workflowKey) workflowLaunchLocksRef.current.add(workflowKey);
     let workflowKeyForStatus: string | undefined;
     workflowKeyForStatus = workflowKey;
-    const setDomainStatus = (status: string) => { if (isWorkflowRun ? workflowKeyForStatus === workflowCanvasKeyRef.current : true) (isWorkflowRun ? setWorkflowRunStatus : setRunStatus)(status); };
+    const setDomainStatus = (status: string) => {
+      const stillOnLaunchRoute = activePathRef.current === launchPath;
+      if (!stillOnLaunchRoute) return;
+      if (isWorkflowRun ? workflowKeyForStatus === workflowCanvasKeyRef.current : true) (isWorkflowRun ? setWorkflowRunStatus : setRunStatus)(status);
+    };
     if (attachmentsPreparing) { workflowKey && workflowLaunchLocksRef.current.delete(workflowKey); setDomainStatus(locale === "zh" ? "正在读取附件，请稍候…" : "Preparing attachments…"); return; }
     const workflowInput = isWorkflowDefinition(workflowOverride)
       ? workflowOverride.nodes.find((node) => node.nodeKey === "input")?.config.text
       : undefined;
     const workflowInputPrompt = typeof workflowInput === "string" ? workflowInput : "";
-    const basePrompt = (promptOverride ?? (isWorkflowRun ? (workflowInputPrompt || workflowPrompt) : prompt)).trim();
+    const rawPrompt = promptOverride ?? (isWorkflowRun ? (workflowInputPrompt || workflowPrompt) : prompt);
+    const basePrompt = rawPrompt.trim();
     const attachmentContext = attachments.length ? (locale === "zh" ? `\n\n本地附件（已复制到当前项目目录）：\n${attachments.map((attachment) => `- ${attachment.relativePath ?? attachment.name} (${attachment.mediaType}, ${attachment.size} bytes)${attachment.text ? `\n  文件正文：\n${attachment.text}${attachment.truncated ? "\n  [正文已截断]" : ""}` : "\n  请使用本地文件工具读取该附件内容。"}`).join("\n")}` : `\n\nLocal attachments copied into the current project:\n${attachments.map((attachment) => `- ${attachment.relativePath ?? attachment.name} (${attachment.mediaType}, ${attachment.size} bytes)${attachment.text ? `\n  Extracted content:\n${attachment.text}${attachment.truncated ? "\n  [Content truncated]" : ""}` : "\n  Use the local file tools to read this attachment."}`).join("\n")}`) : "";
     let knowledgeContext = "";
-    if (knowledgeContextEnabled && basePrompt && config.obsidianIndexPath) {
+    if (knowledgeContextEnabled && basePrompt && launchConfig.obsidianIndexPath) {
       try {
-        const results = await workbenchClient.knowledge.search({ indexPath: config.obsidianIndexPath, query: basePrompt, limit: 6, embedding: embeddingPayload(config) });
+        const results = await workbenchClient.knowledge.search({ indexPath: launchConfig.obsidianIndexPath, query: basePrompt, limit: 6, embedding: embeddingPayload(launchConfig) });
         if (results.length) {
           const knowledgeHeader = locale === "zh"
             ? "本地 Obsidian 知识库上下文（仅来自已选择的 Vault，请优先基于引用回答）"
@@ -4097,21 +4502,26 @@ export function App() {
     }
     const titlePrompt = basePrompt || (locale === "zh" ? "请处理我提供的本地附件" : "Please process the local attachments I provided");
     const userPrompt = `${titlePrompt}${attachmentContext}`;
+    // Keep the user-visible turn faithful to the textarea. Runtime context
+    // (attachments and knowledge) belongs in the request, not in the user's
+    // message bubble or persisted transcript.
+    const displayedUserPrompt = displayedPromptOverride ?? (rawPrompt.length > 0 ? rawPrompt : titlePrompt);
     if (!userPrompt) { workflowKey && workflowLaunchLocksRef.current.delete(workflowKey); return; }
     const runtimePrompt = `${userPrompt}${knowledgeContext}`;
     const actionId = (mediaFeatureId === "image_generate"
       ? "image_generate"
-      : resolveDesktopRunAction(selected.path, routeAction, workflowAction, mediaFeatureId)) as WorkflowAction;
+      : resolveDesktopRunAction(launchSelectedPath, launchRouteAction, launchWorkflowAction, mediaFeatureId)) as WorkflowAction;
+    const conversationAllowsArtifacts = promptRequestsArtifact(userPrompt) || actionId === "ppt_generate";
     const resolvedMediaInputs = mediaInputs ?? (actionId === "image_generate" ? parseImageInputs(userPrompt) : undefined);
     const runId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
-    if (selected.path === "/dashboard/workflows") setLastWorkflowRunId(runId);
-    const routeConversationId = conversationIdFromPath(activePathRef.current);
+    if (launchSelectedPath === "/dashboard/workflows") setLastWorkflowRunId(runId);
+    const routeConversationId = conversationIdFromPath(launchPath);
     const conversationId = isStandaloneMediaTask
       ? null
       : routeConversationId
-        ? (activeConversationRef.current ?? activeConversationId ?? routeConversationId)
+        ? routeConversationId
         : `conversation-${runId}`;
-    const conversationAgentId = conversationScope ?? undefined;
+    const conversationAgentId = launchConversationScope ?? undefined;
     const localAgentId = conversationAgentId?.startsWith("agency-") ? conversationAgentId : undefined;
     const existingConversation = conversations.find((item) => item.id === conversationId);
     const optimisticTitle = resolveConversationTitleUpdate({
@@ -4120,20 +4530,26 @@ export function App() {
       existingMessageCount: conversationMessages.length,
       locale,
     }) ?? existingConversation?.title ?? buildConversationTitleFromPrompt(titlePrompt, locale);
-    if (!isWorkflowRun && conversationId) activeConversationRef.current = conversationId;
+    if (!isWorkflowRun && conversationId && activePathRef.current === launchPath) activeConversationRef.current = conversationId;
     if (conversationId) {
       runConversationIdsRef.current.set(runId, conversationId);
       activeRunsByConversationRef.current.set(conversationId, runId);
     }
     if (isStandaloneMediaTask) standaloneMediaRunsRef.current.add(runId);
-    if (!isWorkflowRun && conversationId) setActiveConversationId(conversationId);
+    runContextsRef.current.set(runId, isWorkflowRun
+      ? { kind: "workflow", launchPath, workflowKey }
+      : isStandaloneMediaTask
+        ? { kind: "media", launchPath, mediaScope: mediaRunScopeForFeature(launchPath, mediaFeatureId) }
+        : { kind: "conversation", launchPath, conversationId: conversationId ?? undefined });
+    const runIsVisible = () => desktopRunIsVisible(runContextsRef.current.get(runId), activePathRef.current, activeConversationRef.current, workflowCanvasKeyRef.current);
+    if (!isWorkflowRun && conversationId && runIsVisible()) setActiveConversationId(conversationId);
     const userMessageCreatedAt = new Date().toISOString();
-    assistantPartsRef.current.set(runId, [{ id: `${runId}:status`, type: "status", status: "running", message: locale === "zh" ? "正在准备本地会话…" : "Preparing local session…", sequence: 0, createdAt: userMessageCreatedAt }]);
+    assistantPartsRef.current.set(runId, [{ type: "data-status", id: `${runId}:status`, data: { status: "running", message: locale === "zh" ? "正在准备本地会话…" : "Preparing local session…" } }]);
     workflowOutputsRef.current.delete(runId);
     setDomainStatus(locale === "zh" ? "正在通过本地 OpenCode 运行…" : "Running through local OpenCode…");
-    if (!isWorkflowRun) { setAssistantText(""); setAssistantAt(userMessageCreatedAt); setToolEvents([]); setActivePrompt(userPrompt); setActivePromptAt(userMessageCreatedAt); }
-    const userParts: WorkbenchMessagePart[] = [{ id: `message-${runId}:text`, type: "text", text: userPrompt }];
-    if (!isWorkflowRun && conversationId) updateConversationMessages((current) => [...current, { id: `message-${runId}`, conversationId, role: "user", content: userPrompt, createdAt: userMessageCreatedAt, parts: userParts }]);
+    if (!isWorkflowRun && runIsVisible()) { activeRunRef.current = runId; setAssistantText(""); setAssistantAt(userMessageCreatedAt); setToolEvents([]); setActivePrompt(displayedUserPrompt); setActivePromptAt(userMessageCreatedAt); }
+    const userParts: DesktopUIMessagePart[] = [{ type: "text", text: displayedUserPrompt, state: "done" }];
+    if (!isWorkflowRun && conversationId) updateVisibleConversationMessages(conversationId, (current) => [...current, { id: `message-${runId}`, conversationId, role: "user", content: displayedUserPrompt, createdAt: userMessageCreatedAt, parts: userParts }]);
     if (!isWorkflowRun && conversationId) setConversations((current) => [{
       id: conversationId,
       title: optimisticTitle,
@@ -4153,8 +4569,8 @@ export function App() {
         setWorkflowRunStatus(tracking.status);
       }
     }
-    else setActiveRunId(runId);
-    if (!isWorkflowRun && !isStandaloneMediaTask && conversationId && !conversationIdFromPath(activePathRef.current)) {
+    else if (runIsVisible()) setActiveRunId(runId);
+    if (!isWorkflowRun && !isStandaloneMediaTask && conversationId && activePathRef.current === launchPath && !conversationIdFromPath(activePathRef.current)) {
       workbenchClient.navigation.go(conversationRoute({ id: conversationId, agent_id: conversationAgentId }));
     }
     let persistedRun = false;
@@ -4169,24 +4585,28 @@ export function App() {
         }) ?? existingConversation?.title ?? optimisticTitle;
         await tauriBridge.invoke("create_conversation", { input: { id: conversationId, title: persistedTitle, project_id: null, agent_id: conversationAgentId ?? null } });
         if (!isWorkflowRun) setConversations((current) => [{ id: conversationId, title: persistedTitle, updated_at: new Date().toISOString(), opencode_session_id: current.find((item) => item.id === conversationId)?.opencode_session_id ?? null, agent_id: current.find((item) => item.id === conversationId)?.agent_id ?? conversationAgentId ?? null }, ...current.filter((item) => item.id !== conversationId)]);
-        await tauriBridge.invoke("append_message", { input: { id: `message-${runId}`, conversation_id: conversationId, role: "user", content: userPrompt, parts_json: JSON.stringify(userParts), created_at: userMessageCreatedAt } });
+        await tauriBridge.invoke("append_message", { input: { id: `message-${runId}`, conversation_id: conversationId, role: "user", content: displayedUserPrompt, parts_json: JSON.stringify(userParts), created_at: userMessageCreatedAt } });
       }
       await tauriBridge.invoke("host_start");
-      if (selected.path === "/dashboard" && conversationId) {
+      if (launchSelectedPath === "/dashboard" && conversationId) {
         if (conversationIdFromPath(activePathRef.current) !== conversationId) {
           workbenchClient.navigation.go(conversationRoute({ id: conversationId, agent_id: conversationAgentId }));
         }
       }
-      setAttachments([]);
+       if (activePathRef.current === launchPath) setAttachments([]);
        const action = workflowActions.find((item) => item.id === actionId) ?? workflowActions[0];
-       const selectedProvider = providerForCapability(config, capabilityForWorkflowAction(actionId));
+       const selectedProvider = providerForCapability(launchConfig, capabilityForWorkflowAction(actionId));
        runModelsRef.current.set(runId, selectedProvider.model);
-       await workbenchClient.runs.start({ id: runId, conversationId, prompt: userPrompt, model: selectedProvider.model || undefined, skillId: effectiveSkillId, reasoningEffort: selectedProvider.reasoningEffort ?? reasoningEffort });
+       // Image generation is a media workflow, not a Skill-driven text turn.
+       // Keep the writer Skill out of this run so a Skill's example provider or
+       // model can never compete with the configured image capability.
+        const runSkillId: SkillId = actionId === "image_generate" ? "auto" : launchEffectiveSkillId;
+       await workbenchClient.runs.start({ id: runId, conversationId, prompt: userPrompt, model: selectedProvider.model || undefined, skillId: runSkillId, reasoningEffort: selectedProvider.reasoningEffort ?? reasoningEffort });
        const mediaFeature = mediaFeatureId && mediaFeatureId !== "image_generate" ? mediaFeatureCatalog.find((feature) => feature.id === mediaFeatureId) : undefined;
        const mediaEntryPath = mediaFeatureId === "image_generate"
-        ? conversationScope === "entry:writer"
-          ? `/dashboard/writer/${encodeURIComponent(conversationId ?? "")}`
-          : conversationScope === "entry:image-assistant"
+         ? launchConversationScope === "entry:writer"
+           ? `/dashboard/writer/${encodeURIComponent(conversationId ?? "")}`
+           : launchConversationScope === "entry:image-assistant"
             ? `/dashboard/image-assistant/${encodeURIComponent(conversationId ?? "")}`
             : `/dashboard/image-assistant/${encodeURIComponent(conversationId ?? "")}`
         : mediaFeature
@@ -4195,8 +4615,8 @@ export function App() {
        const taskMetadata: DesktopTaskMetadata = {
         kind: isWorkflowRun ? "workflow" : mediaFeatureId ? "media" : "agent",
         ...(mediaFeatureId && mediaFeatureId !== "image_generate" ? { featureId: mediaFeatureId } : {}),
-        ...(isWorkflowRun && currentWorkflowIdRef.current ? { workflowId: currentWorkflowIdRef.current } : {}),
-        ...(isWorkflowRun ? { definitionHash: hashWorkflowDefinition(currentWorkflowDefinition(isWorkflowDefinition(workflowOverride) ? workflowOverride : undefined)) } : {}),
+         ...(isWorkflowRun && launchWorkflowId ? { workflowId: launchWorkflowId } : {}),
+         ...(isWorkflowRun ? { definitionHash: hashWorkflowDefinition(launchWorkflowDefinition ?? currentWorkflowDefinition()) } : {}),
         entryPath: isWorkflowRun
           ? `/dashboard/workflows?runId=${encodeURIComponent(runId)}`
           : mediaEntryPath ?? conversationRoute({ id: conversationId ?? "", agent_id: conversationAgentId }),
@@ -4204,30 +4624,33 @@ export function App() {
        void tauriBridge.invoke("append_run_event", { runId, sequence: -1, eventType: "task_metadata", payloadJson: JSON.stringify(taskMetadata) }).catch(() => undefined);
        persistedRun = true;
        setRuns((current) => [{ id: runId, conversation_id: conversationId, status: "running", model: selectedProvider.model || null, started_at: new Date().toISOString(), finished_at: null }, ...current].slice(0, 100));
-       const workflowExecutionPrompt = selected.path === "/dashboard/workflows" && actionId === "writer"
+        const workflowExecutionPrompt = launchSelectedPath === "/dashboard/workflows" && actionId === "writer"
         ? `${runtimePrompt}\n\n输出约束：只输出可直接交付的最终中文营销文案；不要解释过程，不要提及 Skill、模型或工具，不要输出英文前言。按用户要求保留标题、正文和行动号召。`
         : runtimePrompt;
        const capabilityConfig = {
         prompt: workflowExecutionPrompt,
         script: workflowExecutionPrompt,
         text: workflowExecutionPrompt,
-         provider: selectedProvider.id,
-         model: selectedProvider.model,
-         baseUrl: selectedProvider.baseUrl,
-         apiKey: selectedProvider.apiKey,
-         endpoint: selectedProvider.endpoint,
-         queryEndpoint: selectedProvider.queryEndpoint,
         ...(mediaFeatureId ? { featureId: mediaFeatureId } : {}),
         ...(resolvedMediaInputs ?? {}),
-        ...(actionId === "knowledge_retrieve" && config.obsidianIndexPath ? { indexPath: config.obsidianIndexPath, query: userPrompt, embeddingMode: embeddingPayload(config).mode, embeddingBaseUrl: embeddingPayload(config).baseUrl, embeddingModel: embeddingPayload(config).model, embeddingApiKey: embeddingPayload(config).apiKey } : {}),
-        ...(actionId === "knowledge_write" && config.obsidianVaultPath ? { vaultPath: config.obsidianVaultPath } : {}),
-      };
-       const rawWorkflowDefinition = isWorkflowDefinition(workflowOverride) ? workflowOverride : selected.path === "/dashboard/workflows" ? currentWorkflowDefinition() : buildWorkflowDefinition(userPrompt, actionId, selectedProvider, capabilityConfig, locale);
-       const hostDefinitionInput = selected.path === "/dashboard/workflows"
+         ...(actionId === "knowledge_retrieve" && launchConfig.obsidianIndexPath ? { indexPath: launchConfig.obsidianIndexPath, query: userPrompt, embeddingMode: embeddingPayload(launchConfig).mode, embeddingBaseUrl: embeddingPayload(launchConfig).baseUrl, embeddingModel: embeddingPayload(launchConfig).model, embeddingApiKey: embeddingPayload(launchConfig).apiKey } : {}),
+         ...(actionId === "knowledge_write" && launchConfig.obsidianVaultPath ? { vaultPath: launchConfig.obsidianVaultPath } : {}),
+        // Transport selection is authoritative for media actions. Put it after
+        // action inputs so stale provider/model fields from a Skill, imported
+        // workflow, or UI payload cannot override the current local profile.
+        provider: selectedProvider.id,
+        model: selectedProvider.model,
+        baseUrl: selectedProvider.baseUrl,
+        apiKey: selectedProvider.apiKey,
+        endpoint: selectedProvider.endpoint,
+        queryEndpoint: selectedProvider.queryEndpoint,
+        };
+        const rawWorkflowDefinition = isWorkflowDefinition(workflowOverride) ? workflowOverride : launchSelectedPath === "/dashboard/workflows" ? (launchWorkflowDefinition ?? currentWorkflowDefinition()) : buildWorkflowDefinition(userPrompt, actionId, selectedProvider, capabilityConfig, locale);
+        const hostDefinitionInput = launchSelectedPath === "/dashboard/workflows"
         ? { ...rawWorkflowDefinition, nodes: rawWorkflowDefinition.nodes.map((node) => node.type === "writer" ? { ...node, config: { ...node.config, prompt: workflowExecutionPrompt, script: workflowExecutionPrompt, text: workflowExecutionPrompt } } : node) }
         : rawWorkflowDefinition;
       const workflowDefinition = sanitizeWorkflowDefinitionForStorage(hostDefinitionInput);
-      const hostWorkflowDefinition = bindWorkflowProviderDefaults(hostDefinitionInput, config);
+      const hostWorkflowDefinition = bindWorkflowProviderDefaults(hostDefinitionInput, launchConfig);
       if (isWorkflowRun && workflowKey) updateWorkflowTracking(workflowKey, (current) => ({ ...current, snapshots: createWorkflowNodeSnapshots(hostWorkflowDefinition.nodes.map((node) => node.nodeKey)), status: locale === "zh" ? "工作流运行中…" : "Workflow running…" }));
       const mediaNodes = hostWorkflowDefinition.nodes.filter((node) => isMediaWorkflowNodeType(node.type));
       const mediaTempDirectories = Object.fromEntries(await Promise.all(mediaNodes.map(async (node) => {
@@ -4239,12 +4662,15 @@ export function App() {
          const nodeModel = typeof node.config.model === "string" && node.config.model.trim() ? node.config.model.trim() : selectedProvider.model;
         return tauriBridge.invoke("record_run_attempt", { idempotencyKey: `${runId}:${node.nodeKey}:1`, runId, nodeKey: node.nodeKey, provider: nodeProvider || null, providerTaskId: null, status: "queued", payloadJson: JSON.stringify({ executorId: node.type, nodeKey: node.nodeKey, provider: nodeProvider, model: nodeModel, idempotencyKey: `${runId}:${node.nodeKey}:1`, status: "queued" }) });
       }));
-      const usesOpenCodeConversation = mediaFeatureId !== "image_generate" && (mode === "chat" || mode === "writer" || selected.path === "/dashboard");
+        // The image-assistant route does not pass a mediaFeatureId because the
+        // route itself selects image_generate. Use the resolved action here so
+        // it can never fall through to the text/OpenCode conversation path.
+        const usesOpenCodeConversation = !mediaFeatureId && actionId !== "image_generate" && (mode === "chat" || mode === "writer" || launchSelectedPath === "/dashboard");
       if (usesOpenCodeConversation && conversationId) {
-         const skillInstruction = localizedSkillInstruction(effectiveSkillId, locale);
-        const openCodePrompt = `${runtimePrompt}${skillInstruction}`;
+       const openCodePrompt = desktopExecutionPrompt(launchEffectiveSkillId, runtimePrompt, locale);
+         const openCodeSystemPrompt = localizedSkillSystemPrompt(launchEffectiveSkillId, locale);
         const existingSessionId = conversations.find((item) => item.id === conversationId)?.opencode_session_id ?? undefined;
-         const sessionResponse = await sendHostMessage({ version: 1, requestId: `${conversationId}:session`, type: "session.create", payload: { conversationId, ...(existingSessionId ? { sessionId: existingSessionId } : {}), workspacePath: config.workspacePath, model: selectedProvider.model, provider: selectedProvider, ...(localAgentId ? { agentId: localAgentId } : {}) } });
+         const sessionResponse = await sendHostMessage({ version: 1, requestId: `${conversationId}:session:${runId}`, type: "session.create", payload: { conversationId, ...(existingSessionId ? { sessionId: existingSessionId } : {}), workspacePath: launchConfig.workspacePath, model: selectedProvider.model, provider: selectedProvider, allowArtifacts: conversationAllowsArtifacts, ...(localAgentId ? { agentId: localAgentId } : {}) } });
         if (sessionResponse.ok !== true) throw new Error(String((sessionResponse.error as { message?: string } | undefined)?.message ?? "opencode_session_unavailable"));
         const sessionId = String((sessionResponse.data as { sessionId?: string } | undefined)?.sessionId ?? "");
         if (!sessionId) throw new Error("opencode_session_id_missing");
@@ -4254,26 +4680,26 @@ export function App() {
         // briefly busy with the first persistence operation.
         void tauriBridge.invoke("set_conversation_session", { conversationId, sessionId }).catch(() => undefined);
         const recovered = (sessionResponse.data as { recovered?: unknown } | undefined)?.recovered === true;
-        const recoverySnapshot = recovered ? createSessionRecoverySnapshot(priorConversationHistory.filter((message): message is typeof message & { role: "user" | "assistant" } => message.role === "user" || message.role === "assistant")) : "";
+        const recoverySnapshot = recovered ? createSessionRecoverySnapshot(priorConversationHistory.filter((message): message is typeof message & { role: "user" | "assistant" } => message.role === "user" || message.role === "assistant").map((message) => ({ role: message.role, content: desktopUIMessageText(message) }))) : "";
         const promptWithRecovery = recoverySnapshot ? `${recoverySnapshot}\n\nCurrent request: ${openCodePrompt}` : openCodePrompt;
-         await sendHostMessage({ version: 1, requestId: runId, runId, sessionId, type: "session.prompt", payload: { prompt: promptWithRecovery, model: selectedProvider.model, provider: selectedProvider, skillId: effectiveSkillId, ...(localAgentId ? { agentId: localAgentId } : {}), executable: config.runtime.opencodePath } });
+          await sendHostMessage({ version: 1, requestId: runId, runId, sessionId, type: "session.prompt", payload: { prompt: promptWithRecovery, systemPrompt: openCodeSystemPrompt, model: selectedProvider.model, provider: selectedProvider, allowArtifacts: conversationAllowsArtifacts, skillId: launchEffectiveSkillId, ...(localAgentId ? { agentId: localAgentId } : {}), executable: launchConfig.runtime.opencodePath } });
       } else {
-        const workflowId = selected.path === "/dashboard/workflows"
-          ? currentWorkflowIdRef.current ?? (globalThis.crypto?.randomUUID?.() ?? `workflow-${Date.now()}`)
+        const workflowId = launchSelectedPath === "/dashboard/workflows"
+          ? launchWorkflowId ?? (globalThis.crypto?.randomUUID?.() ?? `workflow-${Date.now()}`)
           : `workflow-${actionId}`;
         const actionName = locale === "en" ? workflowActionEnglish[action.id] ?? action.label : action.label;
-        const workflowName = selected.path === "/dashboard/workflows"
-          ? workflowMetadata.title.trim() || (locale === "en" ? `${actionName} workflow` : `${actionName}工作流`)
+        const workflowName = launchSelectedPath === "/dashboard/workflows"
+          ? launchWorkflowMetadata.title.trim() || (locale === "en" ? `${actionName} workflow` : `${actionName}工作流`)
           : (locale === "en" ? `${actionName} workflow` : `${actionName}工作流`);
         const saved = toSavedWorkflow(await workbenchClient.workflows.save({ id: workflowId, title: workflowName, definition: workflowDefinition }));
-        if (selected.path === "/dashboard/workflows") {
+        if (launchSelectedPath === "/dashboard/workflows" && activePathRef.current === launchPath) {
           currentWorkflowIdRef.current = saved.id;
           savedWorkflowHashRef.current = hashWorkflowDefinition(sanitizeWorkflowDefinitionForStorage(currentWorkflowDefinition()));
         }
         setSavedWorkflows((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
-         await sendHostMessage({ version: 1, requestId: runId, runId, type: "workflow.run", payload: { workspacePath: config.workspacePath, provider: selectedProvider, media: selectedProvider, providers: config.providers, vaultPath: config.obsidianVaultPath, indexPath: config.obsidianIndexPath, executable: config.runtime.opencodePath, mediaTempDirectories, definition: hostWorkflowDefinition, ...(workflowRetry ? { completed: workflowRetry.completed, recoveryDefinitionHash: workflowRetry.recoveryDefinitionHash } : {}) } });
+          await sendHostMessage({ version: 1, requestId: runId, runId, type: "workflow.run", payload: { workspacePath: launchConfig.workspacePath, provider: selectedProvider, media: selectedProvider, providers: launchConfig.providers, vaultPath: launchConfig.obsidianVaultPath, indexPath: launchConfig.obsidianIndexPath, executable: launchConfig.runtime.opencodePath, mediaTempDirectories, definition: hostWorkflowDefinition, ...(workflowRetry ? { completed: workflowRetry.completed, recoveryDefinitionHash: workflowRetry.recoveryDefinitionHash } : {}) } });
       }
-      if (!isWorkflowRun) setPrompt("");
+      if (!isWorkflowRun && runIsVisible()) setPrompt("");
       setDomainStatus(locale === "zh" ? "已发送，等待本地 Agent 事件…" : "Sent; waiting for local Agent events…");
     } catch (error) {
       if (workflowKey) workflowLaunchLocksRef.current.delete(workflowKey);
@@ -4283,16 +4709,20 @@ export function App() {
       setRuns((current) => current.map((run) => run.id === runId ? { ...run, status: "failed", finished_at: new Date().toISOString() } : run));
       const createdAt = new Date().toISOString();
       const content = locale === "zh" ? `本地 Agent 未能启动或接收请求：${detail}` : `The local Agent could not start or accept the request: ${detail}`;
-      const parts: WorkbenchMessagePart[] = [{ id: `${runId}:status:failed`, type: "status", status: "failed", message: detail, sequence: 0, createdAt }];
-      if (!isWorkflowRun && conversationId && conversationId === activeConversationRef.current) updateConversationMessages((current) => [...current.filter((message) => message.id !== `assistant-${runId}`), { id: `assistant-${runId}`, conversationId, role: "assistant", content, createdAt, status: "failed", parts }]);
+      const parts: DesktopUIMessagePart[] = [{ type: "data-status", id: `${runId}:status:failed`, data: { status: "failed", message: detail } }];
+      const visible = runIsVisible();
+      if (!isWorkflowRun && conversationId && visible) updateConversationMessages((current) => [...current.filter((message) => message.id !== `assistant-${runId}`), { id: `assistant-${runId}`, conversationId, role: "assistant", content, createdAt, status: "failed", parts }]);
       if (!isWorkflowRun && conversationId) void tauriBridge.invoke("append_message", { input: { id: `assistant-${runId}`, conversation_id: conversationId, role: "assistant", content, parts_json: JSON.stringify(parts), created_at: createdAt } }).catch(() => undefined);
       runConversationIdsRef.current.delete(runId);
-      if (conversationId) activeRunsByConversationRef.current.delete(conversationId);
+      if (conversationId && activeRunsByConversationRef.current.get(conversationId) === runId) activeRunsByConversationRef.current.delete(conversationId);
       standaloneMediaRunsRef.current.delete(runId);
+      runContextsRef.current.delete(runId);
+      const wasActiveRun = activeRunRef.current === runId;
+      if (wasActiveRun) activeRunRef.current = null;
       if (isWorkflowRun) {
         if (workflowKey) removeWorkflowTracking(workflowKey);
-        setWorkflowRunStatus(detail);
-      } else if (conversationId === activeConversationRef.current || activeRunRef.current === runId) {
+        if (visible) setWorkflowRunStatus(detail);
+      } else if (visible && (conversationId === activeConversationRef.current || wasActiveRun)) {
         setActiveRunId(null);
         setRunStatus(detail);
       }
@@ -4300,7 +4730,15 @@ export function App() {
   }
 
   async function cancelActiveRun() {
-    const runId = workflowNodeRunIdRef.current ?? activeRunId;
+    const currentPath = activePathRef.current;
+    const currentWorkflowRunId = workflowCanvasKeyRef.current ? workflowRunsRef.current.get(workflowCanvasKeyRef.current)?.runId : undefined;
+    const routeConversationId = conversationIdFromPath(currentPath);
+    const currentConversationId = routeConversationId ?? activeConversationRef.current;
+    const conversationRunId = currentConversationId ? activeRunsByConversationRef.current.get(currentConversationId) : undefined;
+    const queryRunId = new URLSearchParams(currentPath.split("?", 2)[1] ?? "").get("runId") ?? undefined;
+    const queryRunIsVisible = queryRunId && desktopRunIsVisible(runContextsRef.current.get(queryRunId), currentPath, activeConversationRef.current, workflowCanvasKeyRef.current) ? queryRunId : undefined;
+    const visibleActiveRun = activeRunId && desktopRunIsVisible(runContextsRef.current.get(activeRunId), currentPath, activeConversationRef.current, workflowCanvasKeyRef.current) ? activeRunId : undefined;
+    const runId = currentWorkflowRunId ?? conversationRunId ?? queryRunIsVisible ?? visibleActiveRun;
     if (!runId) return;
     const workflowKey = workflowRunKeysRef.current.get(runId);
     const isWorkflowRun = Boolean(workflowKey);
@@ -4312,8 +4750,13 @@ export function App() {
         setWorkflowRunStatus(locale === "zh" ? "已紧急停止本地 Agent" : "Local Agent emergency-stopped");
       } else {
         setRunStatus(locale === "zh" ? "已紧急停止本地 Agent" : "Local Agent emergency-stopped");
+        if (currentConversationId && activeRunsByConversationRef.current.get(currentConversationId) === runId) activeRunsByConversationRef.current.delete(currentConversationId);
+        runConversationIdsRef.current.delete(runId);
+        standaloneMediaRunsRef.current.delete(runId);
+        runContextsRef.current.delete(runId);
         setActiveRunId(null);
       }
+      if (activeRunRef.current === runId) activeRunRef.current = null;
       setRuns((current) => current.map((run) => run.id === runId ? { ...run, status: "cancelled", finished_at: new Date().toISOString() } : run));
       await tauriBridge.invoke("finish_run", { runId, status: "cancelled" });
     } catch (error) {
@@ -4347,22 +4790,26 @@ export function App() {
     return [userMessage, { ...assistantMessage, parts: processParts, metadata: assistantMetadata }];
   }, [activeConversationId, activeModel, activePrompt, activePromptAt, activeProvider.id, activeRunId, artifactRows, assistantAt, assistantText, toolEvents]);
   if (!shellReady) return <DesktopBootstrapScreen locale={locale} status={runtimeStatus} phase={runtimePhase} style={workbenchThemeStyle} />;
+  const localizedRunStatus = localizeDesktopStatus(runStatus, locale);
+  const localizedWorkflowRunStatus = localizeDesktopStatus(workflowRunStatus, locale);
+  const topTipMessage = [localizedRunStatus, localizedWorkflowRunStatus].find(isDesktopErrorStatus) ?? "";
+  const showTopTip = Boolean(topTipMessage);
 
   return (
     <div className="shell" style={workbenchThemeStyle}>
+      {showTopTip ? <DesktopTopTip message={topTipMessage} locale={locale} /> : null}
       <DesktopMediaHistoryContext.Provider value={mediaHistory}>
       <WorkbenchShell navItems={sidebarRoutes.map((item) => ({ ...item, icon: <RouteIcon name={item.iconKey} /> }))} activePath={activePath} onNavigate={workbenchClient.navigation.go} collapsed={sidebarCollapsed} onToggleCollapsed={() => setSidebarCollapsed((current) => !current)} locale={locale} onLocaleChange={(nextLocale) => { if (nextLocale !== locale) setLocalePreference(nextLocale); }} onLocaleToggle={toggleLocale} localLabel={copy.localWorkspace} status={<div className="wb-runtime-status" data-runtime-status={runtimeStatus} title={localizeRuntimeStatus(runtimeStatus, locale)}><span className="wb-runtime-status-icon"><WorkbenchRouteIcon name="runtime" size={15} /></span><span className="wb-runtime-status-copy"><span className="wb-runtime-status-label">{localizeRuntimeStatus(runtimeStatus, locale)}</span><span className="muted">{locale === "zh" ? "本地运行环境" : "Local runtime"}</span></span></div>} sessions={conversations.map((conversation) => ({ path: conversationRoute(conversation), title: conversation.title, updatedAt: formatDateTime(conversation.updated_at, locale), agentId: conversation.agent_id ?? undefined, status: runs.some((run) => run.conversation_id === conversation.id && run.status === "running") ? "running" as const : undefined }))} sessionsLabel={conversationScope === "entry:writer" ? (locale === "zh" ? "写作会话" : "Writing sessions") : conversationScope === "entry:image-assistant" ? (locale === "zh" ? "图片助手会话" : "Image assistant sessions") : locale === "zh" ? "最近会话" : "Recent chats"} activeSessionAgentId={conversationScope} activeSessionAgentLabel={activeAgentCard?.title ?? activeChatRoute.label} newSessionLabel={locale === "zh" ? "新建会话" : "New chat"} onNewSession={() => void startNewConversation()}>
       <section className={`workspace ${selected.path === "/dashboard" ? "workspace-home" : ""} ${immersivePage ? "workspace-immersive" : ""}`.trim()}>
         {settingsOpen && <DesktopSettingsPanel config={config} locale={locale} localePreference={localePreference} copy={copy} onConfigChange={setConfig} onLocalePreferenceChange={setLocalePreference} onClose={() => { if (selected.path === "/dashboard/settings") workbenchClient.navigation.go("/dashboard"); setSettingsOpen(false); }} onSave={() => void saveSettings()} onRebuildVault={() => void rebuildVaultIndex()} onPickDirectory={(kind) => void pickDirectory(kind)} onRepairRuntime={() => { setRunStatus(locale === "zh" ? "正在导入离线运行时…" : "Importing offline runtime…"); void tauriBridge.invoke("repair_runtime", { options: config.offlineRuntimeZipPath ? { offlineZip: config.offlineRuntimeZipPath } : undefined }).then(() => setRunStatus(locale === "zh" ? "已导入离线运行时并完成复检" : "Offline runtime imported and rechecked")).catch((error) => setRunStatus(error instanceof Error ? error.message : (locale === "zh" ? "离线运行时导入失败" : "Offline runtime import failed"))); }} onExportDiagnostics={() => { setRunStatus(locale === "zh" ? "正在导出诊断包…" : "Exporting diagnostics…"); void tauriBridge.invoke<{ path: string }>("export_diagnostics").then((result) => setRunStatus(locale === "zh" ? `诊断包已导出：${result.path}` : `Diagnostics exported: ${result.path}`)).catch((error) => setRunStatus(error instanceof Error ? error.message : (locale === "zh" ? "诊断包导出失败" : "Diagnostics export failed"))); }} status={runStatus} />}
            {isHomeRoute ? <>
-          <div className="home-shell"><div className="home-page-shell"><header className="home-topbar"><div className="home-topbar-status"><span className="public-signal" aria-hidden="true" /><span>{homeCopy.workspaceReady}</span></div><button type="button" className="home-credits-link" onClick={() => workbenchClient.navigation.go("/dashboard/tasks")}><span className="home-credits-icon"><WorkbenchRouteIcon name="sparkles" size={14} /></span><span>{homeCopy.viewUsage}</span><WorkbenchRouteIcon name="arrowUpRight" size={15} /></button></header><main className="home-main"><section className="home-welcome"><div className="home-welcome-kicker">AI MARKETING WORKSPACE</div><h1>{homeCopy.welcomePrefix}{homeCopy.welcomeDefaultName}<span className="home-welcome-mark" aria-hidden="true">✦</span></h1><p>{homeCopy.welcomeSubtitle}</p></section>
-          <section className="home-chat-workspace"><div className="chat-composer"><WorkbenchPromptInput value={prompt} onValueChange={setPrompt} onSubmit={() => void runAgent()} attachments={attachments.map((attachment) => ({ id: attachment.id, name: attachment.name, mediaType: attachment.mediaType }))} onAddAttachments={addAttachments} onRemoveAttachment={removeAttachment} models={activeModels.map((item) => ({ id: item, label: formatWorkbenchModelLabel(item, { zh: "本地模型", en: "Local model" }, locale), provider: locale === "zh" ? "已配置模型" : "Configured models" }))} model={activeModel} onModelChange={updateModel} placeholder={copy.homePlaceholder} status={activeRunId ? "streaming" : "ready"} onStop={() => void cancelActiveRun()} locale={locale}><span className="sr-only" aria-live="polite">{localizeDesktopStatus(runStatus, locale)}</span>{knowledgeContextEnabled ? <div className="composer-knowledge-control"><button type="button" className="composer-knowledge-button" onClick={() => setKnowledgeContextEnabled(false)}>{locale === "zh" ? "⌑ Obsidian 知识库" : "⌑ Obsidian context"}</button><button type="button" className="composer-knowledge-close" aria-label={locale === "zh" ? "关闭 Obsidian 知识库上下文" : "Disable Obsidian knowledge"} onClick={() => setKnowledgeContextEnabled(false)}>×</button></div> : <button type="button" className="composer-knowledge-button" onClick={() => setKnowledgeContextEnabled(true)}>{locale === "zh" ? "⌑ 添加 Obsidian 知识库" : "⌑ Add Obsidian context"}</button>}<ModelControls locale={locale} model={activeModel} models={activeModels} providerSource={formatWorkbenchModelLabel(activeModel, { zh: "本地模型", en: "Local model" }, locale)} reasoningEffort={reasoningEffort} skillId={skillId} showSkill={false} hideModel onModelChange={updateModel} onReasoningChange={updateReasoning} onSkillChange={setSkillId} /></WorkbenchPromptInput></div></section>
-           <HomeEntryGroups onNavigate={workbenchClient.navigation.go} locale={locale} /></main></div></div>
-          <section className="run-card"><div className="run-card-header"><span>{locale === "zh" ? "新建任务" : "New task"}</span><span className="provider-pill">{locale === "zh" ? "默认模型 · 本地配置" : "Default model · Local config"}</span></div>{mode !== "chat" && <label className="workflow-select">{locale === "zh" ? "工作流能力" : "Workflow capability"}<select value={workflowAction} onChange={(event) => setWorkflowAction(event.target.value as WorkflowAction)}>{workflowActions.map((item) => <option key={item.id} value={item.id}>{locale === "en" ? workflowActionEnglish[item.id] ?? item.label : item.label}</option>)}</select></label>}<textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={locale === "zh" ? "描述你想完成的营销任务……" : "Describe the marketing task you want to complete…"} /><div className="run-footer"><span className="muted">{runStatus || (locale === "zh" ? "Enter 发送 · Shift+Enter 换行" : "Enter to send · Shift+Enter for a new line")}</span>{activeRunId ? <button className="ghost" onClick={() => void cancelActiveRun()}>{copy.stop}</button> : <button className="primary" disabled={!prompt.trim()} onClick={() => void runAgent()}>{locale === "zh" ? "运行 Agent" : "Run Agent"}</button>}</div></section>
-          <section className="recent-card"><div className="section-title"><span>{selected.path === "/dashboard/assets" ? (locale === "zh" ? "资产库" : "Asset library") : mode === "library" ? (locale === "zh" ? "本地工作流与会话" : "Local workflows and sessions") : (locale === "zh" ? "最近会话" : "Recent sessions")}</span><span className="muted">{selected.path === "/dashboard/assets" ? `${artifactRows.length} ${locale === "zh" ? "个产物" : "artifacts"}` : savedWorkflows.length ? `${savedWorkflows.length} ${locale === "zh" ? "个工作流" : "workflows"}` : ""}</span></div>{selected.path === "/dashboard/assets" ? (artifactRows.length ? <div className="conversation-list">{artifactRows.map((item) => <button key={item.id} className="conversation-row artifact-row" onClick={() => void workbenchClient.files.reveal(item.relative_path, item.mime_type)}><span>{item.relative_path}</span><small>{Math.ceil(item.byte_length / 1024)} KB · {item.mime_type}</small></button>)}</div> : <div className="empty-state"><strong>{locale === "zh" ? "还没有本地产物" : "No local artifacts yet"}</strong><p>{locale === "zh" ? "运行写作、PPT 或媒体任务后，文件会出现在这里。" : "Artifacts appear here after writing, PPT, or media runs."}</p></div>) : mode === "library" && savedWorkflows.length ? <div className="conversation-list">{savedWorkflows.map((item) => <div key={item.id} className="conversation-row"><span>{item.name}</span><small>{formatDateTime(item.updated_at, locale)}</small></div>)}</div> : homeMessages.length ? <div className="message-thread"><WorkbenchMessageSurface messages={homeMessages} locale={locale} pendingMessageId={activeRunId ? homeMessages.at(-1)?.id : undefined} onCopy={(message) => navigator.clipboard?.writeText(desktopUIMessageText(message))} onArtifactOpen={(artifact) => void workbenchClient.files.open(artifact.relativePath, artifact.mimeType)} onArtifactDownload={(artifactId) => { const artifact = artifactRows.find((item) => item.id === artifactId); if (artifact) void workbenchClient.files.open(artifact.relative_path, artifact.mime_type); }} /></div> : conversations.length ? <div className="conversation-list">{conversations.map((item) => <button key={item.id} type="button" className="conversation-row" onClick={() => navigate(`/dashboard/ai/${item.id}`)}><span>{item.title}</span><small>{formatDateTime(item.updated_at, locale)}</small></button>)}</div> : <div className="empty-state"><div className="empty-icon">⌁</div><strong>{locale === "zh" ? "还没有本地会话" : "No local sessions yet"}</strong><p>{locale === "zh" ? "运行第一个任务后，文本、工具步骤和产物会显示在这里。" : "Text, tool steps, and artifacts will appear here after your first task."}</p></div>}</section>
+          <div className="home-shell"><div className="home-page-shell"><header className="home-topbar"><div className="home-topbar-status"><span className="public-signal" aria-hidden="true" /><span>{homeCopy.workspaceReady}</span></div><button type="button" className="home-credits-link" onClick={() => workbenchClient.navigation.go("/dashboard/tasks")}><span className="home-credits-icon"><WorkbenchRouteIcon name="sparkles" size={14} /></span><span>{homeCopy.viewUsage}</span><WorkbenchRouteIcon name="arrowUpRight" size={15} /></button></header><main className="home-main"><section className="home-welcome"><div className="home-welcome-kicker">COWORKANY WORKSPACE</div><h1>{homeCopy.welcomePrefix}{homeCopy.welcomeDefaultName}<span className="home-welcome-mark" aria-hidden="true">✦</span></h1><p>{homeCopy.welcomeSubtitle}</p></section>
+          <section className="home-chat-workspace"><div className="chat-composer"><WorkbenchPromptInput value={prompt} onValueChange={setPrompt} onSubmit={() => void runAgent()} attachments={attachments.map((attachment) => ({ id: attachment.id, name: attachment.name, mediaType: attachment.mediaType, status: attachment.status, error: attachment.error }))} onAddAttachments={addAttachments} onRemoveAttachment={removeAttachment} models={activeModels.map((item) => ({ id: item, label: formatWorkbenchModelLabel(item, { zh: "本地模型", en: "Local model" }, locale), provider: locale === "zh" ? "已配置模型" : "Configured models" }))} model={activeModel} onModelChange={updateModel} placeholder={copy.homePlaceholder} status={activeRunId ? "streaming" : "ready"} onStop={() => void cancelActiveRun()} locale={locale}><span className="sr-only" aria-live="polite">{localizeDesktopStatus(runStatus, locale)}</span>{knowledgeContextEnabled ? <div className="composer-knowledge-control"><button type="button" className="composer-knowledge-button" onClick={() => setKnowledgeContextEnabled(false)}>{locale === "zh" ? "⌑ Obsidian 知识库" : "⌑ Obsidian context"}</button><button type="button" className="composer-knowledge-close" aria-label={locale === "zh" ? "关闭 Obsidian 知识库上下文" : "Disable Obsidian knowledge"} onClick={() => setKnowledgeContextEnabled(false)}>×</button></div> : <button type="button" className="composer-knowledge-button" onClick={() => setKnowledgeContextEnabled(true)}>{locale === "zh" ? "⌑ 添加 Obsidian 知识库" : "⌑ Add Obsidian context"}</button>}<ModelControls locale={locale} model={activeModel} models={activeModels} providerSource={formatWorkbenchModelLabel(activeModel, { zh: "本地模型", en: "Local model" }, locale)} reasoningEffort={reasoningEffort} skillId={skillId} showSkill={false} hideModel onModelChange={updateModel} onReasoningChange={updateReasoning} onSkillChange={setSkillId} /></WorkbenchPromptInput></div></section>
+          <HomeEntryGroups onNavigate={workbenchClient.navigation.go} locale={locale} /></main></div></div>
+          <section className="recent-card"><div className="section-title"><span>{selected.path === "/dashboard/assets" ? (locale === "zh" ? "资产库" : "Asset library") : mode === "library" ? (locale === "zh" ? "本地工作流与会话" : "Local workflows and sessions") : (locale === "zh" ? "最近会话" : "Recent sessions")}</span><span className="muted">{selected.path === "/dashboard/assets" ? `${artifactRows.length} ${locale === "zh" ? "个产物" : "artifacts"}` : savedWorkflows.length ? `${savedWorkflows.length} ${locale === "zh" ? "个工作流" : "workflows"}` : ""}</span></div>{selected.path === "/dashboard/assets" ? (artifactRows.length ? <div className="conversation-list">{artifactRows.map((item) => <button key={item.id} className="conversation-row artifact-row" onClick={() => void workbenchClient.files.reveal(item.relative_path, item.mime_type)}><span>{item.relative_path}</span><small>{Math.ceil(item.byte_length / 1024)} KB · {item.mime_type}</small></button>)}</div> : <div className="empty-state"><strong>{locale === "zh" ? "还没有本地产物" : "No local artifacts yet"}</strong><p>{locale === "zh" ? "运行写作、PPT 或媒体任务后，文件会出现在这里。" : "Artifacts appear here after writing, PPT, or media runs."}</p></div>) : mode === "library" && savedWorkflows.length ? <div className="conversation-list">{savedWorkflows.map((item) => <div key={item.id} className="conversation-row"><span>{item.name}</span><small>{formatDateTime(item.updated_at, locale)}</small></div>)}</div> : homeMessages.length ? <div className="message-thread"><WorkbenchMessageSurface messages={homeMessages} locale={locale} pendingMessageId={activeRunId ? homeMessages.at(-1)?.id : undefined} onCopy={(message) => navigator.clipboard?.writeText(desktopUIMessageText(message))} onArtifactOpen={(artifact) => void workbenchClient.files.open(artifact.relativePath, artifact.mimeType)} onArtifactDownload={(artifactId) => { const artifact = artifactRows.find((item) => item.id === artifactId); if (artifact) void workbenchClient.files.open(artifact.relative_path, artifact.mime_type); }} resolveMediaSource={resolveDesktopMediaSource} resolveArtifactSource={resolveDesktopArtifactSource} /></div> : conversations.length ? <div className="conversation-list">{conversations.map((item) => <button key={item.id} type="button" className="conversation-row" onClick={() => navigate(conversationRoute(item))}><span>{item.title}</span><small>{formatDateTime(item.updated_at, locale)}</small></button>)}</div> : <div className="empty-state"><div className="empty-icon">⌁</div><strong>{locale === "zh" ? "还没有本地会话" : "No local sessions yet"}</strong><p>{locale === "zh" ? "运行第一个任务后，文本、工具步骤和产物会显示在这里。" : "Text, tool steps, and artifacts will appear here after your first task."}</p></div>}</section>
            <section className="stats-card"><div className="section-title"><span>{locale === "zh" ? "本地状态" : "Local status"}</span><span className="muted">{locale === "zh" ? "只统计，不扣费" : "Stats only; no billing"}</span></div><div className="stats-grid"><div><strong>{taskCount}</strong><span>{locale === "zh" ? "本地任务" : "Local tasks"}</span></div><div><strong>{tokenCount}</strong><span>Token</span></div><div><strong>{artifactCount}</strong><span>{locale === "zh" ? "产物" : "Artifacts"}</span></div></div></section>
          </> : null}
-        {selected.path !== "/dashboard" && (selected.mode === "chat" || selected.mode === "writer") ? <DesktopConversationWorkspace route={activeChatRoute} prompt={prompt} onPromptChange={setPrompt} runStatus={runStatus} activeRunId={activeRunId} onRun={(value) => void runAgent(value)} onGenerateImages={() => void runAgent(locale === "zh" ? "基于上一轮文案生成配图，并将图片产物写入当前项目目录。" : "Generate images from the previous draft and write the image artifacts into the current project directory.", "image_generate")} onCancel={() => void cancelActiveRun()} onNewConversation={startNewConversation} knowledgeEnabled={knowledgeContextEnabled} onKnowledgeToggle={() => setKnowledgeContextEnabled((current) => !current)} activePrompt={activePrompt} activePromptAt={activePromptAt} assistantText={assistantText} onAssistantTextChange={setAssistantText} onSaveDraft={saveWriterDraft} assistantAt={assistantAt} messages={conversationMessages} conversationId={activeConversationId} chatTransport={desktopChatTransport} chatReady={Boolean(activeConversationId)} providerId={activeProvider.id} activeAssistantParts={activeRunId ? assistantPartsRef.current.get(activeRunId) : undefined} toolEvents={toolEvents} conversations={conversations} onNavigate={workbenchClient.navigation.go} artifacts={artifactRows} onArtifactOpen={(relativePath, mimeType) => void workbenchClient.files.open(relativePath, mimeType)} onArtifactDownload={(artifactId) => { const artifact = artifactRows.find((item) => item.id === artifactId); if (artifact) void workbenchClient.files.open(artifact.relative_path, artifact.mime_type); }} model={activeModel} models={activeModels} reasoningEffort={reasoningEffort} skillId={effectiveSkillId} attachments={attachments} onAddAttachments={addAttachments} onRemoveAttachment={removeAttachment} onModelChange={updateModel} onReasoningChange={updateReasoning} onSkillChange={setSkillId} locale={locale} /> : selected.path === "/dashboard/workflows" ? (workflowBuilderOpen ? <DesktopWorkflowWorkspace route={selected} onBack={() => setWorkflowBuilderOpen(false)} prompt={prompt} onPromptChange={setPrompt} runStatus={workflowRunStatus} activeRunId={currentWorkflowRunId} onRun={(definition) => void runAgent(undefined, undefined, undefined, definition)} onCancel={() => void cancelActiveRun()} savedWorkflows={savedWorkflows} workflowAction={workflowAction} onWorkflowAction={setWorkflowAction} definition={workflowDefinition} onDefinitionChange={setWorkflowDefinition} workflowMetadata={workflowMetadata} onWorkflowMetaChange={(patch) => setWorkflowMetadata((current) => ({ ...current, ...patch }))} onSave={(definition) => void saveCurrentWorkflow("manual", definition)} onExport={(definition) => void exportCurrentWorkflow(definition)} onImport={(file) => void importWorkflow(file)} model={activeModel} models={activeModels} reasoningEffort={reasoningEffort} skillId={effectiveSkillId} onModelChange={updateModel} onReasoningChange={updateReasoning} onSkillChange={setSkillId} providerConfiguredForNode={(nodeType) => isMediaProviderConfigured(providerForCapability(config, capabilityForWorkflowAction(nodeType)))} onSelectWorkflowFiles={selectWorkflowFiles} nodeExecutionSnapshots={workflowNodeSnapshots} locale={locale} /> : <WorkbenchWorkflowDirectory locale={locale} workflows={workflowDirectoryWorkflows} templates={workflowDirectoryTemplates} recentRuns={workflowDirectoryRuns} actionAvailability={{ duplicate: true, delete: true }} onAction={(action) => void handleWorkflowDirectoryAction(action)} />) : (selected.path === "/dashboard/image-assistant" || selected.path === "/dashboard/video" || selected.path === "/dashboard/capabilities") ? <DesktopMediaWorkspace route={selected} prompt={prompt} onPromptChange={setPrompt} runStatus={runStatus} activeRunId={activeRunId} onRun={(override, featureId, mediaInputs) => void runAgent(override, featureId, mediaInputs)} onCancel={() => void cancelActiveRun()} workflowAction={workflowAction} onWorkflowAction={setWorkflowAction} artifactRows={artifactRows} providerConfigured={isMediaProviderConfigured(activeProvider)} onOpenSettings={() => { setSettingsOpen(true); workbenchClient.navigation.go("/dashboard/settings"); }} onOpenTasks={() => workbenchClient.navigation.go("/dashboard/tasks")} onArtifactReveal={(relativePath, mimeType) => void workbenchClient.files.reveal(relativePath, mimeType)} onAddAttachments={addAttachments} onRemoveAttachment={removeAttachment} attachments={attachments} model={activeModel} models={activeModels} reasoningEffort={reasoningEffort} skillId={effectiveSkillId} onModelChange={updateModel} onReasoningChange={updateReasoning} onSkillChange={setSkillId} locale={locale} /> : selected.path === "/dashboard/agent-platform" ? <WorkbenchAgentDirectory locale={locale} title={selected.label} description={selected.description} groups={directoryGroups} onAction={(card, action) => { if (action.id.startsWith("menu:")) { toggleMenuAgent(card.id); return; } workbenchClient.navigation.go(card.id === "general" ? "/dashboard/ai" : `/dashboard/ai?agent=${encodeURIComponent(card.id)}`); }} /> : selected.path === "/dashboard/settings" ? null : selected.mode === "library" ? <DesktopLibraryWorkspace route={selected} artifactRows={artifactRows} savedWorkflows={savedWorkflows} conversations={conversations} runs={runs} taskCount={taskCount} tokenCount={tokenCount} artifactCount={artifactCount} providerCost={providerCost} estimatedCost={estimatedCost} onNavigate={workbenchClient.navigation.go} onRetryRun={(run) => void prepareRunRetry(run)} onInspectRun={(runId) => workbenchClient.runs.inspect(runId).then(toRunDetail)} onArtifactRemove={(artifactId) => { void workbenchClient.artifacts.remove(artifactId).then(() => setArtifactRows((current) => current.filter((item) => item.id !== artifactId))); }} onArtifactReveal={(relativePath, mimeType) => void workbenchClient.files.reveal(relativePath, mimeType)} onKnowledgeOpen={(relativePath) => void workbenchClient.knowledge.open(relativePath)} knowledgeQuery={knowledgeQuery} knowledgeResults={knowledgeResults} knowledgeStatus={knowledgeStatus} onKnowledgeQueryChange={setKnowledgeQuery} onKnowledgeSearch={() => void searchKnowledge()} locale={locale} /> : null}
+        {selected.path !== "/dashboard" && (selected.mode === "chat" || selected.mode === "writer") ? <DesktopConversationWorkspace route={activeChatRoute} prompt={prompt} onPromptChange={setPrompt} runStatus={runStatus} activeRunId={activeRunId} onRun={(value, displayedValue) => void runAgent(value, undefined, undefined, undefined, undefined, displayedValue)} onGenerateImages={() => void runAgent(locale === "zh" ? "基于上一轮文案生成配图，并将图片产物写入当前项目目录。" : "Generate images from the previous draft and write the image artifacts into the current project directory.", "image_generate")} onCancel={() => void cancelActiveRun()} onNewConversation={startNewConversation} knowledgeEnabled={knowledgeContextEnabled} onKnowledgeToggle={() => setKnowledgeContextEnabled((current) => !current)} activePrompt={activePrompt} activePromptAt={activePromptAt} assistantText={assistantText} onAssistantTextChange={setAssistantText} onSaveDraft={saveWriterDraft} onExportDraft={exportWriterDraft} assistantAt={assistantAt} messages={conversationMessages} conversationId={conversationIdFromPath(activePath)} chatTransport={desktopChatTransport} chatReady={Boolean(conversationIdFromPath(activePath))} providerId={activeProvider.id} activeAssistantParts={activeRunId ? assistantPartsRef.current.get(activeRunId) : undefined} toolEvents={toolEvents} conversations={conversations} onNavigate={workbenchClient.navigation.go} artifacts={artifactRows} onArtifactOpen={(relativePath, mimeType) => void workbenchClient.files.open(relativePath, mimeType)} onArtifactDownload={(artifactId) => { const artifact = artifactRows.find((item) => item.id === artifactId); if (artifact) void workbenchClient.files.open(artifact.relative_path, artifact.mime_type); }} model={activeModel} models={activeModels} reasoningEffort={reasoningEffort} skillId={effectiveSkillId} attachments={attachments} onAddAttachments={addAttachments} onRemoveAttachment={removeAttachment} onModelChange={updateModel} onReasoningChange={updateReasoning} onSkillChange={setSkillId} onReachTop={(viewport) => { const id = conversationIdFromPath(activePath); if (id) loadOlderConversationMessages(id, viewport); }} locale={locale} /> : selected.path === "/dashboard/workflows" ? (workflowBuilderOpen ? <DesktopWorkflowWorkspace route={selected} onBack={() => setWorkflowBuilderOpen(false)} prompt={prompt} onPromptChange={setPrompt} runStatus={workflowRunStatus} activeRunId={currentWorkflowRunId} onRun={(definition) => void runAgent(undefined, undefined, undefined, definition)} onCancel={() => void cancelActiveRun()} savedWorkflows={savedWorkflows} workflowAction={workflowAction} onWorkflowAction={setWorkflowAction} definition={workflowDefinition} onDefinitionChange={setWorkflowDefinition} workflowMetadata={workflowMetadata} onWorkflowMetaChange={(patch) => setWorkflowMetadata((current) => ({ ...current, ...patch }))} onSave={(definition) => void saveCurrentWorkflow("manual", definition)} onExport={(definition) => void exportCurrentWorkflow(definition)} onImport={(file) => void importWorkflow(file)} model={activeModel} models={activeModels} reasoningEffort={reasoningEffort} skillId={effectiveSkillId} onModelChange={updateModel} onReasoningChange={updateReasoning} onSkillChange={setSkillId} providerConfiguredForNode={(nodeType) => isMediaProviderConfigured(providerForCapability(config, capabilityForWorkflowAction(nodeType)))} onSelectWorkflowFiles={selectWorkflowFiles} nodeExecutionSnapshots={workflowNodeSnapshots} locale={locale} /> : <WorkbenchWorkflowDirectory locale={locale} workflows={workflowDirectoryWorkflows} templates={workflowDirectoryTemplates} recentRuns={workflowDirectoryRuns} actionAvailability={{ duplicate: true, delete: true }} onAction={(action) => void handleWorkflowDirectoryAction(action)} />) : (selected.path === "/dashboard/image-assistant" || selected.path === "/dashboard/video" || selected.path === "/dashboard/capabilities") ? <DesktopMediaWorkspace route={selected} prompt={prompt} onPromptChange={setPrompt} runStatus={runStatus} activeRunId={activeRunId} onRun={(override, featureId, mediaInputs) => void runAgent(override, featureId, mediaInputs)} onCancel={() => void cancelActiveRun()} workflowAction={workflowAction} onWorkflowAction={setWorkflowAction} artifactRows={artifactRows} providerConfigured={isMediaProviderConfigured(activeProvider)} onOpenSettings={() => { setSettingsOpen(true); workbenchClient.navigation.go("/dashboard/settings"); }} onOpenTasks={() => workbenchClient.navigation.go("/dashboard/tasks")} onArtifactReveal={(relativePath, mimeType) => void workbenchClient.files.reveal(relativePath, mimeType)} onAddAttachments={addAttachments} onRemoveAttachment={removeAttachment} attachments={attachments} model={activeModel} models={activeModels} reasoningEffort={reasoningEffort} skillId={effectiveSkillId} onModelChange={updateModel} onReasoningChange={updateReasoning} onSkillChange={setSkillId} locale={locale} /> : selected.path === "/dashboard/agent-platform" ? <WorkbenchAgentDirectory locale={locale} title={selected.label} description={selected.description} groups={directoryGroups} onAction={(card, action) => { if (action.id.startsWith("menu:")) { toggleMenuAgent(card.id); return; } if (action.id.startsWith("start:")) { void startNewConversationForAgent(card.id === "general" ? null : card.id); return; } workbenchClient.navigation.go(card.id === "general" ? "/dashboard/ai" : `/dashboard/ai?agent=${encodeURIComponent(card.id)}`); }} /> : selected.path === "/dashboard/settings" ? null : selected.mode === "library" ? <DesktopLibraryWorkspace route={selected} artifactRows={artifactRows} savedWorkflows={savedWorkflows} conversations={conversations} runs={runs} taskCount={taskCount} tokenCount={tokenCount} artifactCount={artifactCount} providerCost={providerCost} estimatedCost={estimatedCost} onNavigate={workbenchClient.navigation.go} onRetryRun={(run) => void prepareRunRetry(run)} onInspectRun={(runId) => workbenchClient.runs.inspect(runId).then(toRunDetail)} onArtifactRemove={(artifactId) => { void workbenchClient.artifacts.remove(artifactId).then(() => setArtifactRows((current) => current.filter((item) => item.id !== artifactId))); }} onArtifactReveal={(relativePath, mimeType) => void workbenchClient.files.reveal(relativePath, mimeType)} onKnowledgeOpen={(relativePath) => void workbenchClient.knowledge.open(relativePath)} knowledgeQuery={knowledgeQuery} knowledgeResults={knowledgeResults} knowledgeStatus={knowledgeStatus} onKnowledgeQueryChange={setKnowledgeQuery} onKnowledgeSearch={() => void searchKnowledge()} locale={locale} /> : null}
       </section>
       </WorkbenchShell>
       </DesktopMediaHistoryContext.Provider>

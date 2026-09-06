@@ -5,7 +5,7 @@
 
 ## Source review
 
-The selected component contract follows the official AI Elements component directory and compound APIs. The repository keeps the source under `packages/workbench-ui/src/ai-elements/` and exposes it through `@aimarketing/workbench-ui`.
+The selected component contract follows the official AI Elements component directory and compound APIs. The repository keeps the source under `packages/workbench-ui/src/ai-elements/` and exposes it through `@coworkany/workbench-ui`.
 
 Reviewed domains: PromptInput, Attachments, ModelSelector, Conversation, Message, process components, Sources, Context, Artifact, Agent, Queue/Checkpoint/Confirmation, Canvas, Audio/Voice and capability-gated Code/Runtime structures.
 
@@ -20,7 +20,7 @@ No new optional dependency was added by this change. The stable implementation u
 - Brand colors and status styles are mapped to Workbench CSS tokens, especially `--wb-brand-yellow`, surface, ink, border, muted and focus variables.
 - Workbench compatibility exports remain temporarily to protect existing Web/Tauri callers.
 - Workflow and media business shells remain host-owned; shared components provide semantics and callbacks only.
-- Writer resolves the desktop text provider from `%LOCALAPPDATA%/AIMarketing/config.json` (or the explicit test/config path override), using `defaults.text` and its profile model/base URL/API key. The Tauri Writer composer reuses the same profile's model catalog and persists a changed model id through the existing config writer.
+- Writer resolves the desktop text provider from `%LOCALAPPDATA%/CoworkAny/config.json` (or the explicit test/config path override), using `defaults.text` and its profile model/base URL/API key. The Tauri Writer composer reuses the same profile's model catalog and persists a changed model id through the existing config writer.
 - Current product has no durable Checkpoint restore/branch runtime and no high-risk tool approval runtime. Those paths are explicitly capability-gated rather than represented by fake callbacks.
 
 ## Remaining risk

@@ -1,4 +1,4 @@
-import { HybridKnowledgeRetriever, type KnowledgeCitation, type KnowledgeChunk } from "@aimarketing/knowledge-runtime";
+import { HybridKnowledgeRetriever, type KnowledgeCitation, type KnowledgeChunk } from "@coworkany/knowledge-runtime";
 import { readIndexState, readManifest, searchLanceIndex, type LocalEmbeddingOptions } from "./lancedb";
 
 export async function searchVaultIndex(indexPath: string, query: string, limit = 8, embedding: LocalEmbeddingOptions = {}): Promise<KnowledgeCitation[]> {

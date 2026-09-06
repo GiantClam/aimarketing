@@ -3,7 +3,8 @@ use serde::Serialize;
 use serde_json::Value;
 use sha2::Digest;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::collections::HashSet;
+use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const BACKUP_INTERVAL: Duration = Duration::from_secs(5 * 60);
@@ -32,7 +33,7 @@ CREATE TABLE IF NOT EXISTS vault_mappings (id TEXT PRIMARY KEY, vault_path TEXT 
 
 pub fn data_root(executable: &Path, local_app_data: Option<PathBuf>) -> PathBuf {
     if executable.join("portable.flag").exists() { return executable.join("data"); }
-    local_app_data.unwrap_or_else(|| PathBuf::from(".").join("AIMarketing"))
+    local_app_data.unwrap_or_else(|| PathBuf::from(".").join("CoworkAny"))
 }
 
 pub fn initialize(path: &Path) -> Result<()> {
@@ -241,6 +242,9 @@ pub struct ConversationRow { pub id: String, pub title: String, pub opencode_ses
 #[derive(Debug, Serialize)]
 pub struct ArtifactRow { pub id: String, pub project_id: Option<String>, pub relative_path: String, pub mime_type: String, pub byte_length: i64, pub sha256: String, pub created_at: String, pub available: bool }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct ArtifactReconciliationCandidate { pub id: String, pub relative_path: String, pub mime_type: String }
+
 #[derive(Debug, Serialize)]
 pub struct MessageRow { pub id: String, pub conversation_id: String, pub role: String, pub content: String, pub parts_json: Option<String>, pub metadata_json: Option<String>, pub created_at: String }
 
@@ -392,6 +396,38 @@ pub fn list_artifacts(path: &Path) -> Result<Vec<ArtifactRow>> {
     Ok(rows)
 }
 
+fn safe_artifact_relative_path(value: &str) -> bool {
+    let path = Path::new(value);
+    !value.trim().is_empty()
+        && !value.contains('\0')
+        && !path.is_absolute()
+        && path.components().all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
+}
+
+pub fn artifact_reconciliation_candidates(path: &Path) -> Result<Vec<ArtifactReconciliationCandidate>> {
+    initialize(path)?;
+    let connection = open(path)?;
+    let existing_ids = connection
+        .prepare("SELECT id FROM artifacts")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<HashSet<_>, _>>()?;
+    let events = connection
+        .prepare("SELECT run_id, payload_json FROM run_events WHERE event_type='artifact' ORDER BY id ASC")?
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut candidates = Vec::new();
+    for (run_id, payload_json) in events {
+        let Ok(payload) = serde_json::from_str::<Value>(&payload_json) else { continue; };
+        let Some(artifact) = payload.get("artifact").and_then(Value::as_object) else { continue; };
+        let Some(relative_path) = artifact.get("relativePath").and_then(Value::as_str).filter(|value| safe_artifact_relative_path(value)) else { continue; };
+        let mime_type = artifact.get("mimeType").and_then(Value::as_str).filter(|value| !value.trim().is_empty()).unwrap_or("application/octet-stream");
+        let id = artifact.get("id").and_then(Value::as_str).filter(|value| !value.trim().is_empty()).map(str::to_owned).unwrap_or_else(|| format!("{run_id}:{relative_path}"));
+        if existing_ids.contains(&id) || candidates.iter().any(|candidate: &ArtifactReconciliationCandidate| candidate.id == id) { continue; }
+        candidates.push(ArtifactReconciliationCandidate { id, relative_path: relative_path.to_owned(), mime_type: mime_type.to_owned() });
+    }
+    Ok(candidates)
+}
+
 pub fn remove_artifact(path: &Path, artifact_id: &str) -> Result<()> {
     initialize(path)?;
     let connection = open(path)?;
@@ -400,10 +436,29 @@ pub fn remove_artifact(path: &Path, artifact_id: &str) -> Result<()> {
 }
 
 pub fn list_messages(path: &Path, conversation_id: &str) -> Result<Vec<MessageRow>> {
+    list_messages_page(path, conversation_id, None, None, None)
+}
+
+pub fn list_messages_page(path: &Path, conversation_id: &str, limit: Option<i64>, before_created_at: Option<&str>, before_id: Option<&str>) -> Result<Vec<MessageRow>> {
     initialize(path)?;
     let connection = open(path)?;
-    let mut statement = connection.prepare("SELECT id, conversation_id, role, content, parts_json, metadata_json, created_at FROM messages WHERE conversation_id=?1 ORDER BY created_at ASC, id ASC")?;
-    let rows = statement.query_map([conversation_id], |row| Ok(MessageRow { id: row.get(0)?, conversation_id: row.get(1)?, role: row.get(2)?, content: row.get(3)?, parts_json: row.get(4)?, metadata_json: row.get(5)?, created_at: row.get(6)? }))?.collect::<Result<Vec<_>, _>>()?;
+    let mut rows = if let Some(raw_limit) = limit.filter(|value| *value > 0) {
+        let bounded_limit = raw_limit.min(100);
+        if let (Some(cursor_created_at), Some(cursor_id)) = (before_created_at.filter(|value| !value.is_empty()), before_id.filter(|value| !value.is_empty())) {
+            let mut statement = connection.prepare("SELECT id, conversation_id, role, content, parts_json, metadata_json, created_at FROM messages WHERE conversation_id=?1 AND (created_at < ?2 OR (created_at = ?2 AND rowid < (SELECT rowid FROM messages WHERE id=?3))) ORDER BY created_at DESC, rowid DESC LIMIT ?4")?;
+            let rows = statement.query_map(rusqlite::params![conversation_id, cursor_created_at, cursor_id, bounded_limit], |row| Ok(MessageRow { id: row.get(0)?, conversation_id: row.get(1)?, role: row.get(2)?, content: row.get(3)?, parts_json: row.get(4)?, metadata_json: row.get(5)?, created_at: row.get(6)? }))?.collect::<Result<Vec<_>, _>>()?;
+            rows
+        } else {
+            let mut statement = connection.prepare("SELECT id, conversation_id, role, content, parts_json, metadata_json, created_at FROM messages WHERE conversation_id=?1 ORDER BY created_at DESC, rowid DESC LIMIT ?2")?;
+            let rows = statement.query_map(rusqlite::params![conversation_id, bounded_limit], |row| Ok(MessageRow { id: row.get(0)?, conversation_id: row.get(1)?, role: row.get(2)?, content: row.get(3)?, parts_json: row.get(4)?, metadata_json: row.get(5)?, created_at: row.get(6)? }))?.collect::<Result<Vec<_>, _>>()?;
+            rows
+        }
+    } else {
+        let mut statement = connection.prepare("SELECT id, conversation_id, role, content, parts_json, metadata_json, created_at FROM messages WHERE conversation_id=?1 ORDER BY created_at ASC, rowid ASC")?;
+        let rows = statement.query_map([conversation_id], |row| Ok(MessageRow { id: row.get(0)?, conversation_id: row.get(1)?, role: row.get(2)?, content: row.get(3)?, parts_json: row.get(4)?, metadata_json: row.get(5)?, created_at: row.get(6)? }))?.collect::<Result<Vec<_>, _>>()?;
+        rows
+    };
+    if limit.is_some() { rows.reverse(); }
     Ok(rows)
 }
 
@@ -491,8 +546,28 @@ mod tests {
     use std::thread;
 
     #[test]
+    fn finds_unregistered_local_artifacts_from_persisted_artifact_events() {
+        let root = std::env::temp_dir().join(format!("coworkany-storage-artifact-reconcile-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let path = root.join("app.db");
+        create_run(&path, "run-ppt", None, Some("local")).unwrap();
+        append_run_event(&path, "run-ppt", 1, "artifact", r#"{"event":"artifact","artifact":{"id":"run-ppt:exports/deck.pptx","relativePath":"exports/deck.pptx","mimeType":"application/vnd.openxmlformats-officedocument.presentationml.presentation"}}"#).unwrap();
+        append_run_event(&path, "run-ppt", 2, "artifact", r#"{"event":"artifact","artifact":{"relativePath":"../outside.pptx","mimeType":"application/vnd.openxmlformats-officedocument.presentationml.presentation"}}"#).unwrap();
+        append_run_event(&path, "run-ppt", 3, "text_delta", r#"{"event":"text_delta","delta":"deck.pptx"}"#).unwrap();
+
+        let candidates = artifact_reconciliation_candidates(&path).unwrap();
+
+        assert_eq!(candidates, vec![ArtifactReconciliationCandidate {
+            id: "run-ppt:exports/deck.pptx".to_string(),
+            relative_path: "exports/deck.pptx".to_string(),
+            mime_type: "application/vnd.openxmlformats-officedocument.presentationml.presentation".to_string(),
+        }]);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn repository_round_trip_is_idempotent() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-storage-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-storage-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("app.db");
         let row = create_conversation(&path, "conversation-1", "本地会话", None, Some("executive-brand")).unwrap();
@@ -539,8 +614,26 @@ mod tests {
     }
 
     #[test]
+    fn messages_with_the_same_timestamp_follow_append_order() {
+        let root = std::env::temp_dir().join(format!("coworkany-storage-message-order-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let path = root.join("app.db");
+        create_conversation(&path, "conversation-order", "回合顺序", None, None).unwrap();
+        let created_at = Some("2026-08-12T00:00:00Z");
+        append_message(&path, "z-user-1", "conversation-order", "user", "问题一", None, None, created_at).unwrap();
+        append_message(&path, "a-assistant-1", "conversation-order", "assistant", "回答一", None, None, created_at).unwrap();
+        append_message(&path, "z-user-2", "conversation-order", "user", "问题二", None, None, created_at).unwrap();
+        append_message(&path, "a-assistant-2", "conversation-order", "assistant", "回答二", None, None, created_at).unwrap();
+
+        let rows = list_messages(&path, "conversation-order").unwrap();
+
+        assert_eq!(rows.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(), ["z-user-1", "a-assistant-1", "z-user-2", "a-assistant-2"]);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn concurrent_readers_and_single_writer_keep_wal_storage_consistent() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-storage-concurrency-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-storage-concurrency-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("app.db");
         create_conversation(&path, "conversation-concurrency", "并发读写", None, None).unwrap();
@@ -589,8 +682,33 @@ mod tests {
     }
 
     #[test]
+    fn paged_messages_return_newest_first_page_and_older_cursor_pages() {
+        let root = std::env::temp_dir().join(format!("coworkany-storage-pages-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let path = root.join("app.db");
+        create_conversation(&path, "conversation-pages", "分页会话", None, None).unwrap();
+        for index in 0..25 {
+            let id = format!("message-{index:02}");
+            let created_at = format!("2026-08-12T00:00:{index:02}Z");
+            append_message(&path, &id, "conversation-pages", "user", &id, None, None, Some(&created_at)).unwrap();
+        }
+
+        let latest = list_messages_page(&path, "conversation-pages", Some(10), None, None).unwrap();
+        assert_eq!(latest.first().map(|row| row.id.as_str()), Some("message-15"));
+        assert_eq!(latest.last().map(|row| row.id.as_str()), Some("message-24"));
+        let older = list_messages_page(&path, "conversation-pages", Some(10), Some(&latest[0].created_at), Some(&latest[0].id)).unwrap();
+        assert_eq!(older.first().map(|row| row.id.as_str()), Some("message-05"));
+        assert_eq!(older.last().map(|row| row.id.as_str()), Some("message-14"));
+        let oldest = list_messages_page(&path, "conversation-pages", Some(10), Some(&older[0].created_at), Some(&older[0].id)).unwrap();
+        assert_eq!(oldest.len(), 5);
+        assert_eq!(oldest.first().map(|row| row.id.as_str()), Some("message-00"));
+        assert_eq!(oldest.last().map(|row| row.id.as_str()), Some("message-04"));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn startup_recovery_marks_active_runs_interrupted() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-recovery-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-recovery-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("app.db");
         create_run(&path, "run-active", None, Some("local")).unwrap();
@@ -603,7 +721,7 @@ mod tests {
 
     #[test]
     fn finishing_a_run_closes_unfinished_nodes_with_the_same_terminal_status() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-node-finish-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-node-finish-{}", std::process::id()));
         let path = root.join("app.db");
         let _ = fs::remove_dir_all(&root);
         initialize(&path).unwrap();
@@ -618,7 +736,7 @@ mod tests {
 
     #[test]
     fn workflow_revisions_and_usage_summary_are_persisted() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-workflow-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-workflow-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("app.db");
         let workflow = save_workflow(&path, "wf-1", "内容流水线", None, r#"{"version":1,"nodes":[]}"#).unwrap();
@@ -642,7 +760,7 @@ mod tests {
 
     #[test]
     fn removing_workflow_also_removes_its_revisions() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-workflow-remove-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-workflow-remove-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("app.db");
         save_workflow(&path, "wf-remove", "待删除工作流", None, r#"{"version":1,"nodes":[]}"#).unwrap();
@@ -658,7 +776,7 @@ mod tests {
 
     #[test]
     fn upgrades_legacy_usage_records_with_provider_cost_columns() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-usage-migration-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-usage-migration-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("app.db");
         std::fs::create_dir_all(&root).unwrap();
@@ -676,7 +794,7 @@ mod tests {
 
     #[test]
     fn usage_summary_keeps_an_unknown_cost_unknown() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-usage-unknown-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-usage-unknown-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("app.db");
         create_run(&path, "run-unknown", None, Some("local")).unwrap();
@@ -690,7 +808,7 @@ mod tests {
 
     #[test]
     fn structured_json_storage_redacts_credentials_without_losing_usage_fields() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-storage-redaction-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-storage-redaction-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("app.db");
         let fixture_value = "fixture-value-must-not-reach-sqlite";
@@ -717,7 +835,7 @@ mod tests {
 
     #[test]
     fn workflow_storage_keeps_graph_identity_keys_while_redacting_credentials() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-workflow-identity-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-workflow-identity-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("app.db");
         let definition = r#"{"nodes":[{"nodeKey":"avatar-image","config":{"apiKey":"secret"}}],"edges":[{"edgeKey":"avatar-to-human","sourceNodeKey":"avatar-image","targetNodeKey":"digital-human"}]}"#;
@@ -734,7 +852,7 @@ mod tests {
 
     #[test]
     fn restores_a_corrupt_database_from_the_latest_consistent_backup() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-storage-backup-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-storage-backup-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let path = root.join("app.db");
         create_conversation(&path, "conversation-backup", "恢复会话", None, None).unwrap();

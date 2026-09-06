@@ -6,6 +6,7 @@ export * from "./capability-center";
 export * from "./provider-catalog";
 export * from "./media";
 export * from "./message-timeline";
+export * from "./message-time";
 export * from "./workbench-message-surface";
 export * from "./prompt-input";
 export * from "./process-parts";
@@ -115,7 +116,7 @@ export const WORKBENCH_THEME = {
 } as const;
 
 // Kept in lockstep with components/workspace/workspace-message-primitives.tsx
-// so the Tauri surface uses the same message geometry as aimarketingsite.com.
+// so the Tauri surface uses the same message geometry as the online workbench.
 export const WORKBENCH_MESSAGE_FRAME = {
   maxWidth: "64rem",
   rowPadding: "14px 16px",

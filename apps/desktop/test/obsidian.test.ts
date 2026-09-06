@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { activateIndexGeneration, createIndexGenerationPath, indexObsidianVault, ObsidianVaultWatcher, reconcileObsidianVault, resolveActiveIndexPath, searchVault, writeObsidianNote } from "../runtime/obsidian";
 
 test("indexes Obsidian markdown with Chinese and spaces, then searches locally", async () => {
-  const root = await mkdtemp(join(tmpdir(), "AI Marketing Vault "));
+  const root = await mkdtemp(join(tmpdir(), "CoworkAny Vault "));
   const vault = join(root, "我的 Vault"); const index = join(root, "indexes", "vault-a");
   try {
     await mkdir(join(vault, "项目"), { recursive: true });
@@ -26,14 +26,14 @@ test("indexes Obsidian markdown with Chinese and spaces, then searches locally",
 });
 
 test("honors Vault ignore rules and nested hidden paths", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-vault-ignore-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-vault-ignore-"));
   const index = join(root, "index");
   try {
     await mkdir(join(root, "visible"), { recursive: true });
     await mkdir(join(root, "ignored", "nested"), { recursive: true });
     await mkdir(join(root, ".hidden"), { recursive: true });
     await writeFile(join(root, ".gitignore"), "ignored/\n*.secret.md\n", "utf8");
-    await writeFile(join(root, ".aimarketingignore"), "private/\n", "utf8");
+    await writeFile(join(root, ".coworkanyignore"), "private/\n", "utf8");
     await writeFile(join(root, "visible", "ok.md"), "# 可检索\n公开内容", "utf8");
     await writeFile(join(root, "ignored", "nested", "skip.md"), "# 不应出现\nignored", "utf8");
     await writeFile(join(root, ".hidden", "hidden.md"), "# 不应出现\nhidden", "utf8");
@@ -46,10 +46,10 @@ test("honors Vault ignore rules and nested hidden paths", async () => {
 });
 
 test("Obsidian writes are scoped and protected by a base hash", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-vault-write-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-vault-write-"));
   try {
     const first = await writeObsidianNote({ vaultPath: root, content: "# 新笔记\n内容" });
-    assert.equal(first.path, "AI Marketing/generated-note.md");
+    assert.equal(first.path, "CoworkAny/generated-note.md");
     await assert.rejects(() => writeObsidianNote({ vaultPath: root, targetPath: first.path, content: "stale", baseHash: "wrong" }), /obsidian_write_conflict/);
     await assert.rejects(() => writeObsidianNote({ vaultPath: root, targetPath: "../outside.md", content: "escape" }), /obsidian_path_escape/);
     const manifest = await indexObsidianVault(root, join(root, ".index"));
@@ -59,7 +59,7 @@ test("Obsidian writes are scoped and protected by a base hash", async () => {
 });
 
 test("concurrent Obsidian writes using one base hash produce one conflict", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-vault-write-race-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-vault-write-race-"));
   try {
     const initial = await writeObsidianNote({ vaultPath: root, content: "# Initial" });
     const writes = await Promise.allSettled([
@@ -74,7 +74,7 @@ test("concurrent Obsidian writes using one base hash produce one conflict", asyn
 });
 
 test("Obsidian watcher can start and stop without requiring Obsidian", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-vault-watch-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-vault-watch-"));
   try {
     const watcher = new ObsidianVaultWatcher(root, () => undefined).start();
     watcher.stop();
@@ -82,7 +82,7 @@ test("Obsidian watcher can start and stop without requiring Obsidian", async () 
 });
 
 test("Obsidian index generations activate atomically after a complete manifest", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-vault-generation-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-vault-generation-"));
   const vault = join(root, "Vault"); const index = join(root, "indexes", "vault");
   try {
     await mkdir(vault, { recursive: true });
@@ -98,8 +98,8 @@ test("Obsidian index generations activate atomically after a complete manifest",
 });
 
 test("indexes 10,000 Markdown documents and reconciles changes while the watcher is active", { timeout: 30_000 }, async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-vault-large-"));
-  const vault = join(root, "OneDrive - AI Marketing", "资料库");
+  const root = await mkdtemp(join(tmpdir(), "coworkany-vault-large-"));
+  const vault = join(root, "OneDrive - CoworkAny", "资料库");
   const index = join(root, "indexes", "large-vault");
   const bulk = join(vault, "批量文档");
   const longPath = join(vault, "客户资料", "季度复盘", "2026", "华东区域", "长期项目", "最终交付", "超长路径笔记.md");

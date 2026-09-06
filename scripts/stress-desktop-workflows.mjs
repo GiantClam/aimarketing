@@ -8,8 +8,8 @@ import { fileURLToPath } from "node:url";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const desktopRoot = join(repoRoot, "apps", "desktop");
 const fixture = join(desktopRoot, "test", "fixtures", "fake-opencode-serve.mjs");
-const runsPerType = Math.max(1, Math.min(12, Number.parseInt(process.env.AIMARKETING_STRESS_RUNS_PER_TYPE ?? "4", 10) || 4));
-const artifactRoot = resolve(process.env.AIMARKETING_STRESS_ARTIFACT_DIR ?? join(repoRoot, ".artifacts", `desktop-workflow-stress-${Date.now()}`));
+const runsPerType = Math.max(1, Math.min(12, Number.parseInt(process.env.COWORKANY_STRESS_RUNS_PER_TYPE ?? "4", 10) || 4));
+const artifactRoot = resolve(process.env.COWORKANY_STRESS_ARTIFACT_DIR ?? join(repoRoot, ".artifacts", `desktop-workflow-stress-${Date.now()}`));
 
 function frame(value) {
   const body = Buffer.from(JSON.stringify(value), "utf8");
@@ -33,7 +33,7 @@ function startHost(workspace) {
     cwd: desktopRoot,
     windowsHide: true,
     stdio: ["pipe", "pipe", "pipe"],
-    env: { ...process.env, AIMARKETING_OPENCODE_PATH: fixture, OPENCODE_RUNTIME_DIR: workspace },
+    env: { ...process.env, COWORKANY_OPENCODE_PATH: fixture, OPENCODE_RUNTIME_DIR: workspace },
   });
   const frames = [];
   const errors = [];

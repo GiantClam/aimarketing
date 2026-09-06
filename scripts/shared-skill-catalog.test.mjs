@@ -7,7 +7,7 @@ import test from "node:test";
 import { collectCanonicalSkillCatalog, validateSkillCatalogContents } from "./shared-skill-catalog.mjs";
 
 test("canonical skill catalogs are deterministic and detect digest drift", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-skill-catalog-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-skill-catalog-"));
   await mkdir(join(root, "writer"), { recursive: true });
   await mkdir(join(root, "agents", "research"), { recursive: true });
   await writeFile(join(root, "writer", "SKILL.md"), "# Writer\n", "utf8");

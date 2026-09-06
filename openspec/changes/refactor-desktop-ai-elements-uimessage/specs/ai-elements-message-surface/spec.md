@@ -1,7 +1,7 @@
 # Specification: Shared AI Elements Message Surface
 
 **Change ID:** `refactor-desktop-ai-elements-uimessage`
-**Affects:** `@aimarketing/workbench-ui`, AI Chat, Agent, Writer, Knowledge, Assets, media and Workflow routes
+**Affects:** `@coworkany/workbench-ui`, AI Chat, Agent, Writer, Knowledge, Assets, media and Workflow routes
 
 ---
 

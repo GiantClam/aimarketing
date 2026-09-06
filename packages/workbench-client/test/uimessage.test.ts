@@ -22,6 +22,102 @@ test("merges streaming text immutably and preserves sequence ordering", () => {
   assert.equal(applyWorkbenchRunEventToUIMessage(second, event({ type: "text", delta: " duplicate", sequence: 2 })), second);
 });
 
+test("does not repeat short text fragments when a stream delivers them more than once", () => {
+  let message = createDesktopUIMessage({ id: "assistant-duplicate-fragments", role: "assistant", conversationId: "conversation-1", runId: "run-1" });
+  const fragments = ["I'll", "I'll", "I'll", " load", " load", " load", " the", " the", " the", " D", " D", " D", "ashi", "ashi", "ashi", " PPT", " PPT", " PPT", " skill", " skill"];
+  fragments.forEach((delta, index) => {
+    message = applyWorkbenchRunEventToUIMessage(message, event({ type: "text", delta, sequence: index + 1 }));
+  });
+  assert.equal(desktopUIMessageText(message), "I'll load the Dashi PPT skill");
+});
+
+test("replaces a final full-text snapshot instead of appending it to streamed deltas", () => {
+  const initial = createDesktopUIMessage({ id: "assistant-snapshot", role: "assistant", conversationId: "conversation-1", runId: "run-1" });
+  const streamed = applyWorkbenchRunEventToUIMessage(initial, event({
+    type: "text",
+    delta: "I'mnotgoingtouseaskillforthisgeneralquestion.",
+    sequence: 1,
+  }));
+  const final = applyWorkbenchRunEventToUIMessage(streamed, event({
+    type: "text",
+    delta: "I'm not going to use a skill for this general question.",
+    sequence: 2,
+  }));
+  assert.equal(desktopUIMessageText(final), "I'm not going to use a skill for this general question.");
+});
+
+test("preserves text parts exactly, including planning-like words", () => {
+  const initial = createDesktopUIMessage({ id: "assistant-planning-residue", role: "assistant", conversationId: "conversation-1", runId: "run-1" });
+  const result = applyWorkbenchRunEventToUIMessage(initial, event({
+    type: "text",
+    delta: "TheuserTheuser审查时最需要关注的三项风险：1.付款与资金条款风险",
+    sequence: 1,
+  }));
+  assert.equal(desktopUIMessageText(result), "TheuserTheuser审查时最需要关注的三项风险：1.付款与资金条款风险");
+});
+
+test("preserves text parts exactly across languages", () => {
+  const initial = createDesktopUIMessage({ id: "assistant-repeated-planning-residue", role: "assistant", conversationId: "conversation-1", runId: "run-1" });
+  const result = applyWorkbenchRunEventToUIMessage(initial, event({
+    type: "text",
+    delta: "TheuserisTheuserisTheuser审查最值得优先盯住的三项风险：1.签约主体与授权资格",
+    sequence: 1,
+  }));
+  assert.equal(desktopUIMessageText(result), "TheuserisTheuserisTheuser审查最值得优先盯住的三项风险：1.签约主体与授权资格");
+});
+
+test("restores persisted text without mutating Markdown source", () => {
+  const restored = parseDesktopUIMessage({
+    id: "assistant-persisted-planning-residue",
+    role: "assistant",
+    parts: [{ type: "text", text: "TheuserisTheuserisTheuser审查时最需要关注的三项风险：1.付款与资金条款风险", state: "done" }],
+  });
+  assert.equal(desktopUIMessageText(restored), "TheuserisTheuserisTheuser审查时最需要关注的三项风险：1.付款与资金条款风险");
+});
+
+test("preserves English text when it is explicitly a text part", () => {
+  const restored = parseDesktopUIMessage({
+    id: "assistant-generic-self-talk",
+    role: "assistant",
+    parts: [{ type: "text", text: "This is another regression test message. I should acknowledge the two lines and confirm rendering. 收到你的新回归测试消息，两行内容正常显示：\n\n第一行\n第二行", state: "done" }],
+  });
+  assert.equal(desktopUIMessageText(restored), "This is another regression test message. I should acknowledge the two lines and confirm rendering. 收到你的新回归测试消息，两行内容正常显示：\n\n第一行\n第二行");
+});
+
+test("preserves malformed Markdown source for the standard renderer", () => {
+  const restored = parseDesktopUIMessage({
+    id: "assistant-chinese-self-talk",
+    role: "assistant",
+    parts: [{ type: "text", text: "需要先对齐一个矛盾点：平台和任务要求不同，我按你的明确指令来。确认无误后继续：---##标题候选\n\n正文内容", state: "done" }],
+  });
+  assert.equal(desktopUIMessageText(restored), "需要先对齐一个矛盾点：平台和任务要求不同，我按你的明确指令来。确认无误后继续：---##标题候选\n\n正文内容");
+});
+
+test("keeps explicit reasoning separate from persisted visible text", () => {
+  const restored = parseDesktopUIMessage({
+    id: "assistant-compact-investigation",
+    role: "assistant",
+    parts: [{ type: "text", text: "The userLet me understand the task. Let me investigate the workspace and references. 一、先说结论：需求成立。", state: "done" }],
+  });
+  assert.equal(desktopUIMessageText(restored), "The userLet me understand the task. Let me investigate the workspace and references. 一、先说结论：需求成立。");
+  assert.deepEqual(restored.parts, [{ type: "text", text: "The userLet me understand the task. Let me investigate the workspace and references. 一、先说结论：需求成立。", state: "done" }]);
+});
+
+test("persists exact text and reasoning parts for the desktop history renderer", () => {
+  const message = parseDesktopUIMessage({
+    id: "assistant-sales-storage",
+    role: "assistant",
+    parts: [
+      { type: "reasoning", text: "先检查数据", state: "done" },
+      { type: "text", text: "结论。\n\n---##标题", state: "done" },
+    ],
+  });
+  const stored = desktopUIMessageStorage(message);
+  assert.equal(stored.content, "结论。\n\n---##标题");
+  assert.match(stored.parts_json, /先检查数据/u);
+  assert.match(stored.parts_json, /---##标题/u);
+});
+
 test("does not regress a completed tool on duplicate or late started events", () => {
   let message = createDesktopUIMessage({ id: "assistant-1", role: "assistant", conversationId: "conversation-1", runId: "run-1" });
   message = applyWorkbenchRunEventToUIMessage(message, event({ type: "tool_call", toolName: "search", toolCallId: "tool-1", phase: "started", input: { query: "ai" }, sequence: 1 }));
@@ -43,6 +139,15 @@ test("serializes and restores UIMessage parts and metadata without losing text",
   const restored = parseDesktopUIMessage({ id: message.id, role: message.role, parts: JSON.parse(stored.parts_json), metadata: JSON.parse(stored.metadata_json) });
   assert.equal(desktopUIMessageText(restored), "已完成");
   assert.equal(restored.metadata?.modelId, "deepseek-v4-flash");
+});
+
+test("restores legacy thinking parts as renderable reasoning parts", () => {
+  const restored = parseDesktopUIMessage({
+    id: "assistant-thinking",
+    role: "assistant",
+    parts: [{ type: "thinking", thinking: "先分析任务" }],
+  });
+  assert.deepEqual(restored.parts, [{ type: "reasoning", text: "先分析任务", state: "done" }]);
 });
 
 test("adapts a run event sequence to an AI SDK readable stream", async () => {
@@ -70,6 +175,38 @@ test("adapts a run event sequence to an AI SDK readable stream", async () => {
     { type: "text-end", id: "text:assistant" },
     { type: "finish", finishReason: "stop" },
   ]);
+});
+
+test("exposes a direct transport stop for desktop streams when the shell has no active run id", async () => {
+  const stopped: string[] = [];
+  const transport = createDesktopRunTransport({
+    start: async () => ({ runId: "run-direct-stop" }),
+    subscribe: () => () => undefined,
+    stop: async (runId) => { stopped.push(runId); },
+  });
+  const user = createDesktopUIMessage({ id: "user-direct-stop", role: "user", conversationId: "conversation-stop", content: "long response" });
+  await transport.sendMessages({ trigger: "submit-message", chatId: "conversation-stop", messageId: undefined, messages: [user], abortSignal: undefined });
+  await transport.stopCurrent();
+  assert.deepEqual(stopped, ["run-direct-stop"]);
+});
+
+test("stops a desktop stream even when run startup is still pending", async () => {
+  const stopped: string[] = [];
+  let disposed = 0;
+  let resolveStart: ((value: { runId: string }) => void) | undefined;
+  const transport = createDesktopRunTransport({
+    start: async () => new Promise<{ runId: string }>((resolve) => { resolveStart = resolve; }),
+    subscribe: () => () => { disposed += 1; },
+    stop: async (runId) => { stopped.push(runId); },
+  });
+  const user = createDesktopUIMessage({ id: "user-pending-stop", role: "user", conversationId: "conversation-pending-stop", content: "long response" });
+  const request = transport.sendMessages({ trigger: "submit-message", chatId: "conversation-pending-stop", messageId: undefined, messages: [user], abortSignal: undefined });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await transport.stopCurrent();
+  resolveStart?.({ runId: "run-pending-stop" });
+  await request;
+  assert.deepEqual(stopped, ["run-pending-stop"]);
+  assert.equal(disposed, 1);
 });
 
 test("replays every UIMessage part family into stable native or typed chunks", () => {

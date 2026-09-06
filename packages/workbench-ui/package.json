@@ -1,5 +1,5 @@
 {
-  "name": "@aimarketing/workbench-ui",
+  "name": "@coworkany/workbench-ui",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,11 +13,20 @@
     "build": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@aimarketing/workbench-client": "workspace:*",
-    "@aimarketing/workflow-core": "workspace:*",
+    "@coworkany/workbench-client": "workspace:*",
+    "@coworkany/workflow-core": "workspace:*",
+    "@radix-ui/react-accordion": "1.2.2",
+    "@radix-ui/react-collapsible": "1.1.2",
+    "@radix-ui/react-dialog": "1.1.4",
+    "@radix-ui/react-dropdown-menu": "2.1.4",
+    "@radix-ui/react-hover-card": "1.1.4",
+    "@radix-ui/react-select": "2.1.4",
+    "@radix-ui/react-scroll-area": "1.2.2",
+    "@radix-ui/react-use-controllable-state": "1.1.1",
+    "cmdk": "1.0.4",
+    "use-stick-to-bottom": "1.1.3",
     "lucide-react": "^0.454.0",
     "media-chrome": "^4.19.2",
-    "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "streamdown": "^2.6.0"
   },

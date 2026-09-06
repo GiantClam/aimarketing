@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { Children, isValidElement, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -21,8 +21,6 @@ import {
   Share2,
   Sparkles,
 } from "lucide-react"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
 
 import { useAuth } from "@/components/auth-provider"
 import { useI18n } from "@/components/locale-provider"
@@ -55,7 +53,7 @@ import {
   PromptInputFooter,
   PromptInputSubmit,
   PromptInputTextarea,
-} from "@aimarketing/workbench-ui"
+} from "@coworkany/workbench-ui"
 import {
   findWriterPendingTask,
   removePendingAssistantTask,
@@ -672,7 +670,8 @@ function WriterAssetProgressPanel({
 function renderMarkdown(content: string, assets: WriterAsset[], className?: string, copy?: WriterCopy) {
   const normalizedContent = stripManagedWriterAssetCommentLines(content)
   return (
-    <div
+    <MessageResponse
+      content={normalizedContent}
       className={cn(
         "prose prose-neutral prose-lg max-w-none break-words",
         "prose-headings:font-semibold prose-headings:tracking-[-0.025em] prose-headings:text-slate-950",
@@ -685,10 +684,7 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
         "prose-hr:my-8 prose-hr:border-slate-200 prose-img:rounded-[10px]",
         className,
       )}
-    >
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
+      components={{
           img({ src, alt, ...props }) {
             if (typeof src !== "string" || !src.trim()) return null
             if (src.startsWith("data:image")) return null
@@ -754,10 +750,7 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
             return <code className="break-words rounded bg-slate-100 px-1.5 py-0.5 text-[0.9em] text-slate-900">{children}</code>
           },
         }}
-      >
-        {normalizedContent}
-      </ReactMarkdown>
-    </div>
+    />
   )
 }
 
@@ -813,8 +806,8 @@ function PlatformPreview({
 }) {
   const { locale } = useI18n()
   const isZh = locale === "zh"
-  const previewAccountName = isZh ? "AI Marketing 周刊" : "AI Marketing Weekly"
-  const socialAccountName = "AI Marketing Site"
+  const previewAccountName = isZh ? "CoworkAny 周刊" : "CoworkAny Weekly"
+  const socialAccountName = "CoworkAny Site"
   const socialFollowLabel = isZh ? "关注" : "Follow"
   const socialNowLabel = isZh ? "刚刚" : "Just now"
   const socialWeiboLabel = isZh ? "微博" : "Weibo"
@@ -887,7 +880,7 @@ function PlatformPreview({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="font-semibold text-black">{socialAccountName}</p>
-                  <p className="text-xs text-slate-500">{platform === "weibo" ? "@aimarketing" : "@aimarketingsite"}</p>
+                  <p className="text-xs text-slate-500">{platform === "weibo" ? "@coworkany" : "@coworkanysite"}</p>
                   <span className="text-slate-300">路</span>
                   <p className="text-xs text-slate-500">
                     {mode === "thread" ? `${threadLabel} ${index + 1}` : platform === "weibo" ? socialWeiboLabel : socialNowLabel}

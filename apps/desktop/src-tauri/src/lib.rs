@@ -29,7 +29,7 @@ presentation.slide_height = Inches(7.5)
 slide = presentation.slides.add_slide(presentation.slide_layouts[6])
 shape = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(10), Inches(1.2))
 run = shape.text_frame.paragraphs[0].add_run()
-run.text = "AIMarketing 中文 PPT probe"
+run.text = "CoworkAny 中文 PPT probe"
 run.font.name = "Microsoft YaHei"
 descriptor, output = tempfile.mkstemp(suffix=".pptx")
 os.close(descriptor)
@@ -280,9 +280,9 @@ fn emit_runtime_progress(app: &tauri::AppHandle, message: impl Into<String>) {
 
 fn discover_offline_runtime_zip(resource: &Path) -> Option<PathBuf> {
     let executable = std::env::current_exe().ok();
-    let mut candidates = vec![resource.join("AIMarketing-Runtime-x64.zip")];
-    if let Some(parent) = resource.parent() { candidates.push(parent.join("AIMarketing-Runtime-x64.zip")); }
-    if let Some(executable) = executable.and_then(|path| path.parent().map(Path::to_path_buf)) { candidates.push(executable.join("AIMarketing-Runtime-x64.zip")); }
+    let mut candidates = vec![resource.join("CoworkAny-Runtime-x64.zip")];
+    if let Some(parent) = resource.parent() { candidates.push(parent.join("CoworkAny-Runtime-x64.zip")); }
+    if let Some(executable) = executable.and_then(|path| path.parent().map(Path::to_path_buf)) { candidates.push(executable.join("CoworkAny-Runtime-x64.zip")); }
     candidates.into_iter().find(|path| path.is_file()).and_then(|path| std::fs::canonicalize(path).ok()).map(bootstrap::powershell_compatible_path)
 }
 
@@ -392,7 +392,7 @@ fn portable_default_workspace_path(executable_dir: &Path, configured: &Path) -> 
     let configured_name = configured.file_name()?.to_str()?;
     let data_name = configured.parent()?.file_name()?.to_str()?;
     let portable_name = configured.parent()?.parent()?.file_name()?.to_str()?;
-    if !configured_name.eq_ignore_ascii_case("projects") || !data_name.eq_ignore_ascii_case("data") || !portable_name.eq_ignore_ascii_case("AI-Marketing-Windows-x64-portable") { return None; }
+    if !configured_name.eq_ignore_ascii_case("projects") || !data_name.eq_ignore_ascii_case("data") || !portable_name.eq_ignore_ascii_case("CoworkAny-Windows-x64-portable") { return None; }
     let current = executable_dir.join("data").join("projects");
     if configured == current { return None; }
     Some(current)
@@ -442,7 +442,7 @@ fn merge_portable_provider_config(current: &serde_json::Value, imported: &serde_
 fn configured_local_app_data(app: &tauri::AppHandle) -> Option<PathBuf> {
     #[cfg(windows)]
     if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
-        return Some(PathBuf::from(local_app_data).join("AIMarketing"));
+        return Some(PathBuf::from(local_app_data).join("CoworkAny"));
     }
     app.path().app_local_data_dir().ok()
 }
@@ -454,7 +454,7 @@ fn project_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let configured = config::read(&data.join("config.json"), &data)?.get("workspacePath").and_then(serde_json::Value::as_str).map(PathBuf::from);
     let root = configured.unwrap_or_else(|| data.join("projects"));
     std::fs::create_dir_all(&root).map_err(|error| error.to_string())?;
-    let name = root.file_name().and_then(|value| value.to_str()).unwrap_or("AI Marketing");
+    let name = root.file_name().and_then(|value| value.to_str()).unwrap_or("CoworkAny");
     storage::upsert_project(&data.join("app.db"), &root.to_string_lossy(), name).map_err(|error| error.to_string())?;
     Ok(root)
 }
@@ -553,7 +553,7 @@ fn write_writer_draft(app: tauri::AppHandle, content: String) -> Result<artifact
     if content.trim().is_empty() { return Err("writer_draft_empty".to_string()); }
     if content.len() > 10 * 1024 * 1024 { return Err("writer_draft_too_large".to_string()); }
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|duration| duration.as_nanos()).unwrap_or(0);
-    let relative_path = format!("articles/ai-marketing-writer-{}.md", stamp);
+    let relative_path = format!("articles/coworkany-writer-{}.md", stamp);
     let root = project_root(&app)?;
     let target = root.join(relative_path.replace('/', "\\"));
     if !target.starts_with(&root) { return Err("writer_draft_path_escape".to_string()); }
@@ -570,15 +570,26 @@ fn inspect_artifact(app: tauri::AppHandle, relative_path: String, mime_type: Str
 
 #[tauri::command]
 fn register_artifact(app: tauri::AppHandle, artifact_id: String, project_id: Option<String>, relative_path: String, mime_type: String) -> Result<artifacts::ArtifactMetadata, String> {
-    let metadata = artifacts::inspect(&project_root(&app)?, &relative_path, &mime_type)?;
-    storage::register_artifact(&database_path(&app)?, &artifact_id, project_id.as_deref(), &metadata).map_err(|error| error.to_string())?;
-    Ok(metadata)
+  let metadata = artifacts::inspect(&project_root(&app)?, &relative_path, &mime_type)?;
+  storage::register_artifact(&database_path(&app)?, &artifact_id, project_id.as_deref(), &metadata).map_err(|error| error.to_string())?;
+  Ok(metadata)
+}
+
+fn reconcile_persisted_artifacts(root: &std::path::Path, database: &std::path::Path) -> Result<(), String> {
+  for candidate in storage::artifact_reconciliation_candidates(database).map_err(|error| error.to_string())? {
+    if let Ok(metadata) = artifacts::inspect(root, &candidate.relative_path, &candidate.mime_type) {
+      storage::register_artifact(database, &candidate.id, None, &metadata).map_err(|error| error.to_string())?;
+    }
+  }
+  Ok(())
 }
 
 #[tauri::command]
 fn list_artifacts(app: tauri::AppHandle) -> Result<Vec<storage::ArtifactRow>, String> {
-    let root = project_root(&app)?;
-    let mut rows = storage::list_artifacts(&database_path(&app)?).map_err(|error| error.to_string())?;
+  let root = project_root(&app)?;
+  let database = database_path(&app)?;
+  reconcile_persisted_artifacts(&root, &database)?;
+  let mut rows = storage::list_artifacts(&database).map_err(|error| error.to_string())?;
     for row in &mut rows {
         row.available = artifacts::inspect(&root, &row.relative_path, &row.mime_type).is_ok();
     }
@@ -604,7 +615,7 @@ fn export_diagnostics(app: tauri::AppHandle) -> Result<serde_json::Value, String
     fs::write(staging.join("metadata.json"), serde_json::to_vec_pretty(&serde_json::json!({ "version": env!("CARGO_PKG_VERSION"), "dataRoot": "[REDACTED]", "createdAt": stamp })).map_err(|error| error.to_string())?).map_err(|error| error.to_string())?;
     let logs = data.join("logs");
     if logs.exists() { copy_directory(&logs, &staging.join("logs"))?; }
-    let zip_path = diagnostics_root.join(format!("AI-Marketing-diagnostics-{stamp}.zip"));
+    let zip_path = diagnostics_root.join(format!("CoworkAny-diagnostics-{stamp}.zip"));
     archive_diagnostics(&staging, &zip_path)?;
     let _ = fs::remove_dir_all(&staging);
     Ok(serde_json::json!({ "path": zip_path, "redacted": true }))
@@ -716,13 +727,13 @@ fn pick_directory(initial_path: Option<String>) -> Result<Option<String>, String
 Add-Type -AssemblyName System.Windows.Forms
 $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
 $dialog.ShowNewFolderButton = $true
-$initial = [Environment]::GetEnvironmentVariable('AIMARKETING_PICK_INITIAL', 'Process')
+$initial = [Environment]::GetEnvironmentVariable('COWORKANY_PICK_INITIAL', 'Process')
 if ($initial -and (Test-Path -LiteralPath $initial -PathType Container)) { $dialog.SelectedPath = $initial }
 if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.SelectedPath) }
 "#;
         let output = Command::new("powershell.exe")
             .args(["-NoProfile", "-NonInteractive", "-STA", "-ExecutionPolicy", "Bypass", "-Command", script])
-            .env("AIMARKETING_PICK_INITIAL", initial)
+            .env("COWORKANY_PICK_INITIAL", initial)
             .creation_flags(0x08000000)
             .output()
             .map_err(|error| format!("directory_picker_spawn_failed: {error}"))?;
@@ -802,12 +813,12 @@ fn workflow_export_file_name(suggested_name: &str) -> String {
     let name = Path::new(suggested_name)
         .file_name()
         .and_then(|value| value.to_str())
-        .unwrap_or("ai-marketing-workflow.json");
+        .unwrap_or("coworkany-workflow.json");
     let sanitized = name.chars()
         .filter(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.'))
         .collect::<String>();
     let stem = sanitized.trim_matches('.');
-    if stem.is_empty() { return "ai-marketing-workflow.json".to_string(); }
+    if stem.is_empty() { return "coworkany-workflow.json".to_string(); }
     if stem.to_ascii_lowercase().ends_with(".json") { stem.to_string() } else { format!("{stem}.json") }
 }
 
@@ -824,11 +835,11 @@ $dialog = New-Object System.Windows.Forms.SaveFileDialog
 $dialog.Filter = 'JSON files|*.json|All files|*.*'
 $dialog.DefaultExt = 'json'
 $dialog.AddExtension = $true
-$dialog.FileName = [Environment]::GetEnvironmentVariable('AIMARKETING_WORKFLOW_EXPORT_NAME', 'Process')
+$dialog.FileName = [Environment]::GetEnvironmentVariable('COWORKANY_WORKFLOW_EXPORT_NAME', 'Process')
 if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.FileName) }
 "#;
         let output = Command::new("powershell.exe")
-            .env("AIMARKETING_WORKFLOW_EXPORT_NAME", &file_name)
+            .env("COWORKANY_WORKFLOW_EXPORT_NAME", &file_name)
             .args(["-NoProfile", "-NonInteractive", "-STA", "-ExecutionPolicy", "Bypass", "-Command", script])
             .creation_flags(0x08000000)
             .output()
@@ -906,11 +917,11 @@ fn save_workflow_output(
 Add-Type -AssemblyName System.Windows.Forms
 $dialog = New-Object System.Windows.Forms.SaveFileDialog
 $dialog.Filter = 'All files|*.*'
-$dialog.FileName = [Environment]::GetEnvironmentVariable('AIMARKETING_OUTPUT_NAME', 'Process')
+$dialog.FileName = [Environment]::GetEnvironmentVariable('COWORKANY_OUTPUT_NAME', 'Process')
 if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.FileName) }
 "#;
         let output = Command::new("powershell.exe")
-            .env("AIMARKETING_OUTPUT_NAME", &suggested_name)
+            .env("COWORKANY_OUTPUT_NAME", &suggested_name)
             .args(["-NoProfile", "-NonInteractive", "-STA", "-ExecutionPolicy", "Bypass", "-Command", script])
             .creation_flags(0x08000000)
             .output()
@@ -1125,8 +1136,8 @@ fn list_conversations(app: tauri::AppHandle) -> Result<Vec<storage::Conversation
 }
 
 #[tauri::command]
-fn list_messages(app: tauri::AppHandle, conversation_id: String) -> Result<Vec<storage::MessageRow>, String> {
-    storage::list_messages(&database_path(&app)?, &conversation_id).map_err(|error| error.to_string())
+fn list_messages(app: tauri::AppHandle, conversation_id: String, limit: Option<i64>, before_created_at: Option<String>, before_id: Option<String>) -> Result<Vec<storage::MessageRow>, String> {
+    storage::list_messages_page(&database_path(&app)?, &conversation_id, limit, before_created_at.as_deref(), before_id.as_deref()).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -1172,25 +1183,25 @@ fn usage_summary(app: tauri::AppHandle) -> Result<storage::UsageSummary, String>
 pub fn run() {
     let lock_path = match lock_path() {
         Ok(path) => path,
-        Err(error) => { eprintln!("AI Marketing cannot resolve instance lock path: {error}"); bootstrap::show_startup_error(&error); return; }
+        Err(error) => { eprintln!("CoworkAny cannot resolve instance lock path: {error}"); bootstrap::show_startup_error(&error); return; }
     };
     let instance_lock = match instance_lock::InstanceLock::acquire(lock_path) {
         Ok(lock) => lock,
-        Err(error) => { eprintln!("AI Marketing cannot acquire instance lock: {error}"); bootstrap::show_startup_error(&error); return; }
+        Err(error) => { eprintln!("CoworkAny cannot acquire instance lock: {error}"); bootstrap::show_startup_error(&error); return; }
     };
     if let Ok(executable) = std::env::current_exe() {
         if let Some(executable_dir) = executable.parent() {
             match migrate_portable_root_config(executable_dir) {
-                Ok(true) => eprintln!("AI Marketing imported portable config from the executable directory into data/config.json"),
+                Ok(true) => eprintln!("CoworkAny imported portable config from the executable directory into data/config.json"),
                 Ok(false) => {},
-                Err(error) => eprintln!("AI Marketing could not import the portable config: {error}"),
+                Err(error) => eprintln!("CoworkAny could not import the portable config: {error}"),
             }
         }
     }
     let startup_progress = bootstrap::StartupProgress::new(bootstrap::StartupStage::Starting);
     startup_progress.show_stage(bootstrap::StartupStage::WebView);
     if let Err(error) = bootstrap::ensure_webview2(&startup_progress) {
-        eprintln!("AI Marketing cannot start without WebView2: {error}");
+        eprintln!("CoworkAny cannot start without WebView2: {error}");
         startup_progress.update(&format!("WebView2 unavailable: {error}"));
         bootstrap::show_startup_error(&error);
         instance_lock.release();
@@ -1206,7 +1217,7 @@ pub fn run() {
         .manage(instance_lock)
         .manage(host::HostState::default())
         .invoke_handler(tauri::generate_handler![health, runtime_probe, list_local_skill_catalog, repair_runtime, runtime_paths, initialize_local_state, read_config, write_config, begin_local_attachment, append_local_attachment_chunk, finish_local_attachment, abort_local_attachment, allocate_media_temp, write_writer_draft, inspect_artifact, register_artifact, list_artifacts, remove_artifact, export_diagnostics, open_workspace, pick_directory, pick_workflow_files, save_workflow_export, save_workflow_output, open_artifact, open_artifact_folder, open_artifact_default, open_artifact_with, read_artifact, read_workflow_local_file, open_vault_file, create_conversation, set_conversation_session, append_message, create_run, append_run_event, finish_run, record_usage, record_run_node, record_run_checkpoint, record_run_attempt, list_conversations, list_messages, list_runs, inspect_run, list_recoverable_attempts, save_workflow, list_workflows, remove_workflow, usage_summary, host::host_start, host::host_send, host::host_stop]);
-    let app = builder.build(tauri::generate_context!()).expect("error while building AI Marketing");
+    let app = builder.build(tauri::generate_context!()).expect("error while building CoworkAny");
     drop(startup_progress);
     app.run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
@@ -1219,7 +1230,7 @@ pub fn run() {
 fn lock_path() -> Result<std::path::PathBuf, String> {
     let executable = std::env::current_exe().map_err(|error| error.to_string())?;
     let executable_dir = executable.parent().unwrap_or(executable.as_path());
-    let local_app_data = std::env::var_os("LOCALAPPDATA").map(|value| std::path::PathBuf::from(value).join("AIMarketing"));
+    let local_app_data = std::env::var_os("LOCALAPPDATA").map(|value| std::path::PathBuf::from(value).join("CoworkAny"));
     let data_root = storage::data_root(executable_dir, local_app_data);
     // Keep the lock adjacent to the data root rather than inside it. The
     // first-run runtime installer atomically swaps the whole data directory;
@@ -1229,7 +1240,7 @@ fn lock_path() -> Result<std::path::PathBuf, String> {
 }
 
 fn adjacent_instance_lock_path(data_root: &Path) -> PathBuf {
-    let name = data_root.file_name().and_then(|value| value.to_str()).unwrap_or("AIMarketing");
+    let name = data_root.file_name().and_then(|value| value.to_str()).unwrap_or("CoworkAny");
     data_root.parent().unwrap_or(data_root).join(format!("{name}.instance.lock"))
 }
 
@@ -1248,15 +1259,15 @@ mod tests {
 
     #[test]
     fn runtime_install_lock_stays_outside_swapped_data_root() {
-        let data_root = Path::new("C:/Users/test/AppData/Local/AIMarketing");
+        let data_root = Path::new("C:/Users/test/AppData/Local/CoworkAny");
         let lock = adjacent_instance_lock_path(data_root);
-        assert_eq!(lock, PathBuf::from("C:/Users/test/AppData/Local/AIMarketing.instance.lock"));
+        assert_eq!(lock, PathBuf::from("C:/Users/test/AppData/Local/CoworkAny.instance.lock"));
         assert_ne!(lock.parent(), Some(data_root));
     }
 
     #[test]
     fn portable_config_migrates_a_misplaced_root_config_only_over_the_first_run_default() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-portable-config-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-portable-config-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join("data")).unwrap();
         fs::write(root.join("portable.flag"), b"").unwrap();
@@ -1307,9 +1318,9 @@ mod tests {
 
     #[test]
     fn portable_default_workspace_moves_with_the_current_package() {
-        let base = std::env::temp_dir().join(format!("ai-marketing-portable-workspace-{}", std::process::id()));
-        let root = base.join("desktop-release-gray-20260826").join("AI-Marketing-Windows-x64-portable");
-        let stale = base.join("desktop-release-gray-20260824").join("AI-Marketing-Windows-x64-portable").join("AI-Marketing-Windows-x64-portable").join("data").join("projects");
+        let base = std::env::temp_dir().join(format!("coworkany-portable-workspace-{}", std::process::id()));
+        let root = base.join("desktop-release-gray-20260826").join("CoworkAny-Windows-x64-portable");
+        let stale = base.join("desktop-release-gray-20260824").join("CoworkAny-Windows-x64-portable").join("CoworkAny-Windows-x64-portable").join("data").join("projects");
         let _ = fs::remove_dir_all(&base);
         fs::create_dir_all(&root).unwrap();
         fs::write(root.join("portable.flag"), b"").unwrap();
@@ -1332,7 +1343,7 @@ mod tests {
 
     #[test]
     fn runtime_probe_persists_canonical_paths_and_reuses_them() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-runtime-paths-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-runtime-paths-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         let config_path = root.join("config.json");
@@ -1353,7 +1364,7 @@ mod tests {
 
     #[test]
     fn runtime_probe_cache_accepts_only_matching_ready_results() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-runtime-cache-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-runtime-cache-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         let result = serde_json::json!({ "ready": true, "paths": { "node": "C:/runtime/node.exe" } });
@@ -1368,7 +1379,7 @@ mod tests {
 
     #[test]
     fn local_skill_catalog_uses_the_valid_bundled_manifest() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-skill-catalog-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-skill-catalog-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         let invalid = root.join("invalid.json");
@@ -1382,7 +1393,7 @@ mod tests {
 
     #[test]
     fn windows_command_shims_resolve_to_real_opencode_executable() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-command-shim-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-command-shim-{}", std::process::id()));
         let bin = root.join("node_modules").join("opencode-ai").join("bin");
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&bin).unwrap();
@@ -1435,7 +1446,7 @@ mod tests {
 
     #[test]
     fn writer_artifacts_use_atomic_utf8_file_activation() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-atomic-writer-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-atomic-writer-{}", std::process::id()));
         let target = root.join("articles").join("draft.md");
         let _ = fs::remove_dir_all(&root);
         write_file_atomically(&target, "中文 draft".as_bytes()).unwrap();
@@ -1451,13 +1462,13 @@ mod tests {
         assert_eq!(workflow_export_file_name("campaign.json"), "campaign.json");
         assert_eq!(workflow_export_file_name("../../campaign"), "campaign.json");
         assert_eq!(workflow_export_file_name("<invalid>"), "invalid.json");
-        assert_eq!(workflow_export_file_name("..."), "ai-marketing-workflow.json");
+        assert_eq!(workflow_export_file_name("..."), "coworkany-workflow.json");
     }
 
     #[cfg(windows)]
     #[test]
     fn diagnostic_archive_contains_only_redacted_config() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-diagnostics-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-diagnostics-{}", std::process::id()));
         let staging = root.join("staging");
         let archive = root.join("diagnostics.zip");
         let extracted = root.join("extracted");

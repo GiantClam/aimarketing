@@ -30,20 +30,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ai-marketing"
-version = "0.1.0"
-dependencies = [
- "regex",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "tauri",
- "tauri-build",
- "windows-sys 0.59.0",
-]
-
-[[package]]
 name = "alloc-no-stdlib"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -405,6 +391,20 @@ dependencies = [
  "bitflags 2.13.1",
  "core-foundation",
  "libc",
+]
+
+[[package]]
+name = "coworkany"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

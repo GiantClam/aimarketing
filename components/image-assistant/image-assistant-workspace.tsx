@@ -31,7 +31,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { WorkspaceComposerPanel, WorkspacePromptChips, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
-import { PromptInput, PromptInputTextarea } from "@aimarketing/workbench-ui"
+import { PromptInput, PromptInputTextarea } from "@coworkany/workbench-ui"
 import {
   WorkspaceConversationSkeleton,
   WorkspaceLoadingMessage,

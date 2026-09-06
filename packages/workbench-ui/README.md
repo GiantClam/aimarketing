@@ -1,10 +1,10 @@
-# `@aimarketing/workbench-ui`
+# `@coworkany/workbench-ui`
 
 Shared AI UI primitives for the Web and Tauri workbenches.
 
 ## AI Elements boundary
 
-The `src/ai-elements/` directory is the stable shared source boundary for the selected AI Elements compound components. Page code should import from `@aimarketing/workbench-ui`; host actions such as navigation, cancellation, file access and provider execution remain typed callbacks.
+The `src/ai-elements/` directory is the stable shared source boundary for the selected AI Elements compound components. Page code should import from `@coworkany/workbench-ui`; host actions such as navigation, cancellation, file access and provider execution remain typed callbacks.
 
 Core domains currently covered:
 
@@ -25,8 +25,8 @@ Optional Code, Voice, Runtime, token-cost and React Flow dependencies are capabi
 Run from the repository root:
 
 ```text
-pnpm --filter @aimarketing/workbench-ui typecheck
-pnpm --filter @aimarketing/workbench-ui test
+pnpm --filter @coworkany/workbench-ui typecheck
+pnpm --filter @coworkany/workbench-ui test
 pnpm desktop:typecheck
 pnpm lint
 pnpm run check:shared-boundaries

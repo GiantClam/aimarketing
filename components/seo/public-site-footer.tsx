@@ -15,12 +15,12 @@ export function PublicSiteFooter() {
       <div className="mx-auto grid max-w-7xl gap-8 px-6 py-12 lg:grid-cols-[1.1fr_0.9fr_0.8fr] lg:items-start">
         <div>
           <div className="public-kicker text-muted-foreground">{copy.footer.systemFooterLabel}</div>
-          <div className="mt-2 font-display text-2xl font-extrabold uppercase tracking-[0.04em] text-foreground">AI Marketing</div>
+          <div className="mt-2 font-display text-2xl font-extrabold uppercase tracking-[0.04em] text-foreground">CoworkAny</div>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">{copy.footer.description}</p>
           <div className="mt-4 text-sm text-muted-foreground">
             {copy.footer.contact}:{" "}
-            <a className="text-foreground underline underline-offset-4" href="mailto:contact@aimarketingsite.com">
-              contact@aimarketingsite.com
+            <a className="text-foreground underline underline-offset-4" href="mailto:contact@coworkanysite.com">
+              contact@coworkanysite.com
             </a>
           </div>
         </div>

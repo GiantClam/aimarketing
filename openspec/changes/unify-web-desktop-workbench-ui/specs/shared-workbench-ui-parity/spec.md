@@ -2,7 +2,7 @@
 
 ### Requirement: Target workspaces SHALL have one React and CSS source
 
-The Web and Windows hosts SHALL render the targeted dashboard surfaces from public exports of `@aimarketing/workbench-ui`. Host code MAY compose adapters and capability policy but SHALL NOT maintain copied page components or copied route-specific CSS.
+The Web and Windows hosts SHALL render the targeted dashboard surfaces from public exports of `@coworkany/workbench-ui`. Host code MAY compose adapters and capability policy but SHALL NOT maintain copied page components or copied route-specific CSS.
 
 #### Scenario: Both hosts render a target surface
 

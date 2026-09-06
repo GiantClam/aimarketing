@@ -1,4 +1,4 @@
-import type { WorkflowDefinitionEnvelope, WorkflowDefinitionNodeV2 } from "@aimarketing/workflow-core";
+import type { WorkflowDefinitionEnvelope, WorkflowDefinitionNodeV2 } from "@coworkany/workflow-core";
 
 let fallbackSequence = 0;
 

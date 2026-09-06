@@ -1,7 +1,6 @@
 import type {
   WorkbenchClient,
   WorkbenchConversation,
-  WorkbenchMessage,
   WorkbenchRun,
   WorkbenchRunDetail,
   WorkbenchArtifact,
@@ -13,13 +12,15 @@ import type {
   WorkbenchUsage,
   WorkbenchWorkflow,
   WorkbenchWorkflowInput,
-} from "@aimarketing/workbench-client";
-import { WORKBENCH_MESSAGE_PARTS_VERSION, createDesktopRunTransport, desktopUIMessageStorage, desktopUIMessageText, desktopUIMessageToWorkbenchParts, normalizeWorkbenchMessageParts, parseDesktopUIMessage, workbenchMessageToDesktopUIMessage } from "@aimarketing/workbench-client";
-import type { DesktopUIMessage } from "@aimarketing/workbench-client";
+  WorkbenchConversationMessagesOptions,
+} from "@coworkany/workbench-client";
+import { createDesktopRunTransport, createDesktopUIMessage, desktopUIMessageStorage, desktopUIMessageText, parseDesktopUIMessage } from "@coworkany/workbench-client";
+import type { DesktopUIMessage } from "@coworkany/workbench-client";
 import type { TauriBridge } from "./tauri";
+import { promptRequestsArtifact } from "./artifact-intent";
 
 type DesktopConversationRow = { id: string; title: string; updated_at: string; message_count?: number; opencode_session_id?: string | null; agent_id?: string | null };
-type DesktopMessageRow = { id: string; conversation_id: string; role: WorkbenchMessage["role"]; content: string; parts_json?: string | null; metadata_json?: string | null; created_at: string };
+type DesktopMessageRow = { id: string; conversation_id: string; role: DesktopUIMessage["role"] | "tool"; content: string; parts_json?: string | null; metadata_json?: string | null; created_at: string };
 type DesktopWorkflowRow = { id: string; name: string; definition_json: string; updated_at: string };
 type DesktopArtifactRow = { id: string; relative_path: string; mime_type: string; byte_length: number; sha256: string; created_at: string; available?: boolean };
 type DesktopRunRow = { id: string; conversation_id?: string | null; status: WorkbenchRun["status"] | string; model?: string | null; started_at: string; finished_at?: string | null };
@@ -32,7 +33,10 @@ export type DesktopChatTransportOptions = {
   readonly resolveProvider: (message: DesktopUIMessage) => Record<string, unknown>;
   readonly ensureSession?: (request: { readonly chatId: string; readonly sessionId: string; readonly provider: Record<string, unknown>; readonly message: DesktopUIMessage }) => Promise<string>;
   readonly resolveSkillId?: (message: DesktopUIMessage) => string | undefined;
+  readonly resolvePrompt?: (message: DesktopUIMessage, prompt: string) => string;
+  readonly resolveSystemPrompt?: (message: DesktopUIMessage) => string | undefined;
   readonly resolveAgentId?: (message: DesktopUIMessage) => string | undefined;
+  readonly resolveAllowArtifacts?: (message: DesktopUIMessage) => boolean;
   readonly onRunStarted?: (runId: string, chatId: string, message: DesktopUIMessage) => void;
 };
 
@@ -63,53 +67,28 @@ function toWorkbenchArtifact(row: DesktopArtifactRow): WorkbenchArtifact {
   return { id: row.id, relativePath: row.relative_path, title: row.relative_path, mimeType: row.mime_type, byteLength: row.byte_length, sha256: row.sha256, createdAt: row.created_at, available: row.available };
 }
 
-function readMessageParts(raw: string | null | undefined, content: string): WorkbenchMessage["parts"] {
-  if (!raw) return normalizeWorkbenchMessageParts(undefined, content);
-  try {
-    const value = JSON.parse(raw) as unknown;
-    return normalizeWorkbenchMessageParts(Array.isArray(value) ? value as NonNullable<WorkbenchMessage["parts"]> : undefined, content);
-  } catch {
-    return normalizeWorkbenchMessageParts(undefined, content);
-  }
-}
-
 function readStoredUIMessage(row: DesktopMessageRow): DesktopUIMessage {
   let parts: unknown = [];
   let metadata: unknown;
   try { parts = JSON.parse(row.parts_json ?? "[]"); } catch { parts = []; }
   try { metadata = JSON.parse(row.metadata_json ?? "{}"); } catch { metadata = undefined; }
   const storedParts = Array.isArray(parts) ? parts : [];
-  const isUIMessageParts = storedParts.length > 0 && storedParts.every((part) => {
-    if (!part || typeof part !== "object") return false;
-    const type = (part as { type?: unknown }).type;
-    return typeof type === "string" && (type === "text" || type === "reasoning" || type === "dynamic-tool" || type === "file" || type === "source-url" || type === "source-document" || type.startsWith("data-"));
-  });
-  if (isUIMessageParts || (metadata && typeof metadata === "object" && Object.keys(metadata).length > 0)) {
-    return parseDesktopUIMessage({ id: row.id, role: row.role === "system" || row.role === "tool" ? "assistant" : row.role, parts: storedParts, metadata });
-  }
-  return workbenchMessageToDesktopUIMessage({
+  const parsed = parseDesktopUIMessage({ id: row.id, role: row.role === "system" || row.role === "tool" ? "assistant" : row.role, parts: storedParts, metadata });
+  const storageMetadata = {
+    ...(parsed.metadata ?? {}),
+    conversationId: parsed.metadata?.conversationId ?? row.conversation_id,
+    createdAt: row.created_at,
+    updatedAt: parsed.metadata?.updatedAt ?? row.created_at,
+  };
+  if (parsed.parts.length > 0 || row.content.length === 0) return { ...parsed, metadata: storageMetadata };
+  const fallback = createDesktopUIMessage({
     id: row.id,
     conversationId: row.conversation_id,
-    role: row.role,
+    role: row.role === "system" || row.role === "tool" ? "assistant" : row.role,
     content: row.content,
     createdAt: row.created_at,
-    partsVersion: WORKBENCH_MESSAGE_PARTS_VERSION,
-    parts: readMessageParts(row.parts_json, row.content),
   });
-}
-
-function hasStoredUIMessageParts(row: DesktopMessageRow) {
-  let parts: unknown;
-  let metadata: unknown;
-  try { parts = JSON.parse(row.parts_json ?? "[]"); } catch { parts = []; }
-  try { metadata = JSON.parse(row.metadata_json ?? "{}"); } catch { metadata = undefined; }
-  const storedParts = Array.isArray(parts) ? parts : [];
-  const isUIMessageParts = storedParts.length > 0 && storedParts.every((part) => {
-    if (!part || typeof part !== "object") return false;
-    const type = (part as { type?: unknown }).type;
-    return typeof type === "string" && (type === "text" || type === "reasoning" || type === "dynamic-tool" || type === "file" || type === "source-url" || type === "source-document" || type.startsWith("data-"));
-  });
-  return isUIMessageParts || (metadata && typeof metadata === "object" && Object.keys(metadata).length > 0);
+  return { ...fallback, metadata: { ...fallback.metadata, ...storageMetadata } };
 }
 
 function eventMetadata(event: Record<string, unknown>) {
@@ -147,12 +126,10 @@ export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: Wo
     const requestId = makeId("knowledge");
     const frame = { version: 1, requestId, type, payload };
     let dispose: (() => void) | undefined;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       let resolveResponse: (value: Record<string, unknown>) => void = () => undefined;
       let rejectResponse: (error: unknown) => void = () => undefined;
       const response = new Promise<Record<string, unknown>>((resolve, reject) => { resolveResponse = resolve; rejectResponse = reject; });
-      timer = setTimeout(() => { dispose?.(); rejectResponse(new Error("workflow_host_response_timeout")); }, 60_000);
       // Await listener registration before host_send so a fast local response
       // cannot be lost between the two IPC calls.
       dispose = await bridge.listen<{ raw: string }>("desktop://runtime-response", (event) => {
@@ -160,17 +137,16 @@ export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: Wo
           const separator = event.raw.indexOf(":");
           const parsed = JSON.parse(event.raw.slice(separator + 1)) as { requestId?: string };
           if (parsed.requestId !== requestId) return;
-          if (timer) clearTimeout(timer);
           dispose?.();
           resolveResponse(parsed as Record<string, unknown>);
         } catch {
-          // Ignore unrelated or malformed host frames; the timeout remains authoritative.
+          // Ignore unrelated or malformed host frames and keep waiting for the
+          // response belonging to this request.
         }
       });
       await bridge.invoke("host_send", { message: frame });
       return await response;
     } catch (error) {
-      if (timer) clearTimeout(timer);
       dispose?.();
       throw error;
     }
@@ -181,23 +157,19 @@ export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: Wo
       const rows = await bridge.invoke<DesktopConversationRow[]>("list_conversations");
       return rows.map((row) => ({ id: row.id, title: row.title, updatedAt: row.updated_at, messageCount: row.message_count ?? 0, opencodeSessionId: row.opencode_session_id ?? undefined, agentId: row.agent_id ?? undefined }));
     },
-    async create(title = "新对话"): Promise<WorkbenchConversation> {
+    async create(title = "新对话", agentId?: string | null): Promise<WorkbenchConversation> {
       const id = makeId("conversation");
-      const row = await bridge.invoke<DesktopConversationRow>("create_conversation", { input: { id, title, project_id: null } });
+      const row = await bridge.invoke<DesktopConversationRow>("create_conversation", { input: { id, title, project_id: null, agent_id: agentId ?? null } });
       return { id: row.id, title: row.title, updatedAt: row.updated_at, messageCount: row.message_count ?? 0, opencodeSessionId: row.opencode_session_id ?? undefined, agentId: row.agent_id ?? undefined };
     },
-    async messages(conversationId: string): Promise<readonly WorkbenchMessage[]> {
-      const rows = await bridge.invoke<DesktopMessageRow[]>("list_messages", { conversationId });
-      return rows.map((row) => {
-        if (!hasStoredUIMessageParts(row)) {
-          return { id: row.id, conversationId: row.conversation_id, role: row.role, content: row.content, createdAt: row.created_at, partsVersion: WORKBENCH_MESSAGE_PARTS_VERSION, parts: readMessageParts(row.parts_json, row.content) };
-        }
-        const message = readStoredUIMessage(row);
-        return { id: row.id, conversationId: row.conversation_id, role: row.role, content: desktopUIMessageText(message) || row.content, createdAt: row.created_at, partsVersion: WORKBENCH_MESSAGE_PARTS_VERSION, parts: desktopUIMessageToWorkbenchParts(message) };
-      });
-    },
-    async uiMessages(conversationId: string): Promise<readonly DesktopUIMessage[]> {
-      const rows = await bridge.invoke<DesktopMessageRow[]>("list_messages", { conversationId });
+    async messages(conversationId: string, options?: WorkbenchConversationMessagesOptions): Promise<readonly DesktopUIMessage[]> {
+      const input: Record<string, unknown> = { conversationId };
+      if (typeof options?.limit === "number" && Number.isFinite(options.limit)) input.limit = Math.max(1, Math.floor(options.limit));
+      if (options?.before) {
+        input.beforeCreatedAt = options.before.createdAt;
+        input.beforeId = options.before.id;
+      }
+      const rows = await bridge.invoke<DesktopMessageRow[]>("list_messages", input);
       return rows.map(readStoredUIMessage);
     },
   };
@@ -261,6 +233,13 @@ export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: Wo
           else if (event.event === "task" && event.task && typeof event.task === "object") onEvent({ type: "task", task: event.task as { id: string; taskId?: string; title: string; steps?: Array<{ id: string; title: string; status: "queued" | "running" | "completed" | "succeeded" | "failed" | "cancelled" | "blocked" | "waiting"; detail?: string; toolName?: string }>; status: "queued" | "running" | "completed" | "succeeded" | "failed" | "cancelled" | "blocked" | "waiting" }, ...metadata });
           else if (event.event === "source" && event.source && typeof event.source === "object") onEvent({ type: "source", source: event.source as { id: string; title: string; href?: string; excerpt?: string }, ...metadata });
           else if (event.event === "media" && event.media && typeof event.media === "object") onEvent({ type: "media", media: event.media as { artifactId: string; kind: "image" | "video" | "audio" | "document"; mimeType: string; title: string; relativePath?: string; previewable?: boolean }, ...metadata });
+          else if (event.event === "permission_request") {
+            onEvent({ type: "tool_call", toolName: String(event.toolName ?? "permission"), toolCallId: String(event.callId ?? event.permissionId ?? "permission"), phase: "blocked", input: event.input, approvalId: String(event.permissionId ?? ""), sessionId: String(event.sessionId ?? ""), ...metadata });
+          }
+          else if (event.event === "permission_response") {
+            const response = String(event.response ?? "reject");
+            onEvent({ type: "tool_call", toolName: "permission", toolCallId: String(event.callId ?? event.permissionId ?? "permission"), phase: response === "reject" ? "failed" : "started", error: response === "reject" ? "Permission rejected" : undefined, approvalId: String(event.permissionId ?? ""), sessionId: String(event.sessionId ?? ""), ...metadata });
+          }
           else if ((event.event === "tool_call" || event.event === "tool_result") && (event.data || event.toolName || event.tool)) {
             const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : event;
             const phase = event.event === "tool_result" ? (data.ok === false || data.error ? "failed" : "completed") : "started";
@@ -352,9 +331,11 @@ export function createDesktopChatTransport(bridge: TauriBridge, workbenchClient:
         sessionId,
         type: "session.prompt",
         payload: {
-          prompt,
+          prompt: options.resolvePrompt?.(message, prompt) ?? prompt,
+          ...(options.resolveSystemPrompt?.(message)?.trim() ? { systemPrompt: options.resolveSystemPrompt(message)?.trim() } : {}),
           model: message.metadata?.modelId,
           provider,
+          allowArtifacts: options.resolveAllowArtifacts?.(message) ?? promptRequestsArtifact(desktopUIMessageText(message)),
           ...(options.resolveSkillId?.(message) ? { skillId: options.resolveSkillId(message) } : {}),
           ...(options.resolveAgentId?.(message) ? { agentId: options.resolveAgentId(message) } : {}),
         },

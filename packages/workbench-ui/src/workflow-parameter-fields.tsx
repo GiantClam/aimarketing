@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { workflowNodeRegistry, type WorkflowDefinitionNodeV2, type WorkflowFieldDefinition } from "@aimarketing/workflow-core";
+import { workflowNodeRegistry, type WorkflowDefinitionNodeV2, type WorkflowFieldDefinition } from "@coworkany/workflow-core";
 import { resolveWorkbenchMediaFeature, type WorkbenchMediaField } from "./media";
 
 type WorkflowParameterValue = string | number | boolean;

@@ -6,7 +6,7 @@ export {
   createWorkflowIterationKeys,
   sortWorkflowIterationsForCollect,
   WorkflowPlanCompilationError,
-} from "@aimarketing/workflow-core"
+} from "@coworkany/workflow-core"
 
 export type {
   CompiledWorkflowPlan,
@@ -19,4 +19,4 @@ export type {
   WorkflowPlanIssueCode,
   WorkflowPlanLimits,
   WorkflowPlanNode,
-} from "@aimarketing/workflow-core"
+} from "@coworkany/workflow-core"

@@ -47,7 +47,7 @@ mod tests {
     use super::*;
     #[test]
     fn validates_hash_and_rejects_escape() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-artifacts-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-artifacts-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root); std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("deck.pptx"), b"ppt").unwrap();
         let metadata = inspect(&root, "deck.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation").unwrap();

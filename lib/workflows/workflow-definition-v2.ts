@@ -12,7 +12,7 @@ export {
   validateWorkflowDefinitionEnvelope,
   validateWorkflowPortDefinition,
   WorkflowDefinitionValidationError,
-} from "@aimarketing/workflow-core"
+} from "@coworkany/workflow-core"
 
 export type {
   WorkflowDefinitionEdgeV2,
@@ -22,4 +22,4 @@ export type {
   WorkflowDefinitionPortValueKind,
   WorkflowValidationIssue,
   WorkflowValidationIssueCode,
-} from "@aimarketing/workflow-core"
+} from "@coworkany/workflow-core"

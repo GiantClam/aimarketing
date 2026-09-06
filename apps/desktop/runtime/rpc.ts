@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline";
-import { MAX_RUNTIME_MESSAGE_BYTES, type RuntimeCommand, type RuntimeResponse } from "@aimarketing/runtime-contracts";
+import { MAX_RUNTIME_MESSAGE_BYTES, type RuntimeCommand, type RuntimeResponse } from "@coworkany/runtime-contracts";
 
 export function encodeRpcMessage(value: unknown) {
   const body = JSON.stringify(value);

@@ -12,5 +12,5 @@ export type {
   WorkflowPortValueKind,
   WorkflowRegistryError,
   WorkflowValueKind,
-} from "@aimarketing/workflow-core"
-export { WORKFLOW_NODE_TYPES, WORKFLOW_VALUE_KINDS } from "@aimarketing/workflow-core"
+} from "@coworkany/workflow-core"
+export { WORKFLOW_NODE_TYPES, WORKFLOW_VALUE_KINDS } from "@coworkany/workflow-core"

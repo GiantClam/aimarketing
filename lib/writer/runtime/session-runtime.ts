@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { buildWriterSessionContext } from "@aimarketing/writer-core"
+import { buildWriterSessionContext } from "@coworkany/writer-core"
 
 import type { WriterPlatform } from "@/lib/writer/config"
 

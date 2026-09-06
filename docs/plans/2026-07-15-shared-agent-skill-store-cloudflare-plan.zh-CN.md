@@ -83,7 +83,7 @@ export type SharedSkillSetSelection = {
 
 ### 2.1 Bundle 内容与私有存储
 
-R2 bucket：`aimarketing-shared-agent-runtime`，私有且无公开域名。
+R2 bucket：`coworkany-shared-agent-runtime`，私有且无公开域名。
 
 ```text
 shared-agent-skillsets/{enterprise-or-global}/{agent-id}/{skill-set-id}.json

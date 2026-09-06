@@ -241,6 +241,7 @@ async function runWriterDirectConfiguredProvider(params: {
     params.systemPrompt,
     "This Writer turn runs directly through the provider selected in the desktop config.json; no Railway OpenCode runtime is available.",
     "Call writer_submit_result exactly once. Return a complete platform-native draft when actionable.",
+    "The draft must be standards-compliant CommonMark Markdown: keep headings, paragraphs, lists, images, and thematic breaks as separate blocks, with headings and thematic breaks on their own lines and blank lines between block elements. Never put a heading marker directly after prose or concatenate two block elements.",
     "Do not claim external research was performed. Set research.requested and research.completed to false unless verified sources were supplied by the application.",
     "Keep the active draft body intact for title-only revisions.",
     activeDraftContext,
@@ -1002,6 +1003,7 @@ export async function runWriterSkillFirstTurn(params: {
     "Read every selected Skill completely. Decide whether to ask a clarification or produce the article from the current request and durable draft.",
     "Use writer_webfetch only when the Skill decides research is required. Never claim a source was verified if retrieval failed.",
     "Call writer_submit_result exactly once before finishing. The result must contain the complete draft when ready, the active base revision, research state, and validated cover/inline asset intents.",
+    "The draft must be standards-compliant CommonMark Markdown: keep headings, paragraphs, lists, images, and thematic breaks as separate blocks, with headings and thematic breaks on their own lines and blank lines between block elements. Never put a heading marker directly after prose or concatenate two block elements.",
     "Do not write a result as final prose or JSON text; submit it through the tool.",
     `Respond to the user in ${language}.`,
   ].join("\n")

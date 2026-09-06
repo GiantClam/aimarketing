@@ -1,4 +1,4 @@
-import { desktopUIMessageStorage, workbenchMessageToDesktopUIMessage, type WorkbenchMessage } from "@aimarketing/workbench-client";
+import { createDesktopUIMessage, desktopUIMessageStorage, parseDesktopUIMessage } from "@coworkany/workbench-client";
 
 export interface TauriBridge {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
@@ -13,15 +13,14 @@ function normalizeMessageInvokeArgs(command: string, args?: Record<string, unkno
   if (typeof input.metadata_json === "string") return args;
   let rawParts: unknown;
   try { rawParts = JSON.parse(typeof input.parts_json === "string" ? input.parts_json : "[]"); } catch { rawParts = []; }
-  const message: WorkbenchMessage = {
-    id: String(input.id ?? "message"),
-    conversationId: String(input.conversation_id ?? ""),
-    role: input.role === "user" || input.role === "assistant" ? input.role : "assistant",
-    content: String(input.content ?? ""),
-    createdAt: typeof input.created_at === "string" ? input.created_at : new Date().toISOString(),
-    parts: Array.isArray(rawParts) ? rawParts as WorkbenchMessage["parts"] : undefined,
-  };
-  const normalized = desktopUIMessageStorage(workbenchMessageToDesktopUIMessage(message));
+  const id = String(input.id ?? "message");
+  const conversationId = String(input.conversation_id ?? "");
+  const createdAt = typeof input.created_at === "string" ? input.created_at : new Date().toISOString();
+  const role = input.role === "user" ? "user" : "assistant";
+  const seed = createDesktopUIMessage({ id, conversationId, role, createdAt, content: typeof input.content === "string" ? input.content : undefined });
+  const parsed = parseDesktopUIMessage({ id, role, parts: Array.isArray(rawParts) ? rawParts : seed.parts, metadata: { ...seed.metadata, conversationId, createdAt, updatedAt: createdAt } });
+  const message = parsed.parts.length > 0 || seed.parts.length === 0 ? parsed : { ...parsed, parts: seed.parts };
+  const normalized = desktopUIMessageStorage(message);
   return { ...args, input: { ...input, content: normalized.content, parts_json: normalized.parts_json, metadata_json: normalized.metadata_json } };
 }
 

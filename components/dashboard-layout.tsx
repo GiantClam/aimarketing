@@ -63,7 +63,7 @@ import {
   type LocalizedWorkspaceBusinessEntry,
 } from "@/lib/platform/workspace-business"
 import { cn } from "@/lib/utils"
-import { WORKBENCH_ROUTE_MANIFEST, WorkbenchRouteIcon, WorkbenchShellFrame } from "@aimarketing/workbench-ui"
+import { WORKBENCH_ROUTE_MANIFEST, WorkbenchRouteIcon, WorkbenchShellFrame } from "@coworkany/workbench-ui"
 
 function sharedRouteLabel(path: string, locale: "zh" | "en") {
   const route = WORKBENCH_ROUTE_MANIFEST.find((item) => item.path === path)

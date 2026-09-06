@@ -67,6 +67,26 @@ test("OpenAI-compatible image adapter sends a local image generation request", a
   assert.deepEqual(body, { model: "gpt-image-2", prompt: "a paper airplane", size: "1024x1024", n: 7, quality: "high", background: "transparent", output_format: "webp", output_compression: 72, moderation: "low", response_format: "b64_json", user: "run:image:1" });
 });
 
+test("OpenAI-compatible image adapter normalizes common image output aliases", async () => {
+  const payloads = [
+    { data: [{ image_url: "https://files.invalid/image-url.png" }] },
+    { output: { imageUrl: "https://files.invalid/image-url-camel.png" } },
+    { images: [{ base64: "AQID" }] },
+  ];
+  for (const payload of payloads) {
+    const adapter = createOpenAICompatibleImageAdapter({
+      provider: "fixture" as MediaProviderId,
+      baseUrl: "https://api.example.test/v1",
+      apiKey: "secret",
+      fetchImpl: async () => new Response(JSON.stringify(payload), { status: 200 }),
+    });
+    const task = await adapter.execute({ provider: "fixture" as MediaProviderId, modelId: "gpt-image-2", input: { prompt: "normalize image output" } }, cancellation());
+    assert.equal(task.status, "succeeded");
+    assert.equal(task.outputs.length, 1);
+    assert.ok(task.outputs[0]?.url || task.outputs[0]?.base64);
+  }
+});
+
 test("OpenAI-compatible image adapter omits compression for PNG output", async () => {
   let body: Record<string, unknown> | undefined;
   const adapter = createOpenAICompatibleImageAdapter({ provider: "fixture" as MediaProviderId, baseUrl: "https://api.example.test/v1", apiKey: "secret", fetchImpl: async (_input, init) => {
@@ -291,7 +311,7 @@ test("MiniMax audio adapter preserves numeric provider task and file IDs", async
 });
 
 test("MiniMax voice clone uploads an in-workspace reference without base64 IPC", async () => {
-  const workspace = await mkdtemp(join(tmpdir(), "aimarketing-voice-clone-"));
+  const workspace = await mkdtemp(join(tmpdir(), "coworkany-voice-clone-"));
   try {
     await writeFile(join(workspace, "reference.wav"), "RIFF-fixture");
     const urls: string[] = [];
@@ -322,7 +342,7 @@ test("MiniMax voice clone uploads an in-workspace reference without base64 IPC",
 });
 
 test("MiniMax voice clone accepts an absolute path only for a validated workflow-local attachment", async () => {
-  const workspace = await mkdtemp(join(tmpdir(), "aimarketing-workflow-voice-clone-"));
+  const workspace = await mkdtemp(join(tmpdir(), "coworkany-workflow-voice-clone-"));
   try {
     const sourcePath = join(workspace, "reference.wav");
     await writeFile(sourcePath, "RIFF-fixture");
@@ -403,7 +423,7 @@ test("RunningHub digital-human adapter reports account-owned workflow access fai
 });
 
 test("RunningHub workflow upload returns the provider file name used by LoadAudio and LoadImage", async () => {
-  const workspace = await mkdtemp(join(tmpdir(), "aimarketing-runninghub-upload-"));
+  const workspace = await mkdtemp(join(tmpdir(), "coworkany-runninghub-upload-"));
   try {
     const sourcePath = join(workspace, "speech.mp3");
     await writeFile(sourcePath, "ID3-fixture");
@@ -423,7 +443,7 @@ test("RunningHub workflow upload returns the provider file name used by LoadAudi
 });
 
 test("RunningHub workflow upload preserves a URL fallback for URL-based loader nodes", async () => {
-  const workspace = await mkdtemp(join(tmpdir(), "aimarketing-runninghub-upload-asset-"));
+  const workspace = await mkdtemp(join(tmpdir(), "coworkany-runninghub-upload-asset-"));
   try {
     const sourcePath = join(workspace, "speech.mp3");
     await writeFile(sourcePath, "ID3-fixture");

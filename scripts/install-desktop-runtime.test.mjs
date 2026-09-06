@@ -17,8 +17,8 @@ test("runtime installer keeps the approved mirror order", async () => {
   const source = await readFile(scriptPath, "utf8");
   const mirrorOrder = ["$mirrors = @(\"aliyun\", \"tencent\", \"tsinghua\", \"official\")"];
   assert.ok(source.includes(mirrorOrder[0]));
-  assert.match(source, /AIMarketing \\u4e2d\\u6587 PPT probe/u);
-  assert.doesNotMatch(source, /AIMarketing 中文 PPT probe/u);
+  assert.match(source, /CoworkAny \\u4e2d\\u6587 PPT probe/u);
+  assert.doesNotMatch(source, /CoworkAny 中文 PPT probe/u);
   assert.match(source, /Install-OpenCodePackage\s+-Offline:\(\[bool\]\$OfflineZip\)/u);
   assert.match(source, /offline_opencode_missing/u);
 });
@@ -55,7 +55,7 @@ test("installer falls back through every mirror after bounded HTTP failures", as
     for (let successIndex = 0; successIndex < labels.length; successIndex += 1) {
       activeSuccessIndex = successIndex;
       requests.length = 0;
-      const root = await mkdtemp(join(tmpdir(), `aimarketing-mirror-fallback-${successIndex}-`));
+      const root = await mkdtemp(join(tmpdir(), `coworkany-mirror-fallback-${successIndex}-`));
       const stageRoot = join(root, "stage");
       const target = join(stageRoot, "runtime", "fixture.bin");
       const urls = Object.fromEntries(labels.map((label) => [label, `http://localhost:${address.port}/${label}`]));
@@ -166,7 +166,7 @@ test("runtime activation restores last-known-good when staged activation fails",
   const functionStart = source.indexOf("function Activate-StagedRuntime() ");
   const functionEnd = source.indexOf("\ntry {", functionStart);
   assert.ok(functionStart >= 0 && functionEnd > functionStart);
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-runtime-rollback-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-runtime-rollback-"));
   const installRoot = join(root, "install");
   const stageRoot = join(root, "stage");
   const quote = (value) => `'${String(value).replaceAll("'", "''")}'`;
@@ -209,18 +209,18 @@ test("installer validates the signed-manifest shape before touching the install 
 
 test("staged runtime manifest declares the Windows x64 compatibility and integrity contract", async () => {
   const source = await readFile(join(dirname(fileURLToPath(import.meta.url)), "stage-desktop-runtime.ps1"), "utf8");
-  assert.match(source, /manifestId\s*=\s*"aimarketing-runtime-windows-x64-v1"/u);
+  assert.match(source, /manifestId\s*=\s*"coworkany-runtime-windows-x64-v1"/u);
   assert.match(source, /platform\s*=\s*"windows"/u);
   assert.match(source, /architecture\s*=\s*"x64"/u);
   assert.match(source, /hashAlgorithm\s*=\s*"sha256"/u);
   assert.match(source, /signatureAlgorithm\s*=\s*"ed25519"/u);
-  assert.match(source, /AIMARKETING_RUNTIME_SIGNING_KEY/u);
+  assert.match(source, /COWORKANY_RUNTIME_SIGNING_KEY/u);
   assert.match(source, /runtime-manifest-crypto\.mjs/u);
 });
 
 test("installer validates a manifest without creating or replacing runtime data", async (t) => {
   if (process.platform !== "win32") { t.skip("PowerShell runtime validation is Windows-only"); return; }
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-manifest-validation-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-manifest-validation-"));
   const manifestPath = join(root, "manifest.json");
   const installRoot = join(root, "install");
   const valid = {
@@ -244,7 +244,7 @@ test("installer validates a manifest without creating or replacing runtime data"
 
 test("installer rejects a tampered required signature before touching the install root", async (t) => {
   if (process.platform !== "win32") { t.skip("PowerShell runtime validation is Windows-only"); return; }
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-signed-manifest-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-signed-manifest-"));
   const manifestPath = join(root, "manifest.json");
   const signedPath = join(root, "signed.json");
   const keyPath = join(root, "private.pem");
@@ -289,7 +289,7 @@ test("installer rejects a tampered required signature before touching the instal
 
 test("offline validation rejects an archive whose embedded manifest diverges", async (t) => {
   if (process.platform !== "win32") { t.skip("PowerShell offline validation is Windows-only"); return; }
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-offline-manifest-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-offline-manifest-"));
   const archiveRoot = join(root, "archive");
   const manifestPath = join(root, "manifest.json");
   const archiveManifestPath = join(archiveRoot, "runtime-manifest.json");
@@ -323,7 +323,7 @@ test("offline validation rejects an archive whose embedded manifest diverges", a
 
 test("offline extraction rejects zip-slip entries before creating the destination", async (t) => {
   if (process.platform !== "win32") { t.skip("PowerShell runtime extraction is Windows-only"); return; }
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-offline-zip-slip-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-offline-zip-slip-"));
   const zipPath = join(root, "runtime.zip");
   const target = join(root, "target");
   const source = await readFile(scriptPath, "utf8");

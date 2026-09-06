@@ -13,7 +13,7 @@ import {
   Video,
 } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { WorkbenchCapabilityCenter, type WorkbenchCapabilityCenterGroup } from "@aimarketing/workbench-ui"
+import { WorkbenchCapabilityCenter, type WorkbenchCapabilityCenterGroup } from "@coworkany/workbench-ui"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

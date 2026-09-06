@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process"
 import { mkdir } from "node:fs/promises"
 
 import type { AgentRuntimeEvent, AgentRuntimeInput, AgentRuntimeInputV2, OpenCodeProviderConfig } from "../../../../lib/ai-runtime/contracts.js"
-import { createOpenCodeServeEventState, createOpenCodeServePromptPayload, createOpenCodeServeSessionPayload, normalizeOpenCodeServeEvent, openCodeServeSessionPath, openCodeServeSessionsPath, readOpenCodeServeSessionId, type OpenCodeServeEventState } from "@aimarketing/runtime-contracts/opencode"
+import { createOpenCodeServeEventState, createOpenCodeServePromptPayload, createOpenCodeServeSessionPayload, normalizeOpenCodeServeEvent, openCodeServeSessionPath, openCodeServeSessionsPath, readOpenCodeServeSessionId, type OpenCodeServeEventState } from "@coworkany/runtime-contracts/opencode"
 
 type JsonRecord = Record<string, unknown>
 
@@ -130,7 +130,7 @@ export class OpenCodeServeManager {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify(createOpenCodeServeSessionPayload({
-        title: `AI Marketing ${input.agentId || "agent"} ${input.runId}`,
+        title: `CoworkAny ${input.agentId || "agent"} ${input.runId}`,
         metadata: {
           aiMarketingRunId: input.runId,
           bundleVersion: this.options.bundleVersion,
@@ -177,7 +177,7 @@ export class OpenCodeServeManager {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify(createOpenCodeServeSessionPayload({
-        title: `AI Marketing Writer ${sessionKey}`,
+        title: `CoworkAny Writer ${sessionKey}`,
         metadata: {
           aiMarketingSessionKey: sessionKey,
           aiMarketingRunId: input.runId,

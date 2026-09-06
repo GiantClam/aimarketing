@@ -6,7 +6,7 @@
 
 ### Requirement: Target conversation surfaces SHALL use shared AI Elements primitives
 
-首页、AI 对话、专家 Agent、写作助手和创作工作台 SHALL 使用 `@aimarketing/workbench-ui` 导出的 Message、Prompt Input、Attachments、Reasoning、Plan、Task、Tool 和 Model Selector；host code MAY 提供 adapter props，但 MUST NOT 复制这些组件的页面级实现。
+首页、AI 对话、专家 Agent、写作助手和创作工作台 SHALL 使用 `@coworkany/workbench-ui` 导出的 Message、Prompt Input、Attachments、Reasoning、Plan、Task、Tool 和 Model Selector；host code MAY 提供 adapter props，但 MUST NOT 复制这些组件的页面级实现。
 
 #### Scenario: Web and Desktop render the same conversation surface
 

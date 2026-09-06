@@ -8,7 +8,7 @@ import { buildLanceIndex } from "../runtime/lancedb";
 import type { VaultManifest } from "../runtime/obsidian";
 
 test("desktop RAG searches a Vault manifest without SQLite or remote calls", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-rag-")); const index = join(root, "index");
+  const root = await mkdtemp(join(tmpdir(), "coworkany-rag-")); const index = join(root, "index");
   try {
     await mkdir(index);
     await writeFile(join(index, "manifest.json"), JSON.stringify({ chunks: [{ id: "a", documentPath: "知识/营销.md", heading: "活动", text: "营销策略", hash: "a", tags: ["#增长"], links: ["campaign-brief"] }] }), "utf8");
@@ -31,7 +31,7 @@ test("desktop RAG merges exact lexical hits with LanceDB nearest neighbours", ()
 });
 
 test("desktop RAG uses hybrid retrieval only after the active index is semantic-ready", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-rag-state-")); const index = join(root, "index");
+  const root = await mkdtemp(join(tmpdir(), "coworkany-rag-state-")); const index = join(root, "index");
   try {
     await mkdir(index);
     const manifest: VaultManifest = { schemaVersion: 1, vaultPath: join(root, "Vault"), generation: 1, documents: [{ documentPath: "note.md", hash: "hash" }], chunks: [{ id: "exact", documentPath: "note.md", text: "exact lexical match", hash: "exact" }, { id: "semantic", documentPath: "other.md", text: "vector-only result", hash: "semantic" }], updatedAt: new Date().toISOString() };

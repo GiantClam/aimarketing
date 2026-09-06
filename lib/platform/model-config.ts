@@ -1,4 +1,4 @@
-import { WORKBENCH_PROVIDER_CATALOG } from "@aimarketing/workbench-ui"
+import { WORKBENCH_PROVIDER_CATALOG } from "@coworkany/workbench-ui"
 
 export type EnterpriseModelCategory =
   | "text_generation"

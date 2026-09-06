@@ -1,4 +1,4 @@
-import { WORKBENCH_PROVIDER_CATALOG, type WorkbenchProviderCategory } from "@aimarketing/workbench-ui";
+import { WORKBENCH_PROVIDER_CATALOG, type WorkbenchProviderCategory } from "@coworkany/workbench-ui";
 import type { DesktopProviderConfig, ProviderCapability } from "./provider-config";
 
 export type ConfigurableProviderCapability = ProviderCapability;

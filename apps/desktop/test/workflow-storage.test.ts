@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { WorkflowDefinitionEnvelope } from "@aimarketing/workflow-core";
+import type { WorkflowDefinitionEnvelope } from "@coworkany/workflow-core";
 import { sanitizeWorkflowDefinitionForExport, sanitizeWorkflowDefinitionForStorage } from "../src/workflow-storage";
 import { parseWorkflowImportText, serializeWorkflowExport } from "../src/workflow-portability";
 
@@ -109,7 +109,7 @@ test("workflow JSON survives ordinary file sharing and imports with a fresh port
     }],
     edges: [],
   } as never as WorkflowDefinitionEnvelope;
-  const directory = await mkdtemp(join(tmpdir(), "aimarketing-workflow-share-"));
+  const directory = await mkdtemp(join(tmpdir(), "coworkany-workflow-share-"));
   try {
     const file = join(directory, "workflow.json");
     await writeFile(file, serializeWorkflowExport(definition, "2026-08-13T00:00:00.000Z"), "utf8");

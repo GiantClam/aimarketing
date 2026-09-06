@@ -1,4 +1,4 @@
-"""Regenerate the desktop AI Marketing logo, PNG icons, and Windows ICO."""
+"""Regenerate the desktop CoworkAny logo, PNG icons, and Windows ICO."""
 
 from pathlib import Path
 
@@ -18,8 +18,8 @@ OFF_WHITE = "#F5F5F5"
 
 def icon_svg() -> str:
     return """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
-  <title id="title">AI Marketing app icon</title>
-  <desc id="desc">A golden angular AM growth mark on a near-black rounded square.</desc>
+  <title id="title">CoworkAny app icon</title>
+  <desc id="desc">A golden angular growth mark on a near-black rounded square.</desc>
   <rect x="24" y="24" width="464" height="464" rx="112" fill="#111111"/>
   <path
     d="M132 366V278L218 192L291 265L378 178"
@@ -44,9 +44,9 @@ def icon_svg() -> str:
 
 def logo_svg(text_color: str, dark: bool = False) -> str:
     tile_border = ' stroke="#343434" stroke-width="8"' if dark else ""
-    description = "AI Marketing horizontal logo for dark backgrounds." if dark else "AI Marketing horizontal logo in black and golden yellow."
+    description = "CoworkAny horizontal logo for dark backgrounds." if dark else "CoworkAny horizontal logo in black and golden yellow."
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 240" role="img" aria-labelledby="title desc">
-  <title id="title">AI Marketing</title>
+  <title id="title">CoworkAny</title>
   <desc id="desc">{description}</desc>
   <g transform="translate(20 20) scale(.390625)">
     <rect x="0" y="0" width="512" height="512" rx="112" fill="#111111"{tile_border}/>
@@ -55,8 +55,7 @@ def logo_svg(text_color: str, dark: bool = False) -> str:
     <path d="M180 359L228 294L280 359" fill="none" stroke="#FFD000" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
   <g fill="{text_color}" font-family="Impact, 'Arial Narrow', 'Roboto Condensed', sans-serif" font-weight="900">
-    <text x="254" y="157" font-size="112" letter-spacing="1">AI</text>
-    <text x="382" y="157" font-size="112" letter-spacing="3">MARKETING</text>
+    <text x="254" y="157" font-size="112" letter-spacing="2">COWORKANY</text>
   </g>
   <rect x="256" y="181" width="805" height="8" rx="4" fill="#FFD000"/>
 </svg>
@@ -126,18 +125,14 @@ def render_logo(text_color: str) -> Image.Image:
     font_size = 224
     while True:
         font = _brand_font(font_size)
-        ai_box = draw.textbbox((0, 0), "AI", font=font)
-        marketing_box = draw.textbbox((0, 0), "MARKETING", font=font)
-        total_width = (ai_box[2] - ai_box[0]) + 66 + (marketing_box[2] - marketing_box[0])
+        brand_box = draw.textbbox((0, 0), "COWORKANY", font=font)
+        total_width = brand_box[2] - brand_box[0]
         if total_width <= 1620:
             break
         font_size -= 2
 
     baseline_y = 104
-    ai_x = 508
-    draw.text((ai_x, baseline_y), "AI", font=font, fill=text_color, stroke_width=0)
-    ai_width = ai_box[2] - ai_box[0]
-    draw.text((ai_x + ai_width + 66, baseline_y), "MARKETING", font=font, fill=text_color, stroke_width=0)
+    draw.text((508, baseline_y), "COWORKANY", font=font, fill=text_color, stroke_width=0)
     draw.rounded_rectangle((512, 362, 2122, 378), radius=8, fill=YELLOW)
     return canvas
 
@@ -146,28 +141,28 @@ def main() -> None:
     TAURI_ICONS.mkdir(parents=True, exist_ok=True)
     PUBLIC_BRAND.mkdir(parents=True, exist_ok=True)
 
-    (TAURI_ICONS / "ai-marketing-icon.svg").write_text(icon_svg(), encoding="utf-8", newline="\n")
-    (PUBLIC_BRAND / "ai-marketing-logo.svg").write_text(logo_svg(INK), encoding="utf-8", newline="\n")
-    (PUBLIC_BRAND / "ai-marketing-logo-dark.svg").write_text(logo_svg(OFF_WHITE, dark=True), encoding="utf-8", newline="\n")
+    (TAURI_ICONS / "coworkany-icon.svg").write_text(icon_svg(), encoding="utf-8", newline="\n")
+    (PUBLIC_BRAND / "coworkany-logo.svg").write_text(logo_svg(INK), encoding="utf-8", newline="\n")
+    (PUBLIC_BRAND / "coworkany-logo-dark.svg").write_text(logo_svg(OFF_WHITE, dark=True), encoding="utf-8", newline="\n")
 
     icon = render_icon()
-    icon.save(TAURI_ICONS / "ai-marketing-icon.png", optimize=True)
+    icon.save(TAURI_ICONS / "coworkany-icon.png", optimize=True)
     icon.save(
-        TAURI_ICONS / "ai-marketing-icon.ico",
+        TAURI_ICONS / "coworkany-icon.ico",
         format="ICO",
         sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
     )
     icon.resize((64, 64), Image.Resampling.LANCZOS).save(
-        PUBLIC_BRAND / "ai-marketing-icon-64.png",
+        PUBLIC_BRAND / "coworkany-icon-64.png",
         optimize=True,
     )
 
     render_logo(INK).resize((1120, 240), Image.Resampling.LANCZOS).save(
-        PUBLIC_BRAND / "ai-marketing-logo.png",
+        PUBLIC_BRAND / "coworkany-logo.png",
         optimize=True,
     )
     render_logo(OFF_WHITE).resize((1120, 240), Image.Resampling.LANCZOS).save(
-        PUBLIC_BRAND / "ai-marketing-logo-dark.png",
+        PUBLIC_BRAND / "coworkany-logo-dark.png",
         optimize=True,
     )
 

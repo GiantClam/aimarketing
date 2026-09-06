@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { validateWriterResultInvariants } from "@aimarketing/writer-core"
+import { validateWriterResultInvariants } from "@coworkany/writer-core"
 
 export const WRITER_RESULT_SCHEMA_VERSION = 1 as const
 

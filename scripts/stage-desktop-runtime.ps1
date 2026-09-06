@@ -35,7 +35,7 @@ $fontStaged = Copy-IfFile (Join-Path $env:WINDIR "Fonts/msyh.ttc") (Join-Path $d
 
 @{
   schemaVersion = 1
-  manifestId = "aimarketing-runtime-windows-x64-v1"
+  manifestId = "coworkany-runtime-windows-x64-v1"
   platform = "windows"
   architecture = "x64"
   compatibility = @{ architecture = "x64"; windows = @("10-22H2", "11") }
@@ -91,7 +91,7 @@ $fontStaged = Copy-IfFile (Join-Path $env:WINDIR "Fonts/msyh.ttc") (Join-Path $d
   )
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $destination "runtime-manifest.json") -Encoding utf8
 
-$signingKey = $env:AIMARKETING_RUNTIME_SIGNING_KEY
+$signingKey = $env:COWORKANY_RUNTIME_SIGNING_KEY
 if (-not [string]::IsNullOrWhiteSpace($signingKey)) {
   if (-not (Test-Path -LiteralPath $signingKey -PathType Leaf)) { throw "runtime_manifest_signing_key_missing" }
   $manifest = Join-Path $destination "runtime-manifest.json"

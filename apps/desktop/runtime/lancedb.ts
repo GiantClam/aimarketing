@@ -13,7 +13,7 @@ export type LocalEmbeddingOptions = { readonly mode?: "local" | "remote"; readon
 
 async function loadLance() {
   try {
-    const runtimeRoot = process.env.AIMARKETING_LANCEDB_DIR;
+    const runtimeRoot = process.env.COWORKANY_LANCEDB_DIR;
     if (runtimeRoot) return await import(pathToFileURL(join(runtimeRoot, "node_modules", "@lancedb", "lancedb", "dist", "index.js")).href);
     const packageName = "@lancedb/lancedb";
     const dynamicImport = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<unknown>;
@@ -65,9 +65,9 @@ function isRemoteEmbeddingUrl(value: string) {
 }
 
 async function embedWithOllama(texts: readonly string[], options: LocalEmbeddingOptions) {
-  const baseUrl = (options.baseUrl ?? process.env.AIMARKETING_EMBEDDING_BASE_URL ?? DEFAULT_EMBEDDING_URL).replace(/\/$/u, "");
+  const baseUrl = (options.baseUrl ?? process.env.COWORKANY_EMBEDDING_BASE_URL ?? DEFAULT_EMBEDDING_URL).replace(/\/$/u, "");
   if (!isLoopbackUrl(baseUrl)) throw new Error("embedding_endpoint_must_be_loopback");
-  const model = options.model ?? process.env.AIMARKETING_EMBEDDING_MODEL ?? "nomic-embed-text";
+  const model = options.model ?? process.env.COWORKANY_EMBEDDING_MODEL ?? "nomic-embed-text";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 3500);
   try {

@@ -6,7 +6,7 @@ import test from "node:test"
 import { buildPendingWriterAssets } from "./assets"
 import { resolveWriterPlatformBinding } from "./platform-registry"
 import { validateWriterSubmitResult, type WriterSubmitResult } from "./writer-result"
-import { reconcileWriterRevisionResult } from "@aimarketing/writer-core"
+import { reconcileWriterRevisionResult } from "@coworkany/writer-core"
 
 const khazixSkill = readFileSync(path.join(process.cwd(), "content", "skills", "khazix-writer", "SKILL.md"), "utf8")
 const authoredTitle = "作者提供的标题"

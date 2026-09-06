@@ -151,8 +151,8 @@ Rules:
 ### Task 1: Lock Failing Regression Tests For Streaming And Tool Results
 
 **Files:**
-- Create: `d:/github/aimarketing/lib/skills/runtime/ai-entry-executor.regression.test.ts`
-- Modify: `d:/github/aimarketing/package.json` if a targeted script is useful
+- Create: `d:/github/coworkany/lib/skills/runtime/ai-entry-executor.regression.test.ts`
+- Modify: `d:/github/coworkany/package.json` if a targeted script is useful
 
 **Step 1: Add a fake stream test for text field**
 
@@ -194,8 +194,8 @@ Expected before implementation:
 ### Task 2: Fix Streaming And Tool Result Compatibility
 
 **Files:**
-- Modify: `d:/github/aimarketing/lib/skills/runtime/ai-entry-executor.ts`
-- Test: `d:/github/aimarketing/lib/skills/runtime/ai-entry-executor.regression.test.ts`
+- Modify: `d:/github/coworkany/lib/skills/runtime/ai-entry-executor.ts`
+- Test: `d:/github/coworkany/lib/skills/runtime/ai-entry-executor.regression.test.ts`
 
 **Step 1: Update stream part compatibility type**
 
@@ -245,8 +245,8 @@ Expected: PASS.
 ### Task 3: Stop Knowledge Query For Normal No-Agent Chat
 
 **Files:**
-- Modify: `d:/github/aimarketing/app/api/ai/chat/route.ts`
-- Test: `d:/github/aimarketing/lib/ai-entry/chat-interaction.integration.test.ts`
+- Modify: `d:/github/coworkany/app/api/ai/chat/route.ts`
+- Test: `d:/github/coworkany/lib/ai-entry/chat-interaction.integration.test.ts`
 
 **Step 1: Add a route-level behavior test**
 
@@ -300,9 +300,9 @@ Expected: new tests pass; existing provider fallback tests still pass.
 ### Task 4: Repair Chinese Prompt Literals And Quality Posture
 
 **Files:**
-- Modify: `d:/github/aimarketing/app/api/ai/chat/route.ts`
-- Modify: `d:/github/aimarketing/components/ai-entry/ai-entry-workspace.tsx` only if visible progress labels are still mojibake
-- Test: `d:/github/aimarketing/lib/ai-entry/language-policy.regression.test.ts` or new focused test
+- Modify: `d:/github/coworkany/app/api/ai/chat/route.ts`
+- Modify: `d:/github/coworkany/components/ai-entry/ai-entry-workspace.tsx` only if visible progress labels are still mojibake
+- Test: `d:/github/coworkany/lib/ai-entry/language-policy.regression.test.ts` or new focused test
 
 **Step 1: Replace mojibake Chinese strings**
 
@@ -351,10 +351,10 @@ Expected:
 ### Task 5: Add Aiberm Model Benchmark And Default Selection Policy
 
 **Files:**
-- Create: `d:/github/aimarketing/scripts/ai_entry_aiberm_model_benchmark.js`
-- Modify: `d:/github/aimarketing/lib/ai-entry/model-catalog.ts`
-- Modify: `d:/github/aimarketing/lib/ai-entry/provider-routing.ts`
-- Test: `d:/github/aimarketing/lib/ai-entry/model-catalog.regression.test.ts`
+- Create: `d:/github/coworkany/scripts/ai_entry_aiberm_model_benchmark.js`
+- Modify: `d:/github/coworkany/lib/ai-entry/model-catalog.ts`
+- Modify: `d:/github/coworkany/lib/ai-entry/provider-routing.ts`
+- Test: `d:/github/coworkany/lib/ai-entry/model-catalog.regression.test.ts`
 
 **Step 1: Add benchmark script**
 
@@ -439,10 +439,10 @@ Expected:
 ### Task 6: Split Consulting Speed And Quality Model Policy
 
 **Files:**
-- Modify: `d:/github/aimarketing/lib/ai-entry/model-policy.ts`
-- Modify: `d:/github/aimarketing/app/api/ai/chat/route.ts`
-- Modify: `d:/github/aimarketing/components/ai-entry/ai-entry-workspace.tsx`
-- Test: `d:/github/aimarketing/lib/ai-entry/chat-interaction.integration.test.ts`
+- Modify: `d:/github/coworkany/lib/ai-entry/model-policy.ts`
+- Modify: `d:/github/coworkany/app/api/ai/chat/route.ts`
+- Modify: `d:/github/coworkany/components/ai-entry/ai-entry-workspace.tsx`
+- Test: `d:/github/coworkany/lib/ai-entry/chat-interaction.integration.test.ts`
 
 **Step 1: Replace hard-coded Sonnet 4.6 hint**
 
@@ -503,9 +503,9 @@ Expected:
 ### Task 7: Web Search Tool Event And Source Rendering
 
 **Files:**
-- Modify: `d:/github/aimarketing/lib/skills/runtime/ai-entry-executor.ts`
-- Modify: `d:/github/aimarketing/components/ai-entry/ai-entry-workspace.tsx`
-- Test: `d:/github/aimarketing/lib/ai-entry/chat-interaction.integration.test.ts`
+- Modify: `d:/github/coworkany/lib/skills/runtime/ai-entry-executor.ts`
+- Modify: `d:/github/coworkany/components/ai-entry/ai-entry-workspace.tsx`
+- Test: `d:/github/coworkany/lib/ai-entry/chat-interaction.integration.test.ts`
 
 **Step 1: Ensure backend sends output sources**
 
@@ -541,8 +541,8 @@ System prompt already says cite URLs after using web search. Verify the final an
 ### Task 8: Runtime Performance Probe And Acceptance Script
 
 **Files:**
-- Create: `d:/github/aimarketing/scripts/ai_entry_chat_quality_speed_probe.js`
-- Test artifact: `d:/github/aimarketing/.gstack/qa-reports/ai-chat-quality-speed-after-fix-YYYY-MM-DD.json`
+- Create: `d:/github/coworkany/scripts/ai_entry_chat_quality_speed_probe.js`
+- Test artifact: `d:/github/coworkany/.gstack/qa-reports/ai-chat-quality-speed-after-fix-YYYY-MM-DD.json`
 
 **Step 1: Add probe scenarios**
 
@@ -597,8 +597,8 @@ Consulting quality:
 ### Task 9: End-To-End Browser Verification
 
 **Files:**
-- Create or extend: `d:/github/aimarketing/scripts/ai_entry_chat_quality_speed_e2e.py`
-- Artifacts: `d:/github/aimarketing/.gstack/qa-reports/screenshots/`
+- Create or extend: `d:/github/coworkany/scripts/ai_entry_chat_quality_speed_e2e.py`
+- Artifacts: `d:/github/coworkany/.gstack/qa-reports/screenshots/`
 
 **Step 1: Run local dev server**
 

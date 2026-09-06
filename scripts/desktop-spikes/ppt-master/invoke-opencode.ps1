@@ -38,7 +38,7 @@ $prompt = $prompt.Replace('__PROJECT_NAME__', $projectName)
 
 $evidenceDir = Join-Path $root 'evidence'
 New-Item -ItemType Directory -Force -Path $evidenceDir | Out-Null
-$raw = Join-Path ([IO.Path]::GetTempPath()) "aimarketing-ppt-master-$runId.raw.jsonl"
+$raw = Join-Path ([IO.Path]::GetTempPath()) "coworkany-ppt-master-$runId.raw.jsonl"
 $started = [DateTimeOffset]::UtcNow
 $process = $null
 $timedOut = $false

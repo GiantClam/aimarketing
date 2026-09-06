@@ -9,9 +9,9 @@
 
 ## 2. Establish shared message and style foundations
 
-- [x] 2.1 扩展 `@aimarketing/workbench-client` message/part 与 ordered event contracts。
+- [x] 2.1 扩展 `@coworkany/workbench-client` message/part 与 ordered event contracts。
 - [x] 2.2 扩展 Desktop repository/Tauri commands 读写 `parts_json`，保留旧 content fallback。
-- [x] 2.3 在 `@aimarketing/workbench-ui` 实现公共 message timeline、actions 和 CSS export。
+- [x] 2.3 在 `@coworkany/workbench-ui` 实现公共 message timeline、actions 和 CSS export。
 - [x] 2.4 Web 与 Desktop 对话 renderer 切换到公共 timeline，修复流式完成重写时间问题。
 
 **Quality Gate:** shared UI/client、Web AI、Desktop client/storage tests、typecheck 通过。

@@ -2,7 +2,7 @@ import {
   getWorkbenchTaskStatusLabel,
   normalizeWorkbenchTaskStatus,
   type WorkbenchTaskStatus,
-} from "@aimarketing/workbench-ui"
+} from "@coworkany/workbench-ui"
 
 export type TaskSource = "tool" | "workflow" | "agent" | "media"
 export type TaskStatus = WorkbenchTaskStatus

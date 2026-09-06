@@ -8,7 +8,7 @@ import { defaultDesktopConfig, readDesktopConfig, redactSecrets, writeDesktopCon
 import { acquireInstanceLock } from "../runtime/lock";
 
 test("normal and portable paths are deterministic", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing desktop "));
+  const root = await mkdtemp(join(tmpdir(), "coworkany desktop "));
   try {
     const normal = detectDesktopPaths({ executableDir: root, localAppData: join(root, "local") });
     assert.equal(normal.mode, "normal");
@@ -18,14 +18,14 @@ test("normal and portable paths are deterministic", async () => {
 });
 
 test("first-run desktop config has no default text model", () => {
-  const root = join(tmpdir(), "aimarketing-default-config");
+  const root = join(tmpdir(), "coworkany-default-config");
   const config = defaultDesktopConfig(createPaths(root, "normal"));
   assert.equal(config.provider.model, "");
   assert.equal(config.provider.models, undefined);
 });
 
 test("config writes atomically and recovers from backup", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-config-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-config-"));
   const paths = createPaths(root, "normal");
   try {
     const initial = defaultDesktopConfig(paths);
@@ -70,7 +70,7 @@ test("config writes atomically and recovers from backup", async () => {
 });
 
 test("config preserves provider profiles and capability defaults", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-provider-profiles-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-provider-profiles-"));
   const paths = createPaths(root, "normal");
   try {
     const initial = defaultDesktopConfig(paths);
@@ -89,7 +89,7 @@ test("config preserves provider profiles and capability defaults", async () => {
 });
 
 test("config removes developer-owned RunningHub workflow IDs while preserving user IDs", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-runninghub-config-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-runninghub-config-"));
   const paths = createPaths(root, "normal");
   try {
     const initial = defaultDesktopConfig(paths);
@@ -111,7 +111,7 @@ test("config removes developer-owned RunningHub workflow IDs while preserving us
 });
 
 test("config preserves the selected Obsidian embedding mode and endpoint", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-embedding-config-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-embedding-config-"));
   const paths = createPaths(root, "normal");
   try {
     const initial = defaultDesktopConfig(paths);
@@ -127,7 +127,7 @@ test("config preserves the selected Obsidian embedding mode and endpoint", async
 });
 
 test("same root allows one writer", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-lock-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-lock-"));
   const paths = createPaths(root, "normal");
   try {
     const release = await acquireInstanceLock(paths);

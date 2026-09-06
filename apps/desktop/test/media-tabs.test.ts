@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { closeDesktopMediaTab, createDesktopMediaTab, openDesktopMediaTab } from "../src/media-tabs";
+import { closeDesktopMediaTab, createDesktopMediaTab, openDesktopMediaTab, syncDesktopMediaTabModel } from "../src/media-tabs";
 
 const textToVideo = {
   id: "text-to-video" as const,
@@ -49,4 +49,22 @@ test("closing the final media tab leaves the workspace empty", () => {
 
   assert.deepEqual(next.tabs, []);
   assert.equal(next.activeTabId, null);
+});
+
+test("syncing a media tab replaces a stale model after capability switching", () => {
+  const stale = createDesktopMediaTab({ ...textToVideo, fields: [{ id: "model", label: "模型", type: "select" as const, options: [{ value: "" , label: "Select model" }] }] });
+  const configured = { ...textToVideo, fields: [{ id: "model", label: "模型", type: "select" as const, defaultValue: "seedance", options: [{ value: "seedance", label: "seedance" }] }] };
+  const synced = syncDesktopMediaTabModel(stale, configured);
+
+  assert.equal(synced.values.model, "seedance");
+  assert.notEqual(synced, stale);
+});
+
+test("syncing a valid media model preserves the user's selection", () => {
+  const tab = createDesktopMediaTab({ ...textToVideo, fields: [{ id: "model", label: "模型", type: "select" as const, defaultValue: "seedance", options: [{ value: "seedance", label: "seedance" }, { value: "h3", label: "h3" }] }] });
+  const selected = { ...tab, values: { ...tab.values, model: "h3" } };
+  const synced = syncDesktopMediaTabModel(selected, { ...textToVideo, fields: [{ id: "model", label: "模型", type: "select" as const, defaultValue: "seedance", options: [{ value: "seedance", label: "seedance" }, { value: "h3", label: "h3" }] }] });
+
+  assert.equal(synced.values.model, "h3");
+  assert.equal(synced, selected);
 });

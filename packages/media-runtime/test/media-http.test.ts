@@ -130,7 +130,7 @@ test("shared media adapters reject missing injected provider configuration befor
 });
 
 test("downloads media output to an atomic local artifact", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-media-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-media-"));
   const result = await downloadMediaOutputs({ providerTaskId: "task-1", status: "succeeded", outputs: [{ url: "https://files.invalid/clip.mp4" }] }, root, {
     fetchImpl: async () => new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "video/mp4" } }),
     filenamePrefix: "clip",
@@ -141,7 +141,7 @@ test("downloads media output to an atomic local artifact", async () => {
 });
 
 test("decodes provider data URLs without issuing a second download", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-media-data-url-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-media-data-url-"));
   let fetchCalls = 0;
   try {
     const png = Buffer.from("fixture-png").toString("base64");
@@ -160,7 +160,7 @@ test("decodes provider data URLs without issuing a second download", async () =>
 });
 
 test("uses the response MIME type when a provider URL has no media extension", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-media-mime-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-media-mime-"));
   const result = await downloadMediaOutputs({ providerTaskId: "audio-task", status: "succeeded", outputs: [{ url: "https://files.invalid/retrieve_content?file_id=123" }] }, root, {
     fetchImpl: async () => new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "audio/mpeg" } }),
     filenamePrefix: "voice",
@@ -169,7 +169,7 @@ test("uses the response MIME type when a provider URL has no media extension", a
 });
 
 test("detects PNG output when the provider returns an extensionless binary response", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-media-signature-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-media-signature-"));
   const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
   const result = await downloadMediaOutputs({ providerTaskId: "image-task", status: "succeeded", outputs: [{ url: "https://files.invalid/generated" }] }, root, {
     fetchImpl: async () => new Response(png, { status: 200, headers: { "content-type": "application/octet-stream" } }),
@@ -181,7 +181,7 @@ test("detects PNG output when the provider returns an extensionless binary respo
 });
 
 test("extracts a media file returned inside a provider TAR archive", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-media-tar-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-media-tar-"));
   const media = Buffer.from([0x49, 0x44, 0x33, 1, 2, 3]);
   const header = Buffer.alloc(512);
   header.write("speech.mp3", 0, "utf8");
@@ -204,7 +204,7 @@ test("extracts a media file returned inside a provider TAR archive", async () =>
 });
 
 test("reuses an existing content-addressed media artifact on retry", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-media-retry-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-media-retry-"));
   const task = { providerTaskId: "task-retry", status: "succeeded" as const, outputs: [{ url: "https://files.invalid/clip.mp4" }] };
   const fetchImpl: typeof fetch = async () => new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "video/mp4" } });
   const first = await downloadMediaOutputs(task, root, { fetchImpl, filenamePrefix: "clip" });
@@ -214,7 +214,7 @@ test("reuses an existing content-addressed media artifact on retry", async () =>
 });
 
 test("does not replace a locked existing content-addressed artifact on retry", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-media-lock-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-media-lock-"));
   const task = { providerTaskId: "task-lock", status: "succeeded" as const, outputs: [{ url: "https://files.invalid/clip.mp4" }] };
   const fetchImpl: typeof fetch = async () => new Response(new Uint8Array([9, 8, 7]), { status: 200, headers: { "content-type": "video/mp4" } });
   const first = await downloadMediaOutputs(task, root, { fetchImpl, filenamePrefix: "clip" });
@@ -229,7 +229,7 @@ test("does not replace a locked existing content-addressed artifact on retry", a
 });
 
 test("rejects media output that exceeds the local artifact limit or MIME policy", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-media-limit-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-media-limit-"));
   await assert.rejects(
     downloadMediaOutputs({ providerTaskId: "task-limit", status: "succeeded", outputs: [{ url: "https://files.invalid/clip.mp4" }] }, root, {
       fetchImpl: async () => new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "application/octet-stream", "content-length": "3" } }),
@@ -241,7 +241,7 @@ test("rejects media output that exceeds the local artifact limit or MIME policy"
 });
 
 test("streams chunked downloads and removes partial files on overflow", async () => {
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-media-stream-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-media-stream-"));
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(new Uint8Array([1, 2]));

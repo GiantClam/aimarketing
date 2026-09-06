@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Agent, AgentHeader, AgentInstructions, AgentOutput, AgentTool, AgentTools } from "./ai-elements/index";
+import { Agent, AgentContent, AgentHeader, AgentInstructions, AgentOutput, AgentTool, AgentTools } from "./ai-elements/index";
 
 export type WorkbenchAgentDirectoryAction = {
   readonly id: string;
@@ -76,12 +76,14 @@ export function WorkbenchAgentDirectory({ locale, title, description, groups, on
           const availabilityLabel = availability === "ready" ? copy.ready : availability === "needs-config" ? copy.needsConfig : copy.unavailable;
           return <Agent key={card.id} className="agent-card" data-agent-id={card.id} data-availability={availability}>
             <AgentHeader name={card.title} model={card.meta || group.label}><div className="wb-agent-card-heading"><div className="agent-icon-block" aria-hidden="true">AI</div><div className="wb-agent-card-copy"><div className="agent-category">{card.meta || group.label}</div><h3 className="agent-title">{card.title}</h3></div></div></AgentHeader>
-            <AgentInstructions><p className="agent-description">{card.instructions || card.description}</p></AgentInstructions>
-            {card.tools?.length ? <AgentTools>{card.tools.map((tool) => <AgentTool key={tool.name} name={tool.name} description={tool.description} />)}</AgentTools> : null}
-            {card.output ? <AgentOutput><p>{card.output}</p></AgentOutput> : null}
-            <div className="wb-agent-card-meta"><span className={`agent-chip wb-agent-availability wb-agent-availability-${availability}`}>{availabilityLabel}</span>{card.status ? <span className="agent-chip">{card.status}</span> : null}</div>
-            {card.unavailableReason ? <p className="wb-agent-unavailable-reason" role="status">{card.unavailableReason}</p> : null}
-            {card.primaryAction || card.secondaryAction ? <div className={`agent-card-actions ${card.primaryAction && card.secondaryAction ? "agent-card-actions-paired" : ""}`.trim()}>{card.primaryAction ? <button type="button" className="agent-card-primary-action" disabled={card.primaryAction.disabled} onClick={() => void onAction(card, card.primaryAction!)}>{card.primaryAction.label}</button> : null}{card.secondaryAction ? <button type="button" className="agent-card-secondary-action" disabled={card.secondaryAction.disabled} onClick={() => void onAction(card, card.secondaryAction!)}>{card.secondaryAction.label}</button> : null}</div> : null}
+            <AgentContent>
+              <AgentInstructions><p className="agent-description">{card.instructions || card.description}</p></AgentInstructions>
+              {card.tools?.length ? <AgentTools>{card.tools.map((tool) => <AgentTool key={tool.name} name={tool.name} description={tool.description} />)}</AgentTools> : null}
+              {card.output ? <AgentOutput><p>{card.output}</p></AgentOutput> : null}
+              <div className="wb-agent-card-meta"><span className={`agent-chip wb-agent-availability wb-agent-availability-${availability}`}>{availabilityLabel}</span>{card.status ? <span className="agent-chip">{card.status}</span> : null}</div>
+              {card.unavailableReason ? <p className="wb-agent-unavailable-reason" role="status">{card.unavailableReason}</p> : null}
+              {card.primaryAction || card.secondaryAction ? <div className={`agent-card-actions ${card.primaryAction && card.secondaryAction ? "agent-card-actions-paired" : ""}`.trim()}>{card.primaryAction ? <button type="button" className="agent-card-primary-action" disabled={card.primaryAction.disabled} onClick={() => void onAction(card, card.primaryAction!)}>{card.primaryAction.label}</button> : null}{card.secondaryAction ? <button type="button" className="agent-card-secondary-action" disabled={card.secondaryAction.disabled} onClick={() => void onAction(card, card.secondaryAction!)}>{card.secondaryAction.label}</button> : null}</div> : null}
+            </AgentContent>
           </Agent>;
         })}</div>
       </article>)}</div> : <div className="dashboard-panel wb-agent-directory-empty">{copy.empty}</div>}

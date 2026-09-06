@@ -1,0 +1,7 @@
+@import "tailwindcss" source(none);
+
+/* Keep the desktop utility graph aligned with the cloud build without
+   scanning generated artifacts or local runtime data. */
+@source "../../../packages/workbench-ui/src";
+@source "../../../packages/workbench-ui/node_modules/streamdown/dist/*.js";
+@source inline("space-y-4 whitespace-normal [&>*:first-child]:mt-0 [&>*:last-child]:mb-0");

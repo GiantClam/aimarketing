@@ -67,7 +67,7 @@ async function startHost() {
 
 async function startVite() {
   const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-  const child = spawn(command, ["--filter", "@aimarketing/desktop", "dev"], { cwd: repoRoot, env: { ...process.env }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, shell: process.platform === "win32" });
+  const child = spawn(command, ["--filter", "@coworkany/desktop", "dev"], { cwd: repoRoot, env: { ...process.env }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, shell: process.platform === "win32" });
   let output = "";
   child.stdout.on("data", (chunk: Buffer) => { output += chunk.toString("utf8"); });
   child.stderr.on("data", (chunk: Buffer) => { output += chunk.toString("utf8"); });

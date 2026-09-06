@@ -4,8 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Copy, ExternalLink, FileText, History, Loader2, MessageSquare, Paperclip, Radar, Sparkles, Target, TrendingUp } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 import { useI18n } from "@/components/locale-provider";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +27,7 @@ import { arePendingTaskEventsEqual, normalizePendingTaskEvents, type PendingTask
 import { buildSessionRecoveryPlan } from "@/lib/session-recovery";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./CodeBlock";
-import { Conversation, ConversationContent, Message as AIElementMessage, MessageContent, MessageResponse, PromptInput, PromptInputBody, PromptInputFooter, PromptInputSubmit, PromptInputTextarea, Shimmer, Source, Sources } from "@aimarketing/workbench-ui";
+import { Conversation, ConversationContent, Message as AIElementMessage, MessageContent, MessageResponse, PromptInput, PromptInputBody, PromptInputFooter, PromptInputSubmit, PromptInputTextarea, Shimmer, Source, Sources } from "@coworkany/workbench-ui";
 
 type Message = AdvisorChatMessage;
 
@@ -1241,10 +1239,7 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
                       ) : (
                         <div className={cn("rounded-[24px] border-2 px-4 py-3.5", isAssistant ? "border-border bg-background text-foreground" : "border-primary bg-primary text-primary-foreground")}>
                           <div className={cn("break-words leading-7 [&_a]:underline [&_a]:underline-offset-4 [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_h1]:my-3 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:font-semibold [&_li]:my-1 [&_ol]:my-2 [&_p]:my-2 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:p-3 [&_ul]:my-2 first:[&_p]:mt-0 last:[&_p]:mb-0", isAssistant ? "text-foreground [&_code]:bg-accent/6 [&_pre]:bg-accent [&_pre]:text-accent-foreground" : "text-primary-foreground [&_code]:bg-black/10 [&_pre]:bg-black/10 [&_pre]:text-primary-foreground")}>
-                            <MessageResponse content={message.content} className="dify-ai-elements-message-response">
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm]}
-                              components={{
+                            <MessageResponse content={message.content} className="dify-ai-elements-message-response" components={{
                                 a({ href, children, ...props }) {
                                   const fileLink = buildFileLinkMeta(href, getLinkText(children));
                                   if (fileLink) {
@@ -1272,11 +1267,7 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
                                   return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
                                 },
                                 code({ className, children, ...props }) { const match = /language-(\w+)/.exec(className || ""); if (!match && !className) return <code className={className} {...props}>{children}</code>; return <CodeBlock language={match?.[1]}>{String(children).replace(/\n$/, "")}</CodeBlock>; },
-                              }}
-                            >
-                              {message.content}
-                            </ReactMarkdown>
-                            </MessageResponse>
+                              }} />
                             {isAssistant && inlineSources.length ? <Sources className="dify-ai-elements-sources">{inlineSources.map((source) => <Source key={`${message.id}:${source.href}`} title={source.title} href={source.href} />)}</Sources> : null}
                           </div>
                         </div>

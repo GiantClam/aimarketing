@@ -33,8 +33,8 @@ function terminateWindowsTree(pid) {
 }
 
 function clearWindowsDesktopProcess() {
-  const expected = normalize(resolve(repoRoot, "apps/desktop/src-tauri/target/debug/ai-marketing.exe")).toLowerCase();
-  const rows = run("powershell", ["-NoProfile", "-Command", "Get-CimInstance Win32_Process -Filter \"Name = 'ai-marketing.exe'\" | ForEach-Object { \"$($_.ProcessId)`t$($_.ExecutablePath)\" }"]);
+  const expected = normalize(resolve(repoRoot, "apps/desktop/src-tauri/target/debug/coworkany.exe")).toLowerCase();
+  const rows = run("powershell", ["-NoProfile", "-Command", "Get-CimInstance Win32_Process -Filter \"Name = 'coworkany.exe'\" | ForEach-Object { \"$($_.ProcessId)`t$($_.ExecutablePath)\" }"]);
   for (const row of rows.split(/\r?\n/u)) {
     const [pidText, executablePath] = row.split("\t");
     if (executablePath && normalize(executablePath).toLowerCase() === expected) terminateWindowsTree(Number(pidText));

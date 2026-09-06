@@ -51,7 +51,7 @@ export const WORKBENCH_MEDIA_FEATURES: readonly WorkbenchMediaFeature[] = [
   ] },
   { id: "voice-clone", group: "audio", title: "声音克隆", summary: "上传或录制参考音频，复刻音色并生成试听结果。", submitLabel: "复刻音色", fields: [
     { id: "voiceId", label: "新音色 ID", type: "text", placeholder: "留空则自动生成，例如 voice_brand_host" },
-    { id: "previewText", label: "试听文本", type: "textarea", placeholder: "例如：欢迎来到 AI Marketing 新品发布会。" },
+    { id: "previewText", label: "试听文本", type: "textarea", placeholder: "例如：欢迎来到 CoworkAny 新品发布会。" },
     { id: "promptText", label: "示例音频文本", type: "text", placeholder: "上传示例音频时可填写。" },
     { id: "needNoiseReduction", label: "降噪", type: "select", defaultValue: "false", options: [{ value: "false", label: "关闭" }, { value: "true", label: "开启" }] },
   ] },

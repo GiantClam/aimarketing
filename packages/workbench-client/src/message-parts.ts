@@ -1,4 +1,5 @@
 import type { WorkbenchMessagePart, WorkbenchRunEvent } from "./index";
+import { mergeStreamingText } from "./uimessage";
 
 const MESSAGE_PARTS_VERSION = 2 as const;
 
@@ -31,7 +32,7 @@ export function mergeWorkbenchMessagePart(
   if (index < 0) return [...parts, incoming].sort(compareParts);
   const current = parts[index];
   const next = current.type === "text" && incoming.type === "text"
-    ? { ...current, ...incoming, text: incoming.text.startsWith(current.text) ? incoming.text : `${current.text}${incoming.text}` }
+    ? { ...current, ...incoming, text: mergeStreamingText(current.text, incoming.text) }
     : { ...current, ...incoming } as WorkbenchMessagePart;
   return parts.map((part, partIndex) => partIndex === index ? next : part).sort(compareParts);
 }
@@ -44,11 +45,11 @@ export function applyWorkbenchRunEventToParts(
   switch (event.type) {
     case "text": {
       const existing = parts.find((part): part is Extract<WorkbenchMessagePart, { type: "text" }> => part.type === "text" && part.id === "text:assistant");
-      return mergeWorkbenchMessagePart(parts, { id: "text:assistant", type: "text", text: `${existing?.text ?? ""}${event.delta}`, ...base });
+      return mergeWorkbenchMessagePart(parts, { id: "text:assistant", type: "text", text: mergeStreamingText(existing?.text ?? "", event.delta), ...base });
     }
     case "reasoning": {
       const existing = parts.find((part): part is Extract<WorkbenchMessagePart, { type: "reasoning" }> => part.type === "reasoning" && part.id === "reasoning:assistant");
-      return mergeWorkbenchMessagePart(parts, { id: "reasoning:assistant", type: "reasoning", text: `${existing?.text ?? ""}${event.delta}`, status: "running", ...base });
+      return mergeWorkbenchMessagePart(parts, { id: "reasoning:assistant", type: "reasoning", text: mergeStreamingText(existing?.text ?? "", event.delta), status: "running", ...base });
     }
     case "plan": return mergeWorkbenchMessagePart(parts, { ...event.plan, id: event.plan.id, type: "plan", ...base });
     case "task": return mergeWorkbenchMessagePart(parts, { ...event.task, id: event.task.id, type: "task", ...base });

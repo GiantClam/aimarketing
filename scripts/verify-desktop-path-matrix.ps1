@@ -1,5 +1,5 @@
 param(
-  [string]$PortableZip = ".artifacts/desktop-release/AI-Marketing-Windows-x64-portable.zip",
+  [string]$PortableZip = ".artifacts/desktop-release/CoworkAny-Windows-x64-portable.zip",
   [string]$WorkRoot,
   [int]$StartupSeconds = 8
 )
@@ -11,7 +11,7 @@ $zipPath = [IO.Path]::GetFullPath((Join-Path $repoRoot $PortableZip))
 if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) { throw "desktop_path_matrix_zip_missing:$zipPath" }
 if ($StartupSeconds -lt 2 -or $StartupSeconds -gt 60) { throw "desktop_path_matrix_startup_seconds_invalid" }
 $ownedWorkRoot = [string]::IsNullOrWhiteSpace($WorkRoot)
-if ($ownedWorkRoot) { $WorkRoot = Join-Path ([IO.Path]::GetTempPath()) ("aimarketing-path-matrix-" + [guid]::NewGuid().ToString("N")) }
+if ($ownedWorkRoot) { $WorkRoot = Join-Path ([IO.Path]::GetTempPath()) ("coworkany-path-matrix-" + [guid]::NewGuid().ToString("N")) }
 $work = [IO.Path]::GetFullPath($WorkRoot)
 
 function Assert-File([string]$path, [string]$label) {
@@ -60,15 +60,15 @@ try {
     # Construct the Chinese directory from code points so Windows PowerShell 5.1
     # cannot reinterpret a UTF-8 source literal as the system ANSI code page.
     [ordered]@{ id = "unicode-user"; directory = ([string][char]0x4E2D + [char]0x6587 + " " + [char]0x7528 + [char]0x6237) },
-    [ordered]@{ id = "space"; directory = "AI Marketing space path" },
-    [ordered]@{ id = "long"; directory = ("AIMarketing-" + ("long-" * 14) + "path") },
-    [ordered]@{ id = "onedrive"; directory = "OneDrive - AI Marketing" }
+    [ordered]@{ id = "space"; directory = "CoworkAny space path" },
+    [ordered]@{ id = "long"; directory = ("CoworkAny-" + ("long-" * 14) + "path") },
+    [ordered]@{ id = "onedrive"; directory = "OneDrive - CoworkAny" }
   )
   $results = @()
   foreach ($variant in $variants) {
     $target = Join-Path $matrixRoot $variant.directory
     Copy-PackageTree $packageRoot.FullName $target
-    $executable = Join-Path $target "AI Marketing.exe"
+    $executable = Join-Path $target "CoworkAny.exe"
     Assert-File $executable "${variant.id}:executable"
     Assert-File (Join-Path $target "portable.flag") "${variant.id}:portable_flag"
     Assert-File (Join-Path $target "_up_\dist-runtime\host.mjs") "${variant.id}:host"

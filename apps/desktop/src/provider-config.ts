@@ -8,6 +8,10 @@ export type DesktopProviderConfig = {
   readonly models?: readonly string[];
   readonly apiKey?: string;
   readonly reasoningEffort?: string;
+  /** OpenCode provider request timeout in milliseconds; false disables it. */
+  readonly timeout?: number | false;
+  /** OpenCode streamed chunk timeout in milliseconds; false disables it. */
+  readonly chunkTimeout?: number | false;
   readonly skillId?: string;
   readonly endpoint?: string;
   readonly queryEndpoint?: string;

@@ -254,7 +254,7 @@ def main():
     wait_until_http_ready(base_url)
 
     test_id = str(int(time() * 1000))[-8:]
-    email = f"qa-auth-{test_id}@aimarketingsite.com"
+    email = f"qa-auth-{test_id}@coworkanysite.com"
     name = f"QA Auth {test_id}"
     enterprise_name = f"QA Auth Enterprise {test_id}"
     password_1 = "Qa#12345678"

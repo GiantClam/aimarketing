@@ -32,6 +32,8 @@ For WeChat and other article-like outputs, preserve image intent using stable pl
 
 Draft phase output is Markdown or platform-native text, never JSON-only. Preserve an authored title exactly when the user supplies one. Do not add a title when the platform contract says the application already owns it.
 
+Before submitting the draft, keep it standards-compliant CommonMark Markdown: headings, paragraphs, lists, images, and thematic breaks are separate blocks, with headings and thematic breaks on their own lines and blank lines between block elements. Never put a heading marker directly after prose or concatenate two block elements.
+
 ## Governed turn completion
 
 After the editorial pass, call `writer_submit_result` exactly once. Use the tool's flat schema exactly: `schemaVersion: 1`; `outcome` is the string `draft_ready` or `needs_clarification`; `operation` is a string such as `create` or `revise`; `draft` is an object with `title`, `content`, and numeric `baseRevision` (the active revision, or `0` for a new draft), not a Markdown string; `research` is `{ requested, completed, sourceUrls }`; each asset intent is `{ id, kind, prompt, placement, aspectRatio }`. Submit `needs_clarification` with `draft: null` only when required information is missing; otherwise submit `draft_ready` with the complete draft, the resolved platform, operation, base revision, research status/source URLs, and only platform-compatible cover or inline image intents. When an active draft exists, return its complete content for every revision and never use ellipses or prose saying the application will preserve the rest. Do not use final prose as a substitute for the tool call.

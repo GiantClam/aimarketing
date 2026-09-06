@@ -40,7 +40,7 @@ test("ordinary chat remains on the OpenCode session path", () => {
   assert.match(app, /type:\s*["']session\.create["']/u);
   assert.match(app, /type:\s*["']session\.prompt["']/u);
   assert.match(host, /command\.type === ["']session\.prompt["']/u);
-  assert.match(host, /runOpenCode\(command, session\)/u);
+  assert.match(host, /runOpenCode\(\{ \.\.\.command, runId \}, session, \{ signal: controller\.signal \}\)/u);
 });
 
 test("workflow persistence and artifact evidence use the typed desktop service seam", () => {

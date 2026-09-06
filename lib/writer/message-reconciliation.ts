@@ -5,4 +5,4 @@ export {
   type PendingWriterTaskLike,
   type PendingWriterMessageLike,
   type PendingWriterMessageReconciliation,
-} from "@aimarketing/writer-core"
+} from "@coworkany/writer-core"

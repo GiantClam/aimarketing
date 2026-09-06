@@ -1,1 +1,1 @@
-export { InlineCitation, Source, Sources } from "./source";
+export { InlineCitation, Source, Sources, SourcesContent, SourcesTrigger } from "./source";

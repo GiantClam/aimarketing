@@ -1,12 +1,12 @@
 [package]
-name = "ai-marketing"
+name = "coworkany"
 version = "0.1.0"
-description = "AI Marketing local Windows workbench"
-authors = ["AI Marketing"]
+description = "CoworkAny local Windows workbench"
+authors = ["CoworkAny"]
 edition = "2021"
 
 [lib]
-name = "ai_marketing_lib"
+name = "coworkany_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

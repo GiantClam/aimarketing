@@ -19,7 +19,7 @@
 
 ## Proposed Solution
 
-在现有 `@aimarketing/workbench-ui` 基础上增加 AI Elements 风格的 host-neutral 组件族，并引入版本化的 `WorkbenchMessagePartV2`：
+在现有 `@coworkany/workbench-ui` 基础上增加 AI Elements 风格的 host-neutral 组件族，并引入版本化的 `WorkbenchMessagePartV2`：
 
 - 共享实现 Attachments、Message、Prompt Input、Reasoning、Plan、Task、Tool、Model Selector。
 - 线上 SSE/AI SDK 与桌面 OpenCode/Tauri 事件均适配为 V2 parts。

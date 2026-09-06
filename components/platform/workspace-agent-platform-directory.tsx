@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { WorkbenchAgentDirectory, type WorkbenchAgentDirectoryGroup } from "@aimarketing/workbench-ui"
+import { WorkbenchAgentDirectory, type WorkbenchAgentDirectoryGroup } from "@coworkany/workbench-ui"
 
 import { dispatchBusinessMarketplaceSelectionUpdated } from "@/lib/platform/business-marketplace-events"
 import { buildAgentPlatformDirectoryGroups } from "@/lib/platform/agent-platform-directory"

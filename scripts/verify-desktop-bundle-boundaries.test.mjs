@@ -15,3 +15,12 @@ test("desktop bundle boundary scan rejects excluded SaaS routes and capabilities
 test("desktop bundle boundary scan does not match words embedded in ordinary copy", () => {
   assert.deepEqual(scanDesktopBundle([{ filePath: "fixture.js", source: "modify files directly; configurable" }]), []);
 });
+
+test("desktop bundle boundary scan ignores dependency browser-environment detection", () => {
+  assert.deepEqual(scanDesktopBundle([{ filePath: "vendor.js", source: 'navigator.userAgent.includes("Cloudflare")' }]), []);
+});
+
+test("desktop bundle boundary scan still rejects real cloud integration markers", () => {
+  const violations = scanDesktopBundle([{ filePath: "fixture.js", source: 'import("@cloudflare/workers-types"); fetch("https://api.cloudflare.com/client")' }]);
+  assert.deepEqual(violations.map((item) => item.label), ["cloud-only integration"]);
+});

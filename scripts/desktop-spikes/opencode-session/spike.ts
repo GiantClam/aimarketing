@@ -508,7 +508,7 @@ async function fixtureCheck(): Promise<SpikeCheck> {
 async function runCandidate(candidate: OpenCodeCandidate, evidenceDirectory: string, model: string) {
   const runId = randomUUID()
   const startedAt = new Date().toISOString()
-  const runRoot = path.join(os.tmpdir(), "aimarketing-opencode-spike", `${candidate.kind}-${runId}`)
+  const runRoot = path.join(os.tmpdir(), "coworkany-opencode-spike", `${candidate.kind}-${runId}`)
   const workspace = path.join(runRoot, "workspace-中文 空格")
   try {
   await mkdir(workspace, { recursive: true })

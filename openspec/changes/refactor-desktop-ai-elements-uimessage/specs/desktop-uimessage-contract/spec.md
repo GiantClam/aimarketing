@@ -1,7 +1,7 @@
 # Specification: Desktop UIMessage Contract
 
 **Change ID:** `refactor-desktop-ai-elements-uimessage`
-**Affects:** `@aimarketing/workbench-client`, desktop persistence, Tauri adapters
+**Affects:** `@coworkany/workbench-client`, desktop persistence, Tauri adapters
 
 ---
 

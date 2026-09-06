@@ -45,7 +45,7 @@ mod tests {
     use super::*;
     #[test]
     fn raw_logs_are_redacted_and_scoped_to_run() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-logs-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-logs-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         append(&root, "run-1", r#"{"apiKey":"secret","event":"text"}"#);
         let path = root.join("logs").join("runs").join("run-1.jsonl");
@@ -59,7 +59,7 @@ mod tests {
 
     #[test]
     fn retention_removes_expired_and_oldest_oversized_run_logs() {
-        let root = std::env::temp_dir().join(format!("ai-marketing-log-retention-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("coworkany-log-retention-{}", std::process::id()));
         let directory = root.join("logs").join("runs");
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&directory).unwrap();

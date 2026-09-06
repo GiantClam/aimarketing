@@ -7,10 +7,10 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const desktopRoot = join(repoRoot, "apps", "desktop");
-const configPath = resolve(process.env.AIMARKETING_REAL_PROVIDER_CONFIG ?? join(desktopRoot, "real-providers.test.local.json"));
+const configPath = resolve(process.env.COWORKANY_REAL_PROVIDER_CONFIG ?? join(desktopRoot, "real-providers.test.local.json"));
 const config = JSON.parse(await readFile(configPath, "utf8"));
-const requested = String(process.env.AIMARKETING_WORKFLOW_NODE_SCOPES ?? "local,text,image,audio,music,video,ppt,knowledge,digital_human").split(",").map((value) => value.trim()).filter(Boolean);
-const artifactRoot = resolve(process.env.AIMARKETING_WORKFLOW_NODE_ARTIFACT_DIR ?? join(repoRoot, ".artifacts", `desktop-workflow-node-validation-${Date.now()}`));
+const requested = String(process.env.COWORKANY_WORKFLOW_NODE_SCOPES ?? "local,text,image,audio,music,video,ppt,knowledge,digital_human").split(",").map((value) => value.trim()).filter(Boolean);
+const artifactRoot = resolve(process.env.COWORKANY_WORKFLOW_NODE_ARTIFACT_DIR ?? join(repoRoot, ".artifacts", `desktop-workflow-node-validation-${Date.now()}`));
 await mkdir(artifactRoot, { recursive: true });
 
 function frame(value) {
@@ -148,7 +148,7 @@ function startHost(workspace) {
     env: {
       ...process.env,
       OPENCODE_RUNTIME_DIR: workspace,
-      AIMARKETING_OPENCODE_PATH: process.env.AIMARKETING_OPENCODE_PATH ?? "C:\\Program Files\\nodejs\\node_modules\\opencode-ai\\bin\\opencode.exe",
+      COWORKANY_OPENCODE_PATH: process.env.COWORKANY_OPENCODE_PATH ?? "C:\\Program Files\\nodejs\\node_modules\\opencode-ai\\bin\\opencode.exe",
     },
   });
   const frames = [];
@@ -221,16 +221,16 @@ async function runScope(scope) {
   else if (scope === "text") workflow = textWorkflowDefinition(textProvider);
   else if (["writer", "llm_generate", "agent_execute"].includes(scope)) workflow = textDefinition(scope, textProvider);
   else if (scope === "ppt") workflow = pptDefinition(textProvider);
-  else if (scope === "image") workflow = mediaDefinition("image_generate", provider, { prompt: "A simple yellow square on a white background, no text", imageSize: process.env.AIMARKETING_WORKFLOW_IMAGE_SIZE ?? "256x256", imageQuality: "low", imageBackground: "opaque", imageOutputFormat: "png", imageModeration: "auto" });
+  else if (scope === "image") workflow = mediaDefinition("image_generate", provider, { prompt: "A simple yellow square on a white background, no text", imageSize: process.env.COWORKANY_WORKFLOW_IMAGE_SIZE ?? "256x256", imageQuality: "low", imageBackground: "opaque", imageOutputFormat: "png", imageModeration: "auto" });
   else if (scope === "audio" || scope === "audio_generate") workflow = mediaDefinition(scope === "audio" ? "voice_synthesis" : "audio_generate", provider, { text: "This is a real desktop audio validation.", voiceId: "English_Trustworth_Man", languageBoost: "auto", speed: "1", volume: "1", pitch: "0" });
   else if (scope === "voice_clone") {
-    const reference = String(process.env.AIMARKETING_WORKFLOW_VOICE_CLONE_REFERENCE ?? "reference.bin").trim();
+    const reference = String(process.env.COWORKANY_WORKFLOW_VOICE_CLONE_REFERENCE ?? "reference.bin").trim();
     workflow = mediaDefinition("voice_clone", provider, { localAttachments: [reference], voiceId: `desktop-validation-${Date.now()}`, previewText: "This is a desktop voice clone validation." });
   }
   else if (scope === "music") workflow = mediaDefinition("music_generate", provider, { prompt: "A short upbeat instrumental desktop validation track", genre: "electronic-pop", mood: "uplifting", vocals: "instrumental" });
   else if (scope === "video") workflow = mediaDefinition("video_generate", provider, { prompt: "A short abstract animation of soft blue and white geometric gradients", duration: "5", ratio: "16:9", sound: "off" });
   else if (scope === "video_enhance") workflow = definition([
-    node("input", "upload", { uploadedFiles: [{ localPath: String(process.env.AIMARKETING_WORKFLOW_VIDEO_ENHANCE_SOURCE ?? ""), fileName: "source.mp4", mimeType: "video/mp4" }] }, 0),
+    node("input", "upload", { uploadedFiles: [{ localPath: String(process.env.COWORKANY_WORKFLOW_VIDEO_ENHANCE_SOURCE ?? ""), fileName: "source.mp4", mimeType: "video/mp4" }] }, 0),
     node("video_enhance", "video_generate", { provider: provider.id, model: provider.model, baseUrl: provider.baseUrl, endpoint: provider.endpoint, queryEndpoint: provider.queryEndpoint, featureId: "video-enhance", prompt: "提升细节、修复压缩模糊、强化人物边缘", durationLimit: 10, seed: -1 }, 1),
     node("output", "output", {}, 2),
   ], [
@@ -241,13 +241,13 @@ async function runScope(scope) {
     imageProvider,
     audioProvider,
     videoProvider,
-    String(process.env.AIMARKETING_WORKFLOW_DIGITAL_HUMAN_AUDIO ?? "").trim() || undefined,
-    String(process.env.AIMARKETING_WORKFLOW_DIGITAL_HUMAN_AVATAR ?? "").trim() || undefined,
+    String(process.env.COWORKANY_WORKFLOW_DIGITAL_HUMAN_AUDIO ?? "").trim() || undefined,
+    String(process.env.COWORKANY_WORKFLOW_DIGITAL_HUMAN_AVATAR ?? "").trim() || undefined,
   );
   host.child.stdin.write(frame({ version: 1, requestId: randomUUID(), runId, type: "workflow.run", payload: { workspacePath: workspace, provider: textProvider, media: provider, providers: config.providers, definition: workflow } }));
   try {
     const defaultTimeoutMs = scope === "video" || scope === "video_enhance" || scope === "digital_human" ? 12 * 60_000 : scope === "music" || scope === "ppt" ? 6 * 60_000 : 4 * 60_000;
-    const timeoutMs = Math.max(30_000, Number(process.env.AIMARKETING_WORKFLOW_NODE_TIMEOUT_MS ?? defaultTimeoutMs));
+    const timeoutMs = Math.max(30_000, Number(process.env.COWORKANY_WORKFLOW_NODE_TIMEOUT_MS ?? defaultTimeoutMs));
     const terminal = await host.waitFor((current) => {
       const event = current.data?.event;
       return event?.runId === runId && ["done", "runtime_error"].includes(event?.event);

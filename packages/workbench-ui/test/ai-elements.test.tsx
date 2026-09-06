@@ -31,10 +31,17 @@ test("prompt input keeps contextual hints in the header and actions in the foote
   assert.match(markup, /data-slot="prompt-input-custom-tools"/);
 });
 
-test("model selector groups models and renders an accessible listbox trigger", () => {
+test("model selector groups models and renders an accessible dialog trigger", () => {
   const markup = renderToStaticMarkup(<WorkbenchModelSelector models={[{ id: "openai:gpt", label: "GPT", provider: "OpenAI" }, { id: "local:qwen", label: "Qwen", provider: "Local" }]} value="openai:gpt" onChange={() => undefined} locale="en" />);
-  assert.match(markup, /aria-haspopup="listbox"/);
+  assert.match(markup, /aria-haspopup="dialog"/);
   assert.match(markup, /GPT/);
+  assert.match(markup, /ai-elements-model-selector-logo/);
+});
+
+test("model selector uses a stable neutral badge for localized provider labels", () => {
+  const markup = renderToStaticMarkup(<WorkbenchModelSelector models={[{ id: "deepseek:chat", label: "deepseek-chat", provider: "已配置模型" }]} value="deepseek:chat" onChange={() => undefined} locale="zh" />);
+  assert.match(markup, /ai-elements-model-selector-logo[^>]*>AI<\/span>/);
+  assert.doesNotMatch(markup, />已配<\/span>/);
 });
 
 test("process primitives preserve plan, task, tool and reasoning semantics", () => {

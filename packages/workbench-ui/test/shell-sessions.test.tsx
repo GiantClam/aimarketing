@@ -19,6 +19,7 @@ test("sidebar shows only the current expert's conversation history", () => {
     activeSessionAgentId="executive-brand"
     activeSessionAgentLabel="品牌战略顾问"
     onNewSession={() => undefined}
+    initialSessionsExpanded
   ><div>内容</div></WorkbenchShell>);
 
   assert.match(markup, /品牌战略顾问/);
@@ -28,6 +29,8 @@ test("sidebar shows only the current expert's conversation history", () => {
   const expertNavIndex = markup.indexOf('data-agent-nav="品牌战略顾问"');
   assert.equal(markup.slice(rootNavIndex, expertNavIndex).includes("wb-sidebar-sessions"), false);
   assert.match(markup.slice(expertNavIndex), /<section class="wb-sidebar-sessions"/);
+  assert.match(markup, /title="品牌战略顾问"[^>]*aria-expanded="true"/);
+  assert.doesNotMatch(markup, /class="wb-sidebar-session-heading">品牌战略顾问/);
 });
 
 test("sidebar keeps general AI conversations out of an expert entry", () => {
@@ -44,6 +47,7 @@ test("sidebar keeps general AI conversations out of an expert entry", () => {
     ]}
     activeSessionAgentId={null}
     onNewSession={() => undefined}
+    initialSessionsExpanded
   ><div>内容</div></WorkbenchShell>);
 
   assert.match(markup, /通用会话/);
@@ -72,6 +76,7 @@ test("creative workspace assistants render only their own conversation history",
     activeSessionAgentId={scope}
     activeSessionAgentLabel={label}
     onNewSession={() => undefined}
+    initialSessionsExpanded
   ><div>内容</div></WorkbenchShell>);
 
   const writerMarkup = renderCreativeShell("/dashboard/writer/writer-1", "entry:writer", "多平台写作");

@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createHttpMediaAdapter, createMediaIdempotencyKey, downloadMediaOutputs, ProviderConfigurationRequiredError, requireMediaProvider, runMediaJob, type CancellationPort } from "@aimarketing/media-runtime";
+import { createHttpMediaAdapter, createMediaIdempotencyKey, downloadMediaOutputs, ProviderConfigurationRequiredError, requireMediaProvider, runMediaJob, type CancellationPort } from "@coworkany/media-runtime";
 
 const provider = "fixture" as never;
 const activeCancellation: CancellationPort = { throwIfCancelled: () => undefined };
@@ -39,7 +39,7 @@ test("media runtime preserves idempotency, polls and normalizes provider tasks",
 
 test("media runtime downloads outputs atomically and rejects missing providers", async () => {
   assert.throws(() => requireMediaProvider(undefined, provider, "image"), (error: unknown) => error instanceof ProviderConfigurationRequiredError && error.code === "provider_configuration_required");
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-media-runtime-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-media-runtime-"));
   try {
     const tempDirectory = join(root, "rust-allocated-temp");
     const artifacts = await downloadMediaOutputs({ providerTaskId: "task-2", status: "succeeded", outputs: [{ b64_json: Buffer.from("fixture-png").toString("base64") }] }, root, { filenamePrefix: "image", maxBytes: 1024, tempDirectory });
@@ -76,7 +76,8 @@ test("desktop host emits terminal media attempt events for recovery idempotency"
   assert.match(app, /const localizedFeatures = useMemo\(\(\) => mediaFeatureCatalog/);
   assert.match(app, /applyConfiguredMediaModels\(feature, models, model\)/);
   assert.match(app, /const isStandaloneMediaTask = Boolean\(mediaFeatureId && mediaFeatureId !== "image_generate"\)/);
-  assert.match(app, /!isWorkflowRun && !isStandaloneMediaTask && conversationId && !conversationIdFromPath/);
+  assert.match(app, /const routeConversationId = conversationIdFromPath\(launchPath\)/);
+  assert.match(app, /const conversationId = isStandaloneMediaTask/);
   assert.match(app, /standaloneMediaRunsRef\.current\.add\(runId\)/);
 });
 
@@ -107,7 +108,7 @@ test("desktop image capabilities select direct OpenAI-compatible or Bailian adap
   assert.match(host, /createOpenAICompatibleImageAdapter\(providerOptions\)/);
   assert.match(host, /executorId === "image_generate"/);
   assert.match(app, /mediaFeatureId === "image_generate"/);
-  assert.match(app, /mediaFeatureId !== "image_generate" &&/);
+  assert.match(app, /!mediaFeatureId && actionId !== "image_generate" &&/);
 });
 
 test("desktop video capabilities select shared MiniMax, Bailian and RunningHub clients", () => {

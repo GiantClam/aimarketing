@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import { migrateLegacyRunningHubWorkflows } from "../apps/desktop/src/runninghub-workflow";
 
-const configPath = process.env.AIMARKETING_DESKTOP_CONFIG_PATH ?? "C:/Users/liula/AppData/Local/AIMarketing/config.json";
-const envPath = process.env.AIMARKETING_LEGACY_ENV_PATH ?? ".env";
+const configPath = process.env.COWORKANY_DESKTOP_CONFIG_PATH ?? "C:/Users/liula/AppData/Local/CoworkAny/config.json";
+const envPath = process.env.COWORKANY_LEGACY_ENV_PATH ?? ".env";
 
 function envValue(raw: string, name: string) {
   return raw.split(/\r?\n/u).find((line) => line.startsWith(`${name}=`))?.slice(name.length + 1).trim();
@@ -13,7 +13,7 @@ const legacyEnv = fs.readFileSync(envPath, "utf8");
 const digitalHumanWorkflowId = envValue(legacyEnv, "RUNNINGHUB_DIGITAL_HUMAN_WORKFLOW_ID");
 const videoEnhanceWorkflowId = envValue(legacyEnv, "RUNNINGHUB_VIDEO_ENHANCE_WORKFLOW_ID");
 if (!digitalHumanWorkflowId || !videoEnhanceWorkflowId) throw new Error("legacy_runninghub_workflow_ids_missing");
-const importLegacyCredential = process.env.AIMARKETING_IMPORT_LEGACY_RUNNINGHUB_CREDENTIALS === "1";
+const importLegacyCredential = process.env.COWORKANY_IMPORT_LEGACY_RUNNINGHUB_CREDENTIALS === "1";
 const legacyApiKey = envValue(legacyEnv, "RUNNINGHUB_API_KEY");
 
 const providerId = config.defaults?.video ?? "video-minimax-h3";

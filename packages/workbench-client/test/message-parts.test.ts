@@ -42,3 +42,10 @@ test("merge preserves a single stable part when the incoming id repeats", () => 
   assert.equal(next.length, 1);
   assert.equal(next[0]?.type === "reasoning" ? next[0].text : "", "thinking more");
 });
+
+test("reasoning snapshots do not duplicate in the process part", () => {
+  let parts: WorkbenchMessagePart[] = [];
+  parts = applyWorkbenchRunEventToParts(parts, { type: "reasoning", delta: "先判断用户需求。", sequence: 1 });
+  parts = applyWorkbenchRunEventToParts(parts, { type: "reasoning", delta: "先判断用户需求。", sequence: 2 });
+  assert.equal(parts.find((part) => part.type === "reasoning")?.text, "先判断用户需求。");
+});

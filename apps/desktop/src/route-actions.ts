@@ -26,6 +26,9 @@ export function resolveDesktopRunAction(path: string, routeAction: string | null
   const mediaAction = workflowActionForMediaFeature(mediaFeatureId);
   if (mediaAction) return mediaAction;
   if (path === "/dashboard/video") return selectedAction;
-  if (path === "/dashboard" || path.startsWith("/dashboard/ai")) return "llm_generate";
+  // Agent-scoped AI routes carry their capability in routeAction. Keep the
+  // generic AI and home routes on the ordinary LLM action, but do not erase
+  // the PPT agent's capability before provider/artifact policy is resolved.
+  if (path === "/dashboard" || path.startsWith("/dashboard/ai")) return routeAction ?? "llm_generate";
   return routeAction ?? selectedAction;
 }

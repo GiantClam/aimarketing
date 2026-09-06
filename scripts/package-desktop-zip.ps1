@@ -9,8 +9,8 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $release = (Resolve-Path (Join-Path $root $ReleaseDir)).Path
 $output = [IO.Path]::GetFullPath((Join-Path $root $OutputDir))
 $mode = if ($Portable) { "portable" } else { "normal" }
-$packageName = "AI-Marketing-Windows-x64-$mode"
-$stage = Join-Path ([IO.Path]::GetTempPath()) ("aimarketing-package-" + [guid]::NewGuid().ToString("N"))
+$packageName = "CoworkAny-Windows-x64-$mode"
+$stage = Join-Path ([IO.Path]::GetTempPath()) ("coworkany-package-" + [guid]::NewGuid().ToString("N"))
 $packageRoot = Join-Path $stage $packageName
 $zip = Join-Path $output "$packageName.zip"
 
@@ -31,7 +31,7 @@ function Assert-DesktopPackageArchive {
       return $ZipArchive.Entries | Where-Object { $_.FullName.Replace('\', '/') -eq $normalized } | Select-Object -First 1
     }
     $requiredEntries = @(
-      "$PackageName/AI Marketing.exe",
+      "$PackageName/CoworkAny.exe",
       "$PackageName/README.txt",
       "$PackageName/_up_/dist-runtime/host.mjs",
       "$PackageName/_up_/dist-runtime/knowledge.mjs",
@@ -47,7 +47,7 @@ function Assert-DesktopPackageArchive {
     if (-not $ExpectPortable -and $null -ne (Find-ArchiveEntry $archive "$PackageName/portable.flag")) { throw "normal package must not contain portable.flag" }
 
     $expectedLengths = @{
-      "$PackageName/AI Marketing.exe" = (Get-Item -LiteralPath $ExecutablePath).Length
+      "$PackageName/CoworkAny.exe" = (Get-Item -LiteralPath $ExecutablePath).Length
       "$PackageName/_up_/dist-runtime/host.mjs" = (Get-Item -LiteralPath (Join-Path $RuntimePath "host.mjs")).Length
       "$PackageName/_up_/dist-runtime/knowledge.mjs" = (Get-Item -LiteralPath (Join-Path $RuntimePath "knowledge.mjs")).Length
       "$PackageName/_up_/dist-runtime/skill-catalog.json" = (Get-Item -LiteralPath (Join-Path $RuntimePath "skill-catalog.json")).Length
@@ -67,9 +67,9 @@ function Assert-DesktopPackageArchive {
 
 New-Item -ItemType Directory -Force -Path $packageRoot, $output | Out-Null
 try {
-  $executable = Join-Path $release "ai-marketing.exe"
+  $executable = Join-Path $release "coworkany.exe"
   if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw "release executable missing: $executable" }
-  Copy-Item -LiteralPath $executable -Destination (Join-Path $packageRoot "AI Marketing.exe") -Force
+  Copy-Item -LiteralPath $executable -Destination (Join-Path $packageRoot "CoworkAny.exe") -Force
 
   Get-ChildItem -LiteralPath $release -Filter "*.dll" -File | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $packageRoot $_.Name) -Force
@@ -81,14 +81,14 @@ try {
   Copy-Item -LiteralPath $distRuntime -Destination (Join-Path $packageRoot "_up_\dist-runtime") -Recurse -Force
   if ($Portable) { Set-Content -LiteralPath (Join-Path $packageRoot "portable.flag") -Value "" -Encoding utf8 }
   Set-Content -LiteralPath (Join-Path $packageRoot "README.txt") -Encoding utf8 -Value @"
-AI Marketing Windows green package
+CoworkAny Windows green package
 
-Run AI Marketing.exe.
+Run CoworkAny.exe.
 Supported targets: Windows 10 22H2 and Windows 11, x64.
 Mode: $mode
-Normal mode stores application data in %LOCALAPPDATA%\AIMarketing.
+Normal mode stores application data in %LOCALAPPDATA%\CoworkAny.
 Portable mode stores application data in the data\ directory beside the executable.
-Upgrades are manual: close AI Marketing, back up the data directory in portable mode, then replace the ZIP contents. The app never downloads or replaces itself automatically.
+Upgrades are manual: close CoworkAny, back up the data directory in portable mode, then replace the ZIP contents. The app never downloads or replaces itself automatically.
 The portable package includes config.json and may include a plaintext API key; protect copied archives.
 External Obsidian Vault folders are not copied; the configured Vault path must remain available or be relocated after copying.
 The system WebView2 runtime is not copied; the first launch probes or repairs it on the target machine.

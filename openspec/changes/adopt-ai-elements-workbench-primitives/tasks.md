@@ -92,8 +92,8 @@
 
 ### Follow-up evidence
 
-- P1 media and Canvas checks: `pnpm --filter @aimarketing/workbench-ui typecheck`, `pnpm --filter @aimarketing/desktop exec tsc -p tsconfig.json --noEmit`, and `pnpm exec tsx --test apps/desktop/test/routes.test.ts` pass (72 tests).
-- Desktop build and boundary checks: `pnpm --filter @aimarketing/desktop build`, `pnpm run desktop:verify-network-boundary`, and `pnpm run desktop:verify-bundle` pass after allowing only the provider catalog origins and the documented agency “Creator Marketplace submission pipeline” phrase.
+- P1 media and Canvas checks: `pnpm --filter @coworkany/workbench-ui typecheck`, `pnpm --filter @coworkany/desktop exec tsc -p tsconfig.json --noEmit`, and `pnpm exec tsx --test apps/desktop/test/routes.test.ts` pass (72 tests).
+- Desktop build and boundary checks: `pnpm --filter @coworkany/desktop build`, `pnpm run desktop:verify-network-boundary`, and `pnpm run desktop:verify-bundle` pass after allowing only the provider catalog origins and the documented agency “Creator Marketplace submission pipeline” phrase.
 - Root-wide `pnpm exec tsc -p tsconfig.json --noEmit` passes after aligning the local provider environment helper, reasoning event contract, and Node Buffer boundary types; viewport visual regression still needs an interactive WebView run.
 - Playwright Web smoke at 1280×900 covers `/dashboard/image-assistant`, `/dashboard/workflows`, `/dashboard/writer`, and `/dashboard/ai` with zero console/page errors; image assistant confirms no header model/reasoning/runtime badges and control-before-preview ordering.
 - Startup bootstrap now exposes bridge/state/runtime/repair stages with an accessible live status surface; the shared prompt input exposes AI Elements-compatible header/body/footer/tools slots and was smoke-tested on home, writer, and image assistant routes.

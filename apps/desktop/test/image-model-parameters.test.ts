@@ -21,6 +21,8 @@ test("model switching drops stale fields and applies model defaults", () => {
   const gpt = normalizeDesktopImageSettings("gpt-image-2", { quality: "high", candidateCount: "3", resolution: "4K" });
   assert.equal(gpt.quality, "high");
   assert.equal(gpt.candidateCount, "3");
+  assert.equal(gpt.responseFormat, "url");
+  assert.equal(normalizeDesktopImageSettings("gpt-image-2", { responseFormat: "b64_json" }).responseFormat, "url");
   assert.equal("resolution" in gpt, false);
   const nano = normalizeDesktopImageSettings("nanobanana2", gpt);
   assert.deepEqual(nano, { size: "1:1", resolution: "2K", referenceImages: "" });

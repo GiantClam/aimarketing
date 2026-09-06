@@ -2,7 +2,7 @@ import {
   executeWorkflow,
   migrateWorkflowDefinitionToCurrent,
   type WorkflowDefinitionEnvelope,
-} from "@aimarketing/workflow-core"
+} from "@coworkany/workflow-core"
 
 import {
   createWorkflowNodeInputBundle,

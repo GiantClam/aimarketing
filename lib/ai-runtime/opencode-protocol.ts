@@ -8,4 +8,4 @@ export {
   buildOpenCodeCommand,
   createOpenCodeEventParser,
   opencodeRuntimeDefinition,
-} from "@aimarketing/runtime-contracts/opencode"
+} from "@coworkany/runtime-contracts/opencode"

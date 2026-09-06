@@ -67,6 +67,15 @@ test("all canonical platform Skills describe the governed Writer result contract
   }
 })
 
+test("all canonical platform Skills require standard Markdown block boundaries", () => {
+  for (const platform of platforms) {
+    const document = readPlatformSkill(platform)
+    assert.match(document, /standards-compliant CommonMark Markdown/i, platform)
+    assert.match(document, /headings and thematic breaks on their own lines/i, platform)
+    assert.match(document, /blank lines between block elements/i, platform)
+  }
+})
+
 test("every platform fixture validates create, clarification, and full revision through the shared runtime contract", () => {
   for (const platform of platforms) {
     const draft = fixtureResult(platform)

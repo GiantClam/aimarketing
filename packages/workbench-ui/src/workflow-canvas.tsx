@@ -21,7 +21,7 @@ import {
   type WorkflowNodeType,
   type WorkflowPortDefinition,
   type WorkflowValueKind,
-} from "@aimarketing/workflow-core";
+} from "@coworkany/workflow-core";
 import { Canvas, Connection, Controls, Edge, Node, Panel, Toolbar } from "./ai-elements/index";
 import { getWorkbenchTaskStatusLabel, normalizeWorkbenchTaskStatus } from "./task-status";
 
@@ -38,8 +38,8 @@ export type WorkflowCanvasExecutionSnapshot = {
 };
 
 /** Pointer-event bridge used by the desktop node palette. HTML5 drag events are unreliable in native WebViews. */
-export const WORKFLOW_PALETTE_DRAG_EVENT = "aimarketing:workflow-palette-drag-start";
-export const WORKFLOW_PALETTE_DROP_EVENT = "aimarketing:workflow-palette-drop";
+export const WORKFLOW_PALETTE_DRAG_EVENT = "coworkany:workflow-palette-drag-start";
+export const WORKFLOW_PALETTE_DROP_EVENT = "coworkany:workflow-palette-drop";
 type WorkflowPaletteDragDetail = { type: string; pointerId: number };
 export type WorkflowCanvasProps = {
   className?: string;

@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $release = (Resolve-Path (Join-Path $root $ReleaseDir)).Path
 $packageRoot = [IO.Path]::GetFullPath((Join-Path $root $PackageDir))
-$executable = Join-Path $release "ai-marketing.exe"
+$executable = Join-Path $release "coworkany.exe"
 $runtime = Join-Path $release "_up_/dist-runtime"
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -20,7 +20,7 @@ function Find-Entry {
 
 function Verify-Package {
   param([string]$Mode, [bool]$ExpectPortable)
-  $packageName = "AI-Marketing-Windows-x64-$Mode"
+  $packageName = "CoworkAny-Windows-x64-$Mode"
   $zipCandidates = @(
     (Join-Path $packageRoot "$packageName.zip"),
     (Join-Path (Join-Path $packageRoot "desktop-release") "$packageName.zip"),
@@ -33,7 +33,7 @@ function Verify-Package {
   $archive = [IO.Compression.ZipFile]::OpenRead($zipPath)
   try {
     $required = @(
-      "$packageName/AI Marketing.exe",
+      "$packageName/CoworkAny.exe",
       "$packageName/README.txt",
       "$packageName/_up_/dist-runtime/host.mjs",
       "$packageName/_up_/dist-runtime/knowledge.mjs",
@@ -49,7 +49,7 @@ function Verify-Package {
       "$packageName/_up_/dist-runtime/runtime/python/",
       "$packageName/_up_/dist-runtime/runtime/node/node_modules/",
       "$packageName/_up_/dist-runtime/runtime/opencode/node_modules/",
-      "$packageName/_up_/dist-runtime/AIMarketing-Runtime-x64.zip"
+      "$packageName/_up_/dist-runtime/CoworkAny-Runtime-x64.zip"
     )
     foreach ($entry in $archive.Entries) {
       $normalizedEntry = $entry.FullName.Replace('\', '/')
@@ -62,7 +62,7 @@ function Verify-Package {
     if ($missing.Count) { throw "desktop_package_missing_entries: $($missing -join ', ')" }
 
     $sourceLengths = @{
-      "$packageName/AI Marketing.exe" = (Get-Item -LiteralPath $executable).Length
+      "$packageName/CoworkAny.exe" = (Get-Item -LiteralPath $executable).Length
       "$packageName/_up_/dist-runtime/host.mjs" = (Get-Item -LiteralPath (Join-Path $runtime "host.mjs")).Length
       "$packageName/_up_/dist-runtime/knowledge.mjs" = (Get-Item -LiteralPath (Join-Path $runtime "knowledge.mjs")).Length
       "$packageName/_up_/dist-runtime/skill-catalog.json" = (Get-Item -LiteralPath (Join-Path $runtime "skill-catalog.json")).Length
@@ -79,7 +79,7 @@ function Verify-Package {
       zipBytes = (Get-Item -LiteralPath $zipPath).Length
       requiredEntries = $required.Count
       portableFlag = [bool](Find-Entry $archive "$packageName/portable.flag")
-      executableBytes = (Find-Entry $archive "$packageName/AI Marketing.exe").Length
+      executableBytes = (Find-Entry $archive "$packageName/CoworkAny.exe").Length
       hostBytes = (Find-Entry $archive "$packageName/_up_/dist-runtime/host.mjs").Length
       knowledgeBytes = (Find-Entry $archive "$packageName/_up_/dist-runtime/knowledge.mjs").Length
       catalogBytes = (Find-Entry $archive "$packageName/_up_/dist-runtime/skill-catalog.json").Length

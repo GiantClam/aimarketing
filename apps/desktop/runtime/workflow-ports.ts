@@ -4,8 +4,8 @@ import type {
   WorkflowDefinitionEnvelope,
   WorkflowRunEventSink,
   WorkflowRunRepository,
-} from "@aimarketing/workflow-core";
-import type { OpenCodeRuntimeEvent } from "@aimarketing/runtime-contracts/opencode";
+} from "@coworkany/workflow-core";
+import type { OpenCodeRuntimeEvent } from "@coworkany/runtime-contracts/opencode";
 
 export type DesktopWorkflowPortEvent = Extract<OpenCodeRuntimeEvent, { event: "tool_event" }>;
 

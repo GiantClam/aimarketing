@@ -2,7 +2,7 @@
 
 **日期**: 2026-07-16
 
-**适用项目**: `aimarketing-opencode-agent`
+**适用项目**: `coworkany-opencode-agent`
 
 **文档类型**: 产品能力优化 + 技术架构方案 + 可执行实施计划
 
@@ -691,7 +691,7 @@ type WorkflowIterationState = {
 
 ```ts
 type WorkflowPackageManifest = {
-  format: "aimarketing-workflow-package"
+  format: "coworkany-workflow-package"
   schemaVersion: number
   exportedAt: string
   workflow: {

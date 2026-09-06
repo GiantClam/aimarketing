@@ -366,11 +366,11 @@ pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), Str
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .creation_flags(if cfg!(windows) { 0x08000000 } else { 0 })
-        .envs(skills.as_ref().map(|path| [("AIMARKETING_SKILLS_DIR", path.to_string_lossy().to_string())]).into_iter().flatten())
-        .envs(agents.as_ref().map(|path| [("AIMARKETING_AGENTS_DIR", path.to_string_lossy().to_string())]).into_iter().flatten())
-        .envs(opencode_executable(&app)?.map(|path| [("AIMARKETING_OPENCODE_PATH", path)]).into_iter().flatten())
-        .envs(python.map(|path| [("AIMARKETING_PYTHON_PATH", path)]).into_iter().flatten())
-        .envs(lancedb_runtime_directory(&app)?.map(|path| [("AIMARKETING_LANCEDB_DIR", path)]).into_iter().flatten())
+        .envs(skills.as_ref().map(|path| [("COWORKANY_SKILLS_DIR", path.to_string_lossy().to_string())]).into_iter().flatten())
+        .envs(agents.as_ref().map(|path| [("COWORKANY_AGENTS_DIR", path.to_string_lossy().to_string())]).into_iter().flatten())
+        .envs(opencode_executable(&app)?.map(|path| [("COWORKANY_OPENCODE_PATH", path)]).into_iter().flatten())
+        .envs(python.map(|path| [("COWORKANY_PYTHON_PATH", path)]).into_iter().flatten())
+        .envs(lancedb_runtime_directory(&app)?.map(|path| [("COWORKANY_LANCEDB_DIR", path)]).into_iter().flatten())
         .spawn()
         .map_err(|error| format!("workflow_host_spawn_failed: {error}"))?;
     let stdout = child.stdout.take().ok_or_else(|| "workflow_host_stdout_missing".to_string())?;

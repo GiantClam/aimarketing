@@ -31,7 +31,7 @@ def main() -> None:
         (args.spike_root, "<SPIKE_ROOT>"),
         (args.spike_root.replace("\\", "\\\\"), "<SPIKE_ROOT>"),
         (args.spike_root.replace("\\", "/"), "<SPIKE_ROOT>"),
-        (args.spike_root.replace("aimarketing", "aimeting").replace("\\", "\\\\"), "<SPIKE_ROOT>"),
+        (args.spike_root.replace("coworkany", "aimeting").replace("\\", "\\\\"), "<SPIKE_ROOT>"),
         (args.user_profile, "<USERPROFILE>"),
         (args.user_profile.replace("\\", "\\\\"), "<USERPROFILE>"),
         (args.user_profile.replace("\\", "/"), "<USERPROFILE>"),

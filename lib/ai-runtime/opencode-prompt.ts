@@ -57,6 +57,7 @@ export function buildOpenCodeSystemPrompt(input: AgentRuntimeInput) {
             "The application intentionally passes the raw user request without URL extraction or pre-fetched research. Own URL retrieval and current-fact research inside the Skill workflow.",
             "Use writer_webfetch for public URL retrieval when needed. Built-in webfetch is denied. Never claim a source was checked unless the tool returned it successfully.",
             "Call writer_submit_result exactly once before finishing. Put the complete platform-native draft, research state, and validated asset intents in that structured result.",
+            "The submitted draft must be standards-compliant CommonMark Markdown: keep headings, paragraphs, lists, images, and thematic breaks as separate blocks, with headings and thematic breaks on their own lines and blank lines between block elements. Never put a heading marker directly after prose or concatenate two block elements.",
             "The application owns billing, session state, enterprise persistence, image generation, and asset URLs. Never fabricate final image URLs.",
             ...(input.writerContext?.activeDraft
               ? [

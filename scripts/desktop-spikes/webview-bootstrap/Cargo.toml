@@ -1,5 +1,5 @@
 [package]
-name = "aimarketing-webview-bootstrap-spike"
+name = "coworkany-webview-bootstrap-spike"
 version = "0.1.0"
 edition = "2021"
 publish = false

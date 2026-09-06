@@ -36,7 +36,7 @@ test("runtime manifest signatures cover canonical content and reject tampering",
 
 test("runtime manifest signing CLI writes a required signature and verifies it", async () => {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-manifest-crypto-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-manifest-crypto-"));
   const manifestPath = join(root, "manifest.json");
   const keyPath = join(root, "private.pem");
   const signedPath = join(root, "signed.json");
@@ -59,7 +59,7 @@ test("runtime manifest signing CLI writes a required signature and verifies it",
 
 test("runtime manifest CLI accepts the UTF-8 BOM emitted by Windows PowerShell", async () => {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  const root = await mkdtemp(join(tmpdir(), "aimarketing-manifest-bom-"));
+  const root = await mkdtemp(join(tmpdir(), "coworkany-manifest-bom-"));
   const manifestPath = join(root, "manifest.json");
   const keyPath = join(root, "private.pem");
   const signedPath = join(root, "signed.json");

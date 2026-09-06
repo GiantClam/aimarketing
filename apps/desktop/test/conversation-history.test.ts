@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { WorkbenchMessage } from "@aimarketing/workbench-client";
-import { mergeConversationMessages } from "../src/conversation-history";
+import { createDesktopUIMessage, desktopUIMessageText, type WorkbenchMessage } from "@coworkany/workbench-client";
+import { mergeConversationMessages, mergeDesktopUIMessageViews } from "../src/conversation-history";
 
 test("conversation history keeps an optimistic user message when the first load races persistence", () => {
   const userMessage: WorkbenchMessage = {
@@ -37,4 +37,106 @@ test("conversation history does not leak messages from another conversation", ()
   }];
 
   assert.deepEqual(mergeConversationMessages(current, [], "conversation-1"), []);
+});
+
+test("conversation history orders a user message before an assistant message with the same timestamp", () => {
+  const userMessage: WorkbenchMessage = {
+    id: "user-same-time",
+    conversationId: "conversation-1",
+    role: "user" as const,
+    content: "用户问题",
+    createdAt: "2026-08-21T15:00:00.000Z",
+  };
+  const assistantMessage: WorkbenchMessage = {
+    id: "assistant-same-time",
+    conversationId: "conversation-1",
+    role: "assistant" as const,
+    content: "助手回答",
+    createdAt: "2026-08-21T15:00:00.000Z",
+  };
+
+  const merged = mergeConversationMessages([assistantMessage], [userMessage], "conversation-1");
+
+  assert.deepEqual(merged.map((message) => message.role), ["user", "assistant"]);
+});
+
+test("conversation history keeps valid chronological order when loaded rows arrive out of order", () => {
+  const messages: WorkbenchMessage[] = [
+    { id: "assistant-later", conversationId: "conversation-1", role: "assistant", content: "later", createdAt: "2026-08-21T15:00:02.000Z" },
+    { id: "user-earlier", conversationId: "conversation-1", role: "user", content: "earlier", createdAt: "2026-08-21T15:00:01.000Z" },
+  ];
+
+  const merged = mergeConversationMessages([], messages, "conversation-1");
+
+  assert.deepEqual(merged.map((message) => message.id), ["user-earlier", "assistant-later"]);
+});
+
+test("conversation history preserves multiple same-timestamp turns instead of grouping all users first", () => {
+  const createdAt = "2026-08-21T15:00:00.000Z";
+  const messages: WorkbenchMessage[] = [
+    { id: "user-turn-1", conversationId: "conversation-1", role: "user", content: "问题一", createdAt },
+    { id: "assistant-turn-1", conversationId: "conversation-1", role: "assistant", content: "回答一", createdAt },
+    { id: "user-turn-2", conversationId: "conversation-1", role: "user", content: "问题二", createdAt },
+    { id: "assistant-turn-2", conversationId: "conversation-1", role: "assistant", content: "回答二", createdAt },
+  ];
+
+  const merged = mergeConversationMessages([], messages, "conversation-1");
+
+  assert.deepEqual(merged.map((message) => message.id), messages.map((message) => message.id));
+});
+
+test("history reload replaces a stale in-memory order for persisted messages", () => {
+  const createdAt = "2026-08-21T15:00:00.000Z";
+  const user = { id: "reload-user", conversationId: "conversation-1", role: "user" as const, content: "用户问题", createdAt };
+  const assistant = { id: "reload-assistant", conversationId: "conversation-1", role: "assistant" as const, content: "AI 回复", createdAt };
+
+  const merged = mergeConversationMessages([assistant, user], [user, assistant], "conversation-1");
+
+  assert.deepEqual(merged.map((message) => message.id), ["reload-user", "reload-assistant"]);
+});
+
+test("live UI message merging preserves multiple same-timestamp turns", () => {
+  const createdAt = "2026-08-21T15:00:00.000Z";
+  const messages = [
+    createDesktopUIMessage({ id: "ui-user-1", role: "user", conversationId: "conversation-1", content: "问题一", createdAt }),
+    createDesktopUIMessage({ id: "ui-assistant-1", role: "assistant", conversationId: "conversation-1", content: "回答一", createdAt }),
+    createDesktopUIMessage({ id: "ui-user-2", role: "user", conversationId: "conversation-1", content: "问题二", createdAt }),
+    createDesktopUIMessage({ id: "ui-assistant-2", role: "assistant", conversationId: "conversation-1", content: "回答二", createdAt }),
+  ];
+
+  const merged = mergeDesktopUIMessageViews(messages, []);
+
+  assert.deepEqual(merged.map((message) => message.id), messages.map((message) => message.id));
+});
+
+test("rendered UI messages keep the user text when the live SDK view has an empty user part", () => {
+  const displayed = [createDesktopUIMessage({ id: "user-visible", role: "user", conversationId: "conversation-1", content: "用户输入内容", createdAt: "2026-08-21T15:00:00.000Z" })];
+  const live = [{ ...displayed[0], parts: [] }];
+
+  const merged = mergeDesktopUIMessageViews(displayed, live);
+
+  assert.equal(desktopUIMessageText(merged[0]), "用户输入内容");
+});
+
+test("rendered UI messages do not append an empty live user bubble", () => {
+  const displayed = [createDesktopUIMessage({ id: "assistant-visible", role: "assistant", conversationId: "conversation-1", content: "助手回复", createdAt: "2026-08-21T15:00:01.000Z" })];
+  const live = [{ id: "sdk-empty-user", role: "user" as const, parts: [], metadata: { conversationId: "conversation-1", createdAt: "2026-08-21T15:00:02.000Z", updatedAt: "2026-08-21T15:00:02.000Z" } }];
+
+  const merged = mergeDesktopUIMessageViews(displayed, live);
+
+  assert.deepEqual(merged.map((message) => message.id), ["assistant-visible"]);
+});
+
+test("rendered UI messages keep a live user turn before the active assistant view", () => {
+  const user = createDesktopUIMessage({ id: "live-user", role: "user", conversationId: "conversation-1", content: "继续生成 PPT", createdAt: "2026-08-21T15:00:00.000Z" });
+  const liveAssistant = createDesktopUIMessage({ id: "live-assistant", role: "assistant", conversationId: "conversation-1", content: "正在生成", createdAt: "2026-08-21T15:00:01.000Z" });
+  const activeAssistant = createDesktopUIMessage({ id: "active-assistant", role: "assistant", conversationId: "conversation-1", content: "正在生成", createdAt: "2026-08-21T15:00:00.000Z" });
+
+  const merged = mergeDesktopUIMessageViews([activeAssistant], [user, liveAssistant]);
+
+  assert.deepEqual(merged.map((message) => [message.role, desktopUIMessageText(message)]), [
+    ["user", "继续生成 PPT"],
+    ["assistant", "正在生成"],
+  ]);
+  assert.equal(merged[1]?.id, "active-assistant");
 });

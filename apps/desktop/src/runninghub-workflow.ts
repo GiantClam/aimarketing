@@ -1,4 +1,4 @@
-import { hashWorkflowText } from "@aimarketing/workflow-core";
+import { hashWorkflowText } from "@coworkany/workflow-core";
 
 export type RunningHubWorkflowCapability = "image" | "video" | "digital_human" | "video_enhance" | "audio";
 export type RunningHubWorkflowSourceKind = "url" | "manual" | "runninghub-api-json" | "comfyui-api-json" | "comfyui-ui-json";

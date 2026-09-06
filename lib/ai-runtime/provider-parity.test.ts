@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { createBailianImageAdapter, createOpenAICompatibleImageAdapter, type MediaProviderId } from "@aimarketing/media-runtime"
+import { createBailianImageAdapter, createOpenAICompatibleImageAdapter, type MediaProviderId } from "@coworkany/media-runtime"
 import { bailianImageAdapter } from "@/lib/ai-runtime/adapters/bailian-image"
 import { openAiCompatibleImageAdapter } from "@/lib/ai-runtime/adapters/openai-compatible-image"
 import type { ModelDefinition } from "@/lib/ai-runtime/types"

@@ -1,8 +1,8 @@
 param(
   [string]$ReleaseDir = "apps/desktop/src-tauri/target/release",
-  [string]$SignToolPath = $env:AIMARKETING_SIGNTOOL_PATH,
-  [string]$CertificateThumbprint = $env:AIMARKETING_AUTHENTICODE_THUMBPRINT,
-  [string]$TimestampUrl = $(if ($env:AIMARKETING_AUTHENTICODE_TIMESTAMP_URL) { $env:AIMARKETING_AUTHENTICODE_TIMESTAMP_URL } else { "http://timestamp.digicert.com" }),
+  [string]$SignToolPath = $env:COWORKANY_SIGNTOOL_PATH,
+  [string]$CertificateThumbprint = $env:COWORKANY_AUTHENTICODE_THUMBPRINT,
+  [string]$TimestampUrl = $(if ($env:COWORKANY_AUTHENTICODE_TIMESTAMP_URL) { $env:COWORKANY_AUTHENTICODE_TIMESTAMP_URL } else { "http://timestamp.digicert.com" }),
   [switch]$VerifyOnly,
   [switch]$RequireManifestSignature
 )
@@ -41,7 +41,7 @@ function Resolve-SignTool {
 
 function Resolve-ReleaseTargets {
   if (-not (Test-Path -LiteralPath $releaseRoot -PathType Container)) { throw "windows_release_directory_missing:$releaseRoot" }
-  $mainExecutable = Join-Path $releaseRoot "ai-marketing.exe"
+  $mainExecutable = Join-Path $releaseRoot "coworkany.exe"
   if (-not (Test-Path -LiteralPath $mainExecutable -PathType Leaf)) { throw "windows_release_main_executable_missing:$mainExecutable" }
   $candidates = @(
     $mainExecutable,

@@ -10,8 +10,8 @@ $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $source = (Resolve-Path (Join-Path $root $SourceRoot)).Path
 $output = [IO.Path]::GetFullPath((Join-Path $root $OutputDir))
-$stage = Join-Path ([IO.Path]::GetTempPath()) ("aimarketing-runtime-package-" + [guid]::NewGuid().ToString("N"))
-$zip = Join-Path $output "AIMarketing-Runtime-x64.zip"
+$stage = Join-Path ([IO.Path]::GetTempPath()) ("coworkany-runtime-package-" + [guid]::NewGuid().ToString("N"))
+$zip = Join-Path $output "CoworkAny-Runtime-x64.zip"
 $mirrors = @("aliyun", "tencent", "tsinghua", "official")
 $manifestPath = Join-Path $source "runtime/runtime-manifest.json"
 
@@ -77,7 +77,7 @@ presentation.slide_height = Inches(7.5)
 slide = presentation.slides.add_slide(presentation.slide_layouts[6])
 shape = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(10), Inches(1.2))
 run = shape.text_frame.paragraphs[0].add_run()
-run.text = "AIMarketing PPT offline probe"
+run.text = "CoworkAny PPT offline probe"
 run.font.name = "Microsoft YaHei"
 descriptor, output = tempfile.mkstemp(suffix=".pptx")
 os.close(descriptor)
@@ -89,7 +89,7 @@ try:
 finally:
     if os.path.exists(output): os.remove(output)
 '@
-  $probeFile = Join-Path ([IO.Path]::GetTempPath()) ("aimarketing-python-probe-" + [guid]::NewGuid().ToString("N") + ".py")
+  $probeFile = Join-Path ([IO.Path]::GetTempPath()) ("coworkany-python-probe-" + [guid]::NewGuid().ToString("N") + ".py")
   [IO.File]::WriteAllText($probeFile, $probe, [Text.UTF8Encoding]::new($false))
   try {
     $previousErrorAction = $ErrorActionPreference

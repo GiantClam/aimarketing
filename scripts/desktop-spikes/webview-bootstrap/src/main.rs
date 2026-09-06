@@ -92,7 +92,7 @@ fn show_native_status(message: &str, non_interactive: bool) {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     let body: Vec<u16> = OsStr::new(message).encode_wide().chain(Some(0)).collect();
-    let title: Vec<u16> = OsStr::new("AI Marketing 环境修复")
+    let title: Vec<u16> = OsStr::new("CoworkAny 环境修复")
         .encode_wide()
         .chain(Some(0))
         .collect();
@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn simulated_probe_requires_sentinel() {
-        let path = env::temp_dir().join("aimarketing-webview-spike-missing");
+        let path = env::temp_dir().join("coworkany-webview-spike-missing");
         let _ = std::fs::remove_file(&path);
         let options = Options {
             simulate_missing: true,

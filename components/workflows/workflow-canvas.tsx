@@ -39,7 +39,7 @@ import {
   type WorkflowNodeType,
   type WorkflowValueKind,
 } from "@/lib/workflows/schema"
-import { WorkbenchWorkflowCanvas, type WorkflowCanvasNode as SharedWorkflowCanvasNode } from "@aimarketing/workbench-ui"
+import { WorkbenchWorkflowCanvas, type WorkflowCanvasNode as SharedWorkflowCanvasNode } from "@coworkany/workbench-ui"
 
 const NODE_WIDTH = 336
 const PORT_PANEL_TOP = 52

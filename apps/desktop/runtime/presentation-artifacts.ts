@@ -15,7 +15,7 @@ export async function detectPresentationArtifacts(workspacePath: string, started
       if (entry.name === ".opencode" || entry.name === "node_modules" || entry.name.startsWith(".")) continue;
       const path = join(directory, entry.name);
       if (entry.isDirectory()) await walk(path, depth + 1);
-      else if (entry.isFile() && /\.(pptx|svg|png|jpe?g|webp)$/iu.test(entry.name)) candidates.push(path);
+      else if (entry.isFile() && /\.(html?|pptx|svg|png|jpe?g|webp)$/iu.test(entry.name)) candidates.push(path);
     }
   }
   await walk(root, 0);

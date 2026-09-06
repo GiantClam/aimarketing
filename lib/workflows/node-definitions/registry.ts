@@ -3,4 +3,4 @@ export {
   areWorkflowPortsCompatible,
   getWorkflowNodeDefinitionV2,
   workflowNodeRegistry,
-} from "@aimarketing/workflow-core"
+} from "@coworkany/workflow-core"

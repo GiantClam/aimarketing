@@ -21,10 +21,17 @@ test("AI Entry routes through an injected NavigationAdapter with a Next fallback
 test("AI Entry delegates common cloud message geometry to the shared workbench UI", () => {
   const source = readFileSync(resolve(process.cwd(), "components/ai-entry/ai-entry-workspace.tsx"), "utf8")
 
-  assert.match(source, /import \{ WorkbenchCloudMessageShell, WorkbenchMessageTimeline \} from "@aimarketing\/workbench-ui"/)
-  assert.match(source, /<WorkbenchMessageTimeline/)
+  assert.match(source, /import \{ WorkbenchCloudMessageShell, WorkbenchMessageTimeline \} from "@coworkany\/workbench-ui"/)
+  assert.match(source, /<WorkbenchMessageTimeline[\s\S]*locale=\{displayLocale\}/)
   assert.equal(source.match(/<WorkbenchCloudMessageShell/g)?.length, 2)
   assert.doesNotMatch(source, /<Message key=\{message\.id\}/)
+})
+
+test("AI Entry keeps assistant labels aligned with the active locale", () => {
+  const source = readFileSync(resolve(process.cwd(), "components/ai-entry/ai-entry-workspace.tsx"), "utf8")
+
+  assert.match(source, /label=\{isZh \? "AI 回复" : "AI RESPONSE"\}/)
+  assert.equal(source.match(/aria-label=\{isZh \? "消息输入" : "Message input"\}/g)?.length, 2)
 })
 
 test("AI Entry can load portable conversation messages through an injected WorkbenchClient", () => {

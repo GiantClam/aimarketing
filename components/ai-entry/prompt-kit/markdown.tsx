@@ -2,9 +2,8 @@
 
 import { memo } from "react"
 import type { ReactNode } from "react"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
 import { ChevronRight, FileText, Quote } from "lucide-react"
+import { MessageResponse, type Components } from "@coworkany/workbench-ui"
 
 import { CodeBlock } from "@/components/chat/CodeBlock"
 import { isPublishedR2ArtifactUrl } from "@/lib/ai-entry/runtime/r2-artifact-url"
@@ -163,6 +162,35 @@ function CalloutBlockquote({ children }: { children: ReactNode }) {
 }
 
 function MarkdownComponent({ children, className }: MarkdownProps) {
+  const components: Components = {
+    a({ href, children, ...props }) {
+      const label = stringifyChildren(children) || href || "link"
+      const fileLink = buildFileLinkMeta(href, label)
+      if (fileLink && href) {
+        if (!isPublishedR2ArtifactUrl(href)) return null
+        return <FileLinkCard href={href} title={fileLink.fileName} description={fileLink.host ? `${fileLink.extension} · ${fileLink.host}` : fileLink.extension} />
+      }
+      return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
+    },
+    img({ src, alt, title }) {
+      return typeof src === "string" && isPublishedR2ArtifactUrl(src)
+        ? <InlineImageCard src={src} alt={alt} title={title} />
+        : null
+    },
+    blockquote({ children }) {
+      return <CalloutBlockquote>{children}</CalloutBlockquote>
+    },
+    table({ children }) {
+      return <div className="not-prose my-3 overflow-x-auto rounded-[12px] border border-border bg-background/70"><table className="w-full border-collapse text-xs">{children}</table></div>
+    },
+    code({ className: codeClassName, children: codeChildren, ...props }) {
+      const match = /language-(\w+)/.exec(codeClassName || "")
+      const code = String(codeChildren).replace(/\n$/, "")
+      if (!match && !codeClassName) return <code className={codeClassName} {...props}>{codeChildren}</code>
+      return <CodeBlock language={match?.[1] || "text"}>{code}</CodeBlock>
+    },
+  }
+
   return (
     <div
       className={cn(
@@ -177,55 +205,7 @@ function MarkdownComponent({ children, className }: MarkdownProps) {
         className,
       )}
     >
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          a({ href, children, ...props }) {
-            const label = stringifyChildren(children) || href || "link"
-            const fileLink = buildFileLinkMeta(href, label)
-            if (fileLink && href) {
-              if (!isPublishedR2ArtifactUrl(href)) return null
-              return <FileLinkCard href={href} title={fileLink.fileName} description={fileLink.host ? `${fileLink.extension} · ${fileLink.host}` : fileLink.extension} />
-            }
-            return (
-              <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
-                {children}
-              </a>
-            )
-          },
-          img({ src, alt, title }) {
-            return typeof src === "string" && isPublishedR2ArtifactUrl(src)
-              ? <InlineImageCard src={src} alt={alt} title={title} />
-              : null
-          },
-          blockquote({ children }) {
-            return <CalloutBlockquote>{children}</CalloutBlockquote>
-          },
-          table({ children }) {
-            return (
-              <div className="not-prose my-3 overflow-x-auto rounded-[12px] border border-border bg-background/70">
-                <table className="w-full border-collapse text-xs">{children}</table>
-              </div>
-            )
-          },
-          code({ className: codeClassName, children: codeChildren, ...props }) {
-            const match = /language-(\w+)/.exec(codeClassName || "")
-            const code = String(codeChildren).replace(/\n$/, "")
-
-            if (!match && !codeClassName) {
-              return (
-                <code className={codeClassName} {...props}>
-                  {codeChildren}
-                </code>
-              )
-            }
-
-            return <CodeBlock language={match?.[1] || "text"}>{code}</CodeBlock>
-          },
-        }}
-      >
-        {children}
-      </ReactMarkdown>
+      <MessageResponse content={children} components={components} />
     </div>
   )
 }

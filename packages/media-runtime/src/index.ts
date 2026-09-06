@@ -261,6 +261,26 @@ function mapProviderStatus(value: unknown): MediaTaskStatus {
   return "succeeded";
 }
 
+const mediaUrlKeys = ["url", "uri", "image_url", "imageUrl", "video_url", "videoUrl", "audio_url", "audioUrl", "file_url", "fileUrl", "download_url", "downloadUrl", "image"] as const;
+const mediaEncodedKeys = ["b64_json", "base64", "base64_json", "image_base64", "imageBase64"] as const;
+
+function normalizeMediaOutput(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value === "string") {
+    const url = text(value);
+    return url ? { url } : undefined;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const url = text(mediaUrlKeys.map((key) => record[key]).find((entry) => typeof entry === "string" && Boolean(entry.trim())));
+  const encoded = text(mediaEncodedKeys.map((key) => record[key]).find((entry) => typeof entry === "string" && Boolean(entry.trim())));
+  if (!url && !encoded) return { ...record };
+  return {
+    ...record,
+    ...(url && !text(record.url) ? { url } : {}),
+    ...(encoded && !text(record.b64_json) && (record.image_base64 !== undefined || record.imageBase64 !== undefined) ? { b64_json: encoded } : {}),
+  };
+}
+
 function asTask(provider: MediaProviderId, payload: Record<string, unknown>, fallbackId?: string): MediaTask {
   const output = payload.output && typeof payload.output === "object" ? payload.output as Record<string, unknown> : payload;
   const providerTaskId = text(output.task_id) || text(output.taskId) || text(payload.task_id) || text(payload.taskId) || text(payload.id) || fallbackId || `sync-${Date.now()}`;
@@ -271,16 +291,21 @@ function asTask(provider: MediaProviderId, payload: Record<string, unknown>, fal
     if (Array.isArray(value)) values.push(value);
     else values.push(value);
   };
-  for (const value of [output.video_url, output.videoUrl, output.audio, output.audio_url, output.audioUrl, output.url, output.file_url, output.fileUrl, output.download_url, output.downloadUrl, output.results, output.images, output.data, payload.data, payload.results, payload.outputs]) addValue(value);
+  const hasDirectMedia = (source: Record<string, unknown>) => mediaUrlKeys.some((key) => typeof source[key] === "string" && Boolean((source[key] as string).trim())) || mediaEncodedKeys.some((key) => typeof source[key] === "string" && Boolean((source[key] as string).trim()));
+  for (const value of [output.audio, output.result, output.results, output.images, output.data, payload.output, payload.data, payload.result, payload.results, payload.outputs, payload.images]) addValue(value);
+  if (hasDirectMedia(output)) addValue(output);
+  if (output !== payload && hasDirectMedia(payload)) addValue(payload);
+  for (const source of [output, payload]) {
+    for (const key of mediaEncodedKeys) {
+      if (typeof source[key] === "string" && source[key].trim()) addValue({ [key]: source[key] });
+    }
+  }
   const seen = new Set<string>();
   const outputs = values.flatMap((value) => {
     const candidates = Array.isArray(value) ? value : [value];
     return candidates.flatMap((item) => {
-      if (typeof item === "string") return [{ url: item }];
-      if (!item || typeof item !== "object") return [];
-      const record = item as Record<string, unknown>;
-      const alias = text(record.url ?? record.uri ?? record.video_url ?? record.videoUrl ?? record.file_url ?? record.fileUrl ?? record.download_url ?? record.downloadUrl);
-      return [{ ...record, ...(alias && !record.url ? { url: alias } : {}) }];
+      const normalized = normalizeMediaOutput(item);
+      return normalized ? [normalized] : [];
     });
   }).filter((item) => {
     const key = JSON.stringify(item);

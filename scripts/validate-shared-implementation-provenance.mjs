@@ -8,16 +8,16 @@ export const GENERATED_DESKTOP_DIRECTORIES = Object.freeze([".opencode", ".openc
 const GENERATED_DESKTOP_DIRECTORY_SET = new Set(GENERATED_DESKTOP_DIRECTORIES);
 
 export const COMPATIBILITY_SURFACES = Object.freeze([
-  ["lib/ai-runtime/opencode-protocol.ts", "@aimarketing/runtime-contracts/opencode"],
-  ["lib/workflows/schema.ts", "@aimarketing/workflow-core"],
-  ["lib/workflows/connect.ts", "@aimarketing/workflow-core"],
-  ["lib/workflows/plan-compiler.ts", "@aimarketing/workflow-core"],
-  ["lib/workflows/workflow-definition-migrations.ts", "@aimarketing/workflow-core"],
-  ["lib/workflows/workflow-definition-v2.ts", "@aimarketing/workflow-core"],
-  ["lib/workflows/node-definitions/builtins.ts", "@aimarketing/workflow-core"],
-  ["lib/workflows/node-definitions/registry.ts", "@aimarketing/workflow-core"],
-  ["lib/workflows/node-definitions/types.ts", "@aimarketing/workflow-core"],
-  ["lib/writer/message-reconciliation.ts", "@aimarketing/writer-core"],
+  ["lib/ai-runtime/opencode-protocol.ts", "@coworkany/runtime-contracts/opencode"],
+  ["lib/workflows/schema.ts", "@coworkany/workflow-core"],
+  ["lib/workflows/connect.ts", "@coworkany/workflow-core"],
+  ["lib/workflows/plan-compiler.ts", "@coworkany/workflow-core"],
+  ["lib/workflows/workflow-definition-migrations.ts", "@coworkany/workflow-core"],
+  ["lib/workflows/workflow-definition-v2.ts", "@coworkany/workflow-core"],
+  ["lib/workflows/node-definitions/builtins.ts", "@coworkany/workflow-core"],
+  ["lib/workflows/node-definitions/registry.ts", "@coworkany/workflow-core"],
+  ["lib/workflows/node-definitions/types.ts", "@coworkany/workflow-core"],
+  ["lib/writer/message-reconciliation.ts", "@coworkany/writer-core"],
 ]);
 
 const DESKTOP_LEGACY_IMPORT = /["'](?:@\/)?lib\/(?:workflows\/(?:schema|connect|plan-compiler|workflow-definition-v2|workflow-definition-migrations|node-definitions(?:\/[^"']+)?)|ai-runtime\/opencode-protocol|writer\/(?:message-reconciliation|revision-guard|writer-result))["']/;

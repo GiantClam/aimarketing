@@ -6,7 +6,7 @@ import {
   canWorkflowNodeConnectValueKind as sharedCanConnectValueKind,
   getWorkflowNodeDefinition as sharedGetDefinition,
   workflowNodeRegistry as sharedRegistry,
-} from "@aimarketing/workflow-core"
+} from "@coworkany/workflow-core"
 import { workflowNodeRegistry } from "@/lib/workflows/node-definitions/registry"
 import { WORKFLOW_BUILTIN_NODE_DEFINITIONS } from "@/lib/workflows/node-definitions/builtins"
 import { canWorkflowNodeConnectValueKind, getWorkflowNodeDefinition } from "@/lib/workflows/schema"

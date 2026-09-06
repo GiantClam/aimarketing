@@ -1,4 +1,4 @@
-import type { WorkflowCanvasExecutionSnapshot } from "@aimarketing/workbench-ui";
+import type { WorkflowCanvasExecutionSnapshot } from "@coworkany/workbench-ui";
 
 type WorkflowNodeEventTool = "workflow:node_started" | "workflow:node_succeeded" | "workflow:node_failed";
 type WorkflowTerminalStatus = "succeeded" | "failed" | "cancelled";

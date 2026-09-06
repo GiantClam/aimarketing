@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react"
 
-import { WorkbenchMessageFrame, WorkbenchTaskEvents } from "@aimarketing/workbench-ui"
+import { WorkbenchMessageFrame, WorkbenchTaskEvents } from "@coworkany/workbench-ui"
 
 import { TypingIndicator } from "@/components/ui/typing-indicator"
 import type { PendingTaskEvent } from "@/lib/assistant-task-events"

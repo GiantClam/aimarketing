@@ -13,10 +13,10 @@
 ### Task 1: Define Shared Loading Contract
 
 **Files:**
-- Modify: `d:/github/aimarketing/components/workspace/workspace-message-primitives.tsx`
-- Create: `d:/github/aimarketing/components/workspace/workspace-conversation-shell.tsx`
-- Modify: `d:/github/aimarketing/components/workspace/workspace-primitives.tsx`
-- Test: `d:/github/aimarketing/scripts/workspace_visual_regression.py`
+- Modify: `d:/github/coworkany/components/workspace/workspace-message-primitives.tsx`
+- Create: `d:/github/coworkany/components/workspace/workspace-conversation-shell.tsx`
+- Modify: `d:/github/coworkany/components/workspace/workspace-primitives.tsx`
+- Test: `d:/github/coworkany/scripts/workspace_visual_regression.py`
 
 **Step 1: Write the failing visual expectation checklist**
 
@@ -61,9 +61,9 @@ git commit -m "feat(workspace): add shared conversation shell and message skelet
 ### Task 2: Add Reusable Bootstrap Hook (Cache-First + Background Refresh)
 
 **Files:**
-- Create: `d:/github/aimarketing/lib/hooks/use-conversation-bootstrap.ts`
-- Modify: `d:/github/aimarketing/lib/query/workspace-cache.ts`
-- Test: `d:/github/aimarketing/lib/query/workspace-cache.bootstrap.test.ts` (new)
+- Create: `d:/github/coworkany/lib/hooks/use-conversation-bootstrap.ts`
+- Modify: `d:/github/coworkany/lib/query/workspace-cache.ts`
+- Test: `d:/github/coworkany/lib/query/workspace-cache.bootstrap.test.ts` (new)
 
 **Step 1: Write failing hook behavior test**
 
@@ -100,9 +100,9 @@ git commit -m "feat(workspace): add conversation bootstrap hook with cache-first
 ### Task 3: Integrate Image Assistant Shell-First Loading
 
 **Files:**
-- Modify: `d:/github/aimarketing/components/image-assistant/image-assistant-workspace.tsx`
-- Modify: `d:/github/aimarketing/lib/image-assistant/session-store.ts`
-- Test: `d:/github/aimarketing/scripts/image_assistant_e2e.py`
+- Modify: `d:/github/coworkany/components/image-assistant/image-assistant-workspace.tsx`
+- Modify: `d:/github/coworkany/lib/image-assistant/session-store.ts`
+- Test: `d:/github/coworkany/scripts/image_assistant_e2e.py`
 
 **Step 1: Write failing UX assertion**
 
@@ -139,9 +139,9 @@ git commit -m "feat(image-assistant): render shell-first conversation loading"
 ### Task 4: Integrate Writer Shell-First Loading
 
 **Files:**
-- Modify: `d:/github/aimarketing/components/writer/writer-workspace.tsx`
-- Modify: `d:/github/aimarketing/lib/writer/session-store.ts`
-- Test: `d:/github/aimarketing/lib/writer/skills.regression.test.ts`
+- Modify: `d:/github/coworkany/components/writer/writer-workspace.tsx`
+- Modify: `d:/github/coworkany/lib/writer/session-store.ts`
+- Test: `d:/github/coworkany/lib/writer/skills.regression.test.ts`
 
 **Step 1: Write failing UX assertion**
 
@@ -176,10 +176,10 @@ git commit -m "feat(writer): keep conversation shell and cached messages during 
 ### Task 5: Integrate Advisor + Lead Hunter Shell-First Loading
 
 **Files:**
-- Modify: `d:/github/aimarketing/app/dashboard/advisor/[type]/[[...id]]/page.tsx`
-- Modify: `d:/github/aimarketing/components/chat/DifyChatArea.tsx`
-- Modify: `d:/github/aimarketing/lib/advisor/session-store.ts`
-- Test: `d:/github/aimarketing/components/chat/dify-chat-area.loading.test.tsx` (new)
+- Modify: `d:/github/coworkany/app/dashboard/advisor/[type]/[[...id]]/page.tsx`
+- Modify: `d:/github/coworkany/components/chat/DifyChatArea.tsx`
+- Modify: `d:/github/coworkany/lib/advisor/session-store.ts`
+- Test: `d:/github/coworkany/components/chat/dify-chat-area.loading.test.tsx` (new)
 
 **Step 1: Write failing rendering test**
 
@@ -214,10 +214,10 @@ git commit -m "feat(advisor): shell-first loading for advisor and lead-hunter co
 ### Task 6: Unify Route Transition Behavior (No Flash-Clear)
 
 **Files:**
-- Modify: `d:/github/aimarketing/components/image-assistant/ImageAssistantSidebarItem.tsx`
-- Modify: `d:/github/aimarketing/components/chat/AdvisorSidebarItem.tsx`
-- Modify: `d:/github/aimarketing/components/writer/WriterSidebarItem.tsx`
-- Test: `d:/github/aimarketing/scripts/workspace_visual_regression.py`
+- Modify: `d:/github/coworkany/components/image-assistant/ImageAssistantSidebarItem.tsx`
+- Modify: `d:/github/coworkany/components/chat/AdvisorSidebarItem.tsx`
+- Modify: `d:/github/coworkany/components/writer/WriterSidebarItem.tsx`
+- Test: `d:/github/coworkany/scripts/workspace_visual_regression.py`
 
 **Step 1: Write failing route-switch checklist**
 
@@ -252,10 +252,10 @@ git commit -m "feat(sidebar): prefetch and preserve conversation shell during ro
 ### Task 7: Instrumentation + Error UX Hardening
 
 **Files:**
-- Modify: `d:/github/aimarketing/components/image-assistant/image-assistant-workspace.tsx`
-- Modify: `d:/github/aimarketing/components/writer/writer-workspace.tsx`
-- Modify: `d:/github/aimarketing/components/chat/DifyChatArea.tsx`
-- Test: `d:/github/aimarketing/scripts/workspace_visual_regression.py`
+- Modify: `d:/github/coworkany/components/image-assistant/image-assistant-workspace.tsx`
+- Modify: `d:/github/coworkany/components/writer/writer-workspace.tsx`
+- Modify: `d:/github/coworkany/components/chat/DifyChatArea.tsx`
+- Test: `d:/github/coworkany/scripts/workspace_visual_regression.py`
 
 **Step 1: Add client-side telemetry markers**
 
@@ -295,9 +295,9 @@ git commit -m "feat(workspaces): unify inline loading and retry UX without clear
 ### Task 8: Final Verification and Release Notes
 
 **Files:**
-- Create: `d:/github/aimarketing/docs/plans/2026-03-23-conversation-shell-loading-verification.md`
-- Modify: `d:/github/aimarketing/docs/api/2026-03-15-image-design-assistant-data-api.md` (loading semantics note)
-- Modify: `d:/github/aimarketing/docs/perf/` (add before/after screenshots and timings)
+- Create: `d:/github/coworkany/docs/plans/2026-03-23-conversation-shell-loading-verification.md`
+- Modify: `d:/github/coworkany/docs/api/2026-03-15-image-design-assistant-data-api.md` (loading semantics note)
+- Modify: `d:/github/coworkany/docs/perf/` (add before/after screenshots and timings)
 
 **Step 1: Execute full test matrix**
 

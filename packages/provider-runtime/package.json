@@ -1,5 +1,5 @@
 {
-  "name": "@aimarketing/provider-runtime",
+  "name": "@coworkany/provider-runtime",
   "version": "0.1.0",
   "private": true,
   "type": "module",

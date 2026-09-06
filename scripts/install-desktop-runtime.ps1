@@ -56,7 +56,7 @@ $mirrors = @("aliyun", "tencent", "tsinghua", "official")
 $manifest = Get-Content -Raw -Encoding UTF8 $ManifestPath | ConvertFrom-Json
 Write-RuntimeProgress "manifest_loaded"
 $installRootResolved = [IO.Path]::GetFullPath([string]$InstallRoot)
-$stageRoot = Join-Path ([IO.Path]::GetTempPath()) ("aimarketing-runtime-" + [guid]::NewGuid().ToString("N"))
+$stageRoot = Join-Path ([IO.Path]::GetTempPath()) ("coworkany-runtime-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
 
 function Assert-SafeRelativePath([string]$value, [string]$label) {
@@ -94,7 +94,7 @@ function Assert-ManifestSignature() {
     if ($required) { throw "runtime_manifest_signature_missing" }
     return
   }
-  $node = $env:AIMARKETING_NODE_PATH
+  $node = $env:COWORKANY_NODE_PATH
   if ([string]::IsNullOrWhiteSpace($node)) { $node = (Get-Command node -ErrorAction SilentlyContinue).Source }
   if ([string]::IsNullOrWhiteSpace($node) -or -not (Test-Path -LiteralPath $node -PathType Leaf)) {
     $node = Join-Path (Split-Path -Parent ([IO.Path]::GetFullPath($ManifestPath))) "runtime/node/node.exe"
@@ -346,7 +346,7 @@ presentation.slide_height = Inches(7.5)
 slide = presentation.slides.add_slide(presentation.slide_layouts[6])
 shape = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(10), Inches(1.2))
 run = shape.text_frame.paragraphs[0].add_run()
-run.text = "AIMarketing \u4e2d\u6587 PPT probe"
+run.text = "CoworkAny \u4e2d\u6587 PPT probe"
 run.font.name = "Microsoft YaHei"
 descriptor, output = tempfile.mkstemp(suffix=".pptx")
 os.close(descriptor)
@@ -358,7 +358,7 @@ try:
 finally:
     if os.path.exists(output): os.remove(output)
 '@
-  $probeFile = Join-Path ([IO.Path]::GetTempPath()) ("aimarketing-python-probe-" + [guid]::NewGuid().ToString("N") + ".py")
+  $probeFile = Join-Path ([IO.Path]::GetTempPath()) ("coworkany-python-probe-" + [guid]::NewGuid().ToString("N") + ".py")
   [IO.File]::WriteAllText($probeFile, $probe, [Text.UTF8Encoding]::new($false))
   try {
     $previousErrorAction = $ErrorActionPreference
@@ -388,7 +388,7 @@ finally:
     } catch { }
   }
   if (-not $installed) { throw "python-pptx installation failed on all configured indexes" }
-  $postInstallProbe = Join-Path ([IO.Path]::GetTempPath()) ("aimarketing-python-probe-" + [guid]::NewGuid().ToString("N") + ".py")
+  $postInstallProbe = Join-Path ([IO.Path]::GetTempPath()) ("coworkany-python-probe-" + [guid]::NewGuid().ToString("N") + ".py")
   [IO.File]::WriteAllText($postInstallProbe, $probe, [Text.UTF8Encoding]::new($false))
   try {
     & $python $postInstallProbe 2>&1 | Out-Null

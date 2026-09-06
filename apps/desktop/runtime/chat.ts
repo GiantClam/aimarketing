@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
-import type { OpenCodeRuntimeEvent } from "@aimarketing/runtime-contracts/opencode";
+import type { OpenCodeRuntimeEvent } from "@coworkany/runtime-contracts/opencode";
 import { encodeRpcMessage } from "./rpc";
 
 export interface LocalChatRequest {

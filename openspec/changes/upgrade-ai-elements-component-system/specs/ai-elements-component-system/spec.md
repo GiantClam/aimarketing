@@ -1,7 +1,7 @@
 # Specification: Official AI Elements Component System for Workbench
 
 **Change ID:** `upgrade-ai-elements-component-system`
-**Affects:** `@aimarketing/workbench-ui`, AI Entry, Shell, Agent, Capability, Task, Workflow, Media, Image Assistant, Writer, Knowledge, Assets and Dify Chat
+**Affects:** `@coworkany/workbench-ui`, AI Entry, Shell, Agent, Capability, Task, Workflow, Media, Image Assistant, Writer, Knowledge, Assets and Dify Chat
 
 ---
 
@@ -23,7 +23,7 @@ The workbench SHALL integrate the selected official AI Elements source component
 - **GIVEN** a component is selected from the official directory
 - **WHEN** it is added to the repository
 - **THEN** the generated source, dependencies, Tailwind classes, Radix primitives, client boundary and license SHALL be reviewed before migration
-- **AND** the stable source SHALL be exported from `@aimarketing/workbench-ui`
+- **AND** the stable source SHALL be exported from `@coworkany/workbench-ui`
 
 ### Requirement: The shared layer SHALL preserve the Workbench brand system
 
@@ -34,7 +34,7 @@ All official AI Elements components used by Workbench SHALL consume Workbench to
 - **GIVEN** an official ModelSelector, PromptInput action or Task action is selected or active
 - **WHEN** it is rendered in Web or Tauri
 - **THEN** it SHALL use the same Workbench canonical brand token and focus treatment
-- **AND** the component SHALL retain the AI Marketing black/white/yellow visual hierarchy
+- **AND** the component SHALL retain the CoworkAny black/white/yellow visual hierarchy
 
 #### Scenario: Change the canonical brand yellow
 

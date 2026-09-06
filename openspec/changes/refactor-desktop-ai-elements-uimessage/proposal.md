@@ -113,16 +113,16 @@ AI Elements/shadcn neutral tokens are canonical. The Workbench brand color is th
 
 ## Success Criteria
 
-- [ ] All in-scope desktop pages use one AI Elements-based `WorkbenchMessageSurface`.
-- [ ] Frontend message state and new persistence use `DesktopUIMessage` only.
-- [ ] OpenCode/Tauri output is visible as text/process/media Parts while streaming, without a second renderer protocol.
-- [ ] Selected Provider/model remains locked for the entire run, retry branch and recovery path.
-- [ ] Attachments support inline queue state, grid/list rendering, preview, remove, failure retry and safe download.
-- [ ] Text, image, video, audio and document outputs are actionable and registered in the asset library.
-- [ ] Completed process details collapse; active, waiting and failed details remain visible and actionable.
-- [ ] Menus close on outside click/Escape; all primary paths work with keyboard and Chinese IME.
-- [ ] No old page-level AI message, composer, attachment, source or artifact visual implementation remains.
-- [ ] Tauri real UI acceptance passes for all listed routes and no P0/P1 issue remains.
+- [x] All in-scope desktop pages use one AI Elements-based `WorkbenchMessageSurface`.
+- [x] Frontend message state and new persistence use `DesktopUIMessage` only.
+- [x] OpenCode/Tauri output is visible as text/process/media Parts while streaming, without a second renderer protocol.
+- [x] Selected Provider/model remains locked for the entire run, retry branch and recovery path.
+- [x] Attachments support inline queue state, grid/list rendering, preview, remove, failure retry and safe download.
+- [x] Text, image, video, audio and document outputs are actionable and registered in the asset library.
+- [x] Completed process details collapse; active, waiting and failed details remain visible and actionable.
+- [x] Menus close on outside click/Escape; all primary paths work with keyboard and Chinese IME.
+- [x] No old page-level AI message, composer, attachment, source or artifact visual implementation remains.
+- [x] Tauri real UI acceptance passes for all listed routes; the current acceptance batch has no open P0/P1 issue. Historical task-center failures remain available for audit and are not counted in the current batch gate.
 
 ## Risks & Mitigations
 

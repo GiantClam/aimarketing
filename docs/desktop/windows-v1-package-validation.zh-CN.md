@@ -7,28 +7,28 @@
 
 | 产物 | 结果 |
 | --- | --- |
-| NSIS | `apps/desktop/src-tauri/target/release/bundle/nsis/AI Marketing_0.1.0_x64-setup.exe`（直接 bundle 验证通过） |
-| 普通 ZIP | `.artifacts/desktop-release/AI-Marketing-Windows-x64-normal.zip`，268,933,332 bytes，SHA-256 `8A7295AC95744332724B0B040DA8005AE87C67416C3734C85668DA62DDEF0A25` |
-| 便携 ZIP | `.artifacts/desktop-release-new/AI-Marketing-Windows-x64-portable.zip`，268,996,894 bytes，SHA-256 `D78706117EC9CDC498BAB72B892839CBC45B2635553CC9E6B06EFAA56A5A0D75` |
+| NSIS | `apps/desktop/src-tauri/target/release/bundle/nsis/CoworkAny_0.1.0_x64-setup.exe`（直接 bundle 验证通过） |
+| 普通 ZIP | `.artifacts/desktop-release/CoworkAny-Windows-x64-normal.zip`，268,933,332 bytes，SHA-256 `8A7295AC95744332724B0B040DA8005AE87C67416C3734C85668DA62DDEF0A25` |
+| 便携 ZIP | `.artifacts/desktop-release-new/CoworkAny-Windows-x64-portable.zip`，268,996,894 bytes，SHA-256 `D78706117EC9CDC498BAB72B892839CBC45B2635553CC9E6B06EFAA56A5A0D75` |
 
 本轮 Tauri release exe（12,396,544 bytes）SHA-256：`C38F8DF05437036DCC646E24358DC4DB1B9EACB74D35D6E6522E0035B407515A`。
 上一轮直接 bundle 生成的 NSIS 安装包（179,619,046 bytes）SHA-256：`EBCE6C3DD571D5EB944AC64A80F4B5EE5642291BE56C4D58360E78BE7DD8963E`；本轮 UI 修复未能在本机 `makensis` 上重新生成安装器；已用 `tauri build --no-bundle` 重新生成 release exe 并重新打包普通 ZIP。
 
-普通 ZIP 不携带 `portable.flag`，使用 `%LOCALAPPDATA%\\AIMarketing`；便携 ZIP 携带 `portable.flag`，使用 exe 旁 `data/`。两种 ZIP 均包含 `_up_/dist-runtime/host.mjs`、完整 `ppt-master` Skill、Windows LanceDB native binding 和修复脚本；本轮 ZIP 已重新从新 release exe 生成。NSIS 安装器仍保留上一轮直接 bundle 的证据，本轮重建在 `makensis` deflate 阶段长时间无产物，已停止该工具进程，不将其误报为本轮通过。
+普通 ZIP 不携带 `portable.flag`，使用 `%LOCALAPPDATA%\\CoworkAny`；便携 ZIP 携带 `portable.flag`，使用 exe 旁 `data/`。两种 ZIP 均包含 `_up_/dist-runtime/host.mjs`、完整 `ppt-master` Skill、Windows LanceDB native binding 和修复脚本；本轮 ZIP 已重新从新 release exe 生成。NSIS 安装器仍保留上一轮直接 bundle 的证据，本轮重建在 `makensis` deflate 阶段长时间无产物，已停止该工具进程，不将其误报为本轮通过。
 
 ## UI 一致性回归
 
-- 首页、普通对话、工作流和视频 Agent 均使用 `@aimarketing/workbench-ui` 的共享壳、路由清单、消息几何和主题变量。
+- 首页、普通对话、工作流和视频 Agent 均使用 `@coworkany/workbench-ui` 的共享壳、路由清单、消息几何和主题变量。
 - 视觉烟测确认桌面端不会因外层 flex 容器把聊天/工作流压缩为窄栏；视频 Agent 入口与线上一致放在侧栏底部。
 - 普通对话和首页输入区均提供线上同位置的模型、推理强度选择；对话用户消息右对齐为深色气泡，AI 消息左对齐为带头像的结果卡片。
 - 持久 OpenCode 会话现在按本轮 assistant 基线完成判定，上一轮已完成消息不会被误当成当前轮结果；普通对话、Writer、PPT 的多轮交互因此保持连续。
 - AI 消息复用线上产物卡片，直接打开本地文件；设置页保留线上布局并增加离线运行时 ZIP 导入入口。
-- 聊天消息现由 `@aimarketing/workbench-ui` 的 `WorkbenchChatMessage` 输出与云端 AI Entry 同构的 `message-card-user`、`assistant-message`、头像、时间和处理事件面板；聊天落地页保留云端快捷提示词按钮，首页使用云端嵌入式聊天框布局。
+- 聊天消息现由 `@coworkany/workbench-ui` 的 `WorkbenchChatMessage` 输出与云端 AI Entry 同构的 `message-card-user`、`assistant-message`、头像、时间和处理事件面板；聊天落地页保留云端快捷提示词按钮，首页使用云端嵌入式聊天框布局。
 - 本轮进一步补齐云端交互：AI Composer 使用同一组快捷提示词，消息保留附件芯片；Writer 回复提供预览、生成图片、复制富文本、复制 Markdown 四个线上同位置动作，图片动作会重新进入本地媒体运行链。
 - 消息正文现在由共享 Workbench UI 使用同一套 GFM Markdown 渲染，标题、列表、链接和代码块在桌面/云端保持相同语义，不再把 OpenCode 回复降级成纯文本。
 - 首页发送按钮现在复用云端 `send-button` 视觉契约（斜角、边框、字重与禁用态）；设置路由仍可深链访问，但从桌面主侧栏隐藏，和云端账户/状态入口的导航密度保持一致。
 - 首页入口组与云端保持五列布局、相同分组顺序、文案和路由；桌面端仅按已确认范围排除 Agent Market、企业平台设置、Lead Hunter、公开页面和计费入口。
-- 首页入口卡与侧栏路由图标统一由 `@aimarketing/workbench-ui` 的 `WorkbenchRouteIcon` 输出，云端与桌面不再各自维护一套 SVG/图标路径。
+- 首页入口卡与侧栏路由图标统一由 `@coworkany/workbench-ui` 的 `WorkbenchRouteIcon` 输出，云端与桌面不再各自维护一套 SVG/图标路径。
 - 云端静态侧栏入口（首页、能力中心、工作流、任务、资产、知识库和设置）也通过同一共享图标渲染器输出；动态企业入口仍保留云端自身的权限/可见性逻辑。
 - 首页现直接复用云端的 `home-shell → home-page-shell → home-topbar/home-main` DOM 层级，并在桌面样式中复制同一页面宽度、padding、背景和滚动边界，避免壳层额外 padding 造成视觉漂移。
 - 普通对话与 Writer 深链接会从 SQLite 回放整段 user/assistant 消息历史，不再只显示最新一轮；流式回复完成后追加到同一消息时间线。
@@ -47,7 +47,7 @@
 - 工作流页面支持 JSON 导出/导入；导入经过 `workflow-core` schema migration，重新生成本地 workflow ID，不复制原机 Provider、路径或数据库 ID。
 - 长媒体任务在启动时读取本地 `run_attempts`，若已有 provider task ID 则通过 `media.resume` 继续 poll/download，不重新 submit；API Key 只从当前 config.json 注入运行时。
 - 媒体任务现在在提交、成功、失败、取消和下载失败时写入终态 attempt 事件；设置页支持自定义媒体提交/查询 Endpoint，RunningHub 等异步 Provider 可在重启恢复时继续使用同一配置而不会重复提交。
-- 媒体工作台按线上能力分组提供音频处理/视频处理多标签、能力说明、动态字段、URL/本地产物选择器、提交状态和产物打开；字段 schema 位于共享 `@aimarketing/workbench-ui`，避免桌面端复制另一套能力清单。
+- 媒体工作台按线上能力分组提供音频处理/视频处理多标签、能力说明、动态字段、URL/本地产物选择器、提交状态和产物打开；字段 schema 位于共享 `@coworkany/workbench-ui`，避免桌面端复制另一套能力清单。
 - 本轮进一步把媒体/视频工作区外壳对齐线上能力页：网格背景、`capabilities-header` 标题层级、能力分组卡、16px 配置/结果面板、双栏比例、黄色折角和圆角表单控件；本地 Provider 与 OpenCode 事件链保持不变。
 - 本轮修复 Writer 预览的布局漂移：桌面改为与云端相同的右侧 920px 抽屉、全高滚动和左侧遮罩；工作流能力列表、编辑器下拉框和画布节点在英文界面统一使用云端对应文案。
 - 视频 Agent 现在复用线上能力页的能力分组、能力卡片和 launcher tab 交互；点击能力卡/Tab 会切换本地运行能力，并继续进入原有 OpenCode/媒体任务链。
@@ -59,7 +59,7 @@
 - 两个线上 PPT 查询入口（`/dashboard/ai?agent=executive-ppt`、`/dashboard/ai?agent=executive-presentation-ppt`）现在与云端一样进入 AI 对话消息壳；桌面端只在运行时将前者/后者映射为 `ppt-master` OpenCode 指令，不再误显示为媒体工作台。
 - 保留线上 `/dashboard/works` 兼容深链接，按云端行为立即 canonicalize 到 `/dashboard/assets`，避免作品库与资产库出现第二套交互。
 - 资产库与媒体产物列表点击文件默认调用 Windows 关联程序打开，符合线上“打开/交付”交互；Obsidian 引用仍可通过独立的 Tauri 命令在 Explorer 中定位原文。
-- Desktop App 的会话、消息、文件打开和运行取消通过 `@aimarketing/workbench-client` 的 Tauri adapter 进入统一端口，避免 UI 直接依赖一套平行业务协议。
+- Desktop App 的会话、消息、文件打开和运行取消通过 `@coworkany/workbench-client` 的 Tauri adapter 进入统一端口，避免 UI 直接依赖一套平行业务协议。
 - Runtime probe 现在同时校验 SQLite migrations 与 `ppt-master` 完整 Python requirements（PPTX、SVG、PDF、文档、表格、图片、网页和音频工具链）；缺失时设置页/窗口前安装器会沿同一镜像链补齐，设置页可提供离线 runtime ZIP，安装后重启复检。
 - 本轮将窗口前门禁、Tauri `runtime_probe` 和 workflow-host 的 Python 选择统一到同一完整依赖探针，避免只安装 `pptx` 的不完整系统 Python 被误选；英文界面同步补齐知识库引用、工作流节点标题/保存名称和未知成本文案。
 - Tauri 创建窗口前增加 Windows WebView2 原生预检：检测注册表/安装目录，缺失时自动下载官方 bootstrapper、静默安装并复检；仍失败则阻止进入半可用 UI，并显示原生错误提示。
@@ -77,11 +77,11 @@
 
 ## 回归命令
 
-- `pnpm --filter @aimarketing/desktop typecheck`
+- `pnpm --filter @coworkany/desktop typecheck`
 - `pnpm desktop:test`：132/132 通过（含首页/路由 parity、双语 i18n、模型列表优先级、多 Provider 隔离、媒体终态与恢复、OpenCode 多轮与崩溃恢复、Obsidian RAG、工作流导入导出、PPT/Writer 本地产物、离线网络边界和运行时门禁）
-- `pnpm --filter @aimarketing/workflow-core test`：12/12 通过（含 DAG 并行、节点失败事件、foreach 汇总）
-- `pnpm --filter @aimarketing/media-runtime test`：13/13 通过（含提交后取消、持久任务续 poll、流式下载原子落盘、媒体大小/MIME 校验）
-- `pnpm --filter @aimarketing/desktop exec cargo test --manifest-path src-tauri/Cargo.toml`：10/10 通过（含实例锁、窗口前运行时门禁与 WebView2 bootstrap 预检辅助测试）
+- `pnpm --filter @coworkany/workflow-core test`：12/12 通过（含 DAG 并行、节点失败事件、foreach 汇总）
+- `pnpm --filter @coworkany/media-runtime test`：13/13 通过（含提交后取消、持久任务续 poll、流式下载原子落盘、媒体大小/MIME 校验）
+- `pnpm --filter @coworkany/desktop exec cargo test --manifest-path src-tauri/Cargo.toml`：10/10 通过（含实例锁、窗口前运行时门禁与 WebView2 bootstrap 预检辅助测试）
 - `pnpm exec openspec validate --all --strict`：8/8 通过
 - `pnpm lint`、`pnpm build`：通过
 

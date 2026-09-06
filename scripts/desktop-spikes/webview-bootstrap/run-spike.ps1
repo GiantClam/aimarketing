@@ -8,7 +8,7 @@ Import-Module (Join-Path $PSScriptRoot '../common/Evidence.psm1') -Force
 
 $started = [datetime]::UtcNow
 $evidence = New-SpikeEvidence -SpikeId 'webview-bootstrap' -StartedAtUtc $started
-$target = Join-Path $PSScriptRoot 'target/release/aimarketing-webview-bootstrap-spike.exe'
+$target = Join-Path $PSScriptRoot 'target/release/coworkany-webview-bootstrap-spike.exe'
 $scratch = Join-Path $PSScriptRoot '.spike-state'
 New-Item -ItemType Directory -Force -Path $scratch | Out-Null
 $sentinel = Join-Path $scratch 'webview2.available'
