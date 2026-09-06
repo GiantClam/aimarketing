@@ -188,6 +188,19 @@ function mergePart(parts: readonly DesktopUIMessagePart[], incoming: DesktopUIMe
 
 /** Apply one host event to a UIMessage part list without introducing a second UI protocol. */
 export function applyDesktopUIMessageRunEventToParts(parts: readonly DesktopUIMessagePart[], event: WorkbenchRunEvent): DesktopUIMessagePart[] {
+  if (event.type === "text" || event.type === "reasoning") {
+    const incoming = eventPart(event);
+    if (incoming && (incoming.type === "text" || incoming.type === "reasoning")) {
+      const identity = partIdentity(incoming);
+      const index = identity === undefined ? -1 : parts.findIndex((part) => partIdentity(part) === identity);
+      if (index < 0) return [...parts, incoming];
+      const current = parts[index];
+      if (current.type === incoming.type) {
+        const next = { ...current, ...incoming, text: `${current.text}${incoming.text}` };
+        return parts.map((part, partIndex) => partIndex === index ? next : part);
+      }
+    }
+  }
   const lastSequence = parts.reduce((highest, part) => Math.max(highest, partSequence(part) ?? -1), -1);
   const seed = createDesktopUIMessage({ id: "desktop-run-parts", role: "assistant", conversationId: "" });
   const updated = applyWorkbenchRunEventToUIMessage({ ...seed, parts: [...parts], metadata: { conversationId: "", createdAt: seed.metadata?.createdAt ?? now(), updatedAt: now(), lastSequence } }, event);

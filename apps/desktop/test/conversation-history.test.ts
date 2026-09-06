@@ -85,6 +85,22 @@ test("conversation history preserves multiple same-timestamp turns instead of gr
   assert.deepEqual(merged.map((message) => message.id), messages.map((message) => message.id));
 });
 
+test("conversation history keeps a restored answer after its optimistic user turn when timestamps collide", () => {
+  const createdAt = "2026-08-21T15:00:00.000Z";
+  const loaded: WorkbenchMessage[] = [
+    { id: "message-first", conversationId: "conversation-1", role: "user", content: "第一个问题", createdAt },
+    { id: "assistant-first", conversationId: "conversation-1", role: "assistant", content: "第一个回答", createdAt },
+    { id: "assistant-second", conversationId: "conversation-1", role: "assistant", content: "第二个回答", createdAt },
+  ];
+  const optimistic: WorkbenchMessage[] = [
+    { id: "message-second", conversationId: "conversation-1", role: "user", content: "第二个问题", createdAt },
+  ];
+
+  const merged = mergeConversationMessages(optimistic, loaded, "conversation-1");
+
+  assert.deepEqual(merged.map((message) => message.id), ["message-first", "assistant-first", "message-second", "assistant-second"]);
+});
+
 test("history reload replaces a stale in-memory order for persisted messages", () => {
   const createdAt = "2026-08-21T15:00:00.000Z";
   const user = { id: "reload-user", conversationId: "conversation-1", role: "user" as const, content: "用户问题", createdAt };
@@ -107,6 +123,20 @@ test("live UI message merging preserves multiple same-timestamp turns", () => {
   const merged = mergeDesktopUIMessageViews(messages, []);
 
   assert.deepEqual(merged.map((message) => message.id), messages.map((message) => message.id));
+});
+
+test("live UI merging keeps a streaming answer with the user message from its run after a session switch", () => {
+  const createdAt = "2026-08-21T15:00:00.000Z";
+  const displayed = [
+    createDesktopUIMessage({ id: "message-first", role: "user", conversationId: "conversation-1", content: "第一个问题", createdAt }),
+    createDesktopUIMessage({ id: "assistant-first", role: "assistant", conversationId: "conversation-1", content: "第一个回答", createdAt }),
+    createDesktopUIMessage({ id: "assistant-second", role: "assistant", conversationId: "conversation-1", runId: "second", content: "正在生成", createdAt }),
+  ];
+  const live = [createDesktopUIMessage({ id: "message-second", role: "user", conversationId: "conversation-1", runId: "second", content: "第二个问题", createdAt })];
+
+  const merged = mergeDesktopUIMessageViews(displayed, live, "assistant-second");
+
+  assert.deepEqual(merged.map((message) => message.id), ["message-first", "assistant-first", "message-second", "assistant-second"]);
 });
 
 test("rendered UI messages keep the user text when the live SDK view has an empty user part", () => {

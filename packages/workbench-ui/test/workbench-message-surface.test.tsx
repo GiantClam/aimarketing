@@ -170,6 +170,20 @@ test("groups messages into question-and-answer turns with role avatars", () => {
   assert.ok(markup.indexOf("first answer") < markup.indexOf("second question"));
 });
 
+test("keeps an equal-timestamp streaming reply in the same causal turn after a session switch", () => {
+  const createdAt = "2026-08-21T15:00:00.000Z";
+  const markup = renderToStaticMarkup(<WorkbenchMessageSurface messages={[
+    createDesktopUIMessage({ id: "message-first", role: "user", conversationId: "conversation-1", content: "第一个问题", createdAt }),
+    createDesktopUIMessage({ id: "assistant-first", role: "assistant", conversationId: "conversation-1", content: "第一个回答", createdAt }),
+    createDesktopUIMessage({ id: "assistant-second", role: "assistant", conversationId: "conversation-1", runId: "second", content: "正在生成", createdAt }),
+    createDesktopUIMessage({ id: "message-second", role: "user", conversationId: "conversation-1", runId: "second", content: "第二个问题", createdAt }),
+  ]} locale="zh" />);
+
+  assert.ok(markup.indexOf("第一个问题") < markup.indexOf("第一个回答"));
+  assert.ok(markup.indexOf("第一个回答") < markup.indexOf("第二个问题"));
+  assert.ok(markup.indexOf("第二个问题") < markup.indexOf("正在生成"));
+});
+
 test("shows each message creation timestamp in the local time zone", () => {
   const createdAt = "2026-08-12T00:00:00Z";
   const expectedTimestamp = formatWorkbenchMessageTimestamp(createdAt, "zh");

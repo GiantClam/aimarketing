@@ -151,7 +151,11 @@ test("workflow-host keeps concurrent OpenCode sessions alive across provider con
       await Promise.race([stopped, new Promise<void>((resolveClose) => setTimeout(resolveClose, 5_000))]);
     }
     child.child.stdin.destroy();
-    await rm(workspace, { recursive: true, force: true });
+    // OpenCode children may release their workspace handle a few milliseconds
+    // after the host exits on Windows. Match the other host tests' bounded
+    // cleanup policy so a successful concurrency assertion is not reported as
+    // a false EBUSY failure.
+    await rm(workspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }
 });
 

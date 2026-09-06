@@ -161,6 +161,11 @@ type MessageTurn = {
   readonly assistants: readonly DesktopUIMessage[];
 };
 
+function messageTurnId(message: DesktopUIMessage) {
+  const prefix = message.role === "user" ? "message-" : message.role === "assistant" ? "assistant-" : "";
+  return prefix && message.id.startsWith(prefix) ? message.id.slice(prefix.length) : message.metadata?.runId;
+}
+
 function orderMessagesForTimeline(messages: readonly DesktopUIMessage[]) {
   const ordered = messages
     .map((message, index) => ({ message, index, time: Date.parse(message.metadata?.createdAt ?? "") }))
@@ -169,6 +174,11 @@ function orderMessagesForTimeline(messages: readonly DesktopUIMessage[]) {
       const rightHasTime = !Number.isNaN(right.time);
       if (leftHasTime && rightHasTime && left.time !== right.time) return left.time - right.time;
       if (leftHasTime !== rightHasTime) return leftHasTime ? -1 : 1;
+      const leftTurnId = messageTurnId(left.message);
+      const rightTurnId = messageTurnId(right.message);
+      if (leftTurnId && leftTurnId === rightTurnId && left.message.role !== right.message.role) {
+        return left.message.role === "user" ? -1 : 1;
+      }
       return left.index - right.index;
     })
     .map(({ message }) => message);

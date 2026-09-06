@@ -236,14 +236,17 @@ function workbenchAgentId(path: string) {
  */
 export function workbenchSessionScope(path: string) {
   const pathname = path.split("?", 1)[0].replace(/\/+$/u, "") || "/";
+  // Dedicated creative surfaces own their conversations. A stale/deep-link
+  // `agent` query must never move a writing or image session into an Agent's
+  // sidebar group.
+  if (pathname === "/dashboard/writer" || pathname.startsWith("/dashboard/writer/")) return "entry:writer";
+  if (pathname === "/dashboard/image-assistant" || pathname.startsWith("/dashboard/image-assistant/")) return "entry:image-assistant";
   const query = path.split("?", 2)[1];
   const params = new URLSearchParams(query ?? "");
   const agentId = params.get("agent")?.trim();
   if (agentId) return agentId;
   const entry = params.get("entry")?.trim();
   if (entry) return `entry:${entry}`;
-  if (pathname === "/dashboard/writer" || pathname.startsWith("/dashboard/writer/")) return "entry:writer";
-  if (pathname === "/dashboard/image-assistant" || pathname.startsWith("/dashboard/image-assistant/")) return "entry:image-assistant";
   return undefined;
 }
 

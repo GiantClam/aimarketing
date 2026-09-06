@@ -33,8 +33,9 @@ test("desktop error statuses are promoted to the top tips surface", () => {
   assert.equal(isDesktopErrorStatus("正在分析请求…"), false);
   assert.equal(isDesktopErrorStatus("已发送，正在流式生成…"), false);
   const source = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
-  assert.match(source, /function DesktopTopTip[\s\S]*?role="alert"/u);
-  assert.match(source, /showTopTip \? <DesktopTopTip message=\{topTipMessage\}/u);
+  assert.match(source, /function DesktopTopTip[\s\S]*?role="alert"[\s\S]*?onDismiss/u);
+  assert.match(source, /const showTopTip = Boolean\(topTipMessage && dismissedTopTip !== topTipMessage\)/u);
+  assert.match(source, /showTopTip \? <DesktopTopTip message=\{topTipMessage\} locale=\{locale\} onDismiss=\{\(\) => setDismissedTopTip\(topTipMessage\)\}/u);
   assert.match(source, /const status = isDesktopErrorStatus\(rawStatus\) \? "" : rawStatus;/u);
   assert.doesNotMatch(source, /workflow_host_response_timeout/u);
 });

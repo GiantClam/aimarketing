@@ -20,3 +20,17 @@ test("replays a completed PPT run into an assistant message with its artifact pa
   assert.equal(message.parts.some((part) => part.type === "data-artifact" && part.data.mimeType.includes("presentation")), true);
   assert.equal(message.parts.some((part) => part.type === "data-status" && part.data.status === "completed"), true);
 });
+
+test("replays every text delta after reasoning without dropping the first visible token", () => {
+  const message = replayPersistedRunToConversationMessage(
+    { id: "run-stream-boundary", status: "succeeded", started_at: "2026-09-06T12:20:39.000Z", finished_at: "2026-09-06T12:20:43.000Z" },
+    [
+      { sequence: 1, event_type: "reasoning_delta", payload_json: JSON.stringify({ delta: "Decide how to answer." }), created_at: "2026-09-06T12:20:40.000Z" },
+      { sequence: 2, event_type: "text_delta", payload_json: JSON.stringify({ delta: "你好" }), created_at: "2026-09-06T12:20:41.000Z" },
+      { sequence: 3, event_type: "text_delta", payload_json: JSON.stringify({ delta: "。需要继续做 PPT 吗？" }), created_at: "2026-09-06T12:20:42.000Z" },
+    ],
+    "conversation-stream-boundary",
+  );
+
+  assert.equal(message?.content, "你好。需要继续做 PPT 吗？");
+});

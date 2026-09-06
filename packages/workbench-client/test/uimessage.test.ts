@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyWorkbenchRunEventToUIMessage, createDesktopUIMessage, createDesktopRunTransport, desktopUIMessageStorage, desktopUIMessageText, parseDesktopUIMessage, workbenchEventToUIMessageChunks, type DesktopUIMessage, type WorkbenchRunEvent } from "../src/index";
+import { applyDesktopUIMessageRunEventToParts, applyWorkbenchRunEventToUIMessage, createDesktopUIMessage, createDesktopRunTransport, desktopUIMessageStorage, desktopUIMessageText, parseDesktopUIMessage, workbenchEventToUIMessageChunks, type DesktopUIMessage, type WorkbenchRunEvent } from "../src/index";
 
 function event(input: Parameters<typeof applyWorkbenchRunEventToUIMessage>[1]) {
   return input;
@@ -29,6 +29,14 @@ test("does not repeat short text fragments when a stream delivers them more than
     message = applyWorkbenchRunEventToUIMessage(message, event({ type: "text", delta, sequence: index + 1 }));
   });
   assert.equal(desktopUIMessageText(message), "I'll load the Dashi PPT skill");
+});
+
+test("desktop OpenCode event replay preserves a repeated visible boundary token", () => {
+  let parts = applyDesktopUIMessageRunEventToParts([], { type: "reasoning", delta: "Choose the response.", sequence: 1 });
+  parts = applyDesktopUIMessageRunEventToParts(parts, { type: "text", delta: "主题", sequence: 2 });
+  parts = applyDesktopUIMessageRunEventToParts(parts, { type: "text", delta: "主题-only", sequence: 3 });
+  const message: DesktopUIMessage = { ...createDesktopUIMessage({ id: "assistant-boundary", role: "assistant", conversationId: "conversation-1" }), parts };
+  assert.equal(desktopUIMessageText(message), "主题主题-only");
 });
 
 test("replaces a final full-text snapshot instead of appending it to streamed deltas", () => {

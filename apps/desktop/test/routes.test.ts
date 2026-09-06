@@ -38,6 +38,7 @@ test("desktop scopes conversations by the online AI entry or selected expert", (
   assert.equal(workbenchSessionScope("/dashboard/ai?agent=executive-brand&entry=consulting-advisor"), "executive-brand");
   assert.equal(workbenchSessionScope("/dashboard/writer"), "entry:writer");
   assert.equal(workbenchSessionScope("/dashboard/writer/conversation-1"), "entry:writer");
+  assert.equal(workbenchSessionScope("/dashboard/writer/conversation-1?agent=executive-presentation-ppt"), "entry:writer");
   assert.equal(workbenchSessionScope("/dashboard/image-assistant"), "entry:image-assistant");
   assert.equal(workbenchSessionScope("/dashboard/image-assistant/conversation-1"), "entry:image-assistant");
   assert.equal(isWorkbenchSessionPath("/dashboard/writer"), true);
@@ -52,6 +53,8 @@ test("desktop scopes conversations by the online AI entry or selected expert", (
   assert.match(appSource, /const conversationAgentId = launchConversationScope \?\? undefined/u);
   assert.match(appSource, /agent_id: conversationAgentId \?\? null/u);
   assert.match(appSource, /activeSessionAgentId=\{conversationScope\}/u);
+  assert.match(appSource, /const workflowDirectoryRuns = useMemo<WorkbenchWorkflowDirectoryRun\[\]>\(\(\) => runs\.flatMap/u);
+  assert.match(appSource, /if \(metadata\?\.kind !== "workflow"\) return \[\];/u);
   assert.match(appSource, /startNewConversationForAgent\(card\.id === "general" \? null : card\.id\)/u);
   assert.match(appSource, /resolvePrompt:/u);
 });
@@ -95,6 +98,8 @@ test("desktop chat projects streaming runtime events into durable rich message p
   assert.match(appSource, /const artifactPart: Extract<DesktopUIMessagePart, \{ type: "data-artifact" \}> = \{[\s\S]*?type: "data-artifact"/);
   assert.match(appSource, /assistantPartsRef\.current\.set\(artifactRunId, \[\.\.\.currentParts\.filter\(\(part\) => !\("id" in part\) \|\| part\.id !== artifactPartId\), registeredPart\]\)/);
   assert.match(appSource, /filter\(\(part\) => !\("id" in part\) \|\| part\.id !== `\$\{event\.runId\}:status`\)/);
+  assert.match(appSource, /type: "reasoning", delta: event\.delta, sequence, createdAt/);
+  assert.doesNotMatch(appSource, /const reasoningSequence = \(sequences\.get\(runId\) \?\? 0\) \+ 1/);
 });
 
 test("configured provider models populate selectors and take priority over a stale default", () => {
@@ -111,11 +116,8 @@ test("desktop workflow and media entry points expose the configured model select
   assert.match(appSource, /function DesktopWriterCloudWorkspace\([\s\S]*?const \{[^}]*model, models,[\s\S]*?<ModelControls locale=\{locale\} model=\{model\} models=\{models\}/);
   assert.match(appSource, /<DesktopWorkflowWorkspace[\s\S]*?model=\{activeModel\} models=\{activeModels\}[\s\S]*?onModelChange=\{onModelChange\}/);
   assert.match(appSource, /<DesktopMediaWorkspace[\s\S]*?model=\{activeModel\} models=\{activeModels\}[\s\S]*?onModelChange=\{updateModel\}/);
-  assert.match(appSource, /currentWorkflowDefinition\(\)[\s\S]*?const nodeProvider = typeof node\.config\.provider === "string"/);
   assert.match(appSource, /hostWorkflowDefinition = bindWorkflowProviderDefaults\(hostDefinitionInput, launchConfig\)/);
-  assert.match(appSource, /workflowExecutionPrompt = launchSelectedPath === "\/dashboard\/workflows" && actionId === "writer"/);
-  assert.match(appSource, /输出约束：只输出可直接交付的最终中文营销文案/);
-  assert.match(appSource, /hostDefinitionInput = launchSelectedPath === "\/dashboard\/workflows"[\s\S]*?node\.type === "writer"/);
+  assert.match(appSource, /const hostDefinitionInput = rawWorkflowDefinition/);
   assert.match(appSource, /requestedMediaAction \?\? workflowAction/);
   assert.match(appSource, /providerForCapability\(config, "audio"\)/);
   assert.match(appSource, /const runSkillId: SkillId = actionId === "image_generate" \? "auto" : launchEffectiveSkillId/);
@@ -140,11 +142,13 @@ test("desktop workflows open the shared online directory before the local canvas
   assert.match(appSource, /workflowBuilderOpen\s*\?/);
   assert.match(appSource, /action\.type === "create"[\s\S]*?setWorkflowBuilderOpen\(true\)/);
   assert.match(appSource, /action\.type === "open"[\s\S]*?openWorkflowCanvas\(definition(?:, workflow)?\)/);
+  assert.match(appSource, /action\.type === "open-run" && action\.id[\s\S]*?workbenchClient\.navigation\.go\(`\/dashboard\/workflows\?runId=\$\{encodeURIComponent\(action\.id\)\}`\)/);
+  assert.doesNotMatch(appSource, /action\.type === "open-run"\) workbenchClient\.navigation\.go\("\/dashboard\/tasks"\)/);
   assert.match(appSource, /action\.type === "delete"[\s\S]*?workbenchClient\.workflows\.remove\(workflowId\)/);
   assert.match(appSource, /actionAvailability=\{\{ duplicate: true, delete: true \}\}/);
   assert.match(appSource, /const savedWorkflowHashRef = useRef<string \| null>\(null\)/);
   assert.match(appSource, /workflowAutoSaveRef\.current = \(\) => saveCurrentWorkflow\("auto"\)/);
-  assert.match(appSource, /window\.setInterval\(\(\) => void workflowAutoSaveRef\.current\("auto"\), 5_000\)/);
+  assert.match(appSource, /window\.setTimeout\(\(\) => void workflowAutoSaveRef\.current\("auto"\), 700\)/);
   assert.match(appSource, /savedWorkflowHashRef\.current === definitionHash/);
   assert.match(appSource, /currentWorkflowIdRef\.current = saved\.id/);
   assert.match(appSource, /onBack=\{\(\) => setWorkflowBuilderOpen\(false\)\}/);
@@ -580,7 +584,7 @@ test("desktop writer and media surfaces retain the online control contract", () 
   assert.match(appSource, /document\.execCommand\("copy"\)/);
   assert.match(appSource, /knowledge\.search/);
   assert.match(appSource, /本地 Obsidian 知识库上下文/);
-  assert.match(appSource, /<Suggestions className="chat-ai-suggestions"/);
+  assert.match(appSource, /<Suggestions className="chat-ai-suggestions chat-prompt-card-grid"/);
   assert.match(appSource, /<Suggestion key=\{item\}/);
   assert.match(appSource, /data-cloud-surface="prompt-suggestions"/);
   assert.match(desktopStyleSource, /\.writer-cloud-scroll \{[^}]*display: flex;[^}]*overflow: hidden;/);
@@ -608,6 +612,25 @@ test("desktop writer and media surfaces retain the online control contract", () 
   assert.match(sharedMessageSource, /data-cloud-surface="message"/);
   assert.equal(WORKBENCH_CHAT_QUICK_PROMPTS.length, 3);
   assert.equal(WORKBENCH_WRITER_QUICK_PROMPTS.length, 3);
+});
+
+test("new desktop conversations keep the AI Elements prompt input beside suggestions", () => {
+  const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  const promptInputSource = readFileSync(resolve(process.cwd(), "../../packages/workbench-ui/src/prompt-input.tsx"), "utf8");
+  const desktopStyleSource = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+
+  assert.match(appSource, /const showLanding = isEmptyConversation;/);
+  assert.match(appSource, /className="chat-ai-suggestions chat-prompt-card-grid"/);
+  assert.match(appSource, /<div ref=\{composerDockRef\} className="chat-composer-dock">/);
+  assert.match(appSource, /autoFocus=\{showLanding && !activeRunId\}/);
+  assert.match(appSource, /focusRequest=\{composerFocusRequest\}/);
+  assert.doesNotMatch(appSource, /composer-prompt-chips/);
+  assert.match(promptInputSource, /autoFocus\?: boolean/);
+  assert.match(promptInputSource, /focusRequest\?: number/);
+  assert.match(promptInputSource, /<PromptInputTextarea[^>]*autoFocus=\{autoFocus\}/);
+  assert.match(desktopStyleSource, /\.chat-prompt-card-grid \.ai-elements-suggestions-list \{[\s\S]*?display: grid;/);
+  assert.match(desktopStyleSource, /\.chat-prompt-card \{[\s\S]*?min-height:/);
+  assert.match(desktopStyleSource, /\.chat-workspace-section\.landing-active \.chat-landing \{[\s\S]*?--chat-composer-clearance/);
 });
 
 test("desktop video media surface mirrors the cloud capability and launcher contract", () => {
@@ -1120,14 +1143,31 @@ test("desktop workflow actions use the current canvas definition and do not requ
   assert.match(appSource, /save_workflow_export/);
 });
 
-test("desktop workflow runs restore the saved Canvas and node outputs from task center", () => {
+test("desktop workflows persist the edited Canvas and restore the exact task snapshot with node outputs", () => {
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
   assert.ok(appSource.includes("workflowRestoreRequestRef"));
-  assert.ok(appSource.includes("workflowId?: string; definitionHash?: string"));
+  assert.ok(appSource.includes("workflowDefinition?: WorkflowDefinitionEnvelope"));
+  assert.ok(appSource.includes("const workflowDefinitionSnapshot = isWorkflowRun"));
+  assert.ok(appSource.includes("workflowDefinition: workflowDefinitionSnapshot"));
   assert.ok(appSource.includes("metadata?.workflowId"));
-  assert.ok(appSource.includes("openWorkflowCanvas(definition, saved)"));
-  assert.ok(appSource.includes("setWorkflowNodeSnapshots(detail.nodes.map"));
-  assert.ok(appSource.includes("definitionHash: hashWorkflowDefinition"));
+  assert.ok(appSource.includes("metadata?.workflowDefinition"));
+  assert.ok(appSource.includes("const snapshotWorkflow = saved ??"));
+  assert.ok(appSource.includes("openWorkflowCanvas(definition, snapshotWorkflow)"));
+  assert.ok(appSource.includes("workflowTitle?: string"));
+  assert.ok(appSource.includes("workflowTitle: savedWorkflowForRun.name"));
+  assert.ok(appSource.includes("async function restoreLatestWorkflowRun"));
+  assert.ok(appSource.includes("void restoreLatestWorkflowRun(workflow, definition)"));
+  assert.ok(appSource.includes("function applyWorkflowRunDetail(detail: RunDetail)"));
+  assert.ok(appSource.includes("const failureMessages = new Map<string, string>()"));
+  assert.ok(appSource.includes("workflow:node_failed"));
+  assert.ok(appSource.includes("{ error: payload.message }"));
+  assert.ok(appSource.includes("const snapshots = detail.nodes.map"));
+  assert.ok(appSource.includes("setTimeout(() => void workflowAutoSaveRef.current(\"auto\"), 700)"));
+  const definitionStart = appSource.indexOf("function currentWorkflowDefinition");
+  const definitionEnd = appSource.indexOf("  useEffect(() => {", definitionStart);
+  const currentDefinition = appSource.slice(definitionStart, definitionEnd);
+  assert.match(currentDefinition, /The canvas owns node configuration/u);
+  assert.doesNotMatch(currentDefinition, /nodes: base\.nodes\.map/u);
 });
 
 test("desktop workflow editor keeps its draft out of the AI composer state", () => {

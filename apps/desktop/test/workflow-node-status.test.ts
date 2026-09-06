@@ -13,6 +13,11 @@ test("workflow node snapshots follow node lifecycle events", () => {
   assert.deepEqual(succeeded.find((snapshot) => snapshot.nodeKey === "writer"), { nodeKey: "writer", status: "succeeded", outputPayload: { text: "Delivered" } });
 });
 
+test("workflow node snapshots retain the failure message for the node canvas", () => {
+  const snapshots = applyWorkflowNodeEvent(createWorkflowNodeSnapshots(["image"]), "workflow:node_failed", JSON.stringify({ nodeKey: "image", message: "media_outputs_not_downloadable" }));
+  assert.deepEqual(snapshots, [{ nodeKey: "image", status: "failed", errorMessage: "media_outputs_not_downloadable" }]);
+});
+
 test("workflow completion keeps terminal nodes and marks untouched nodes as skipped", () => {
   const snapshots = [
     { nodeKey: "input", status: "succeeded" },

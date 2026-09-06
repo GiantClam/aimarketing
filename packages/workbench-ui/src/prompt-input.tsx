@@ -39,7 +39,7 @@ export function WorkbenchModelSelector({ models, value, onChange, disabled = fal
   </ModelSelector></div>;
 }
 
-export function WorkbenchPromptInput({ value, onValueChange, onSubmit, attachments = [], onAddAttachments, onRemoveAttachment, models = [], model, onModelChange, placeholder, status = "ready", onStop, disabled = false, locale = "zh", submitLabel, children }: { value: string; onValueChange: (value: string) => void; onSubmit: () => void; attachments?: readonly WorkbenchAttachmentItem[]; onAddAttachments?: (files: FileList | null) => void; onRemoveAttachment?: (id: string) => void; models?: readonly WorkbenchModelOption[]; model?: string; onModelChange?: (value: string) => void; placeholder?: string; status?: "ready" | "streaming" | "error"; onStop?: () => void; disabled?: boolean; locale?: "zh" | "en"; submitLabel?: string; children?: ReactNode }) {
+export function WorkbenchPromptInput({ value, onValueChange, onSubmit, attachments = [], onAddAttachments, onRemoveAttachment, models = [], model, onModelChange, placeholder, status = "ready", onStop, disabled = false, autoFocus = false, focusRequest = 0, locale = "zh", submitLabel, children }: { value: string; onValueChange: (value: string) => void; onSubmit: () => void; attachments?: readonly WorkbenchAttachmentItem[]; onAddAttachments?: (files: FileList | null) => void; onRemoveAttachment?: (id: string) => void; models?: readonly WorkbenchModelOption[]; model?: string; onModelChange?: (value: string) => void; placeholder?: string; status?: "ready" | "streaming" | "error"; onStop?: () => void; disabled?: boolean; autoFocus?: boolean; focusRequest?: number; locale?: "zh" | "en"; submitLabel?: string; children?: ReactNode }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const textareaWasFocused = useRef(false);
   const headerChildren: ReactNode[] = [];
@@ -54,9 +54,14 @@ export function WorkbenchPromptInput({ value, onValueChange, onSubmit, attachmen
     const frame = window.requestAnimationFrame(() => textareaRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);
   }, [status]);
+  useEffect(() => {
+    if (!autoFocus || status === "streaming") return;
+    const frame = window.requestAnimationFrame(() => textareaRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [autoFocus, focusRequest, status]);
   return <PromptInput value={value} onValueChange={onValueChange} onSubmit={onSubmit} onAddAttachments={onAddAttachments} attachments={attachments} onRemoveAttachment={onRemoveAttachment} status={status} onStop={onStop} disabled={disabled} locale={locale}>
     <PromptInputHeader>{headerChildren.length ? <div className="wb-ai-prompt-context">{headerChildren}</div> : null}<WorkbenchAttachments attachments={attachments} variant="inline" onRemove={onRemoveAttachment} locale={locale} /></PromptInputHeader>
-    <PromptInputBody><PromptInputTextarea ref={textareaRef} value={value} onFocus={() => { textareaWasFocused.current = true; }} onChange={(event) => onValueChange(event.target.value)} placeholder={placeholder} /></PromptInputBody>
+    <PromptInputBody><PromptInputTextarea ref={textareaRef} value={value} autoFocus={autoFocus} onFocus={() => { textareaWasFocused.current = true; }} onChange={(event) => onValueChange(event.target.value)} placeholder={placeholder} /></PromptInputBody>
     <PromptInputFooter><PromptInputTools>
       {onAddAttachments ? <PromptInputActionMenu><PromptInputActionMenuTrigger aria-label={locale === "zh" ? "添加附件" : "Add attachment"} /><PromptInputActionMenuContent><PromptInputActionAddAttachments label={locale === "zh" ? "上传本地文件" : "Upload local file"} /></PromptInputActionMenuContent></PromptInputActionMenu> : null}
       {models.length && onModelChange ? <PromptInputSelect className="wb-ai-prompt-model-select"><WorkbenchModelSelector models={models} value={model} onChange={onModelChange} disabled={disabled || status === "streaming"} locale={locale} /></PromptInputSelect> : null}

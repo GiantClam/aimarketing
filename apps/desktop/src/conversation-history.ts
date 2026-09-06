@@ -7,9 +7,14 @@ type ConversationMessage = {
   readonly role?: string;
 };
 
+function messageTurnId(message: { readonly id?: string; readonly role?: string }) {
+  const prefix = message.role === "user" ? "message-" : message.role === "assistant" ? "assistant-" : "";
+  return prefix && message.id?.startsWith(prefix) ? message.id.slice(prefix.length) : undefined;
+}
+
 function compareMessageOrder(
-  left: { readonly createdAt?: string; readonly role?: string; readonly index: number },
-  right: { readonly createdAt?: string; readonly role?: string; readonly index: number },
+  left: { readonly id?: string; readonly createdAt?: string; readonly role?: string; readonly index: number },
+  right: { readonly id?: string; readonly createdAt?: string; readonly role?: string; readonly index: number },
 ) {
   const leftTime = Date.parse(left.createdAt ?? "");
   const rightTime = Date.parse(right.createdAt ?? "");
@@ -18,6 +23,16 @@ function compareMessageOrder(
 
   if (leftHasTime && rightHasTime && leftTime !== rightTime) return leftTime - rightTime;
   if (leftHasTime !== rightHasTime) return leftHasTime ? -1 : 1;
+
+  // A restored assistant answer and its optimistic user request may share the
+  // storage timestamp while coming from different sources.  The run-derived
+  // IDs are the causal link that survives a session switch, so only use them
+  // to repair that exact pair; keep unrelated same-timestamp turns stable.
+  const leftTurnId = messageTurnId(left);
+  const rightTurnId = messageTurnId(right);
+  if (leftTurnId && leftTurnId === rightTurnId && left.role !== right.role) {
+    return left.role === "user" ? -1 : 1;
+  }
 
   return left.index - right.index;
 }
@@ -52,7 +67,7 @@ export function mergeConversationMessages<TMessage extends ConversationMessage>(
   const optimistic = current.filter((message) => message.conversationId === conversationId && !loadedIds.has(message.id));
   const ordered = [...loadedForConversation, ...optimistic]
     .map((message, index) => ({ message, index }))
-    .sort((left, right) => compareMessageOrder({ createdAt: left.message.createdAt, role: left.message.role, index: left.index }, { createdAt: right.message.createdAt, role: right.message.role, index: right.index }))
+    .sort((left, right) => compareMessageOrder({ id: left.message.id, createdAt: left.message.createdAt, role: left.message.role, index: left.index }, { id: right.message.id, createdAt: right.message.createdAt, role: right.message.role, index: right.index }))
     .map(({ message }) => message);
   return repairAdjacentTimestampInversions(ordered);
 }
@@ -96,10 +111,11 @@ function repairAdjacentUIMessageTimestampInversions(messages: readonly DesktopUI
 export function mergeDesktopUIMessageViews(
   displayed: readonly DesktopUIMessage[],
   live: readonly DesktopUIMessage[],
+  activeAssistantMessageId = "active-assistant",
 ): DesktopUIMessage[] {
   const liveById = new Map(live.map((message) => [message.id, message]));
   const displayedIds = new Set(displayed.map((message) => message.id));
-  const activeAssistant = displayed.find((message) => message.id === "active-assistant" && message.role === "assistant");
+  const activeAssistant = displayed.find((message) => message.id === activeAssistantMessageId && message.role === "assistant");
   const liveAssistant = activeAssistant ? live.find((message) => message.role === "assistant" && !displayedIds.has(message.id)) : undefined;
   const liveAssistantId = liveAssistant?.id;
   const merged = displayed.map((message) => {
@@ -111,7 +127,7 @@ export function mergeDesktopUIMessageViews(
   const appendedLive = live.filter((message) => message.id !== liveAssistantId && !displayedIds.has(message.id) && hasRenderableLiveMessage(message));
   const ordered = [...merged, ...appendedLive]
     .map((message, index) => ({ message, index }))
-    .sort((left, right) => compareMessageOrder({ createdAt: left.message.metadata?.createdAt, role: left.message.role, index: left.index }, { createdAt: right.message.metadata?.createdAt, role: right.message.role, index: right.index }))
+    .sort((left, right) => compareMessageOrder({ id: left.message.id, createdAt: left.message.metadata?.createdAt, role: left.message.role, index: left.index }, { id: right.message.id, createdAt: right.message.metadata?.createdAt, role: right.message.role, index: right.index }))
     .map(({ message }) => message);
   return repairAdjacentUIMessageTimestampInversions(ordered);
 }

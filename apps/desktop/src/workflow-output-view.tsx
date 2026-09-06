@@ -55,6 +55,13 @@ function WorkflowOutputMedia({ item, locale }: { item: WorkflowOutputItem; local
 }
 
 export function WorkflowOutputPreview({ node, snapshot, locale }: { node: WorkflowCanvasNode; snapshot: WorkflowCanvasExecutionSnapshot; locale: "zh" | "en" }) {
+  if (snapshot.status === "failed") {
+    const message = snapshot.errorMessage?.trim() || (locale === "zh" ? "该节点执行失败，未返回详细错误。" : "This node failed without a detailed error.");
+    return <div className="workflow-node-error" data-node-error="true" role="alert">
+      <strong>{locale === "zh" ? "节点执行失败" : "Node execution failed"}</strong>
+      <span>{message}</span>
+    </div>;
+  }
   if (node.nodeKey !== "output" || snapshot.status !== "succeeded") return null;
   const items = normalizeWorkflowOutput(snapshot.outputPayload);
   if (!items.length) return <div className="workflow-output-empty">{locale === "zh" ? "没有可展示的输出" : "No output to display"}</div>;

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { WorkbenchShell } from "../src/index";
+import { WorkbenchShell, workbenchSessionScope } from "../src/index";
 
 test("sidebar shows only the current expert's conversation history", () => {
   const markup = renderToStaticMarkup(<WorkbenchShell
@@ -92,4 +92,34 @@ test("creative workspace assistants render only their own conversation history",
   assert.doesNotMatch(imageMarkup, /class="wb-sidebar-session-heading">图片设计助手/);
   assert.doesNotMatch(imageMarkup, /公众号文案/);
   assert.doesNotMatch(imageMarkup, /通用会话/);
+});
+
+test("PPT agents and dedicated creative entries never share a session scope", () => {
+  assert.equal(workbenchSessionScope("/dashboard/ai/conversation-ppt?agent=executive-presentation-ppt"), "executive-presentation-ppt");
+  assert.equal(workbenchSessionScope("/dashboard/writer/conversation-writing?agent=executive-presentation-ppt"), "entry:writer");
+
+  const markup = renderToStaticMarkup(<WorkbenchShell
+    navItems={[
+      { path: "/dashboard/ai", label: "AI 对话" },
+      { path: "/dashboard/ai?agent=executive-presentation-ppt", label: "演讲型 PPT 助手" },
+      { path: "/dashboard/writer", label: "多平台写作" },
+    ]}
+    activePath="/dashboard/ai/conversation-ppt?agent=executive-presentation-ppt"
+    onNavigate={() => undefined}
+    collapsed={false}
+    onToggleCollapsed={() => undefined}
+    locale="zh"
+    sessions={[
+      { path: "/dashboard/ai/conversation-general", title: "通用会话", updatedAt: "昨天" },
+      { path: "/dashboard/ai/conversation-ppt?agent=executive-presentation-ppt", title: "路演 PPT", agentId: "executive-presentation-ppt", updatedAt: "刚刚" },
+      { path: "/dashboard/writer/conversation-writing", title: "品牌文章", agentId: "entry:writer", updatedAt: "刚刚" },
+    ]}
+    activeSessionAgentId="executive-presentation-ppt"
+    activeSessionAgentLabel="演讲型 PPT 助手"
+    initialSessionsExpanded
+  ><div>内容</div></WorkbenchShell>);
+
+  assert.match(markup, /路演 PPT/);
+  assert.doesNotMatch(markup, /通用会话/);
+  assert.doesNotMatch(markup, /品牌文章/);
 });
