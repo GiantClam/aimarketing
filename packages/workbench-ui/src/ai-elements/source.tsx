@@ -270,14 +270,16 @@ export function ModelSelectorLogo({ children, className, ...props }: ComponentPr
 export function ModelSelectorLogoGroup({ children, className, ...props }: ComponentProps<"span"> & { children?: ReactNode }) { return <span {...props} className={cx("ai-elements-model-selector-logo-group", className)}>{children}</span>; }
 export function ModelSelectorName({ children, className, ...props }: ComponentProps<"span"> & { children?: ReactNode }) { return <span {...props} className={cx("ai-elements-model-selector-name", className)}>{children}</span>; }
 
-function ConversationScrollBridge({ autoScroll, scrollToBottomKey, onReachTop }: { autoScroll: boolean; scrollToBottomKey?: string | number | null; onReachTop?: (viewport: HTMLDivElement) => void }) {
+function ConversationScrollBridge({ autoScroll, scrollToBottomKey, onReachTop, onViewportScroll, restoreScrollTop, scrollStateKey }: { autoScroll: boolean; scrollToBottomKey?: string | number | null; onReachTop?: (viewport: HTMLDivElement) => void; onViewportScroll?: (viewport: HTMLDivElement) => void; restoreScrollTop?: number; scrollStateKey?: string | number | null }) {
   const { scrollRef, scrollToBottom } = useStickToBottomContext();
   const previousScrollKeyRef = useRef<string | number | null | undefined>(scrollToBottomKey);
+  const restoredStateKeyRef = useRef<string | number | null | undefined>(undefined);
   const wasNearTopRef = useRef(false);
   useEffect(() => {
     const viewport = scrollRef.current;
     if (!viewport) return;
     const handleScroll = () => {
+      onViewportScroll?.(viewport as HTMLDivElement);
       const nearTop = viewport.scrollTop <= 48;
       if (nearTop && !wasNearTopRef.current) onReachTop?.(viewport as HTMLDivElement);
       wasNearTopRef.current = nearTop;
@@ -290,10 +292,19 @@ function ConversationScrollBridge({ autoScroll, scrollToBottomKey, onReachTop }:
     previousScrollKeyRef.current = scrollToBottomKey;
     if (autoScroll && changed) void scrollToBottom("instant");
   }, [autoScroll, scrollToBottom, scrollToBottomKey]);
+  useEffect(() => {
+    const viewport = scrollRef.current;
+    if (!viewport || restoreScrollTop === undefined || restoredStateKeyRef.current === scrollStateKey) return;
+    restoredStateKeyRef.current = scrollStateKey;
+    const frame = window.requestAnimationFrame(() => {
+      viewport.scrollTop = Math.max(0, Math.min(restoreScrollTop, viewport.scrollHeight - viewport.clientHeight));
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [restoreScrollTop, scrollRef, scrollStateKey]);
   return null;
 }
-export function Conversation({ children, className, autoScroll = true, scrollButtonLabel, scrollToBottomKey, onReachTop, ...props }: ComponentProps<typeof StickToBottom> & { autoScroll?: boolean; scrollButtonLabel?: string; scrollToBottomKey?: string | number | null; onReachTop?: (viewport: HTMLDivElement) => void }) {
-  return <StickToBottom className={cx("ai-elements-conversation", "wb-message-conversation", className)} initial="smooth" resize="smooth" data-slot="conversation" role="log" aria-live="polite" data-auto-scroll={autoScroll ? "true" : "false"} {...props}>{(context) => <><ConversationScrollBridge autoScroll={autoScroll} scrollToBottomKey={scrollToBottomKey} onReachTop={onReachTop} />{typeof children === "function" ? children(context) : children}<ConversationScrollButton aria-label={scrollButtonLabel} title={scrollButtonLabel} /></>}</StickToBottom>;
+export function Conversation({ children, className, autoScroll = true, scrollButtonLabel, scrollToBottomKey, onReachTop, onViewportScroll, restoreScrollTop, scrollStateKey, ...props }: ComponentProps<typeof StickToBottom> & { autoScroll?: boolean; scrollButtonLabel?: string; scrollToBottomKey?: string | number | null; onReachTop?: (viewport: HTMLDivElement) => void; onViewportScroll?: (viewport: HTMLDivElement) => void; restoreScrollTop?: number; scrollStateKey?: string | number | null }) {
+  return <StickToBottom className={cx("ai-elements-conversation", "wb-message-conversation", className)} initial="smooth" resize="smooth" data-slot="conversation" role="log" aria-live="polite" data-auto-scroll={autoScroll ? "true" : "false"} {...props}>{(context) => <><ConversationScrollBridge autoScroll={autoScroll} scrollToBottomKey={scrollToBottomKey} onReachTop={onReachTop} onViewportScroll={onViewportScroll} restoreScrollTop={restoreScrollTop} scrollStateKey={scrollStateKey} />{typeof children === "function" ? children(context) : children}<ConversationScrollButton aria-label={scrollButtonLabel} title={scrollButtonLabel} /></>}</StickToBottom>;
 }
 export function ConversationContent({ children, className, ...props }: ComponentProps<typeof StickToBottom.Content>) { return <StickToBottom.Content {...props} scrollClassName="ai-elements-conversation-viewport" className={cx("ai-elements-conversation-content", className)} data-slot="conversation-content">{children}</StickToBottom.Content>; }
 export function ConversationScrollButton({ className, children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) { const { isAtBottom, scrollToBottom } = useStickToBottomContext(); if (isAtBottom) return null; return <button {...props} type="button" className={cx("ai-elements-conversation-scroll-button", className)} aria-label={props["aria-label"] ?? "Scroll to latest"} data-slot="conversation-scroll-button" onClick={(event) => { props.onClick?.(event); if (!event.defaultPrevented) void scrollToBottom(); }}>{children ?? <ChevronDown size={16} strokeWidth={2.25} aria-hidden="true" />}</button>; }

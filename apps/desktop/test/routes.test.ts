@@ -109,7 +109,7 @@ test("desktop workflow and media entry points expose the configured model select
   const selector = /<ModelControls locale=\{locale\} model=\{model\} models=\{models\} reasoningEffort=\{reasoningEffort\} skillId=\{skillId\} showSkill=\{false\}/g;
   assert.ok((appSource.match(selector) ?? []).length >= 1);
   assert.match(appSource, /function DesktopWriterCloudWorkspace\([\s\S]*?const \{[^}]*model, models,[\s\S]*?<ModelControls locale=\{locale\} model=\{model\} models=\{models\}/);
-  assert.match(appSource, /<DesktopWorkflowWorkspace[\s\S]*?model=\{activeModel\} models=\{activeModels\}[\s\S]*?onModelChange=\{updateModel\}/);
+  assert.match(appSource, /<DesktopWorkflowWorkspace[\s\S]*?model=\{activeModel\} models=\{activeModels\}[\s\S]*?onModelChange=\{onModelChange\}/);
   assert.match(appSource, /<DesktopMediaWorkspace[\s\S]*?model=\{activeModel\} models=\{activeModels\}[\s\S]*?onModelChange=\{updateModel\}/);
   assert.match(appSource, /currentWorkflowDefinition\(\)[\s\S]*?const nodeProvider = typeof node\.config\.provider === "string"/);
   assert.match(appSource, /hostWorkflowDefinition = bindWorkflowProviderDefaults\(hostDefinitionInput, launchConfig\)/);
@@ -538,7 +538,11 @@ test("desktop writer and media surfaces retain the online control contract", () 
   assert.match(appSource, /writer-platform-preview-social-account/);
   assert.match(appSource, /\["weibo", "x", "linkedin", "facebook", "reddit"\]/);
   assert.match(appSource, /<MessageResponse content=\{content\}/);
-  assert.match(appSource, /<WriterPlatformPreview platform=\{platform\} locale=\{locale\} content=\{assistantText\}/);
+  assert.match(appSource, /<WriterPlatformPreview platform=\{platform\} locale=\{locale\} content=\{previewText\} images=\{previewImages\}/);
+  assert.match(appSource, /const \[previewMessage, setPreviewMessage\] = useState<DesktopUIMessage \| null>\(null\)/);
+  assert.match(appSource, /onClick=\{\(\) => openPreview\(message\)\}/);
+  assert.match(appSource, /writerImageArtifactsForArticle\(renderedUIMessages, selectedPreviewMessage\.id\)/);
+  assert.match(appSource, /data-writerAsset/);
   assert.doesNotMatch(appSource, /writer-message-actions/);
   assert.match(appSource, /renderAssistantActions=\{\(message\)/);
   assert.match(appSource, /className="writer-cloud-message-surface"/);
@@ -549,7 +553,7 @@ test("desktop writer and media surfaces retain the online control contract", () 
   assert.match(appSource, /<FileText size=\{14\}/);
   assert.doesNotMatch(appSource, /message\.id !== latestAssistantId/);
   assert.match(appSource, /const text = previewEditing \? previewDraft : desktopUIMessageText\(message\)/);
-  assert.match(appSource, /<div ref=\{messageSurfaceRef\}[^>]*><WorkbenchMessageSurface[^>]*messages=\{renderedUIMessages\}[^>]*onRetry=/);
+  assert.match(appSource, /<div ref=\{messageSurfaceRef\}[\s\S]*?<WorkbenchMessageSurface[\s\S]*?messages=\{renderedUIMessages\}[\s\S]*?onRetry=/);
   assert.match(appSource, /data-cloud-surface="composer"/);
   assert.match(appSource, /onGenerateImages/);
   assert.match(appSource, /conversationMessages/);
@@ -571,7 +575,7 @@ test("desktop writer and media surfaces retain the online control contract", () 
   assert.match(appSource, /data-testid="writer-preview-copy-markdown"/);
   assert.match(appSource, /data-testid="writer-preview-export"/);
   assert.match(appSource, /写作 Markdown 已导出/);
-  assert.match(appSource, /previewEditing \? previewDraft : assistantText/);
+  assert.match(appSource, /previewEditing \? previewDraft : previewText/);
   assert.match(appSource, /ClipboardItem/);
   assert.match(appSource, /document\.execCommand\("copy"\)/);
   assert.match(appSource, /knowledge\.search/);
@@ -702,8 +706,9 @@ test("writer and video title bars do not duplicate composer or form controls", (
   assert.doesNotMatch(appSource, /!isImage \? <div className="workflow-header-actions">/);
   assert.match(appSource, /activeFeature\.fields\.filter\(\(field\) => field\.id !== "prompt" && field\.id !== "model"\)\.map\(\(field\) =>/);
   assert.match(appSource, /<ModelControls locale=\{locale\} model=\{model\}/);
-  assert.match(appSource, /<WorkbenchPlan title=\{locale === "zh" \? "执行计划"/);
-  assert.match(appSource, /<WorkbenchTask title=\{locale === "zh" \? "工作流任务"/);
+  assert.doesNotMatch(appSource, /workflow-process-evidence/);
+  assert.doesNotMatch(appSource, /<WorkbenchPlan title=\{locale === "zh" \? "执行计划"/);
+  assert.doesNotMatch(appSource, /<WorkbenchTask title=\{locale === "zh" \? "工作流任务"/);
 });
 
 test("desktop capabilities route mounts the shared online capability center", () => {
@@ -877,6 +882,23 @@ test("ordinary chat, writer and PPT routes stay on the OpenCode session path", (
   assert.doesNotMatch(appSource, /ai-sdk-native/);
 });
 
+test("desktop restores a routed OpenCode session before mounting native questions", () => {
+  const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+  const tauriSource = readFileSync(resolve(process.cwd(), "src/tauri.ts"), "utf8");
+  assert.match(appSource, /questionConversationForRoute\(activePath, conversations\)/u);
+  assert.match(appSource, /restoreQuestionSession/u);
+  assert.match(appSource, /type: "session\.attach"/u);
+  assert.match(appSource, /attempt < 3/u);
+  assert.match(appSource, /availableQuestionSessionIds/u);
+  assert.match(appSource, /questionSessionIdForRoute\(activePath, conversations, availableQuestionSessionIds\)/u);
+  assert.match(appSource, /for \(const waiter of \[\.\.\.responseWaiters\.current\.values\(\)\]\) waiter\(hostExitResponse\)/u);
+  assert.match(appSource, /questionSessionRestoreInFlightRef\.current\.clear\(\)/u);
+  assert.match(appSource, /if \(hostResponse\.ok === false\) \{/u);
+  assert.doesNotMatch(appSource, /isHomeRoute \? activeConversationId/u);
+  assert.match(tauriSource, /currentHostGeneration/u);
+  assert.match(tauriSource, /generation < currentHostGeneration/u);
+});
+
 test("desktop conversation history and retry flow consume the injected WorkbenchClient", () => {
   const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
   assert.match(appSource, /const workbenchClient = useMemo\(\(\) => createDesktopWorkbenchClient/);
@@ -992,7 +1014,7 @@ test("OpenCode serve errors terminate the asynchronous turn barrier", () => {
   assert.match(serveSource, /if \(active\.failed\) throw new Error\(active\.failed\)/);
   assert.match(serveSource, /normalizeOpenCodeServeEvent/);
   assert.match(serveSource, /normalized\.terminalError/);
-  assert.match(serveSource, /openCodeServeSessionPath\(sessionId, workspacePath, "prompt_async"\)/);
+  assert.match(serveSource, /openCodeServeSessionPath\(sessionId, workspacePath, useCommand \? "command" : "prompt_async"\)/);
   assert.match(serveSource, /openCodeServeSessionStatusPath/);
   assert.match(serveSource, /pollSessionStatus/);
 });

@@ -203,15 +203,36 @@ test("desktop ChatTransport lets the config/session adapter materialize a draft 
   assert.deepEqual(calls, ["create_run", "append_message", "host_start", "host_send"]);
 });
 
-test("desktop ChatTransport keeps the user prompt intact and sends Skill guidance as system context", async () => {
+test("desktop ChatTransport restores bounded history before prompting a recreated OpenCode session", async () => {
   let sentPrompt = "";
-  let sentSystemPrompt = "";
+  const bridge = {
+    async invoke<T>(command: string, args?: Record<string, unknown>) {
+      if (command === "host_send") sentPrompt = String(((args?.message as { payload?: { prompt?: unknown } }).payload?.prompt) ?? "");
+      return undefined as T;
+    },
+    async listen() { return () => undefined; },
+  };
+  const workbenchClient = { runs: { subscribe: () => () => undefined } } as never;
+  const transport = createDesktopChatTransport(bridge, workbenchClient, {
+    resolveSessionId: async () => "lost-session",
+    resolveProvider: () => ({ id: "deepseek", model: "deepseek-v4-flash" }),
+    ensureSession: async () => ({ sessionId: "replacement-session", recoveryContext: "Previous conversation:\nUser: 旧问题\nAssistant: 旧回答" }),
+    resolvePrompt: (_message, prompt) => `skill:${prompt}`,
+  });
+  const message = createDesktopUIMessage({ id: "recovered-user-1", role: "user", conversationId: "recovered-chat-1", content: "继续" });
+  await transport.sendMessages({ trigger: "submit-message", chatId: "recovered-chat-1", messageId: undefined, messages: [message], abortSignal: undefined });
+  assert.equal(sentPrompt, "Previous conversation:\nUser: 旧问题\nAssistant: 旧回答\n\nCurrent request: skill:继续");
+});
+
+test("desktop ChatTransport keeps the user prompt intact without sending legacy Skill system context", async () => {
+  let sentPrompt = "";
+  let sentSystemPrompt: unknown;
   const bridge = {
     async invoke<T>(command: string, args?: Record<string, unknown>) {
       if (command === "host_send") {
         const payload = (args?.message as { payload?: { prompt?: unknown; systemPrompt?: unknown } }).payload;
         sentPrompt = String(payload?.prompt ?? "");
-        sentSystemPrompt = String(payload?.systemPrompt ?? "");
+        sentSystemPrompt = payload?.systemPrompt;
       }
       return undefined as T;
     },
@@ -227,7 +248,7 @@ test("desktop ChatTransport keeps the user prompt intact and sends Skill guidanc
   const message = createDesktopUIMessage({ id: "skill-user-1", role: "user", conversationId: "skill-c1", content: "写一段文案" });
   await transport.sendMessages({ trigger: "submit-message", chatId: "skill-c1", messageId: undefined, messages: [message], abortSignal: undefined });
   assert.equal(sentPrompt, "写一段文案");
-  assert.equal(sentSystemPrompt, "Use the native skill tool to load writer-orchestrator.");
+  assert.equal(sentSystemPrompt, undefined);
 });
 
 test("desktop WorkbenchClient streams text, tool, usage, cancellation and terminal events", async () => {

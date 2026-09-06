@@ -44,11 +44,18 @@ export type DesktopMediaData = {
 
 export type DesktopArtifactData = WorkbenchArtifact;
 
+/** Associates generated media with the Writer article it belongs to. */
+export type DesktopWriterAssetData = {
+  readonly articleMessageId: string;
+  readonly kind: "image";
+};
+
 export type DesktopDataParts = {
   task: DesktopTaskData;
   workflow: DesktopWorkflowData;
   media: DesktopMediaData;
   artifact: DesktopArtifactData;
+  writerAsset: DesktopWriterAssetData;
   status: { readonly status: DesktopRunStatus; readonly message?: string };
   attachment: { readonly attachmentId: string; readonly name: string; readonly mediaType: string; readonly uri?: string; readonly status: "queued" | "uploading" | "ready" | "failed" };
   warning: { readonly code: string; readonly message: string };

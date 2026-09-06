@@ -1,4 +1,5 @@
 import { applyDesktopUIMessageRunEventToParts, createDesktopUIMessage, desktopUIMessageText, type DesktopUIMessagePart, type WorkbenchRunEvent } from "@coworkany/workbench-client";
+import { isWorkbenchQuestionToolEvent } from "@coworkany/workbench-client";
 
 type PersistedRun = {
   readonly id: string;
@@ -34,6 +35,7 @@ function persistedEventToWorkbenchEvent(event: PersistedRunEvent): WorkbenchRunE
     return undefined;
   }
   const base = { sequence: event.sequence, createdAt: event.created_at };
+  if (isWorkbenchQuestionToolEvent({ ...payload, event: event.event_type })) return undefined;
   const delta = typeof payload.delta === "string" ? payload.delta : "";
   if (event.event_type === "text_delta" && delta) return { type: "text", delta, ...base };
   if (event.event_type === "reasoning_delta" && delta) return { type: "reasoning", delta, ...base };

@@ -1,4 +1,5 @@
 import type { DesktopUIMessage } from "./uimessage";
+import type { WorkbenchQuestionClient, WorkbenchQuestionEvent } from "./questions";
 
 export interface NavigationAdapter {
   readonly go: (href: string) => void;
@@ -137,6 +138,7 @@ export interface WorkbenchWorkflowInput {
 export type WorkbenchRunEventMetadata = { readonly sequence?: number; readonly createdAt?: string };
 
 export type WorkbenchRunEvent = WorkbenchRunEventMetadata & (
+  | WorkbenchQuestionEvent
   | { readonly type: "text"; readonly delta: string }
   | { readonly type: "reasoning"; readonly delta: string }
   | { readonly type: "plan"; readonly plan: { readonly id: string; readonly title?: string; readonly steps: readonly WorkbenchPlanStep[]; readonly status: WorkbenchPartStatus } }
@@ -203,6 +205,7 @@ export interface WorkbenchKnowledgeIndex {
 }
 
 export interface WorkbenchClient {
+  readonly questions?: WorkbenchQuestionClient;
   readonly navigation: NavigationAdapter;
   readonly files: FileActionsAdapter;
   readonly artifacts: ArtifactActionsAdapter;
@@ -235,4 +238,5 @@ export interface WorkbenchClient {
 }
 
 export * from "./message-parts";
+export * from "./questions";
 export * from "./uimessage";

@@ -24,13 +24,45 @@ $node = (Get-Command node -ErrorAction SilentlyContinue).Source
 $nodeTarget = Join-Path $destination "node/node.exe"
 $nodeStaged = Copy-IfFile $node $nodeTarget
 
+function Get-OpenCodeVersion([string]$path) {
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
+  $previousModelsFetch = $env:OPENCODE_DISABLE_MODELS_FETCH
+  $previousAutoUpdate = $env:OPENCODE_DISABLE_AUTOUPDATE
+  try {
+    $env:OPENCODE_DISABLE_MODELS_FETCH = "true"
+    $env:OPENCODE_DISABLE_AUTOUPDATE = "true"
+    $output = & $path --version 2>$null
+    if ($LASTEXITCODE -eq 0) { return (($output -join "`n").Trim()) }
+  } catch { return $null }
+  finally {
+    $env:OPENCODE_DISABLE_MODELS_FETCH = $previousModelsFetch
+    $env:OPENCODE_DISABLE_AUTOUPDATE = $previousAutoUpdate
+  }
+  return $null
+}
+
+function Stage-OpenCode([string[]]$candidates, [string]$target) {
+  $foundExecutable = $false
+  foreach ($candidate in @($candidates) + @($target)) {
+    if ([string]::IsNullOrWhiteSpace($candidate) -or -not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
+    $foundExecutable = $true
+    if ((Get-OpenCodeVersion $candidate) -cne "1.18.27") { continue }
+    if ([IO.Path]::GetFullPath($candidate) -ne [IO.Path]::GetFullPath($target)) {
+      Copy-Item -LiteralPath $candidate -Destination $target -Force
+    }
+    return $true
+  }
+  # Do not leave an old executable available for packaging under a new manifest.
+  if ($foundExecutable) { throw "opencode_version_required:1.18.27" }
+  return $false
+}
+
 $opencodeCandidates = @()
 if ($node) { $opencodeCandidates += (Join-Path (Split-Path $node -Parent) "node_modules/opencode-ai/bin/opencode.exe") }
 $opencodeCandidates += (Join-Path $env:APPDATA "npm/node_modules/opencode-ai/bin/opencode.exe")
 $opencodeCandidates += (Join-Path $env:LOCALAPPDATA "npm/node_modules/opencode-ai/bin/opencode.exe")
-$opencode = $opencodeCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
 $opencodeTarget = Join-Path $destination "opencode/opencode.exe"
-$opencodeStaged = Copy-IfFile $opencode $opencodeTarget
+$opencodeStaged = Stage-OpenCode $opencodeCandidates $opencodeTarget
 $fontStaged = Copy-IfFile (Join-Path $env:WINDIR "Fonts/msyh.ttc") (Join-Path $destination "fonts/msyh.ttc")
 
 @{
@@ -42,8 +74,8 @@ $fontStaged = Copy-IfFile (Join-Path $env:WINDIR "Fonts/msyh.ttc") (Join-Path $d
   integrity = @{ hashAlgorithm = "sha256"; signatureAlgorithm = "ed25519"; signature = $null; required = $false; publicKey = "-----BEGIN PUBLIC KEY-----`nMCowBQYDK2VwAyEAHgKs3hyNJCHJsLN9sle73MWSPew6fOweDLoO1E935JA=`n-----END PUBLIC KEY-----`n" }
   stagedAt = [DateTime]::UtcNow.ToString("o")
   node = @{ staged = $nodeStaged; path = if ($nodeStaged) { "runtime/node/node.exe" } else { $null } }
-  opencode = @{ staged = $opencodeStaged; path = if ($opencodeStaged) { "runtime/opencode/opencode.exe" } else { $null } }
-  python = @{ staged = $false; reason = "Python embedded runtime is installed by the mirror-chain installer when PPT probe requires it." }
+  opencode = @{ staged = $opencodeStaged; version = "1.18.27"; path = if ($opencodeStaged) { "runtime/opencode/opencode.exe" } else { $null } }
+  python = @{ staged = $false; distribution = "cpython-nuget"; version = "3.13.6"; path = "runtime/python/python.exe"; reason = "Official CPython NuGet tools are installed locally by the runtime installer." }
   fonts = @{ staged = $fontStaged; path = if ($fontStaged) { "runtime/fonts/msyh.ttc" } else { $null } }
   lancedb = @{ staged = Test-Path -LiteralPath (Join-Path $destination "lancedb/node_modules/@lancedb/lancedb/dist/index.js") -PathType Leaf; path = "runtime/lancedb/node_modules/@lancedb/lancedb/dist/index.js"; native = "runtime/lancedb/node_modules/@lancedb/lancedb-win32-x64-msvc/lancedb.win32-x64-msvc.node" }
   embedding = @{ staged = $true; path = "runtime/embedding/local-hash-384-v1.json"; model = "local-hash-384-v1"; dimension = 384; network = $false }
@@ -62,30 +94,16 @@ $fontStaged = Copy-IfFile (Join-Path $env:WINDIR "Fonts/msyh.ttc") (Join-Path $d
       }
     },
     @{
-      id = "python-embed-amd64"
+      id = "python-nuget-amd64"
       kind = "archive"
-      relativePath = "runtime/python/python-3.13.6-embed-amd64.zip"
+      relativePath = "runtime/python/python.3.13.6.nupkg"
       extractPath = "runtime/python"
-      bytes = 10916608
-      sha256 = "d6ab71980c0be5809f2a0edd991e28d999e7ac971dc3b6da676dc2f80eac41dd"
+      # Official x64 package: https://www.nuget.org/packages/python/3.13.6
+      # CPython documents the installation in tools/: https://docs.python.org/3.13/using/windows.html#the-nuget-org-packages
+      bytes = 14170995
+      sha256 = "cc1d4850a31f18a5c5d52007c248a99f1c360c96886f6fd2e324a55dc1d1967b"
       urls = @{
-        aliyun = "https://mirrors.aliyun.com/python-release/windows/python-3.13.6-embed-amd64.zip"
-        tencent = "https://mirrors.cloud.tencent.com/python-release/windows/python-3.13.6-embed-amd64.zip"
-        tsinghua = "https://mirrors.tuna.tsinghua.edu.cn/python-releases/windows/python-3.13.6-embed-amd64.zip"
-        official = "https://www.python.org/ftp/python/3.13.6/python-3.13.6-embed-amd64.zip"
-      }
-    },
-    @{
-      id = "python-get-pip"
-      kind = "file"
-      relativePath = "runtime/python/get-pip.py"
-      bytes = 2230488
-      sha256 = "fb24e693bab954209a063d90953621412ccad4a500905a726286e038f508ddf6"
-      urls = @{
-        aliyun = "https://mirrors.aliyun.com/pypi/get-pip.py"
-        tencent = "https://mirrors.cloud.tencent.com/pypi/get-pip.py"
-        tsinghua = "https://pypi.tuna.tsinghua.edu.cn/get-pip.py"
-        official = "https://bootstrap.pypa.io/get-pip.py"
+        official = "https://api.nuget.org/v3-flatcontainer/python/3.13.6/python.3.13.6.nupkg"
       }
     }
   )

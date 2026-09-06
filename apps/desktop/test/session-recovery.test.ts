@@ -20,3 +20,12 @@ test("session recovery snapshot keeps the latest bounded transcript", () => {
   assert.match(snapshot, /turn-19/);
   assert.equal((snapshot.match(/(?:User|Assistant):/g) ?? []).length, 12);
 });
+
+test("session recovery snapshot truncates an oversized latest turn instead of dropping all context", () => {
+  const snapshot = createSessionRecoverySnapshot([
+    { role: "user", content: "older request" },
+    { role: "assistant", content: `latest-${"x".repeat(20_000)}` },
+  ]);
+  assert.match(snapshot, /Assistant: latest-/u);
+  assert.ok(snapshot.length < 13_000);
+});

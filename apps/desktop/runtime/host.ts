@@ -6,7 +6,6 @@ import { basename, dirname, isAbsolute, join, relative as relativePath, resolve,
 import { buildOpenCodeCommand, createOpenCodeEventParser, type OpenCodeRuntimeEvent } from "@coworkany/runtime-contracts/opencode";
 import { createBailianImageAdapter, createBailianVideoAdapter, createHttpMediaAdapter, createMiniMaxAudioAdapter, createMiniMaxVideoAdapter, createOpenAICompatibleImageAdapter, createRunningHubAdapter, createRunningHubWorkflowAdapter, downloadMediaOutputs, IMAGE_GENERATION_REQUEST_TIMEOUT_MS, listMiniMaxVoices, runMediaJob, uploadRunningHubMediaAsset, type MediaProviderId, type MediaProviderAdapter } from "@coworkany/media-runtime";
 import { executeWorkflow, migrateWorkflowDefinitionToCurrent, type WorkflowArtifactPort, type WorkflowCapabilityPort, type WorkflowDefinitionEnvelope } from "@coworkany/workflow-core";
-import { detectPresentationArtifacts } from "./presentation-artifacts";
 import { OpenCodeServeClient } from "./opencode-serve";
 import { createRpcReader, writeRpcResponse, writeRpcServiceRequest } from "./rpc";
 import { createDesktopWorkflowPorts } from "./workflow-ports";
@@ -19,7 +18,7 @@ import { migrateLegacyRunningHubWorkflows } from "../src/runninghub-workflow";
 import * as chatAttachmentExtractor from "../../../lib/chat-attachments/extract.ts";
 import { promptRequestsArtifact } from "../src/artifact-intent";
 
-type HostCommand = { readonly version: 1; readonly requestId: string; readonly type: "chat.run" | "workflow.run" | "run.cancel" | "run.emergency_stop" | "run.retry" | "media.resume" | "media.voices" | "health" | "session.create" | "session.prompt" | "permission.respond" | "attachment.extract" | "knowledge.index" | "knowledge.search"; readonly runId?: string; readonly sessionId?: string; readonly payload?: Record<string, unknown> };
+type HostCommand = { readonly version: 1; readonly requestId: string; readonly type: "chat.run" | "workflow.run" | "run.cancel" | "run.emergency_stop" | "run.retry" | "media.resume" | "media.voices" | "health" | "session.create" | "session.attach" | "session.prompt" | "permission.respond" | "question.list" | "question.reply" | "question.reject" | "attachment.extract" | "knowledge.index" | "knowledge.search"; readonly runId?: string; readonly sessionId?: string; readonly payload?: Record<string, unknown> };
 type ProviderConfig = { readonly id?: string; readonly source?: string; readonly model?: string; readonly baseUrl?: string; readonly apiKey?: string; readonly reasoningEffort?: string; readonly timeout?: number | false; readonly chunkTimeout?: number | false; readonly endpoint?: string; readonly queryEndpoint?: string; readonly workflowId?: string; readonly digitalHumanWorkflowId?: string; readonly videoEnhanceWorkflowId?: string; readonly workflows?: readonly RunningHubWorkflowRegistration[] };
 const active = new Map<string, ReturnType<typeof spawn>>();
 const workflowControllers = new Map<string, AbortController>();
@@ -98,7 +97,7 @@ const serveClients = new Map<string, OpenCodeServeClient>();
 
 function runtimeEnvironmentSignature(environment: Record<string, string | undefined>) {
   return JSON.stringify(Object.entries(environment)
-    .filter(([key]) => key === "OPENCODE_CONFIG_CONTENT" || key === "OPENCODE_CONFIG_DIR" || key === "HOME" || key === "USERPROFILE" || key.startsWith("XDG_") || key.endsWith("_API_KEY"))
+    .filter(([key]) => key === "COWORKANY_SKILL_CATALOG_REVISION" || key === "OPENCODE_CONFIG_CONTENT" || key === "OPENCODE_CONFIG_DIR" || key === "HOME" || key === "USERPROFILE" || key.startsWith("XDG_") || key.endsWith("_API_KEY"))
     .sort(([left], [right]) => left.localeCompare(right)));
 }
 
@@ -202,7 +201,7 @@ async function preparedAgentName(configDirectory: string, agentId?: string) {
   }
 }
 
-const FILE_ARTIFACT_TOOLS = new Set(["write", "edit", "patch", "apply_patch"]);
+const FILE_ARTIFACT_TOOLS = new Set(["write", "edit", "patch", "apply_patch", "bash"]);
 
 function workspaceRelativeFilePath(workspacePath: string, candidate: string) {
   const root = resolve(workspacePath);
@@ -235,8 +234,7 @@ function fileArtifactMimeType(relative: string) {
                             : "application/octet-stream";
 }
 
-async function emitFinalFileArtifacts(command: HostCommand, runId: string, workspacePath: string, events: readonly OpenCodeRuntimeEvent[], allowArtifacts: boolean, startedAt: number) {
-  if (!allowArtifacts) return;
+function fileArtifactPaths(workspacePath: string, events: readonly OpenCodeRuntimeEvent[]) {
   const candidates = new Set<string>();
   for (const event of events) {
     if (event.event !== "tool_event" || event.phase !== "completed" || !FILE_ARTIFACT_TOOLS.has(event.tool)) continue;
@@ -245,27 +243,27 @@ async function emitFinalFileArtifacts(command: HostCommand, runId: string, works
       if (relative) candidates.add(relative);
     }
   }
-  // Presentation skills commonly create the final deck through bash/python
-  // rather than a typed write tool. Discover files created during this turn so
-  // the final PPTX is still attached to the assistant message.
-  for (const artifact of await detectPresentationArtifacts(workspacePath, startedAt)) {
-    const relative = workspaceRelativeFilePath(workspacePath, artifact.relativePath);
-    if (relative) candidates.add(relative);
-  }
+  return [...candidates];
+}
+
+function localFileArtifacts(workspacePath: string, events: readonly OpenCodeRuntimeEvent[]) {
+  return fileArtifactPaths(workspacePath, events).flatMap((relative) => {
+    try {
+      const metadata = statSync(resolve(workspacePath, relative));
+      return metadata.isFile() ? [{ relativePath: relative, title: basename(relative), mimeType: fileArtifactMimeType(relative), bytes: metadata.size }] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+async function emitFinalFileArtifacts(command: HostCommand, runId: string, workspacePath: string, events: readonly OpenCodeRuntimeEvent[], allowArtifacts: boolean) {
+  if (!allowArtifacts) return;
   // Emit only after the model turn has completed. Repeated writes are
   // collapsed to one card per path, and metadata describes the final
   // on-disk version instead of an intermediate tool step.
-  for (const relative of candidates) {
-    const target = resolve(workspacePath, relative);
-    let bytes = 0;
-    try {
-      const metadata = statSync(target);
-      if (!metadata.isFile()) continue;
-      bytes = metadata.size;
-    } catch {
-      continue;
-    }
-    const mimeType = fileArtifactMimeType(relative);
+  for (const artifact of localFileArtifacts(workspacePath, events)) {
+    const { relativePath: relative, mimeType, bytes } = artifact;
     let registration: Record<string, unknown> | undefined;
     try {
       registration = await requestService("workflow.artifact.register", { runId, relativePath: relative, mimeType });
@@ -297,7 +295,7 @@ async function runOpenCode(command: HostCommand, session?: { readonly workspaceP
   if (!prompt.trim()) return fail(command, "invalid_prompt", "prompt is required");
   const runId = command.runId ?? randomUUID();
   const modelHint = typeof command.payload?.model === "string" ? command.payload.model : undefined;
-  const requestedSystemPrompt = typeof command.payload?.systemPrompt === "string" ? command.payload.systemPrompt : undefined;
+  const skillId = typeof command.payload?.skillId === "string" ? command.payload.skillId : undefined;
   const agentId = selectedAgentId(command.payload?.agentId);
   const userPromptForArtifactIntent = prompt.replace(/\n\n(?:请使用本地 |Use the local )[\s\S]*$/u, "");
   const allowArtifacts = typeof command.payload?.allowArtifacts === "boolean" ? command.payload.allowArtifacts : session?.allowArtifacts ?? promptRequestsArtifact(userPromptForArtifactIntent);
@@ -306,21 +304,16 @@ async function runOpenCode(command: HostCommand, session?: { readonly workspaceP
   if (!(activeProvider?.model?.trim() || modelHint?.trim())) return fail(command, "text_provider_model_required", "Configure a text Provider and model before sending.");
   const executable = typeof command.payload?.executable === "string" ? command.payload.executable : defaultOpenCodeExecutable();
   const workspacePath = session?.workspacePath ?? (typeof command.payload?.workspacePath === "string" ? command.payload.workspacePath : process.cwd());
-  // Keep the Skill-provided system instruction intact. Workspace preparation
-  // and artifact finalization are enforced by the host/runtime boundary; they
-  // must not be expressed as extra task instructions that can override Skill
-  // behavior (for example, a brief-first presentation Skill flow).
-  const systemPrompt = requestedSystemPrompt?.trim() || undefined;
-  const configDirectory = await prepareSkillWorkspace(workspacePath, agentId);
+  const configDirectory = await prepareSkillWorkspace(workspacePath);
   const agentName = await preparedAgentName(configDirectory, agentId);
   const environment = await createOpenCodeEnvironment(configDirectory, provider, modelHint, agentId);
   const persistentSession = session?.sessionId ? session as { readonly workspacePath: string; readonly sessionId: string; readonly provider?: ProviderConfig; readonly agentName?: string } : undefined;
   if (persistentSession?.sessionId) {
     const client = session?.client ?? serveClientFor(workspacePath, environment);
+    if (!sessions.has(persistentSession.sessionId)) sessions.set(persistentSession.sessionId, { conversationId: "", workspacePath, sessionId: persistentSession.sessionId, provider, agentName, allowArtifacts, client });
     if (options.respond !== false) respond(command, { runId });
     const events: OpenCodeRuntimeEvent[] = [];
-    const turnStartedAt = Date.now();
-    await client.prompt(persistentSession.sessionId, workspacePath, runId, prompt, provider ?? persistentSession.provider ?? {}, (event) => { const enriched = enrichUsageEvent(event, provider ?? persistentSession.provider, modelHint); events.push(enriched); emit(command, enriched); }, options.signal, persistentSession.agentName ?? agentName, async () => emitFinalFileArtifacts(command, runId, workspacePath, events, allowArtifacts, turnStartedAt), systemPrompt);
+    await client.prompt(persistentSession.sessionId, workspacePath, runId, prompt, provider ?? persistentSession.provider ?? {}, (event) => { const enriched = enrichUsageEvent(event, provider ?? persistentSession.provider, modelHint); events.push(enriched); emit(command, enriched); }, options.signal, persistentSession.agentName ?? agentName, async () => emitFinalFileArtifacts(command, runId, workspacePath, events, allowArtifacts), skillId);
     return events;
   }
   const child = spawn(executable, buildOpenCodeCommand({ modelHint }).args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true, cwd: workspacePath, env: environment });
@@ -494,7 +487,9 @@ function withPrivatePython(environment: NodeJS.ProcessEnv) {
   const executable = environment.COWORKANY_PYTHON_PATH;
   if (!executable) return environment;
   const separator = process.platform === "win32" ? ";" : ":";
-  return { ...environment, PATH: `${dirname(executable)}${separator}${environment.PATH ?? process.env.PATH ?? ""}` };
+  const pathKey = Object.keys(environment).find(key => key.toUpperCase() === "PATH") ?? "PATH";
+  const entries = Object.entries(environment).filter(([key]) => key.toUpperCase() !== "PATH");
+  return { ...Object.fromEntries(entries), PATH: `${dirname(executable)}${separator}${join(dirname(executable), "Scripts")}${separator}${environment[pathKey] ?? ""}` };
 }
 
 function selectedModel(provider: ProviderConfig | undefined, modelHint: string | undefined) {
@@ -567,13 +562,9 @@ async function writeOpenCodeConfig(configDirectory: string, provider: ProviderCo
       "*": "allow",
       bash: "ask", edit: "ask", task: "ask", external_directory: "ask",
       websearch: "ask", webfetch: "ask", doom_loop: "ask",
-      question: "deny",
+      question: "allow",
     } : {
-      // Keep a wildcard allow in addition to the known tool names so a newer
-      // OpenCode tool cannot silently fall back to an approval prompt. The
-      // interactive question tool remains denied because the desktop UI does
-      // not expose a general-purpose question dialog for agent turns.
-      "*": "allow", question: "deny",
+      "*": "allow", question: "allow",
     },
     provider: {
       [selected.providerId]: {
@@ -623,69 +614,86 @@ async function createOpenCodeEnvironment(configDirectory: string, provider: Prov
     OPENCODE_CONFIG_DIR: configDirectory,
     OPENCODE_CONFIG_CONTENT: configContent,
     COWORKANY_DESKTOP_LOCAL: "1",
+    COWORKANY_SKILL_CATALOG_REVISION: createHash("sha256").update(stagedSkillSourceKey).digest("hex"),
     OPENCODE_DISABLE_PROJECT_CONFIG: "1",
     OPENCODE_DISABLE_EXTERNAL_SKILLS: "1",
     OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: "1",
     OPENCODE_DISABLE_DEFAULT_PLUGINS: "1",
+    OPENCODE_CLIENT: "desktop",
     ...(agentId ? { COWORKANY_OPENCODE_AGENT_ID: agentId } : {}),
     ...providerApiKeyEnvironment(provider, modelHint),
   });
 }
 
-async function prepareSkillWorkspace(workspacePath: string, agentId?: string) {
+async function prepareSkillWorkspace(workspacePath: string) {
   const previous = skillWorkspaceQueue;
   let release!: () => void;
   skillWorkspaceQueue = new Promise<void>((resolve) => { release = resolve; });
   await previous;
   try {
-    return await stageSkillWorkspace(workspacePath, agentId);
+    return await stageSkillWorkspace(workspacePath);
   } finally {
     release();
   }
 }
 
-async function stageSkillWorkspace(workspacePath: string, agentId?: string) {
+async function stageSkillWorkspace(workspacePath: string) {
   await mkdir(workspacePath, { recursive: true });
   const source = process.env.COWORKANY_SKILLS_DIR;
   const agentsSource = process.env.COWORKANY_AGENTS_DIR;
   // Keep the OpenCode catalog outside the project.  A skill bundle contains
   // many supporting assets (notably SVGs); placing it under the workspace
   // makes OpenCode's project initialization scan and snapshot every asset on
-  // every serve start, which serializes otherwise independent long-running
-  // tasks.  The config is still refreshed at each session boundary, but it no
-  // longer becomes project content or an artifact candidate.
+  // every serve start. Pin this deployment for the host lifetime: upgrading
+  // on a session boundary can replace files underneath another active task.
   const runtimeConfigRoot = process.env.COWORKANY_OPENCODE_CONFIG_DIR
     ?? join(process.env.LOCALAPPDATA ?? process.env.TEMP ?? process.cwd(), "CoworkAny", "opencode-config");
   const configDirectory = join(runtimeConfigRoot, "config");
-  const sourceMarker = async (root: string | undefined, nestedFile: string) => {
+  if (stagedSkillSourceKey) return configDirectory;
+  const sourceMarker = async (root: string | undefined) => {
     if (!root) return "";
-    try {
-      const entries = await readdir(root, { withFileTypes: true });
-      return [root, ...entries.map((entry) => {
-        const candidate = entry.isDirectory() ? join(root, entry.name, nestedFile) : nestedFile === "SKILL.md" ? "" : join(root, entry.name);
-        if (!candidate) return "";
-        try { const metadata = statSync(candidate); return `${candidate}:${metadata.mtimeMs}:${metadata.size}`; } catch { return `${candidate}:missing`; }
-      }).filter(Boolean)].join("|");
-    } catch { return `${root}:missing`; }
+    const hash = createHash("sha256");
+    const visit = async (directory: string): Promise<void> => {
+      const entries = (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name, "en"));
+      for (const entry of entries) {
+        if (entry.isSymbolicLink()) throw new Error("opencode_catalog_symlink");
+        const path = join(directory, entry.name);
+        hash.update(relativePath(root, path)).update("\0");
+        if (entry.isDirectory()) await visit(path);
+        else hash.update(createHash("sha256").update(Uint8Array.from(await readFile(path))).digest("hex"));
+      }
+    };
+    await visit(root);
+    return hash.digest("hex");
   };
-  const sourceKey = `${await sourceMarker(source, "SKILL.md")}\u0000${await sourceMarker(agentsSource, "")}`;
-  if (sourceKey === stagedSkillSourceKey && (!source || existsSync(join(configDirectory, "skills"))) && (!agentsSource || existsSync(join(configDirectory, "agents")))) return configDirectory;
-  if (source) {
-    const target = join(configDirectory, "skills");
-    // Refresh the staged catalog on every session boundary. `force: false`
-    // leaves an old SKILL.md in place forever, so edits in content/skills are
-    // invisible to the desktop runtime until users manually delete the
-    // workspace cache.
-    try { await mkdir(target, { recursive: true }); await cp(source, target, { recursive: true, force: true, errorOnExist: false }); } catch { /* missing optional bundled skills are surfaced by OpenCode */ }
+  const sourceKey = `${await sourceMarker(source)}:${await sourceMarker(agentsSource)}`;
+  const marker = join(configDirectory, ".catalog-deployment");
+  if (await readFile(marker, "utf8").catch(() => "") === sourceKey &&
+      (!source || existsSync(join(configDirectory, "skills"))) && (!agentsSource || existsSync(join(configDirectory, "agents")))) {
+    stagedSkillSourceKey = sourceKey;
+    return configDirectory;
   }
+  const deploy = async (from: string, name: "skills" | "agents") => {
+    await mkdir(configDirectory, { recursive: true });
+    const target = join(configDirectory, name);
+    const stage = join(configDirectory, `.${name}-${randomUUID()}`);
+    const backup = join(runtimeConfigRoot, "catalog-backups", `${name}-${randomUUID()}`);
+    await cp(from, stage, { recursive: true });
+    const previous = existsSync(target);
+    if (previous) { await mkdir(dirname(backup), { recursive: true }); await rename(target, backup); }
+    try { await rename(stage, target); }
+    catch (error) { if (previous) await rename(backup, target); throw error; }
+    // Keep the old deployment recoverable, including dependencies installed by
+    // the Skill. Never prune arbitrary runtime-created files on host restart.
+  };
+  if (source) await deploy(source, "skills");
   if (agentsSource) {
     const target = join(configDirectory, "agents");
     try {
-      await mkdir(target, { recursive: true });
       // OpenCode caches the Agent catalog when the serve process starts. Copy
       // every packaged Agent up front so switching sessions never requires a
       // process restart; normalize legacy colors before OpenCode parses them.
-      await cp(agentsSource, target, { recursive: true, force: true });
+      await deploy(agentsSource, "agents");
       for (const entry of await readdir(target, { withFileTypes: true })) {
         if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
         const targetPath = join(target, entry.name);
@@ -696,8 +704,12 @@ async function stageSkillWorkspace(workspacePath: string, agentId?: string) {
         ).replace(/^\s*(?:tools|services):[^\r\n]*\r?\n/imu, "");
         if (normalizedAgent !== agentSource) await writeFile(targetPath, normalizedAgent, "utf8");
       }
-    } catch { /* the selected bundled agent is surfaced by OpenCode */ }
+    } catch (error) { throw new Error("opencode_agent_catalog_unavailable", { cause: error }); }
   }
+  await mkdir(configDirectory, { recursive: true });
+  const markerStage = `${marker}.${randomUUID()}`;
+  await writeFile(markerStage, sourceKey, "utf8");
+  await rename(markerStage, marker);
   stagedSkillSourceKey = sourceKey;
   return configDirectory;
 }
@@ -708,10 +720,8 @@ async function runWorkflow(command: HostCommand) {
   const runId = command.runId ?? randomUUID(); const workspacePath = typeof command.payload?.workspacePath === "string" ? command.payload.workspacePath : process.cwd();
   respond(command, { runId });
   const normalizedDefinition = migrateWorkflowDefinitionToCurrent(definition as WorkflowDefinitionEnvelope);
-  const workflowStartedAt = Date.now();
   const controller = new AbortController(); workflowControllers.set(runId, controller);
   let result: Awaited<ReturnType<typeof executeWorkflow>>;
-  let artifactPort: WorkflowArtifactPort;
   const capability: WorkflowCapabilityPort = { execute: async ({ executorId, nodeKey, config, inputs }, signal) => {
       if (executorId === "text_input") return { text: typeof config.text === "string" ? config.text : "" };
       if (executorId === "upload") {
@@ -769,7 +779,7 @@ async function runWorkflow(command: HostCommand) {
         }
       }
       const prompt = [typeof config.prompt === "string" ? config.prompt : "", typeof config.script === "string" ? config.script : "", typeof config.text === "string" ? config.text : "", typeof inputs.text === "string" ? inputs.text : ""].filter(Boolean).join("\n\n");
-      const nodeCommand: HostCommand = { ...command, runId: `${runId}:${nodeKey}`, payload: { ...(command.payload ?? {}), prompt: executorId === "ppt_generate" ? `${prompt}\n\nUse the local ppt-master skill and write the editable PPTX into the project workspace.` : prompt } };
+      const nodeCommand: HostCommand = { ...command, runId: `${runId}:${nodeKey}`, payload: { ...(command.payload ?? {}), prompt, ...(executorId === "ppt_generate" ? { skillId: "ppt-master" } : {}) } };
       const workflowProvider = readProvider(command.payload?.provider);
       const workflowConfigDirectory = await prepareSkillWorkspace(workspacePath);
       const workflowEnvironment = await createOpenCodeEnvironment(workflowConfigDirectory, workflowProvider, workflowProvider?.model);
@@ -779,8 +789,7 @@ async function runWorkflow(command: HostCommand) {
       const runtimeError = (events ?? []).find((event) => event.event === "runtime_error");
       if (runtimeError?.event === "runtime_error") throw new Error(runtimeError.message);
       const text = (events ?? []).filter((event): event is Extract<OpenCodeRuntimeEvent, { event: "text_delta" }> => event.event === "text_delta").map((event) => event.delta).join("");
-      const artifacts = executorId === "ppt_generate" ? await detectPresentationArtifacts(workspacePath, workflowStartedAt) : [];
-      if (executorId === "ppt_generate" && !artifacts.some((artifact) => artifact.kind === "pptx")) throw new Error("ppt_artifact_missing");
+      const artifacts = localFileArtifacts(workspacePath, events ?? []);
       return { text, ...(artifacts.length ? { artifacts, ...(executorId === "ppt_generate" ? { ppt: artifacts } : {}) } : {}) };
     }, resume: async ({ executorId, nodeKey, config, inputs, providerTaskId }, signal) => {
       if (["image_generate", "video_generate", "digital_human", "music_generate", "voice_synthesis", "voice_clone", "audio_generate"].includes(executorId)) {
@@ -789,7 +798,7 @@ async function runWorkflow(command: HostCommand) {
       throw new Error(`workflow_recovery_unsupported:${executorId}`);
     } };
   const ports = createDesktopWorkflowPorts({ runId, emit: (event) => emit(command, event), requestService: (method, payload) => requestService(method, payload, controller.signal), capability });
-  artifactPort = ports.artifacts;
+  const artifactPort: WorkflowArtifactPort = ports.artifacts;
   const recoveryDefinitionHash = typeof command.payload?.recoveryDefinitionHash === "string" && command.payload.recoveryDefinitionHash.trim() ? command.payload.recoveryDefinitionHash.trim() : undefined;
   try { result = await executeWorkflow(normalizedDefinition, { runId, signal: controller.signal, recovering: readWorkflowRecovery(command.payload?.recovering), ...(recoveryDefinitionHash ? { recoveryDefinitionHash } : {}), ...(command.payload?.completed && typeof command.payload.completed === "object" ? { completed: command.payload.completed as Record<string, Record<string, unknown>> } : {}), ports }); } catch (error) {
     workflowControllers.delete(runId);
@@ -1120,7 +1129,7 @@ async function stopRun(command: HostCommand, emergency: boolean) {
   respond(command, { cancelled: stopped || served, emergency });
 }
 
-createRpcReader(process.stdin, (raw) => {
+const hostReader = createRpcReader(process.stdin, (raw) => {
   const rawRecord = raw && typeof raw === "object" ? raw as unknown as Record<string, unknown> : undefined;
   if (rawRecord?.type === "service_response") {
     resolveServiceResponse(rawRecord);
@@ -1139,7 +1148,7 @@ createRpcReader(process.stdin, (raw) => {
       try {
         const agentId = selectedAgentId(command.payload?.agentId);
         const allowArtifacts = command.payload?.allowArtifacts === true;
-        const configDirectory = await prepareSkillWorkspace(workspacePath, agentId);
+        const configDirectory = await prepareSkillWorkspace(workspacePath);
         const agentName = await preparedAgentName(configDirectory, agentId);
         const environment = await createOpenCodeEnvironment(configDirectory, provider, typeof command.payload?.model === "string" ? command.payload.model : provider?.model, agentId);
         const client = serveClientFor(workspacePath, environment);
@@ -1147,6 +1156,27 @@ createRpcReader(process.stdin, (raw) => {
         sessions.set(sessionId, { conversationId, workspacePath, sessionId, provider, agentName, allowArtifacts, client });
         respond(command, { conversationId, sessionId, workspacePath, transport: "opencode-serve", fullAccess: true, permissionMode: "full", allowArtifacts, recovered });
       } catch (error) { fail(command, "opencode_session_unavailable", error instanceof Error ? error.message : String(error)); }
+    })();
+  }
+  if (command.type === "session.attach") {
+    const conversationId = typeof command.payload?.conversationId === "string" ? command.payload.conversationId : "";
+    const workspacePath = typeof command.payload?.workspacePath === "string" ? command.payload.workspacePath : "";
+    const requestedSessionId = typeof command.payload?.sessionId === "string" ? command.payload.sessionId : "";
+    if (!conversationId || !workspacePath || !requestedSessionId) return fail(command, "invalid_session", "conversationId, workspacePath and sessionId are required");
+    const provider = readProvider(command.payload?.provider);
+    return void (async () => {
+      try {
+        const agentId = selectedAgentId(command.payload?.agentId);
+        const allowArtifacts = command.payload?.allowArtifacts === true;
+        const configDirectory = await prepareSkillWorkspace(workspacePath);
+        const agentName = await preparedAgentName(configDirectory, agentId);
+        const environment = await createOpenCodeEnvironment(configDirectory, provider, typeof command.payload?.model === "string" ? command.payload.model : provider?.model, agentId);
+        const client = serveClientFor(workspacePath, environment);
+        const attached = await client.attachSession(workspacePath, requestedSessionId, provider ?? {}, environment);
+        if (!attached) return respond(command, { conversationId, sessionId: requestedSessionId, attached: false });
+        sessions.set(requestedSessionId, { conversationId, workspacePath, sessionId: requestedSessionId, provider, agentName, allowArtifacts, client });
+        respond(command, { conversationId, sessionId: requestedSessionId, attached: true });
+      } catch (error) { fail(command, "opencode_session_attach_failed", error instanceof Error ? error.message : String(error)); }
     })();
   }
   if (command.type === "session.prompt") {
@@ -1166,6 +1196,20 @@ createRpcReader(process.stdin, (raw) => {
     return void runOpenCode({ ...command, runId }, session, { signal: controller.signal }).finally(() => {
       if (sessionRunControllers.get(runId) === controller) sessionRunControllers.delete(runId);
     });
+  }
+  if (command.type === "question.list" || command.type === "question.reply" || command.type === "question.reject") {
+    const sessionId = typeof command.payload?.sessionId === "string" ? command.payload.sessionId : command.sessionId ?? "";
+    const session = sessions.get(sessionId);
+    if (!session) return fail(command, "session_not_found", "OpenCode session is not available");
+    if (command.type === "question.list") return void session.client.listQuestions(sessionId, session.workspacePath)
+      .then(questions => respond(command, { questions }))
+      .catch(error => fail(command, "question_list_failed", error instanceof Error ? error.message : String(error)));
+    const requestId = typeof command.payload?.requestId === "string" ? command.payload.requestId : "";
+    const answers = command.payload?.answers;
+    if (!requestId || (command.type === "question.reply" && (!Array.isArray(answers) || !answers.every(answer => Array.isArray(answer) && answer.every(value => typeof value === "string"))))) return fail(command, "invalid_question_response", "requestId and valid answers are required");
+    return void session.client.replyQuestion(sessionId, requestId, command.type === "question.reject" ? undefined : answers as string[][], session.workspacePath)
+      .then(() => respond(command, { sessionId, requestId }))
+      .catch(error => fail(command, "question_response_failed", error instanceof Error ? error.message : String(error)));
   }
   if (command.type === "permission.respond") {
     const sessionId = typeof command.payload?.sessionId === "string" ? command.payload.sessionId : typeof command.sessionId === "string" ? command.sessionId : "";
@@ -1214,3 +1258,4 @@ createRpcReader(process.stdin, (raw) => {
   if (command.type === "run.cancel" || command.type === "run.emergency_stop") return void stopRun(command, command.type === "run.emergency_stop" || command.payload?.emergency === true);
   fail(command, "unknown_method", `Unsupported method: ${command.type}`);
 }, (error) => process.stderr.write(`[workflow-host] ${error.message}\n`));
+hostReader.once("close", () => { void shutdownHost(); });

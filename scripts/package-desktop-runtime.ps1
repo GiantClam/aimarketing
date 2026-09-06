@@ -8,12 +8,24 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$source = (Resolve-Path (Join-Path $root $SourceRoot)).Path
-$output = [IO.Path]::GetFullPath((Join-Path $root $OutputDir))
+$source = if ([IO.Path]::IsPathRooted($SourceRoot)) { (Resolve-Path -LiteralPath $SourceRoot).Path } else { (Resolve-Path (Join-Path $root $SourceRoot)).Path }
+$output = if ([IO.Path]::IsPathRooted($OutputDir)) { [IO.Path]::GetFullPath($OutputDir) } else { [IO.Path]::GetFullPath((Join-Path $root $OutputDir)) }
 $stage = Join-Path ([IO.Path]::GetTempPath()) ("coworkany-runtime-package-" + [guid]::NewGuid().ToString("N"))
 $zip = Join-Path $output "CoworkAny-Runtime-x64.zip"
 $mirrors = @("aliyun", "tencent", "tsinghua", "official")
 $manifestPath = Join-Path $source "runtime/runtime-manifest.json"
+
+# Match the installer's fallback for stripped-down Windows PowerShell hosts.
+if ($null -eq (Get-Command Get-FileHash -ErrorAction SilentlyContinue)) {
+  function Get-FileHash {
+    param([Parameter(Mandatory = $true)][string]$LiteralPath, [string]$Algorithm = "SHA256")
+    $stream = [IO.File]::OpenRead($LiteralPath)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+      [pscustomobject]@{ Algorithm = $Algorithm; Hash = ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '') }
+    } finally { $sha.Dispose(); $stream.Dispose() }
+  }
+}
 
 function Assert-SafeRelativePath([string]$value) {
   $normalized = $value.Replace('\', '/')
@@ -55,46 +67,32 @@ function Download-Asset([object]$asset, [string]$rootPath) {
   throw "runtime_package_download_failed:$($asset.id):$lastError"
 }
 
-function Enable-EmbeddedPythonSitePackages([string]$pythonRoot) {
-  $pth = Get-ChildItem -LiteralPath $pythonRoot -Filter "*._pth" -File -ErrorAction SilentlyContinue | Select-Object -First 1
-  if (-not $pth) { $pth = Get-ChildItem -LiteralPath $pythonRoot -Filter "*.pth" -File -ErrorAction SilentlyContinue | Select-Object -First 1 }
-  if (-not $pth) { throw "runtime_package_python_pth_missing" }
-  $lines = @(Get-Content -LiteralPath $pth.FullName -Encoding UTF8)
-  if ($lines -notcontains "Lib\site-packages") { $lines += "Lib\site-packages" }
-  if ($lines -notcontains "import site") { $lines += "import site" }
-  [IO.File]::WriteAllLines($pth.FullName, $lines, [Text.UTF8Encoding]::new($false))
+function Test-StandardPythonLayout([string]$pythonRoot) {
+  if (Get-ChildItem -LiteralPath $pythonRoot -Filter "*._pth" -File -ErrorAction SilentlyContinue) { return $false }
+  foreach ($required in @("python.exe", "python313.dll", "Lib/os.py", "Lib/venv/__init__.py", "Lib/ensurepip/__init__.py")) {
+    if (-not (Test-Path -LiteralPath (Join-Path $pythonRoot $required) -PathType Leaf)) { return $false }
+  }
+  $previousErrorAction = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    & (Join-Path $pythonRoot "python.exe") -s -E -c 'import sys, struct, venv, ensurepip; assert sys.version_info[:3] == (3, 13, 6) and struct.calcsize(chr(80)) == 8 and not sys.flags.isolated and not sys.flags.safe_path' 2>&1 | Out-Null
+    return $LASTEXITCODE -eq 0
+  } catch { return $false }
+  finally { $ErrorActionPreference = $previousErrorAction }
 }
 
-function Test-EmbeddedPythonPptProbe([string]$python) {
+function Test-StandardPythonProbe([string]$python) {
   $probe = @'
-import os, tempfile, zipfile
-import pptx, xlsxwriter, pathops, uharfbuzz, fitz, mammoth, markdownify, ebooklib, nbconvert, openpyxl, PIL, numpy, requests, bs4, curl_cffi, edge_tts, flask, google.genai
-from pptx import Presentation
-from pptx.util import Inches
-presentation = Presentation()
-presentation.slide_width = Inches(13.333333)
-presentation.slide_height = Inches(7.5)
-slide = presentation.slides.add_slide(presentation.slide_layouts[6])
-shape = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(10), Inches(1.2))
-run = shape.text_frame.paragraphs[0].add_run()
-run.text = "CoworkAny PPT offline probe"
-run.font.name = "Microsoft YaHei"
-descriptor, output = tempfile.mkstemp(suffix=".pptx")
-os.close(descriptor)
-try:
-    presentation.save(output)
-    assert os.path.getsize(output) > 0
-    with zipfile.ZipFile(output) as package:
-        assert "ppt/slides/slide1.xml" in package.namelist()
-finally:
-    if os.path.exists(output): os.remove(output)
+import os, sys, pip, venv, ensurepip
+assert not sys.flags.isolated and not sys.flags.safe_path
+assert os.path.dirname(os.path.abspath(__file__)) in sys.path
 '@
   $probeFile = Join-Path ([IO.Path]::GetTempPath()) ("coworkany-python-probe-" + [guid]::NewGuid().ToString("N") + ".py")
   [IO.File]::WriteAllText($probeFile, $probe, [Text.UTF8Encoding]::new($false))
   try {
     $previousErrorAction = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    $probeOutput = @(& $python $probeFile 2>&1)
+    $probeOutput = @(& $python -s -E $probeFile 2>&1)
     $probeExitCode = $LASTEXITCODE
     $ErrorActionPreference = $previousErrorAction
   } finally {
@@ -107,31 +105,50 @@ finally:
   return $true
 }
 
+function Test-PythonRequirements([string]$python, [string]$requirements) {
+  $previousErrorAction = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    & $python -s -E -m pip --isolated install --no-index --no-deps --dry-run --disable-pip-version-check -r $requirements 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { return $false }
+    & $python -s -E -m pip --isolated check 2>&1 | Out-Null
+    return $LASTEXITCODE -eq 0
+  } finally { $ErrorActionPreference = $previousErrorAction }
+}
+
 function Prepare-OfflinePython([string]$rootPath) {
+  # Replacement is confined to this packager's disposable copy, never SourceRoot.
+  if ([IO.Path]::GetFullPath($rootPath) -ne [IO.Path]::GetFullPath($stage)) { throw "runtime_package_python_stage_required" }
   $pythonRoot = Join-Path $rootPath "runtime/python"
   $python = Join-Path $pythonRoot "python.exe"
-  if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
-    $archive = Get-ChildItem -LiteralPath $pythonRoot -Filter "python-*-embed-amd64.zip" -File | Select-Object -First 1
-    if (-not $archive) { throw "runtime_package_python_archive_missing" }
-    Expand-Archive -LiteralPath $archive.FullName -DestinationPath $pythonRoot -Force
+  if (-not (Test-StandardPythonLayout $pythonRoot)) {
+    $archive = Join-Path $pythonRoot "python.3.13.6.nupkg"
+    $unpacked = Join-Path $rootPath ("python-nuget-" + [guid]::NewGuid().ToString("N"))
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [IO.Compression.ZipFile]::ExtractToDirectory($archive, $unpacked)
+    $tools = Join-Path $unpacked "tools"
+    if (-not (Test-StandardPythonLayout $tools)) { throw "runtime_package_python_distribution_unsupported:nuget_layout" }
+    Copy-Item -LiteralPath $archive -Destination (Join-Path $tools "python.3.13.6.nupkg")
+    Remove-Item -LiteralPath $pythonRoot -Recurse -Force
+    Move-Item -LiteralPath $tools -Destination $pythonRoot
+    Remove-Item -LiteralPath $unpacked -Recurse -Force
   }
-  Enable-EmbeddedPythonSitePackages $pythonRoot
-  if (Test-EmbeddedPythonPptProbe $python) { return }
-  if ($SkipPythonDependencies) { throw "runtime_package_python_dependencies_skipped" }
-  $getPip = Join-Path $pythonRoot "get-pip.py"
+  # Generic command alias for upstream scripts; this copy lives only in staging.
+  Copy-Item -LiteralPath $python -Destination (Join-Path $pythonRoot "python3.exe") -Force
+  if (-not (Test-StandardPythonProbe $python)) { throw "runtime_package_python_distribution_unsupported:script_probe" }
   $requirements = Join-Path $rootPath "skills/ppt-master/requirements.txt"
-  if (-not (Test-Path -LiteralPath $getPip -PathType Leaf) -or -not (Test-Path -LiteralPath $requirements -PathType Leaf)) { throw "runtime_package_python_bootstrap_assets_missing" }
+  if (-not (Test-Path -LiteralPath $requirements -PathType Leaf)) { throw "runtime_package_python_bootstrap_assets_missing" }
+  if (Test-PythonRequirements $python $requirements) { return }
+  if ($SkipPythonDependencies) { throw "runtime_package_python_dependencies_skipped" }
   $previousErrorAction = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
-  $bootstrapOutput = @(& $python $getPip --disable-pip-version-check --no-warn-script-location 2>&1)
+  $bootstrapOutput = @(& $python -s -E -m ensurepip --upgrade 2>&1)
   $bootstrapExitCode = $LASTEXITCODE
   $ErrorActionPreference = $previousErrorAction
   if ($bootstrapExitCode -ne 0) {
     $bootstrapOutput | Select-Object -Last 12 | ForEach-Object { Write-Warning ("runtime_package_python_pip_bootstrap: " + $_) }
     throw "runtime_package_python_pip_bootstrap_failed"
   }
-  $sitePackages = Join-Path $pythonRoot "Lib/site-packages"
-  New-Item -ItemType Directory -Force -Path $sitePackages | Out-Null
   $indexes = @(
     "https://mirrors.aliyun.com/pypi/simple",
     "https://mirrors.cloud.tencent.com/repository/pypi/simple",
@@ -143,7 +160,7 @@ function Prepare-OfflinePython([string]$rootPath) {
     try {
       $previousErrorAction = $ErrorActionPreference
       $ErrorActionPreference = "Continue"
-      $pipOutput = @(& $python -m pip install --disable-pip-version-check --no-input --no-warn-script-location --target $sitePackages --timeout 60 --retries 1 --index-url $index -r $requirements 2>&1)
+      $pipOutput = @(& $python -s -E -m pip --isolated install --disable-pip-version-check --no-input --no-warn-script-location --prefix $pythonRoot --timeout 60 --retries 1 --index-url $index -r $requirements 2>&1)
       $pipExitCode = $LASTEXITCODE
       $ErrorActionPreference = $previousErrorAction
       if ($pipExitCode -eq 0) { $installed = $true; break }
@@ -153,8 +170,7 @@ function Prepare-OfflinePython([string]$rootPath) {
     }
   }
   if (-not $installed) { throw "runtime_package_python_dependencies_failed" }
-  if (-not (Test-EmbeddedPythonPptProbe $python)) {
-    Write-Warning ("runtime_package_python_site_packages_missing=" + (-not (Test-Path -LiteralPath (Join-Path $sitePackages 'pptx'))))
+  if (-not (Test-PythonRequirements $python $requirements)) {
     throw "runtime_package_python_dependencies_failed"
   }
 }
@@ -164,6 +180,8 @@ $manifest = Get-Content -Raw -Encoding UTF8 $manifestPath | ConvertFrom-Json
 if ([int]$manifest.schemaVersion -ne 1 -or [string]$manifest.platform -ne "windows" -or [string]$manifest.architecture -ne "x64") { throw "runtime_package_manifest_target_invalid" }
 if ([string]$manifest.integrity.hashAlgorithm -ne "sha256" -or [string]$manifest.integrity.signatureAlgorithm -ne "ed25519") { throw "runtime_package_manifest_integrity_invalid" }
 if ($RequireSignature -and ([string]::IsNullOrWhiteSpace([string]$manifest.integrity.signature) -or -not [bool]$manifest.integrity.required)) { throw "runtime_package_manifest_signature_required" }
+$pythonAssets = @($manifest.assets | Where-Object { $_.id -eq "python-nuget-amd64" -and $_.relativePath -eq "runtime/python/python.3.13.6.nupkg" -and $_.extractPath -eq "runtime/python" })
+if ($pythonAssets.Count -ne 1 -or @($manifest.assets | Where-Object { $_.id -in @("python-embed-amd64", "python-get-pip") }).Count -gt 0) { throw "runtime_package_python_distribution_unsupported:restage_with_cpython_nuget" }
 
 New-Item -ItemType Directory -Force -Path $stage, $output | Out-Null
 try {

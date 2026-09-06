@@ -26,14 +26,14 @@ test("each damaged runtime fixture blocks the repair gate until the repeated pro
   }
 });
 
-test("runtime repair uses the same real PPTX capability shape as the native gate", () => {
+test("runtime repair requires standard Python script semantics without generating a probe artifact", () => {
   const source = readFileSync(resolve(process.cwd(), "../../scripts/install-desktop-runtime.ps1"), "utf8");
   // Keep the PowerShell source ASCII-safe so legacy Windows PowerShell cannot
   // reinterpret the probe text before Python receives it.
-  assert.match(source, /CoworkAny \\u4e2d\\u6587 PPT probe/u);
-  assert.doesNotMatch(source, /CoworkAny 中文 PPT probe/u);
-  assert.match(source, /ppt\/slides\/slide1\.xml/);
-  assert.match(source, /Microsoft YaHei/);
+  assert.match(source, /assert not sys\.flags\.isolated and not sys\.flags\.safe_path/u);
+  assert.match(source, /import sys, struct, venv, ensurepip/u);
+  assert.doesNotMatch(source, /Presentation\(|presentation\.save|run\.font\.name/u);
+  assert.doesNotMatch(source, /ppt\/slides\/slide1\.xml|Microsoft YaHei/u);
 });
 
 test("runtime probes resolve the concrete font and embedding assets", () => {

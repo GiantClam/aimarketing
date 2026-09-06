@@ -17,7 +17,17 @@ export function createSessionRecoverySnapshot(history: readonly SessionRecoveryT
   for (const turn of [...history].reverse()) {
     const content = clean(turn.content);
     if (!content) continue;
-    if (length + content.length > MAX_CONTENT_CHARS) break;
+    const remaining = MAX_CONTENT_CHARS - length;
+    if (content.length > remaining) {
+      const marker = " …[truncated]… ";
+      if (!retained.length && remaining > marker.length) {
+        const contentBudget = remaining - marker.length;
+        const headLength = Math.ceil(contentBudget / 2);
+        const truncated = `${content.slice(0, headLength)}${marker}${content.slice(-(contentBudget - headLength))}`;
+        retained.unshift({ role: turn.role, content: truncated });
+      }
+      break;
+    }
     retained.unshift({ role: turn.role, content });
     length += content.length;
     if (retained.length >= MAX_TURNS) break;

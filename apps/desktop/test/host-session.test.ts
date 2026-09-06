@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { once } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -282,13 +283,17 @@ test("workflow-host runs a mixed text, image, video, audio and PPT workflow with
     assert.deepEqual([...pptx.subarray(0, 4)], [0x50, 0x4b, 0x03, 0x04]);
   } finally {
     if (child.child.exitCode === null) {
-      const stopped = new Promise<void>((resolveClose) => child.child.once("close", () => resolveClose()));
-      child.child.kill();
+      const stopped = new Promise<void>((resolveClose) => child.child.once("exit", () => resolveClose()));
+      child.child.stdin.end();
       await Promise.race([stopped, new Promise<void>((resolveClose) => setTimeout(resolveClose, 5_000))]);
+      if (child.child.exitCode === null && process.platform === "win32") {
+        await once(spawn("taskkill", ["/PID", String(child.child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" }), "close");
+      } else if (child.child.exitCode === null) child.child.kill();
     }
-    child.child.stdin.destroy();
+    child.child.stdout.destroy(); child.child.stderr.destroy(); child.child.stdin.destroy();
+    server.closeAllConnections();
     await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
-    await rm(workspace, { recursive: true, force: true });
+    await rm(workspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -306,8 +311,9 @@ test("workflow-host creates a stable session mapping through RPC", async () => {
       child.stdout.off("data", onData); resolveResponse(JSON.parse(Buffer.from(buffer.subarray(separator + 1, end)).toString("utf8")) as Record<string, unknown>);
     };
     child.stdout.on("data", onData); child.once("error", reject);
-    child.stdin.end(encodeRpcMessage({ version: 1, requestId: randomUUID(), type: "session.create", payload: { conversationId: "conversation-1", workspacePath: desktopRoot } }));
+    child.stdin.write(encodeRpcMessage({ version: 1, requestId: randomUUID(), type: "session.create", payload: { conversationId: "conversation-1", workspacePath: desktopRoot } }));
   });
+  child.stdin.end();
   child.kill();
   assert.equal(response.ok, true);
   assert.equal((response.data as Record<string, unknown>).conversationId, "conversation-1");
@@ -384,7 +390,7 @@ test("workflow-host registers a PPT artifact when the presentation skill writes 
     const sessionResponse = await child.waitFor((frame) => frame.requestId === sessionRequestId && frame.ok === true);
     const sessionId = String((sessionResponse.data as Record<string, unknown>).sessionId ?? "");
     const runId = `ppt-artifact-${randomUUID()}`;
-    child.child.stdin.write(encodeRpcMessage({ version: 1, requestId: runId, runId, sessionId, type: "session.prompt", payload: { prompt: "Create ppt-master artifact", model: provider.model, provider, allowArtifacts: true } }));
+    child.child.stdin.write(encodeRpcMessage({ version: 1, requestId: runId, runId, sessionId, type: "session.prompt", payload: { prompt: "Create ppt-master artifact", model: provider.model, provider, allowArtifacts: true, skillId: "ppt-master" } }));
     await child.waitFor((frame) => {
       const event = (frame.data as Record<string, unknown> | undefined)?.event as Record<string, unknown> | undefined;
       return event?.event === "done" && event.runId === runId;

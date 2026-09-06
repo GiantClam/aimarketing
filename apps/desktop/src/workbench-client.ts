@@ -18,6 +18,8 @@ import { createDesktopRunTransport, createDesktopUIMessage, desktopUIMessageStor
 import type { DesktopUIMessage } from "@coworkany/workbench-client";
 import type { TauriBridge } from "./tauri";
 import { promptRequestsArtifact } from "./artifact-intent";
+import { createQuestionBridge } from "./question-bridge";
+import { isWorkbenchQuestionToolEvent, parseWorkbenchQuestionEvent, type WorkbenchQuestionClient } from "@coworkany/workbench-client";
 
 type DesktopConversationRow = { id: string; title: string; updated_at: string; message_count?: number; opencode_session_id?: string | null; agent_id?: string | null };
 type DesktopMessageRow = { id: string; conversation_id: string; role: DesktopUIMessage["role"] | "tool"; content: string; parts_json?: string | null; metadata_json?: string | null; created_at: string };
@@ -31,7 +33,7 @@ type DesktopKnowledgeResult = { chunkId: string; documentPath: string; heading?:
 export type DesktopChatTransportOptions = {
   readonly resolveSessionId: (chatId: string) => Promise<string>;
   readonly resolveProvider: (message: DesktopUIMessage) => Record<string, unknown>;
-  readonly ensureSession?: (request: { readonly chatId: string; readonly sessionId: string; readonly provider: Record<string, unknown>; readonly message: DesktopUIMessage }) => Promise<string>;
+  readonly ensureSession?: (request: { readonly chatId: string; readonly sessionId: string; readonly provider: Record<string, unknown>; readonly message: DesktopUIMessage }) => Promise<string | { readonly sessionId: string; readonly recoveryContext?: string }>;
   readonly resolveSkillId?: (message: DesktopUIMessage) => string | undefined;
   readonly resolvePrompt?: (message: DesktopUIMessage, prompt: string) => string;
   readonly resolveSystemPrompt?: (message: DesktopUIMessage) => string | undefined;
@@ -120,7 +122,7 @@ function toWorkbenchKnowledgeResult(value: DesktopKnowledgeResult): WorkbenchKno
   return { chunkId: value.chunkId, documentPath: value.documentPath, heading: value.heading, excerpt: value.excerpt, score: typeof value.score === "number" ? value.score : 0, lineStart: value.lineStart, lineEnd: value.lineEnd };
 }
 
-export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: WorkbenchClient["navigation"]): WorkbenchClient {
+export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: WorkbenchClient["navigation"]): WorkbenchClient & { readonly questions: WorkbenchQuestionClient } {
   async function sendHostCommand(type: "knowledge.index" | "knowledge.search", payload: Record<string, unknown>): Promise<Record<string, unknown>> {
     await bridge.invoke("host_start");
     const requestId = makeId("knowledge");
@@ -218,7 +220,10 @@ export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: Wo
           const frame = JSON.parse(payload.raw.slice(separator + 1)) as { data?: { event?: Record<string, unknown> } };
           const event = frame.data?.event;
           if (!event || event.runId !== runId) return;
+          if (isWorkbenchQuestionToolEvent(event)) return;
           const metadata = eventMetadata(event);
+          const questionEvent = parseWorkbenchQuestionEvent(event);
+          if (questionEvent) { onEvent({ ...questionEvent, ...metadata }); return; }
           if (event.event === "text_delta") onEvent({ type: "text", delta: String(event.delta ?? ""), ...metadata });
           else if (event.event === "reasoning_delta") onEvent({ type: "reasoning", delta: String(event.delta ?? ""), ...metadata });
           else if (event.event === "runtime_warning") onEvent({ type: "warning", code: String(event.code ?? "runtime_warning"), message: String(event.message ?? "Runtime warning"), ...metadata });
@@ -258,6 +263,7 @@ export function createDesktopWorkbenchClient(bridge: TauriBridge, navigation: Wo
 
   return {
     navigation,
+    questions: createQuestionBridge(bridge),
     files: {
       open: (relativePath, mimeType = "application/octet-stream") => bridge.invoke("open_artifact_default", { relativePath, mimeType }).then(() => undefined),
       reveal: (relativePath, mimeType = "application/octet-stream") => bridge.invoke("open_artifact", { relativePath, mimeType }).then(() => undefined),
@@ -314,7 +320,8 @@ export function createDesktopChatTransport(bridge: TauriBridge, workbenchClient:
       const runId = makeId("run");
       const provider = options.resolveProvider(message);
       const requestedSessionId = await options.resolveSessionId(chatId);
-      const sessionId = options.ensureSession ? await options.ensureSession({ chatId, sessionId: requestedSessionId, provider, message }) : requestedSessionId;
+      const ensuredSession = options.ensureSession ? await options.ensureSession({ chatId, sessionId: requestedSessionId, provider, message }) : requestedSessionId;
+      const sessionId = typeof ensuredSession === "string" ? ensuredSession : ensuredSession.sessionId;
       const resolvedProviderId = typeof provider.id === "string" ? provider.id : undefined;
       const resolvedModelId = typeof provider.model === "string" ? provider.model : undefined;
       if (message.metadata?.providerId && resolvedProviderId && message.metadata.providerId !== resolvedProviderId) throw new Error("desktop_transport_provider_changed");
@@ -324,6 +331,10 @@ export function createDesktopChatTransport(bridge: TauriBridge, workbenchClient:
       await bridge.invoke("append_message", { input: { id: message.id, conversation_id: chatId, role: "user", content: stored.content, parts_json: stored.parts_json, metadata_json: stored.metadata_json, created_at: message.metadata?.createdAt ?? new Date().toISOString() } });
       options.onRunStarted?.(runId, chatId, message);
       await bridge.invoke("host_start");
+      const resolvedPrompt = options.resolvePrompt?.(message, prompt) ?? prompt;
+      const promptWithRecovery = typeof ensuredSession === "object" && ensuredSession.recoveryContext
+        ? `${ensuredSession.recoveryContext}\n\nCurrent request: ${resolvedPrompt}`
+        : resolvedPrompt;
       await bridge.invoke("host_send", { message: {
         version: 1,
         requestId: runId,
@@ -331,8 +342,7 @@ export function createDesktopChatTransport(bridge: TauriBridge, workbenchClient:
         sessionId,
         type: "session.prompt",
         payload: {
-          prompt: options.resolvePrompt?.(message, prompt) ?? prompt,
-          ...(options.resolveSystemPrompt?.(message)?.trim() ? { systemPrompt: options.resolveSystemPrompt(message)?.trim() } : {}),
+          prompt: promptWithRecovery,
           model: message.metadata?.modelId,
           provider,
           allowArtifacts: options.resolveAllowArtifacts?.(message) ?? promptRequestsArtifact(desktopUIMessageText(message)),

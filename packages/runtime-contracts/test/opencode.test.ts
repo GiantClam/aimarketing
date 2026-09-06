@@ -81,6 +81,56 @@ test("normalizes serve text snapshots without guessing their language or intent"
   assert.deepEqual(snapshot.events, []);
 });
 
+for (const channel of [
+  { type: "text", field: "text", snapshotField: "text", event: "text_delta" },
+  { type: "reasoning", field: "text", snapshotField: "text", event: "reasoning_delta" },
+  { type: "thinking", field: "text", snapshotField: "text", event: "reasoning_delta" },
+  { type: "text", field: "reasoning_content", snapshotField: "reasoning_content", event: "reasoning_delta" },
+] as const) {
+  for (const initialSource of ["snapshot", "delta"] as const) {
+    test(`${channel.type}/${channel.field} snapshots keep a monotonic cache after ${initialSource}`, () => {
+      const state = createOpenCodeServeEventState();
+      const runId = "snapshot-order";
+      const identity = { sessionID: "session", messageID: "assistant" };
+      const snapshot = (text: string) => normalizeOpenCodeServeEvent(runId, {
+        type: "message.part.updated",
+        properties: { part: { ...identity, id: "part", type: channel.type, [channel.snapshotField]: text } },
+      }, state).events;
+      const delta = (text: string) => normalizeOpenCodeServeEvent(runId, {
+        type: "message.part.delta",
+        properties: { ...identity, partID: "part", field: channel.field, delta: text },
+      }, state).events;
+      assert.deepEqual(snapshot(""), []); // Establish the type for generic text deltas.
+      const emitted = [...(initialSource === "snapshot" ? snapshot("Hello world") : delta("Hello world"))];
+      assert.deepEqual(emitted, [{ event: channel.event, delta: "Hello world", runId }]);
+
+      for (const stale of ["Hello", "", "Hello world", "Hello w"]) {
+        assert.deepEqual(snapshot(stale), [], `stale/equal snapshot: ${JSON.stringify(stale)}`);
+        assert.equal(state.textByPartId.get("part"), "Hello world");
+      }
+      // A delta-only consumer cannot replace emitted text with a conflicting snapshot.
+      for (const conflicting of ["Other", "HELLO WORLD", "A different longer snapshot"]) {
+        assert.deepEqual(snapshot(conflicting), []);
+        assert.equal(state.textByPartId.get("part"), "Hello world");
+      }
+
+      emitted.push(...delta("!"));
+      assert.equal(state.textByPartId.get("part"), "Hello world!");
+      assert.deepEqual(snapshot("Hello world"), []);
+      assert.equal(state.textByPartId.get("part"), "Hello world!");
+      // The host reconciles an extending snapshot at idle, after streaming stops.
+      const finalText = "Hello world!\n最终结果";
+      const final = snapshot(finalText);
+      assert.deepEqual(final, [{ event: channel.event, delta: "\n最终结果", runId }]);
+      emitted.push(...final);
+      assert.deepEqual(snapshot(finalText), []);
+      assert.equal(state.textByPartId.get("part"), finalText);
+      assert.equal(emitted.map(event => "delta" in event ? event.delta : "").join(""), finalText);
+      assert.equal(emitted.every(event => event.event === channel.event), true);
+    });
+  }
+}
+
 test("normalizes session-level busy and idle status without treating message completion as turn completion", () => {
   const state = createOpenCodeServeEventState();
   const busy = normalizeOpenCodeServeEvent("run-status", { payload: { type: "session.status", properties: { sessionID: "session-status", status: { type: "busy" } } } }, state);

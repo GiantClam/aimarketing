@@ -125,7 +125,7 @@ test("active Writer preview uses the bilingual copy contract", () => {
   const end = source.indexOf("type DesktopWorkflowWorkspaceProps", start);
   assert.ok(start >= 0 && end > start, "active Writer workspace source must be present");
   const activeWriter = source.slice(start, end);
-  assert.match(activeWriter, /WriterPlatformPreview platform=\{platform\} locale=\{locale\} content=\{assistantText\}/u);
+  assert.match(activeWriter, /WriterPlatformPreview platform=\{platform\} locale=\{locale\} content=\{previewText\} images=\{previewImages\}/u);
   assert.match(source, /function WriterPlatformPreview[\s\S]*?MessageResponse content=\{content\}/u);
   assert.match(activeWriter, /writerCopy\.edit/u);
   assert.doesNotMatch(activeWriter, /label="AI RESPONSE"/u);
@@ -229,9 +229,8 @@ test("new desktop workflow nodes initialize the online parameter contract", () =
 
 test("OpenCode loads the selected Skill without adding workflow rules", () => {
   assert.equal(localizedSkillSystemPrompt("auto", "en"), "");
-  assert.match(localizedSkillSystemPrompt("writer-orchestrator", "zh"), /native skill tool/u);
-  assert.match(localizedSkillSystemPrompt("writer-orchestrator", "en"), /native skill tool/u);
-  assert.match(localizedSkillSystemPrompt("writer-orchestrator", "en"), /writer-orchestrator/u);
+  assert.equal(localizedSkillSystemPrompt("writer-orchestrator", "zh"), "");
+  assert.equal(localizedSkillSystemPrompt("writer-orchestrator", "en"), "");
   assert.doesNotMatch(localizedSkillSystemPrompt("writer-orchestrator", "zh"), /保持所有产物写入/u);
   assert.doesNotMatch(localizedSkillSystemPrompt("writer-orchestrator", "en"), /keep all artifacts/u);
   assert.doesNotMatch(localizedSkillSystemPrompt("ppt-master", "en"), /[\u4e00-\u9fff]/u);
@@ -242,7 +241,7 @@ test("ordinary desktop conversations do not inherit a persisted Skill", () => {
   assert.equal(resolveDesktopSkillId("/dashboard/ai?agent=executive-ppt", "executive-ppt"), "ppt-master");
   assert.equal(resolveDesktopSkillId("/dashboard/ai?agent=executive-presentation-ppt", "executive-presentation-ppt"), "dashi-ppt");
   assert.equal(resolveDesktopSkillId("/dashboard/ai?agent=executive-legal-risk", "executive-legal-risk"), "executive-consulting-suite");
-  assert.match(localizedSkillSystemPrompt("executive-consulting-suite", "en"), /executive-consulting-suite/u);
+  assert.equal(localizedSkillSystemPrompt("executive-consulting-suite", "en"), "");
   assert.equal(resolveDesktopSkillId("/dashboard/writer", null), "writer-orchestrator");
   assert.equal(resolveDesktopSkillId("/dashboard/ai", "entry:writer"), "writer-orchestrator");
   assert.equal(resolveDesktopSkillId("/dashboard/ai", "entry:image-assistant"), "auto");
@@ -255,9 +254,8 @@ test("selected Skills own their interaction flow", () => {
   assert.equal(desktopExecutionPrompt("ppt-master", prompt, "zh"), prompt);
   assert.equal(desktopExecutionPrompt("dashi-ppt", prompt, "zh"), prompt);
   assert.equal(desktopExecutionPrompt("dashi-ppt", `  ${prompt}\n`, "zh"), `  ${prompt}\n`);
-  assert.match(localizedSkillSystemPrompt("ppt-master", "zh"), /native skill tool/u);
-  assert.match(localizedSkillSystemPrompt("ppt-master", "zh"), /authoritative/u);
-  assert.match(localizedSkillSystemPrompt("dashi-ppt", "en"), /dashi-ppt/u);
+  assert.equal(localizedSkillSystemPrompt("ppt-master", "zh"), "");
+  assert.equal(localizedSkillSystemPrompt("dashi-ppt", "en"), "");
   for (const systemPrompt of [localizedSkillSystemPrompt("ppt-master", "zh"), localizedSkillSystemPrompt("dashi-ppt", "en")]) {
     assert.doesNotMatch(systemPrompt, /goal:scaffold|props:safe|template variants|bespoke variant|PPTX export|complete the generation workflow|Do not stop|ask the user/u);
   }

@@ -67,9 +67,9 @@ aider --model openai/minimaxai/minimax-m2.1 \
 
 | 指标 | 数值 |
 |------|------|
-| 总任务 | 9 个 |
-| 已完成 | 2 个 (22%) |
-| 进行中 | 7 个 |
+| 总任务 | 10 个 |
+| 已完成 | 2 个 (20%) |
+| 进行中 | 8 个 |
 
 **已完成功能：**
 - ✅ STORY-001: 认证系统 (JWT)
@@ -83,6 +83,7 @@ aider --model openai/minimaxai/minimax-m2.1 \
 - ⏳ STORY-007: 培训材料
 - ⏳ STORY-008: 集成测试
 - ⏳ STORY-009: 部署上线
+- ⏳ STORY-010: 桌面端 Office 产物预览（先关联 PPT/PPTX 的 HTML、SVG 或图片预览；后续补充 DOCX/XLSX 的只读预览或本地转换方案）
 
 ## 📁 核心文件
 

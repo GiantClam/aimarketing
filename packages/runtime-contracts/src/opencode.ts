@@ -3,6 +3,8 @@ const MAX_DIAGNOSTIC_BYTES = 1024;
 const MAX_TOOL_NAME_LENGTH = 80;
 
 export type OpenCodeCommandInput = { readonly modelHint?: string | null };
+export type OpenCodeQuestion = { readonly question: string; readonly header: string; readonly options: readonly { readonly label: string; readonly description: string }[]; readonly multiple?: boolean; readonly custom?: boolean };
+export type OpenCodeQuestionRequest = { readonly id: string; readonly sessionID: string; readonly questions: readonly OpenCodeQuestion[] };
 
 export type OpenCodeRuntimeEvent =
   | { readonly event: "text_delta"; readonly delta: string; readonly runId: string }
@@ -13,6 +15,8 @@ export type OpenCodeRuntimeEvent =
   | { readonly event: "runtime_warning"; readonly code: string; readonly message: string; readonly runId: string }
   | { readonly event: "permission_request"; readonly permissionId: string; readonly sessionId: string; readonly toolName: string; readonly input?: unknown; readonly title?: string; readonly callId?: string; readonly runId: string }
   | { readonly event: "permission_response"; readonly permissionId: string; readonly sessionId: string; readonly response: "once" | "always" | "reject"; readonly callId?: string; readonly runId: string }
+  | { readonly event: "question_request"; readonly requestId: string; readonly sessionId: string; readonly questions: readonly OpenCodeQuestion[]; readonly runId: string }
+  | { readonly event: "question_response"; readonly requestId: string; readonly sessionId: string; readonly rejected: boolean; readonly runId: string }
   | { readonly event: "runtime_error"; readonly code: string; readonly message: string; readonly retryable: boolean; readonly runId: string }
   | { readonly event: "done"; readonly runId: string };
 
@@ -302,12 +306,15 @@ export interface OpenCodeServeEventState {
   readonly partTypes: Map<string, string>;
   readonly textByPartId: Map<string, string>;
   readonly permissionCallIds: Map<string, string>;
+  readonly usagePartIds: Set<string>;
 }
 
 export interface OpenCodeServeEventResult {
   readonly sessionId: string;
   readonly messageId?: string;
   readonly messageRole?: string;
+  readonly parentId?: string;
+  readonly messageCreated?: number;
   readonly messageCompleted?: boolean;
   readonly messageFinish?: string;
   readonly sessionStatus?: "idle" | "busy" | "retry";
@@ -317,7 +324,7 @@ export interface OpenCodeServeEventResult {
 }
 
 export function createOpenCodeServeEventState(): OpenCodeServeEventState {
-  return { messageRoles: new Map(), partTypes: new Map(), textByPartId: new Map(), permissionCallIds: new Map() };
+  return { messageRoles: new Map(), partTypes: new Map(), textByPartId: new Map(), permissionCallIds: new Map(), usagePartIds: new Set() };
 }
 
 /**
@@ -340,10 +347,22 @@ export function normalizeOpenCodeServeEvent(
   // occasionally nested under the message metadata. Keep host routing tied to
   // this normalized value instead of duplicating a narrower parser per host.
   const sessionId = readString(properties?.sessionID, properties?.sessionId, part?.sessionID, part?.sessionId, info?.sessionID, info?.sessionId, tool?.sessionID, tool?.sessionId) ?? "";
-  const messageId = readString(info?.id, part?.messageID, part?.messageId, tool?.messageID, tool?.messageId) ?? undefined;
+  const messageId = readString(info?.id, properties?.messageID, properties?.messageId, part?.messageID, part?.messageId, tool?.messageID, tool?.messageId) ?? undefined;
   const messageRole = readString(info?.role) ?? undefined;
-  const identity = { sessionId, ...(messageId ? { messageId } : {}), ...(messageRole ? { messageRole } : {}) };
+  const parentId = readString(info?.parentID) ?? undefined;
+  const messageCreated = readFiniteNumber(readRecord(info?.time)?.created) ?? undefined;
+  const identity = { sessionId, ...(messageId ? { messageId } : {}), ...(messageRole ? { messageRole } : {}), ...(parentId ? { parentId } : {}), ...(messageCreated === undefined ? {} : { messageCreated }) };
   const type = readString(record?.type) ?? "";
+  if (type === "question.asked") {
+    const requestId = readString(properties?.id);
+    const questions = properties?.questions;
+    if (!requestId || !sessionId || !Array.isArray(questions)) return { ...identity, events: [] };
+    return { ...identity, events: [{ event: "question_request", requestId, sessionId, questions: questions as OpenCodeQuestion[], runId }] };
+  }
+  if (type === "question.replied" || type === "question.rejected") {
+    const requestId = readString(properties?.requestID);
+    return { ...identity, events: requestId && sessionId ? [{ event: "question_response", requestId, sessionId, rejected: type === "question.rejected", runId }] : [] };
+  }
   if (type === "session.status") {
     const status = readRecord(properties?.status);
     const value = readString(status?.type);
@@ -435,17 +454,22 @@ export function normalizeOpenCodeServeEvent(
   const partId = readString(part.id, partMessageId) ?? "text";
   if (partType) state.partTypes.set(partId, partType);
   const reasoningText = readText(part.thinking, part.reasoning, part.reasoning_content, part.reasoningText);
+  // Snapshots may only extend emitted content; stale/conflicting snapshots
+  // cannot replace it in a delta-only stream. The host reconciles at idle to
+  // avoid snapshots that overlap later SSE deltas.
   if (partType === "text" && !reasoningText) {
     const text = typeof part.text === "string" ? part.text : "";
     const previous = state.textByPartId.get(partId) ?? "";
-    const delta = text.startsWith(previous) ? text.slice(previous.length) : text;
+    if (!text.startsWith(previous)) return { ...identity, events: [] };
+    const delta = text.slice(previous.length);
     state.textByPartId.set(partId, text);
     return { ...identity, events: delta ? [{ event: "text_delta", delta, runId }] : [] };
   }
   if (partType === "reasoning" || partType === "thinking" || reasoningText) {
     const text = reasoningText ?? (typeof part.text === "string" ? part.text : "");
     const previous = state.textByPartId.get(partId) ?? "";
-    const delta = text.startsWith(previous) ? text.slice(previous.length) : text;
+    if (!text.startsWith(previous)) return { ...identity, events: [] };
+    const delta = text.slice(previous.length);
     state.textByPartId.set(partId, text);
     if (!delta) return { ...identity, events: [] };
     return { ...identity, events: [{ event: "reasoning_delta", delta, runId }] };
@@ -475,11 +499,14 @@ export function normalizeOpenCodeServeEvent(
     };
   }
   if (partType === "step-finish" || partType === "step_finish") {
+    const usagePartId = readString(part.id);
+    if (usagePartId && state.usagePartIds.has(usagePartId)) return { ...identity, events: [] };
     const tokens = readRecord(part.tokens);
     const inputTokens = readFiniteNumber(tokens?.input, tokens?.inputTokens, part.inputTokens);
     const outputTokens = readFiniteNumber(tokens?.output, tokens?.outputTokens, part.outputTokens);
     const costUsd = readFiniteNumber(part.cost, part.costUsd);
     if (inputTokens === null && outputTokens === null && costUsd === null) return { ...identity, events: [] };
+    if (usagePartId) state.usagePartIds.add(usagePartId);
     return {
       ...identity,
       events: [{

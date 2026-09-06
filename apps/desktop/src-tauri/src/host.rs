@@ -3,23 +3,36 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::os::windows::process::CommandExt;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 pub struct HostState {
     process: Arc<Mutex<Option<HostProcess>>>,
     knowledge: Arc<Mutex<Option<KnowledgeProcess>>>,
+    generation: Arc<AtomicU64>,
 }
 
 impl Default for HostState {
-    fn default() -> Self { Self { process: Arc::new(Mutex::new(None)), knowledge: Arc::new(Mutex::new(None)) } }
+    fn default() -> Self { Self { process: Arc::new(Mutex::new(None)), knowledge: Arc::new(Mutex::new(None)), generation: Arc::new(AtomicU64::new(0)) } }
 }
 
-struct HostProcess { child: Child, stdin: Arc<Mutex<ChildStdin>>, job: Option<crate::supervisor::JobObject> }
+struct HostProcess { child: Child, stdin: Arc<Mutex<ChildStdin>>, job: Option<crate::supervisor::JobObject>, generation: u64 }
 struct KnowledgeProcess { child: Child, stdin: ChildStdin, stdout: BufReader<ChildStdout>, job: Option<crate::supervisor::JobObject> }
 
 #[derive(Clone, Debug, Serialize)]
-struct HostEvent { raw: String }
+struct HostEvent { raw: String, generation: u64 }
+
+fn is_current_generation(active: &AtomicU64, generation: u64) -> bool {
+    active.load(Ordering::Acquire) == generation
+}
+
+fn emit_for_current_host(app: &AppHandle, process: &Arc<Mutex<Option<HostProcess>>>, generation: u64, event: &str, raw: String) {
+    let Ok(guard) = process.lock() else { return; };
+    if guard.as_ref().map(|host| host.generation) == Some(generation) {
+        let _ = app.emit(event, HostEvent { raw, generation });
+    }
+}
 
 const MAX_RUNTIME_MESSAGE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_RUNTIME_FRAME_BYTES: usize = MAX_RUNTIME_MESSAGE_BYTES + 32;
@@ -147,18 +160,18 @@ fn node_executable(app: &AppHandle) -> Result<String, String> {
     Ok(candidates.into_iter().find(|path| path.is_file() && executable_works(path, &["--version"])).and_then(|path| std::fs::canonicalize(path).ok().map(crate::bootstrap::powershell_compatible_path)).or_else(|| system_executable("node")).map(|path| path.to_string_lossy().into_owned()).unwrap_or_else(|| "node".to_string()))
 }
 
-fn opencode_executable(app: &AppHandle) -> Result<Option<String>, String> {
+pub(crate) fn opencode_executable(app: &AppHandle) -> Result<Option<String>, String> {
     let data = crate::data_dir(app)?;
     let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
-    let configured = configured_runtime_path(app, "opencodePath");
-    if let Some(path) = configured.and_then(|path| crate::resolve_windows_command_shim(path).into_iter().find(|candidate| candidate.is_file() && executable_works(candidate, &["--version"]))) { return Ok(Some(path.to_string_lossy().into_owned())); }
-    let candidates = [
-        data.join("runtime").join("opencode").join("opencode.exe"),
+    // runtime_probe persists discovered paths. An old cached private binary
+    // must not shadow the version shipped by an application upgrade.
+    let bundled = [
         resource.join("dist-runtime").join("runtime").join("opencode").join("opencode.exe"),
         resource.join("_up_").join("dist-runtime").join("runtime").join("opencode").join("opencode.exe"),
         resource.join("runtime").join("opencode").join("opencode.exe"),
     ];
-    Ok(candidates.into_iter().find(|path| path.is_file() && executable_works(path, &["--version"])).and_then(|path| std::fs::canonicalize(path).ok().map(crate::bootstrap::powershell_compatible_path)).or_else(|| system_executable("opencode")).map(|path| path.to_string_lossy().into_owned()))
+    let configured = configured_runtime_path(app, "opencodePath").into_iter().flat_map(crate::resolve_windows_command_shim);
+    Ok(bundled.into_iter().chain(configured).chain([data.join("runtime").join("opencode").join("opencode.exe")]).find(|path| path.is_file() && executable_works(path, &["--version"])).and_then(|path| std::fs::canonicalize(path).ok().map(crate::bootstrap::powershell_compatible_path)).or_else(|| system_executable("opencode")).map(|path| path.to_string_lossy().into_owned()))
 }
 
 fn system_executable(command: &str) -> Option<PathBuf> {
@@ -182,20 +195,36 @@ fn configured_runtime_path(app: &AppHandle, key: &str) -> Option<PathBuf> {
     std::fs::canonicalize(path).ok().map(crate::bootstrap::powershell_compatible_path)
 }
 
-fn python_executable(app: &AppHandle) -> Result<Option<String>, String> {
+pub(crate) fn python_executable(app: &AppHandle) -> Result<Option<String>, String> {
     let data = crate::data_dir(app)?;
     let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
-    let configured = configured_runtime_path(app, "pythonPath")
-        .filter(|path| path.is_file() && python_capable(path));
-    if let Some(path) = configured { return Ok(Some(path.to_string_lossy().into_owned())); }
-    let candidates = [
-        data.join("runtime").join("python").join("python.exe"),
+    // Application upgrades must activate the standard Python and dependency
+    // set shipped with that build. A previously discovered interpreter is a
+    // fallback only; otherwise stale config silently defeats runtime upgrades.
+    let bundled = [
         resource.join("dist-runtime").join("runtime").join("python").join("python.exe"),
         resource.join("_up_").join("dist-runtime").join("runtime").join("python").join("python.exe"),
     ];
-    if let Some(path) = candidates.into_iter().find(|path| path.is_file() && python_capable(path)).and_then(|path| std::fs::canonicalize(path).ok().map(crate::bootstrap::powershell_compatible_path)) { return Ok(Some(path.to_string_lossy().into_owned())); }
+    let configured = configured_runtime_path(app, "pythonPath").into_iter();
+    let private = [data.join("runtime").join("python").join("python.exe")];
+    if let Some(path) = bundled.into_iter().chain(configured).chain(private).find(|path| path.is_file() && python_capable(path)).and_then(|path| std::fs::canonicalize(path).ok().map(crate::bootstrap::powershell_compatible_path)) { return Ok(Some(path.to_string_lossy().into_owned())); }
     let system = system_executable("python").filter(|path| python_capable(path));
     Ok(system.map(|path| path.to_string_lossy().into_owned()))
+}
+
+pub(crate) fn skills_directory(app: &AppHandle) -> Result<Option<PathBuf>, String> {
+    let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
+    Ok(select_skills_directory(&resource, configured_runtime_path(app, "skillsPath")))
+}
+
+fn select_skills_directory(resource: &std::path::Path, configured: Option<PathBuf>) -> Option<PathBuf> {
+    // Cached discovery paths must not hide the catalog shipped by an upgrade.
+    [resource.join("dist-runtime/skills"), resource.join("_up_/dist-runtime/skills"), resource.join("skills")]
+        .into_iter().chain(configured).find(|path| {
+            ["ppt-master", "dashi-ppt"].iter().all(|id| {
+                path.join(id).join("SKILL.md").is_file() && path.join(format!("{id}.manifest.json")).is_file()
+            })
+        })
 }
 
 fn python_capable(path: &std::path::Path) -> bool {
@@ -347,19 +376,28 @@ fn dispatch_service_request(app: &AppHandle, state: &Arc<Mutex<Option<KnowledgeP
 }
 
 #[tauri::command]
-pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), String> {
+pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<u64, String> {
     let mut guard = state.process.lock().map_err(|_| "host_state_poisoned".to_string())?;
     if let Some(process) = guard.as_mut() {
-        if process.child.try_wait().map_err(|error| error.to_string())?.is_none() { return Ok(()); }
+        if process.child.try_wait().map_err(|error| error.to_string())?.is_none() { return Ok(process.generation); }
         *guard = None;
     }
+    // Invalidate every event source owned by the exited process before doing
+    // any startup preparation. Its stderr/stdout reader threads may still be
+    // draining while paths and runtime assets for the replacement are resolved.
+    let generation = state.generation.fetch_add(1, Ordering::AcqRel) + 1;
     let script = host_script(&app)?;
     let resource = app.path().resource_dir().map_err(|error| error.to_string())?;
-    let skills = configured_runtime_path(&app, "skillsPath").filter(|path| path.is_dir()).or_else(|| [resource.join("dist-runtime").join("skills"), resource.join("_up_").join("dist-runtime").join("skills"), resource.join("skills")].into_iter().find(|path| path.exists()));
+    let skills = skills_directory(&app)?;
     let agents = [crate::data_dir(&app)?.join("agents"), resource.join("dist-runtime").join("agents"), resource.join("_up_").join("dist-runtime").join("agents"), resource.join("agents"), std::env::current_dir().map_err(|error| error.to_string())?.join("apps").join("desktop").join("dist-runtime").join("agents")]
         .into_iter()
         .find(|path| path.is_dir());
     let python = python_executable(&app)?;
+    // A packaged app may be launched with an arbitrary or read-only working
+    // directory (for example the launcher application's install directory).
+    // Keep OpenCode's sockets and lock files under CoworkAny's writable data
+    // root; this is runtime plumbing, not Skill-specific behavior.
+    let opencode_runtime = crate::data_dir(&app)?;
     let mut child = Command::new(node_executable(&app)?)
         .arg(script)
         .stdin(Stdio::piped())
@@ -371,6 +409,7 @@ pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), Str
         .envs(opencode_executable(&app)?.map(|path| [("COWORKANY_OPENCODE_PATH", path)]).into_iter().flatten())
         .envs(python.map(|path| [("COWORKANY_PYTHON_PATH", path)]).into_iter().flatten())
         .envs(lancedb_runtime_directory(&app)?.map(|path| [("COWORKANY_LANCEDB_DIR", path)]).into_iter().flatten())
+        .env("OPENCODE_RUNTIME_DIR", opencode_runtime)
         .spawn()
         .map_err(|error| format!("workflow_host_spawn_failed: {error}"))?;
     let stdout = child.stdout.take().ok_or_else(|| "workflow_host_stdout_missing".to_string())?;
@@ -379,18 +418,23 @@ pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), Str
     let event_app = app.clone();
     let host_stdin = Arc::clone(&stdin);
     let knowledge_state = Arc::clone(&state.knowledge);
+    let response_generation = Arc::clone(&state.generation);
+    let log_generation = Arc::clone(&state.generation);
+    let response_process = Arc::clone(&state.process);
+    let log_process = Arc::clone(&state.process);
     let log_root = crate::data_dir(&app).map_err(|error| error.to_string())?;
     let stderr_log_root = log_root.clone();
     std::thread::spawn(move || {
         let mut reader = BufReader::new(stdout);
         loop {
+            if !is_current_generation(&response_generation, generation) { break; }
             let line = match read_bounded_line(&mut reader) {
                 Ok(Some(line)) => line,
                 Ok(None) => break,
                 Err(error) => {
                     let raw = serde_json::json!({ "type": "workflow_host_protocol_error", "code": error.to_string() }).to_string();
                     crate::logs::append(&log_root, "host", &raw);
-                    let _ = event_app.emit("desktop://runtime-log", HostEvent { raw });
+                    emit_for_current_host(&event_app, &response_process, generation, "desktop://runtime-log", raw);
                     if error.kind() != io::ErrorKind::InvalidData { break; }
                     continue;
                 }
@@ -400,11 +444,13 @@ pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), Str
                 Err(code) => {
                     let raw = serde_json::json!({ "type": "workflow_host_protocol_error", "code": code }).to_string();
                     crate::logs::append(&log_root, "host", &raw);
-                    let _ = event_app.emit("desktop://runtime-log", HostEvent { raw });
+                    emit_for_current_host(&event_app, &response_process, generation, "desktop://runtime-log", raw);
                     continue;
                 }
             };
             if value.get("type").and_then(serde_json::Value::as_str) == Some("service_request") {
+                let process_guard = response_process.lock().map_err(|_| ()).ok();
+                if process_guard.as_ref().and_then(|guard| guard.as_ref()).map(|host| host.generation) != Some(generation) { break; }
                 let method = value.get("method").and_then(serde_json::Value::as_str).unwrap_or("");
                 let response = if method.starts_with("workflow.") || method.starts_with("runtime.") {
                     service_response(value.get("requestId").and_then(serde_json::Value::as_str).unwrap_or("unknown"), dispatch_workflow_service_request(&event_app, &value))
@@ -416,20 +462,25 @@ pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), Str
                         let _ = writer.write_all(frame.as_bytes()).and_then(|_| writer.flush());
                     }
                 }
+                drop(process_guard);
                 continue;
             }
             let run_id = value.get("data").and_then(|data| data.get("event")).and_then(|event| event.get("runId")).and_then(serde_json::Value::as_str).unwrap_or("host");
             let raw = String::from_utf8(line).expect("validated UTF-8 RPC frame");
             crate::logs::append(&log_root, run_id, &raw);
-            let _ = event_app.emit("desktop://runtime-response", HostEvent { raw });
+            emit_for_current_host(&event_app, &response_process, generation, "desktop://runtime-response", raw);
         }
     });
     std::thread::spawn(move || {
         for line in BufReader::new(stderr).lines().flatten() {
             crate::logs::append(&stderr_log_root, "stderr", &line);
-            let _ = app.emit("desktop://runtime-log", HostEvent { raw: line });
+            if is_current_generation(&log_generation, generation) {
+                emit_for_current_host(&app, &log_process, generation, "desktop://runtime-log", line);
+            }
         }
-        let _ = app.emit("desktop://runtime-log", HostEvent { raw: "{\"type\":\"workflow_host_exit\"}".to_string() });
+        if is_current_generation(&log_generation, generation) {
+            emit_for_current_host(&app, &log_process, generation, "desktop://runtime-log", "{\"type\":\"workflow_host_exit\"}".to_string());
+        }
     });
     let job = match crate::supervisor::JobObject::new() {
         Ok(job) => {
@@ -448,8 +499,8 @@ pub fn host_start(app: AppHandle, state: State<'_, HostState>) -> Result<(), Str
             return Err(format!("workflow_host_job_create_failed: {error}"));
         }
     };
-    *guard = Some(HostProcess { child, stdin, job });
-    Ok(())
+    *guard = Some(HostProcess { child, stdin, job, generation });
+    Ok(generation)
 }
 
 #[tauri::command]
@@ -482,6 +533,26 @@ pub fn stop_state(state: &HostState) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn packaged_skills_replace_cached_old_catalog_without_touching_it() {
+        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let root = std::env::temp_dir().join(format!("coworkany-skill-selection-{}-{stamp}", std::process::id()));
+        let cached = root.join("cached");
+        let bundled = root.join("_up_/dist-runtime/skills");
+        for path in [&cached, &bundled] {
+            for id in ["ppt-master", "dashi-ppt"] {
+                std::fs::create_dir_all(path.join(id)).unwrap();
+                std::fs::write(path.join(id).join("SKILL.md"), b"original").unwrap();
+                std::fs::write(path.join(format!("{id}.manifest.json")), b"{}").unwrap();
+            }
+        }
+        assert_eq!(select_skills_directory(&root, Some(cached.clone())), Some(bundled.clone()));
+        std::fs::remove_file(bundled.join("dashi-ppt/SKILL.md")).unwrap();
+        assert_eq!(select_skills_directory(&root, Some(cached.clone())), Some(cached.clone()));
+        assert_eq!(std::fs::read(cached.join("ppt-master/SKILL.md")).unwrap(), b"original");
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn stdout_frames_require_a_bounded_utf8_json_payload() {
@@ -519,5 +590,16 @@ mod tests {
         let error = read_bounded_line(&mut reader).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidData);
         assert_eq!(read_bounded_line(&mut reader).unwrap().unwrap(), b"2:[]");
+    }
+
+    #[test]
+    fn stale_host_generation_cannot_emit_events_for_a_restarted_host() {
+        let active = AtomicU64::new(1);
+        assert!(is_current_generation(&active, 1));
+        active.store(2, Ordering::Release);
+        assert!(!is_current_generation(&active, 1));
+        assert!(is_current_generation(&active, 2));
+        let event = serde_json::to_value(HostEvent { raw: "{}".to_string(), generation: 2 }).unwrap();
+        assert_eq!(event["generation"], 2);
     }
 }

@@ -278,8 +278,7 @@ async function runConversationTurn(page, collector, options, session, round, ind
   try {
     console.log(`[desktop-regression] turn-start kind=${kind} conversation=${session.conversationId} round=${round}`);
     const allowArtifacts = kind === "presentation";
-    const presentationSystemPrompt = "Use the native skill tool to load the local dashi-ppt Skill. The selected Skill is authoritative for this task's behavior and response flow.";
-    const command = { version: 1, requestId, runId, sessionId: session.sessionId, type: "session.prompt", payload: { prompt, model: options.provider.model, provider: options.provider, allowArtifacts, ...(kind === "presentation" ? { systemPrompt: presentationSystemPrompt } : {}), ...(session.agentId ? { agentId: session.agentId } : {}) } };
+    const command = { version: 1, requestId, runId, sessionId: session.sessionId, type: "session.prompt", payload: { prompt, model: options.provider.model, provider: options.provider, allowArtifacts, ...(kind === "presentation" ? { skillId: "dashi-ppt" } : {}), ...(session.agentId ? { agentId: session.agentId } : {}) } };
     const requestStartedAt = Date.now();
     const sent = await sendHost(page, collector, command);
     const responseMs = Date.now() - requestStartedAt;

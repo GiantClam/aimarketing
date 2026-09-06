@@ -75,6 +75,7 @@ function Assert-RuntimeManifestSchema() {
   $assets = @($manifest.assets)
   if ($assets.Count -eq 0) { throw "runtime_manifest_assets_missing" }
   foreach ($asset in $assets) {
+    if ($asset.id -in @('python-embed-amd64', 'python-get-pip')) { throw "runtime_python_distribution_unsupported:restage_with_cpython_nuget" }
     if ([string]::IsNullOrWhiteSpace([string]$asset.id)) { throw "runtime_manifest_asset_id_missing" }
     if ([string]$asset.kind -notin @('archive', 'file')) { throw "runtime_manifest_asset_kind_invalid:$($asset.id)" }
     Assert-SafeRelativePath ([string]$asset.relativePath) "asset_path"
@@ -259,10 +260,24 @@ function Expand-ArchiveAssets() {
     if ($asset.kind -ne "archive") { continue }
     $archive = Join-Path $stageRoot $asset.relativePath
     $target = Join-Path $stageRoot $asset.extractPath
+    if ($asset.id -eq "python-nuget-amd64") {
+      Assert-Asset $asset $stageRoot
+      if (Test-Path -LiteralPath (Join-Path $target "python.exe") -PathType Leaf) {
+        Assert-StandardPython $target
+      } else {
+        $unpacked = Join-Path $stageRoot ("python-nuget-" + [guid]::NewGuid().ToString("N"))
+        Expand-SafeZip $archive $unpacked
+        $tools = Join-Path $unpacked "tools"
+        Assert-StandardPython $tools
+        Get-ChildItem -LiteralPath $tools -Force | Copy-Item -Destination $target -Recurse -Force
+        Remove-Item -LiteralPath $unpacked -Recurse -Force
+      }
+      # NuGet omits the generic python3 command. Keep it beside the same DLLs/Lib.
+      Copy-Item -LiteralPath (Join-Path $target "python.exe") -Destination (Join-Path $target "python3.exe") -Force
+      continue
+    }
     $alreadyExtracted = if ($asset.id -eq "node-embed-amd64") {
       Test-Path -LiteralPath (Join-Path $stageRoot "runtime/node/node.exe") -PathType Leaf
-    } elseif ($asset.id -eq "python-embed-amd64") {
-      Test-Path -LiteralPath (Join-Path $stageRoot "runtime/python/python.exe") -PathType Leaf
     } else { $false }
     if ($alreadyExtracted) { continue }
     Write-RuntimeProgress "extracting:$($asset.id)"
@@ -284,11 +299,33 @@ function Expand-ArchiveAssets() {
   }
 }
 
+function Get-OpenCodeVersion([string]$path) {
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
+  $previousModelsFetch = $env:OPENCODE_DISABLE_MODELS_FETCH
+  $previousAutoUpdate = $env:OPENCODE_DISABLE_AUTOUPDATE
+  try {
+    # A version probe must also stay local when validating an offline archive.
+    $env:OPENCODE_DISABLE_MODELS_FETCH = "true"
+    $env:OPENCODE_DISABLE_AUTOUPDATE = "true"
+    $output = & $path --version 2>$null
+    if ($LASTEXITCODE -eq 0) { return (($output -join "`n").Trim()) }
+  } catch { return $null }
+  finally {
+    $env:OPENCODE_DISABLE_MODELS_FETCH = $previousModelsFetch
+    $env:OPENCODE_DISABLE_AUTOUPDATE = $previousAutoUpdate
+  }
+  return $null
+}
+
 function Install-OpenCodePackage([switch]$Offline) {
   Write-RuntimeProgress "opencode_check"
+  $requiredVersion = "1.18.27"
   $target = Join-Path $stageRoot "runtime/opencode/opencode.exe"
-  if (Test-Path -LiteralPath $target -PathType Leaf) { return }
-  if ($Offline) { throw "offline_opencode_missing" }
+  if (Test-Path -LiteralPath $target -PathType Leaf) {
+    $actualVersion = Get-OpenCodeVersion $target
+    if ($actualVersion -ceq $requiredVersion) { return }
+    if ($Offline) { throw "offline_opencode_version_mismatch:expected=$requiredVersion;actual=$actualVersion" }
+  } elseif ($Offline) { throw "offline_opencode_missing" }
   $nodeRoot = Join-Path $stageRoot "runtime/node"
   $npm = Join-Path $nodeRoot "npm.cmd"
   if (-not (Test-Path -LiteralPath $npm -PathType Leaf)) { throw "npm unavailable for OpenCode bootstrap" }
@@ -304,97 +341,85 @@ function Install-OpenCodePackage([switch]$Offline) {
   $installed = $false
   foreach ($registry in $registries) {
     try {
-      & $npm install --prefix $prefix --no-save --no-fund --no-audit --fetch-timeout 30000 --fetch-retries 1 --registry $registry @proxyArgs opencode-ai@latest 2>&1 | Out-Null
+      & $npm install --prefix $prefix --no-save --no-fund --no-audit --fetch-timeout 30000 --fetch-retries 1 --registry $registry @proxyArgs "opencode-ai@$requiredVersion" 2>&1 | Out-Null
       if ($LASTEXITCODE -eq 0) { $installed = $true; break }
     } catch { }
   }
   if (-not $installed) { throw "OpenCode package installation failed on configured registries" }
   $candidate = Join-Path $prefix "node_modules/opencode-ai/bin/opencode.exe"
   if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { throw "OpenCode package did not provide Windows executable" }
+  $actualVersion = Get-OpenCodeVersion $candidate
+  if ($actualVersion -cne $requiredVersion) { throw "opencode_version_mismatch:expected=$requiredVersion;actual=$actualVersion" }
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
   Copy-Item -LiteralPath $candidate -Destination $target -Force
 }
 
-function Enable-EmbeddedPythonSitePackages() {
-  $pythonRoot = Join-Path $stageRoot "runtime/python"
-  $pth = Get-ChildItem -LiteralPath $pythonRoot -Filter "*._pth" -File -ErrorAction SilentlyContinue | Select-Object -First 1
-  if (-not $pth) { $pth = Get-ChildItem -LiteralPath $pythonRoot -Filter "*.pth" -File -ErrorAction SilentlyContinue | Select-Object -First 1 }
-  if (-not $pth) { return }
-  $lines = @(Get-Content -LiteralPath $pth.FullName -Encoding UTF8)
-  if ($lines -notcontains "Lib\site-packages") { $lines += "Lib\site-packages" }
-  if ($lines -notcontains "import site") { $lines += "import site" }
-  [IO.File]::WriteAllLines($pth.FullName, $lines, [Text.UTF8Encoding]::new($false))
+function Assert-StandardPython([string]$pythonRoot) {
+  if (Get-ChildItem -LiteralPath $pythonRoot -Filter "*._pth" -File -ErrorAction SilentlyContinue) { throw "runtime_python_distribution_unsupported:embedded_pth" }
+  foreach ($required in @("python.exe", "python313.dll", "Lib/os.py", "Lib/venv/__init__.py", "Lib/ensurepip/__init__.py")) {
+    if (-not (Test-Path -LiteralPath (Join-Path $pythonRoot $required) -PathType Leaf)) { throw "runtime_python_distribution_unsupported:missing_$required" }
+  }
+  $previousErrorAction = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    & (Join-Path $pythonRoot "python.exe") -s -E -c 'import sys, struct, venv, ensurepip; assert sys.version_info[:3] == (3, 13, 6) and struct.calcsize(chr(80)) == 8 and not sys.flags.isolated and not sys.flags.safe_path' 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "runtime_python_distribution_unsupported:probe_failed" }
+  } finally { $ErrorActionPreference = $previousErrorAction }
 }
 
-function Install-PythonPptxDependencies([switch]$Offline) {
+function Test-PythonRequirements([string]$python, [string]$requirements) {
+  $previousErrorAction = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    # Let pip interpret the original requirements, including version constraints.
+    # Dry-run and no-index make the readiness check read-only and network-free.
+    & $python -s -E -m pip --isolated install --no-index --no-deps --dry-run --disable-pip-version-check -r $requirements 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { return $false }
+    & $python -s -E -m pip --isolated check 2>&1 | Out-Null
+    return $LASTEXITCODE -eq 0
+  } finally { $ErrorActionPreference = $previousErrorAction }
+}
+
+function Install-PythonDependencies([switch]$Offline) {
   Write-RuntimeProgress "python_dependencies_check"
   $python = Join-Path $stageRoot "runtime/python/python.exe"
-  if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw "embedded Python executable missing" }
+  Assert-StandardPython (Split-Path -Parent $python)
   $proxyArgs = if ([string]::IsNullOrWhiteSpace($Proxy)) { @() } else { @("--proxy", $Proxy) }
-  Enable-EmbeddedPythonSitePackages
-  # Offline packages may already contain a complete embedded Python runtime.
-  # Probe before touching pip so a portable ZIP never reaches the network path.
   $requirements = Join-Path $stageRoot "skills/ppt-master/requirements.txt"
+  if (-not (Test-Path -LiteralPath $requirements -PathType Leaf)) { throw "python_requirements_missing" }
   $probe = @'
-import os, tempfile, zipfile
-import pptx, xlsxwriter, pathops, uharfbuzz, fitz, mammoth, markdownify, ebooklib, nbconvert, openpyxl, PIL, numpy, requests, bs4, curl_cffi, edge_tts, flask, google.genai
-from pptx import Presentation
-from pptx.util import Inches
-presentation = Presentation()
-presentation.slide_width = Inches(13.333333)
-presentation.slide_height = Inches(7.5)
-slide = presentation.slides.add_slide(presentation.slide_layouts[6])
-shape = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(10), Inches(1.2))
-run = shape.text_frame.paragraphs[0].add_run()
-run.text = "CoworkAny \u4e2d\u6587 PPT probe"
-run.font.name = "Microsoft YaHei"
-descriptor, output = tempfile.mkstemp(suffix=".pptx")
-os.close(descriptor)
-try:
-    presentation.save(output)
-    assert os.path.getsize(output) > 0
-    with zipfile.ZipFile(output) as package:
-        assert "ppt/slides/slide1.xml" in package.namelist()
-finally:
-    if os.path.exists(output): os.remove(output)
+import os, sys, pip, venv, ensurepip
+assert not sys.flags.isolated and not sys.flags.safe_path
+assert os.path.dirname(os.path.abspath(__file__)) in sys.path
 '@
   $probeFile = Join-Path ([IO.Path]::GetTempPath()) ("coworkany-python-probe-" + [guid]::NewGuid().ToString("N") + ".py")
   [IO.File]::WriteAllText($probeFile, $probe, [Text.UTF8Encoding]::new($false))
   try {
     $previousErrorAction = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    & $python $probeFile 2>&1 | Out-Null
+    & $python -s -E $probeFile 2>&1 | Out-Null
     $probeExitCode = $LASTEXITCODE
     $ErrorActionPreference = $previousErrorAction
   } finally { Remove-Item -LiteralPath $probeFile -Force -ErrorAction SilentlyContinue }
-  if ($probeExitCode -eq 0) { return }
-  if ($Offline) { throw "offline_python_pptx_missing" }
-  $pipScript = Join-Path $stageRoot "runtime/python/get-pip.py"
-  if (-not (Test-Path -LiteralPath $pipScript -PathType Leaf)) { throw "get-pip.py missing" }
-  & $python $pipScript --disable-pip-version-check --no-warn-script-location @proxyArgs 2>&1 | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw "embedded Python pip bootstrap failed" }
+  if ($probeExitCode -ne 0) { throw "runtime_python_distribution_unsupported:script_probe_failed" }
+  if (Test-PythonRequirements $python $requirements) { return }
+  if ($Offline) { throw "offline_python_requirements_missing" }
+  & $python -s -E -m ensurepip --upgrade 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "Python ensurepip bootstrap failed" }
   $indexes = @(
     "https://mirrors.aliyun.com/pypi/simple",
     "https://mirrors.cloud.tencent.com/repository/pypi/simple",
     "https://pypi.tuna.tsinghua.edu.cn/simple",
     "https://pypi.org/simple"
   )
-  if (-not (Test-Path -LiteralPath $requirements -PathType Leaf)) { throw "ppt_master_requirements_missing" }
   $installed = $false
   foreach ($index in $indexes) {
     try {
-      & $python -m pip install --disable-pip-version-check --no-input --no-warn-script-location --timeout 30 --retries 1 --index-url $index @proxyArgs -r $requirements 2>&1 | Out-Null
+      & $python -s -E -m pip --isolated install --disable-pip-version-check --no-input --no-warn-script-location --prefix (Split-Path -Parent $python) --timeout 30 --retries 1 --index-url $index @proxyArgs -r $requirements 2>&1 | Out-Null
       if ($LASTEXITCODE -eq 0) { $installed = $true; break }
     } catch { }
   }
-  if (-not $installed) { throw "python-pptx installation failed on all configured indexes" }
-  $postInstallProbe = Join-Path ([IO.Path]::GetTempPath()) ("coworkany-python-probe-" + [guid]::NewGuid().ToString("N") + ".py")
-  [IO.File]::WriteAllText($postInstallProbe, $probe, [Text.UTF8Encoding]::new($false))
-  try {
-    & $python $postInstallProbe 2>&1 | Out-Null
-    $postInstallProbeExitCode = $LASTEXITCODE
-  } finally { Remove-Item -LiteralPath $postInstallProbe -Force -ErrorAction SilentlyContinue }
-  if ($postInstallProbeExitCode -ne 0) { throw "python-pptx probe failed after installation" }
+  if (-not $installed -or -not (Test-PythonRequirements $python $requirements)) { throw "python_requirements_installation_failed" }
 }
 
 function Install-VerifiedAsset([object]$asset) {
@@ -455,6 +480,8 @@ function Activate-StagedRuntime() {
 }
 
 try {
+  $pythonAssets = @($manifest.assets | Where-Object { $_.id -eq "python-nuget-amd64" -and $_.relativePath -eq "runtime/python/python.3.13.6.nupkg" -and $_.extractPath -eq "runtime/python" })
+  if ($pythonAssets.Count -ne 1) { throw "runtime_python_distribution_unsupported:cpython_nuget_required" }
   Assert-SufficientDiskSpace
   # An offline runtime archive is self-contained. Avoid copying the packaged
   # runtime/skills into staging before extracting the same bytes again.
@@ -468,7 +495,7 @@ try {
   }
   Expand-ArchiveAssets
   Install-OpenCodePackage -Offline:([bool]$OfflineZip)
-  Install-PythonPptxDependencies -Offline:([bool]$OfflineZip)
+  Install-PythonDependencies -Offline:([bool]$OfflineZip)
   foreach ($asset in $manifest.assets) { Assert-Asset $asset $stageRoot }
   Write-RuntimeProgress "activating_runtime"
   Activate-StagedRuntime

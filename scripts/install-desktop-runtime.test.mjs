@@ -13,12 +13,66 @@ const execFileAsync = promisify(execFile);
 
 const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "install-desktop-runtime.ps1");
 
+test("NuGet extraction stages a generic python3 command with standard script imports", {
+  skip: process.platform !== "win32" || !process.env.COWORKANY_TEST_PYTHON_NUPKG,
+}, async () => {
+  const root = await mkdtemp(join(tmpdir(), "runtime-python3-"));
+  const quote = (value) => `'${value.replaceAll("'", "''")}'`;
+  try {
+    const pythonRoot = join(root, "runtime/python");
+    await mkdir(pythonRoot, { recursive: true });
+    await copyFile(process.env.COWORKANY_TEST_PYTHON_NUPKG, join(pythonRoot, "python.3.13.6.nupkg"));
+    await writeFile(join(root, "sibling.py"), "VALUE = 42\n", "utf8");
+    await writeFile(join(root, "probe.py"), "import sibling, sys, pip, venv\nassert sibling.VALUE == 42\nassert not sys.flags.isolated and not sys.flags.safe_path\nprint('python3-ok')\n", "utf8");
+    await writeFile(join(root, "installed-requirements.txt"), "pip>=0\n", "utf8");
+    await writeFile(join(root, "missing-requirements.txt"), "coworkany-missing-runtime-fixture>=1\n", "utf8");
+    const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", `
+$ErrorActionPreference='Stop'
+$tokens=$null; $errors=$null
+$ast=[Management.Automation.Language.Parser]::ParseFile(${quote(scriptPath)},[ref]$tokens,[ref]$errors)
+if ($errors.Count) { throw $errors[0] }
+$ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] },$false) | ForEach-Object { . ([scriptblock]::Create($_.Extent.Text)) }
+$stageRoot=${quote(root)}
+$manifest=@{assets=@(@{id='python-nuget-amd64'; kind='archive'; relativePath='runtime/python/python.3.13.6.nupkg'; extractPath='runtime/python'; bytes=14170995; sha256='cc1d4850a31f18a5c5d52007c248a99f1c360c96886f6fd2e324a55dc1d1967b'})}
+Expand-ArchiveAssets
+$env:PATH=${quote(pythonRoot)} + ';' + $env:PATH
+if ((Get-Command python3).Source -ne ${quote(join(pythonRoot, "python3.exe"))}) { throw 'python3_resolved_outside_runtime' }
+python3 ${quote(join(root, "probe.py"))}
+if ($LASTEXITCODE -ne 0) { throw 'python3_command_failed' }
+$python=Join-Path $stageRoot 'runtime/python/python.exe'
+foreach ($iteration in @(1,2)) {
+  if (-not (Test-PythonRequirements $python ${quote(join(root, "installed-requirements.txt"))})) { throw 'requirements_not_idempotent' }
+  if (Test-PythonRequirements $python ${quote(join(root, "missing-requirements.txt"))}) { throw 'accepted_missing_requirement' }
+}
+`], { windowsHide: true, cwd: tmpdir(), timeout: 60000, maxBuffer: 16384 });
+    assert.match(stdout, /python3-ok/);
+    assert.deepEqual(await readFile(join(pythonRoot, "python3.exe")), await readFile(join(pythonRoot, "python.exe")));
+  } finally { await rm(root, { recursive: true, force: true, maxRetries: 3 }); }
+});
+
+test("bootstrap rejects legacy embedded Python manifests before accepting an offline runtime", { skip: process.platform !== "win32" }, async () => {
+  const root = await mkdtemp(join(tmpdir(), "runtime-legacy-python-"));
+  try {
+    const manifestPath = join(root, "manifest.json");
+    await writeFile(manifestPath, JSON.stringify({
+      schemaVersion: 1, platform: "windows", architecture: "x64",
+      compatibility: { architecture: "x64" },
+      integrity: { hashAlgorithm: "sha256", signatureAlgorithm: "ed25519" },
+      assets: [{ id: "python-embed-amd64", kind: "archive", relativePath: "runtime/python/python-3.13.6-embed-amd64.zip", extractPath: "runtime/python", sha256: "a".repeat(64), urls: {} }],
+    }), "utf8");
+    await assert.rejects(execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath, "-ManifestPath", manifestPath, "-InstallRoot", join(root, "install"), "-ValidateOnly"], { windowsHide: true, timeout: 30000 }), /runtime_python_distribution_unsupported/);
+    await assert.rejects(readFile(join(root, "install", "runtime", "python", "python.exe")), /ENOENT/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("runtime installer keeps the approved mirror order", async () => {
   const source = await readFile(scriptPath, "utf8");
   const mirrorOrder = ["$mirrors = @(\"aliyun\", \"tencent\", \"tsinghua\", \"official\")"];
   assert.ok(source.includes(mirrorOrder[0]));
-  assert.match(source, /CoworkAny \\u4e2d\\u6587 PPT probe/u);
-  assert.doesNotMatch(source, /CoworkAny 中文 PPT probe/u);
+  assert.match(source, /assert not sys.flags.isolated and not sys.flags.safe_path/u);
+  assert.match(source, /--no-index --no-deps --dry-run/u);
+  assert.doesNotMatch(source, /import pptx|import.*pathops/u);
+  assert.doesNotMatch(source, /Presentation\(\)|run.font.name/u);
   assert.match(source, /Install-OpenCodePackage\s+-Offline:\(\[bool\]\$OfflineZip\)/u);
   assert.match(source, /offline_opencode_missing/u);
 });
@@ -105,7 +159,7 @@ test("installer seeds bundled runtime and skills before downloading missing comp
   assert.match(source, /runtime archive missing/u);
   assert.match(source, /Invoke-ResumableDownload\s+\$url\s+\$tmp\s+90/u);
   assert.match(source, /HttpWebRequest/u);
-  assert.match(source, /pip install[^\n]+--timeout 30/u);
+  assert.match(source, /pip --isolated install[^\n]+--timeout 30/u);
   assert.match(source, /if \(-not \$OfflineZip\) \{ Seed-BundledRuntime \}/u);
 });
 

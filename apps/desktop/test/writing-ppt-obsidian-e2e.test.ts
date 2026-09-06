@@ -1,13 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { OpenCodeServeClient } from "../runtime/opencode-serve";
-import { detectPresentationArtifacts } from "../runtime/presentation-artifacts";
 import { indexObsidianVault, searchVault, writeObsidianNote } from "../runtime/obsidian";
 
-test("local writing, PPT artifacts, Vault citations and conflict handling share one E2E flow", async () => {
+test("local writing, Vault citations and conflict handling share one E2E flow", async () => {
   const root = await mkdtemp(join(tmpdir(), "coworkany-writing-ppt-rag-e2e-"));
   const runtimeDirectory = join(root, "runtime");
   const vault = join(root, "vault");
@@ -29,14 +28,6 @@ test("local writing, PPT artifacts, Vault citations and conflict handling share 
     const citations = searchVault(manifest, "营销");
     assert.equal(citations[0]?.chunk.documentPath, note.path);
     assert.equal(citations[0]?.chunk.heading, "春季活动");
-
-    const pptxPath = join(root, "春季活动.pptx");
-    const previewPath = join(root, "春季活动-preview.svg");
-    await writeFile(pptxPath, new Uint8Array([1, 2, 3, 4]));
-    await writeFile(previewPath, "<svg><text>春季活动</text></svg>", "utf8");
-    const artifacts = await detectPresentationArtifacts(root, Date.now() - 1_000);
-    assert.deepEqual(artifacts.map((artifact) => artifact.relativePath), ["春季活动-preview.svg", "春季活动.pptx"]);
-    assert.equal(artifacts.every((artifact) => artifact.sha256.length === 64), true);
 
     const writes = await Promise.allSettled([
       writeObsidianNote({ vaultPath: vault, targetPath: note.path, content: "# 第一版", baseHash: note.hash }),

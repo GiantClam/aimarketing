@@ -24,7 +24,28 @@
 - `opencode_serve_exited` / `opencode_prompt_failed`：OpenCode serve 崩溃或请求失败；活动会话标记为可恢复/中断。
 - `runtime_install_incomplete`：自动修复后重复 probe 仍未完整；主 WebView 不创建。
 
-## 已知限制
+## Skill 原生执行边界（2026-09-06）
+
+- Desktop 只提交真实用户输入，通过 OpenCode 原生 Skill command / skill tool 加载能力；不添加 PPT 专用系统提示词、自动确认或合成的“继续”消息。工具循环、上下文压缩和续行由 OpenCode 负责。
+- 原生 question 请求、回答、拒绝和权限请求作为交互事件处理。消息归属以 OpenCode 的 message ID / parent ID 为准，不用客户端时间戳判断当前回合。
+- `runtime_probe` 与 `host_start` 使用同一套 Python 和 Skill 路径选择。新打包 Skill 优先于历史发现缓存；探测缓存包含目录清单的更新标识。
+- Python 兼容性检查仅验证标准解释器、pip/venv 和正常脚本搜索路径；拒绝隔离 `_pth` 解释器，不创建测试 PPT、不指定字体。Skill 的依赖由上游安装说明/requirements 管理，产物质量由 Skill 自带流程判断。
+- Skill 完整目录摘要记录在版本化 lock 文件中；联网获取和离线缓存都必须通过摘要校验，不能把本地污染内容标记成上游 commit。同版本重启保留 Skill 安装的依赖；变更在 host 重启时部署，不在并行任务运行中替换脚本。旧部署保留在 OpenCode 配置根旁的 `catalog-backups`，不会被作为当前 Skill 目录加载。
+- Artifact 仅依据 OpenCode 已完成工具事件中的结构化文件路径建立索引；不扫描工作区猜测 PPT 产物，也不以桌面端自定义 `ppt_artifact_missing` 规则覆盖 Skill/OpenCode 的终态。
+- OpenCode 数据目录保持稳定；更新 Skill 不迁移、重建或清空原生会话历史。
+- OpenCode 的临时运行目录固定在 Desktop 可写数据目录中，不继承启动器的 `process.cwd()`；从 WindowsApps、快捷方式或其他只读目录启动时仍可创建原生 session 与临时状态。
+
+### 回归入口
+
+```powershell
+node --test scripts/desktop-native-environment.test.mjs scripts/bundle-desktop-skills.test.mjs
+pnpm --filter @coworkany/desktop exec tsx --test test/host-stage.test.ts test/opencode-serve.test.ts test/opencode-recovery.test.ts
+cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib
+```
+
+真实 Provider 的 opt-in 问答测试为 `apps/desktop/test/opencode-native.smoke.ts`，读取已有配置，不输出凭据。协议 smoke 成功不等于最终 PPTX 视觉验收通过，后者必须另行运行上游完整流程。
+
+## 发布验证限制
 
 - OpenCode、host 和 knowledge service 均要求单个 Desktop 实例持有本地写锁；不支持同步盘并发打开 `app.db` 或 LanceDB。
 - Provider 的真实可用性由上游服务决定；当前真实 smoke 明确执行文本、图片、音频，视频/Seedance 不在 smoke 范围内。

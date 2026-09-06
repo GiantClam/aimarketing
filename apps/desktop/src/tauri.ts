@@ -7,6 +7,18 @@ export interface TauriBridge {
 
 type TauriWindow = Window & { __TAURI__?: { core?: { invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> }; event?: { listen<T>(event: string, handler: (event: { payload: T }) => void): Promise<() => void> } } };
 
+let currentHostGeneration = 0;
+
+function acceptHostEvent(event: string, payload: unknown) {
+  if (event !== "desktop://runtime-response" && event !== "desktop://runtime-log") return true;
+  if (!payload || typeof payload !== "object") return true;
+  const generation = (payload as { generation?: unknown }).generation;
+  if (typeof generation !== "number" || !Number.isFinite(generation)) return true;
+  if (generation < currentHostGeneration) return false;
+  currentHostGeneration = Math.max(currentHostGeneration, generation);
+  return true;
+}
+
 function normalizeMessageInvokeArgs(command: string, args?: Record<string, unknown>) {
   if (command !== "append_message" || !args?.input || typeof args.input !== "object") return args;
   const input = args.input as Record<string, unknown>;
@@ -31,10 +43,16 @@ export function isTauriBridgeAvailable() {
 export const tauriBridge: TauriBridge = {
   invoke<T>(command: string, args?: Record<string, unknown>) {
     const invoke = (window as TauriWindow).__TAURI__?.core?.invoke;
-    return invoke ? invoke<T>(command, normalizeMessageInvokeArgs(command, args)) : Promise.reject(new Error("tauri_bridge_unavailable"));
+    if (!invoke) return Promise.reject(new Error("tauri_bridge_unavailable"));
+    const result = invoke<T>(command, normalizeMessageInvokeArgs(command, args));
+    if (command !== "host_start") return result;
+    return result.then((value) => {
+      if (typeof value === "number" && Number.isFinite(value)) currentHostGeneration = Math.max(currentHostGeneration, value);
+      return value;
+    });
   },
   listen<T>(event: string, handler: (payload: T) => void) {
     const listen = (window as TauriWindow).__TAURI__?.event?.listen;
-    return listen ? listen<T>(event, (value) => handler(value.payload)) : Promise.reject(new Error("tauri_bridge_unavailable"));
+    return listen ? listen<T>(event, (value) => { if (acceptHostEvent(event, value.payload)) handler(value.payload); }) : Promise.reject(new Error("tauri_bridge_unavailable"));
   },
 };

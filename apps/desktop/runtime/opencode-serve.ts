@@ -1,7 +1,7 @@
 import { randomBytes, randomInt } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir } from "node:fs/promises";
-import { createOpenCodeServeEventState, createOpenCodeServePromptPayload, createOpenCodeServeSessionPayload, normalizeOpenCodeServeEvent, openCodeServePermissionPath, openCodeServeSessionPath, openCodeServeSessionStatusPath, openCodeServeSessionsPath, readOpenCodeServeSessionId, type OpenCodeRuntimeEvent, type OpenCodeServeEventState } from "@coworkany/runtime-contracts/opencode";
+import { createOpenCodeServeEventState, createOpenCodeServePromptPayload, createOpenCodeServeSessionPayload, normalizeOpenCodeServeEvent, openCodeServePermissionPath, openCodeServeSessionPath, openCodeServeSessionStatusPath, openCodeServeSessionsPath, readOpenCodeServeSessionId, type OpenCodeRuntimeEvent, type OpenCodeServeEventState, type OpenCodeQuestionRequest } from "@coworkany/runtime-contracts/opencode";
 
 type Provider = { readonly id?: string; readonly model?: string; readonly apiKey?: string; readonly reasoningEffort?: string };
 type EventSink = (event: OpenCodeRuntimeEvent) => void;
@@ -13,17 +13,22 @@ type ActiveRun = {
   readonly messageIds: Set<string>;
   readonly completion: Promise<void>;
   readonly resolveCompletion: () => void;
-  readonly continueTurn: () => Promise<void>;
   readonly turnStartedAt: number;
+  readonly submittedMessageId: string;
+  userMessageId?: string;
+  readonly userMessageIds: Set<string>;
+  readonly ignoredMessageIds: Set<string>;
+  readonly questionIds: Set<string>;
+  onAccepted?: () => void;
+  readonly pendingFrames: Map<string, string[]>;
   promptSubmitted: boolean;
   assistantMessageSeen: boolean;
   assistantFinalMessageSeen: boolean;
   lastAssistantFinish?: string;
-  continuationAttempts: number;
-  continuationInFlight?: Promise<void>;
-  continuationPending: boolean;
   lastMessagePollAt: number;
   busySeen: boolean;
+  idleSeen?: boolean;
+  streamInterrupted?: boolean;
   activitySeen: boolean;
   completed: boolean;
   failed?: string;
@@ -31,13 +36,14 @@ type ActiveRun = {
 
 function runtimeEnvironmentSignature(environment: Record<string, string | undefined>) {
   const relevant = Object.entries(environment)
-    .filter(([key]) => key === "OPENCODE_CONFIG_CONTENT" || key === "OPENCODE_CONFIG_DIR" || key === "HOME" || key === "USERPROFILE" || key.startsWith("XDG_") || key.endsWith("_API_KEY"))
+    .filter(([key]) => key === "COWORKANY_SKILL_CATALOG_REVISION" || key === "OPENCODE_CONFIG_CONTENT" || key === "OPENCODE_CONFIG_DIR" || key === "HOME" || key === "USERPROFILE" || key.startsWith("XDG_") || key.endsWith("_API_KEY"))
     .sort(([left], [right]) => left.localeCompare(right));
   return JSON.stringify(relevant);
 }
 
 function record(value: unknown): Record<string, unknown> | null { return value && typeof value === "object" ? value as Record<string, unknown> : null; }
 function stringValue(...values: unknown[]) { return values.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim() ?? ""; }
+// eslint-disable-next-line no-control-regex -- remove control bytes from diagnostic text
 function safe(value: unknown) { return stringValue(value).replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 1024); }
 function modelParts(model: string | undefined) { const separator = model?.indexOf("/") ?? -1; return separator > 0 ? { providerID: model!.slice(0, separator), modelID: model!.slice(separator + 1) } : undefined; }
 function deepSeekVariant(model: string | undefined, reasoningEffort: string | undefined) {
@@ -80,6 +86,7 @@ export class OpenCodeServeClient {
   private runtimeEnvironmentSignature = "";
   private runtimeWorkspace = "";
   private readonly active = new Map<string, ActiveRun>();
+  private readonly selectedSkills = new Map<string, string>();
   // OpenCode Serve can be healthy before its session repository is ready for
   // concurrent POSTs. Serialize only the control-plane session handshake;
   // prompts remain fully concurrent once their session IDs exist.
@@ -104,7 +111,7 @@ export class OpenCodeServeClient {
       const signal = controller?.signal ?? externalSignal ?? init.signal;
       return await fetch(`${this.baseUrl}${path}`, { ...init, headers: { accept: "application/json", authorization: this.auth(), ...(init.headers ?? {}) }, ...(signal ? { signal } : {}) });
     } catch (error) {
-      if (timedOut) throw new Error(`opencode_request_timeout:${timeoutMs}`);
+      if (timedOut) throw new Error(`opencode_request_timeout:${timeoutMs}`, { cause: error });
       throw error;
     } finally {
       if (timer) clearTimeout(timer);
@@ -164,14 +171,6 @@ export class OpenCodeServeClient {
     child.stderr?.on("data", (chunk: Buffer) => {
       const diagnostic = chunk.toString("utf8");
       process.stderr.write(`[opencode-serve] ${diagnostic.slice(-2048)}`);
-      // OpenCode retries upstream 429s internally and can leave the prompt
-      // request open indefinitely. Surface a bounded terminal event so the
-      // desktop composer never appears to hang without an explanation.
-      if (/(?:too many requests|rate limit exceeded|\bstatus(?:code)?[=: ]*429\b|\bhttp\s*429\b)/iu.test(diagnostic)) {
-        this.failActiveRuns("provider_rate_limited", "Provider rate limit reached (HTTP 429). Choose another configured text model or retry later.");
-      } else if (/(?:access forbidden|\bforbidden\b|\bstatus(?:code)?[=: ]*403\b|\bhttp\s*403\b)/iu.test(diagnostic)) {
-        this.failActiveRuns("provider_access_forbidden", "Provider rejected the request (HTTP 403). Check the provider key, model permission, or choose another configured text model.");
-      }
     });
     child.once("close", () => { this.streamAbort?.abort(); this.streamAbort = undefined; if (!this.stopping) for (const active of this.active.values()) this.reportServeExit(active); });
     const deadline = Date.now() + 60_000;
@@ -190,8 +189,11 @@ export class OpenCodeServeClient {
     await previous;
     try {
       if (requestedId) {
-        const existing = await this.request(openCodeServeSessionPath(requestedId, workspacePath, "message")).catch(() => undefined);
-        if (existing?.ok) return { sessionId: requestedId, recovered: false };
+        const existing = await this.request(openCodeServeSessionPath(requestedId, workspacePath, "message")).catch((error) => {
+          throw new Error(`opencode_session_lookup_failed:${error instanceof Error ? error.message : String(error)}`);
+        });
+        if (existing.ok) return { sessionId: requestedId, recovered: false };
+        if (existing.status !== 404) throw new Error(`opencode_session_lookup_failed:${existing.status}`);
       }
       const model = modelParts(provider.model);
       const body = createOpenCodeServeSessionPayload({ title: "CoworkAny Desktop", ...(model ? { providerId: model.providerID, modelId: model.modelID } : {}) });
@@ -208,36 +210,67 @@ export class OpenCodeServeClient {
     }
   }
 
-  async prompt(sessionId: string, workspacePath: string, runId: string, prompt: string, provider: Provider, sink: EventSink, signal?: AbortSignal, agent?: string, beforeDone?: () => Promise<void>, systemPrompt?: string) {
+  async attachSession(workspacePath: string, requestedId: string, _provider: Provider, environment: Record<string, string | undefined>) {
+    await this.ensureStarted(workspacePath, environment);
+    const previous = this.sessionCreateQueue;
+    let release: (() => void) | undefined;
+    this.sessionCreateQueue = new Promise((resolve) => { release = resolve; });
+    await previous;
+    try {
+      const response = await this.request(openCodeServeSessionPath(requestedId, workspacePath, "message")).catch((error) => {
+        throw new Error(`opencode_session_attach_failed:${error instanceof Error ? error.message : String(error)}`);
+      });
+      if (response.status === 404) return undefined;
+      if (!response.ok) throw new Error(`opencode_session_attach_failed:${response.status}`);
+      return { sessionId: requestedId };
+    } finally {
+      release?.();
+    }
+  }
+
+  async prompt(sessionId: string, workspacePath: string, runId: string, prompt: string, provider: Provider, sink: EventSink, signal?: AbortSignal, agent?: string, beforeDone?: () => Promise<void>, skillId?: string) {
     await this.ensureStarted(workspacePath, this.runtimeEnvironment);
+    if ([...this.active.values()].some(run => run.sessionId === sessionId)) {
+      sink({ event: "runtime_error", code: "opencode_session_busy", message: "This OpenCode session is already running.", retryable: true, runId });
+      return;
+    }
     let resolveCompletion!: () => void;
     const completion = new Promise<void>((resolve) => { resolveCompletion = resolve; });
     const model = modelParts(provider.model);
-    const sendPrompt = async (nextPrompt: string) => {
-      const response = await this.request(openCodeServeSessionPath(sessionId, workspacePath, "prompt_async"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(createOpenCodeServePromptPayload({ prompt: nextPrompt, ...(model ? { providerId: model.providerID, modelId: model.modelID } : {}), ...(model?.modelID === "deepseek-v4-flash" ? { variant: deepSeekVariant(model.modelID, provider.reasoningEffort) } : {}), ...(agent?.trim() ? { agent: agent.trim() } : {}), ...(systemPrompt?.trim() ? { systemPrompt: systemPrompt.trim() } : {}) })),
-      }, this.promptTimeoutMs ?? false, signal);
-      if (!response.ok && response.status !== 204) throw new Error(`opencode_prompt_failed_${response.status}`);
-    };
-    let continueTurn!: () => Promise<void>;
-    const active: ActiveRun = { runId, sessionId, sink, serveEvents: createOpenCodeServeEventState(), messageIds: new Set(), completion, resolveCompletion, continueTurn: () => continueTurn(), turnStartedAt: Date.now(), promptSubmitted: false, assistantMessageSeen: false, assistantFinalMessageSeen: false, continuationAttempts: 0, continuationPending: false, lastMessagePollAt: 0, busySeen: false, activitySeen: false, completed: false };
-    const continuationPrompt = "Continue the current task from the latest tool result, following the active Skill's instructions and interaction flow.";
-    continueTurn = () => sendPrompt(continuationPrompt);
+    const turnStartedAt = Date.now();
+    // Native message IDs use a 48-bit timestamp/counter prefix and a random
+    // suffix. Supplying one ties the persisted user to this request even when
+    // the server's wall clock is a millisecond behind the desktop's.
+    const submittedMessageId = `msg_${(BigInt(turnStartedAt) * BigInt(0x1000) + BigInt(1)).toString(16).slice(-12).padStart(12, "0")}${randomBytes(7).toString("hex")}`;
+    const active: ActiveRun = { runId, sessionId, sink, serveEvents: createOpenCodeServeEventState(), messageIds: new Set(), userMessageIds: new Set(), ignoredMessageIds: new Set(), questionIds: new Set(), pendingFrames: new Map(), completion, resolveCompletion, turnStartedAt, submittedMessageId, promptSubmitted: false, assistantMessageSeen: false, assistantFinalMessageSeen: false, lastMessagePollAt: 0, busySeen: false, activitySeen: false, completed: false };
     this.active.set(runId, active);
     const abort = () => { void this.abort(sessionId); };
     signal?.addEventListener("abort", abort, { once: true });
     try {
-      // Long-running Skills must not hold the synchronous `/message` request
-      // open. OpenCode's async endpoint returns immediately; completion is
-      // delivered by the session.status=idle SSE event below.
+      if (signal?.aborted) throw new Error("opencode_aborted");
+      const selectedSkill = skillId?.trim() && skillId !== "auto" ? skillId.trim() : undefined;
+      const useCommand = selectedSkill && this.selectedSkills.get(sessionId) !== selectedSkill;
+      active.onAccepted = () => {
+        if (selectedSkill) this.selectedSkills.set(sessionId, selectedSkill);
+        else this.selectedSkills.delete(sessionId);
+      };
+      if (useCommand) {
+        const commandsResponse = await this.request(`/command?directory=${encodeURIComponent(workspacePath)}`, {}, 30_000, signal);
+        const commands = await commandsResponse.json();
+        if (!commandsResponse.ok || !Array.isArray(commands) || !commands.some(item => item.name === selectedSkill && item.source === "skill")) throw new Error(`opencode_skill_unavailable:${selectedSkill}`);
+      }
+      const variant = model?.modelID === "deepseek-v4-flash" ? deepSeekVariant(model.modelID, provider.reasoningEffort) : undefined;
+      const body = useCommand
+        ? { command: selectedSkill, arguments: prompt, ...(agent ? { agent } : {}), ...(model ? { model: `${model.providerID}/${model.modelID}` } : {}), ...(variant ? { variant } : {}) }
+        : createOpenCodeServePromptPayload({ prompt, ...(model ? { providerId: model.providerID, modelId: model.modelID } : {}), ...(variant ? { variant } : {}), ...(agent ? { agent } : {}) });
+      // Native command requests can stay open for the whole Skill. Ordinary
+      // prompts use prompt_async. Neither path imposes a task timeout.
       active.promptSubmitted = true;
       const completionWait = this.waitForCompletion(active, workspacePath, signal);
-      const promptSubmission = this.request(openCodeServeSessionPath(sessionId, workspacePath, "prompt_async"), {
+      const promptSubmission = this.request(openCodeServeSessionPath(sessionId, workspacePath, useCommand ? "command" : "prompt_async"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(createOpenCodeServePromptPayload({ prompt, ...(model ? { providerId: model.providerID, modelId: model.modelID } : {}), ...(model?.modelID === "deepseek-v4-flash" ? { variant: deepSeekVariant(model.modelID, provider.reasoningEffort) } : {}), ...(agent?.trim() ? { agent: agent.trim() } : {}), ...(systemPrompt?.trim() ? { systemPrompt: systemPrompt.trim() } : {}) })),
+        body: JSON.stringify({ ...body, messageID: submittedMessageId }),
       }, this.promptTimeoutMs ?? false, signal)
         .then((response) => ({ kind: "response" as const, response }))
         .catch((error) => ({ kind: "error" as const, error }));
@@ -250,6 +283,7 @@ export class OpenCodeServeClient {
         const detail = safe(await first.response.text().catch(() => ""));
         throw new Error(`opencode_prompt_failed_${first.response.status}${detail ? `:${detail}` : ""}`);
       }
+      if (first.kind === "response") active.onAccepted?.();
       if (signal?.aborted) throw new Error("opencode_aborted");
       if (active.failed) throw new Error(active.failed);
       await completionWait;
@@ -276,7 +310,7 @@ export class OpenCodeServeClient {
       if (!active.failed && this.child?.exitCode !== null) this.reportServeExit(active);
       if (active.failed) return;
       sink({ event: "runtime_error", code: signal?.aborted ? "opencode_aborted" : "opencode_prompt_failed", message: safe(error instanceof Error ? error.message : error), retryable: !signal?.aborted, runId });
-    } finally { signal?.removeEventListener("abort", abort); this.active.delete(runId); }
+    } finally { this.complete(active); signal?.removeEventListener("abort", abort); this.active.delete(runId); }
   }
 
   private reportServeExit(active: ActiveRun) {
@@ -284,16 +318,6 @@ export class OpenCodeServeClient {
     active.failed = "OpenCode serve exited before the turn completed.";
     active.sink({ event: "runtime_error", code: "opencode_serve_exited", message: active.failed, retryable: true, runId: active.runId });
     this.complete(active);
-  }
-
-  private failActiveRuns(code: string, message: string) {
-    for (const active of this.active.values()) {
-      if (active.failed) continue;
-      active.failed = message;
-      active.sink({ event: "runtime_error", code, message, retryable: true, runId: active.runId });
-      this.complete(active);
-      void this.abort(active.sessionId);
-    }
   }
 
   async abort(sessionId: string) { await this.request(openCodeServeSessionPath(sessionId, this.runtimeWorkspace, "abort"), { method: "POST" }, 2_000).catch(() => undefined); }
@@ -308,6 +332,24 @@ export class OpenCodeServeClient {
       const detail = safe(await result.text().catch(() => ""));
       throw new Error(`opencode_permission_reply_failed_${result.status}${detail ? `:${detail}` : ""}`);
     }
+  }
+
+  async listQuestions(sessionId: string, workspacePath: string): Promise<OpenCodeQuestionRequest[]> {
+    if (this.child && this.child.exitCode !== null) await this.ensureStarted(workspacePath, this.runtimeEnvironment);
+    const response = await this.request(`/question?directory=${encodeURIComponent(workspacePath)}`);
+    if (!response.ok) throw new Error(`opencode_questions_failed_${response.status}`);
+    const questions = await response.json();
+    return Array.isArray(questions) ? questions.filter((item): item is OpenCodeQuestionRequest => item?.sessionID === sessionId && typeof item.id === "string" && Array.isArray(item.questions)) : [];
+  }
+
+  async replyQuestion(sessionId: string, requestId: string, answers: string[][] | undefined, workspacePath: string) {
+    const pending = await this.listQuestions(sessionId, workspacePath);
+    if (!pending.some(question => question.id === requestId)) throw new Error("opencode_question_not_found");
+    const operation = answers === undefined ? "reject" : "reply";
+    const response = await this.request(`/question/${encodeURIComponent(requestId)}/${operation}?directory=${encodeURIComponent(workspacePath)}`, {
+      method: "POST", headers: { "content-type": "application/json" }, ...(answers === undefined ? {} : { body: JSON.stringify({ answers }) }),
+    });
+    if (!response.ok) throw new Error(`opencode_question_reply_failed_${response.status}`);
   }
 
   async cancelRun(runId: string) {
@@ -328,8 +370,13 @@ export class OpenCodeServeClient {
   async stop() {
     this.stopping = true;
     this.streamAbort?.abort();
-    for (const active of this.active.values()) active.sink({ event: "runtime_error", code: "opencode_serve_stopped", message: "OpenCode serve stopped.", retryable: true, runId: active.runId });
+    for (const active of this.active.values()) {
+      active.failed = "OpenCode serve stopped.";
+      active.sink({ event: "runtime_error", code: "opencode_serve_stopped", message: active.failed, retryable: true, runId: active.runId });
+      this.complete(active);
+    }
     this.active.clear();
+    this.selectedSkills.clear();
     const child = this.child;
     this.child = undefined;
     this.runtimeWorkspace = "";
@@ -349,21 +396,6 @@ export class OpenCodeServeClient {
     active.resolveCompletion();
   }
 
-  private requestContinuation(active: ActiveRun) {
-    if (active.completed || active.failed || active.continuationPending || active.continuationInFlight) return;
-    active.continuationAttempts += 1;
-    active.continuationPending = true;
-    active.continuationInFlight = active.continueTurn()
-      .catch((error) => {
-        if (active.completed || active.failed) return;
-        active.continuationPending = false;
-        active.failed = safe(error instanceof Error ? error.message : error);
-        active.sink({ event: "runtime_error", code: "opencode_continuation_failed", message: active.failed, retryable: true, runId: active.runId });
-        this.complete(active);
-      })
-      .finally(() => { active.continuationInFlight = undefined; });
-  }
-
   private async waitForCompletion(active: ActiveRun, workspacePath: string, signal?: AbortSignal) {
     const pollController = new AbortController();
     const abortPoll = () => pollController.abort();
@@ -378,6 +410,7 @@ export class OpenCodeServeClient {
 
   private async pollSessionStatus(active: ActiveRun, workspacePath: string, signal: AbortSignal) {
     while (!active.completed && !active.failed && !signal.aborted) {
+      let idle = Boolean(active.idleSeen);
       try {
         const response = await this.request(openCodeServeSessionStatusPath(workspacePath), {}, 2_000, signal);
         if (response.ok) {
@@ -385,32 +418,29 @@ export class OpenCodeServeClient {
           const sessions = record(payload);
           const session = sessions?.[active.sessionId];
           const type = statusType(session);
-          if (type === "busy") active.busySeen = true;
-          if ((type === "idle" || session === undefined) && (active.busySeen || active.activitySeen)) {
-            if (active.assistantFinalMessageSeen) {
-              this.complete(active);
-              return;
-            }
-            if (active.lastAssistantFinish === "tool-calls") this.requestContinuation(active);
+          if (type === "busy") { active.busySeen = true; active.idleSeen = false; idle = false; }
+          if ((type === "idle" || session === undefined) && active.promptSubmitted) {
+            idle = true;
           }
         }
       } catch {
         if (signal.aborted) return;
       }
-      // The SSE idle event is normally authoritative, but under high
-      // concurrency OpenCode can persist the completed message before the
-      // corresponding status event reaches this client. Reconcile against
-      // the session message list independently of the status request: a
-      // stalled status endpoint must not prevent completion detection.
+      // Only reconcile text after OpenCode is idle. A busy snapshot can be
+      // ahead of queued SSE deltas, whose protocol has no replay offset.
       if (Date.now() - active.lastMessagePollAt >= 1_000) {
         active.lastMessagePollAt = Date.now();
-        try { await this.reconcileCompletedMessage(active, workspacePath, signal); } catch { if (signal.aborted) return; }
+        try {
+          if (idle) await this.reconcileCompletedMessage(active, workspacePath, signal, true);
+          if (!active.completed) await this.restoreQuestions(active, workspacePath);
+        } catch { if (signal.aborted) return; }
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
 
-  private async reconcileCompletedMessage(active: ActiveRun, workspacePath: string, signal: AbortSignal) {
+  private async reconcileCompletedMessage(active: ActiveRun, workspacePath: string, signal: AbortSignal, idle: boolean) {
+    if (!idle) return;
     const response = await this.request(openCodeServeSessionPath(active.sessionId, workspacePath, "message"), {}, 2_000, signal);
     if (!response.ok) return;
     const payload = await response.json().catch(() => null);
@@ -420,27 +450,24 @@ export class OpenCodeServeClient {
       : Array.isArray(payloadRecord?.messages)
         ? payloadRecord.messages
         : [];
-    for (const entry of [...messages].reverse()) {
+    // Replay authoritative snapshots after reconnect. Parent IDs establish
+    // ownership; a completed tool step is not a completed user turn.
+    for (const entry of messages) {
       const message = record(record(entry)?.info) ?? record(entry);
-      if (message?.role !== "assistant") continue;
-      const messageId = typeof message.id === "string" ? message.id : undefined;
-      const time = record(message.time);
-      const completed = typeof time?.completed === "number"
-        ? time.completed
-        : typeof message.completed === "number"
-          ? message.completed
-          : undefined;
-      if (completed === undefined || completed < active.turnStartedAt) continue;
-      if (active.continuationPending && messageId && !active.messageIds.has(messageId)) active.continuationPending = false;
-      if (messageId) active.messageIds.add(messageId);
-      active.activitySeen = true;
-      active.assistantMessageSeen = true;
-      active.lastAssistantFinish = typeof message.finish === "string" ? message.finish : undefined;
-      active.assistantFinalMessageSeen = active.lastAssistantFinish !== "tool-calls";
-      if (active.assistantFinalMessageSeen) {
-        this.complete(active);
-      } else this.requestContinuation(active);
-      return;
+      if (!message) continue;
+      this.handleEvent(`data: ${JSON.stringify({ type: "message.updated", properties: { sessionID: active.sessionId, info: message } })}`, true);
+      const parts = record(entry)?.parts;
+      if (Array.isArray(parts)) for (const part of parts) this.handleEvent(`data: ${JSON.stringify({ type: "message.part.updated", properties: { sessionID: active.sessionId, part } })}`, true);
+    }
+    if (idle && active.assistantFinalMessageSeen) this.complete(active);
+  }
+
+  private async restoreQuestions(active: ActiveRun, workspacePath: string) {
+    const pending = await this.listQuestions(active.sessionId, workspacePath);
+    if (active.completed || active.failed) return;
+    for (const question of pending) {
+      if (active.questionIds.has(question.id)) continue;
+      this.handleEvent(`data: ${JSON.stringify({ type: "question.asked", properties: question })}`);
     }
   }
 
@@ -476,50 +503,81 @@ export class OpenCodeServeClient {
               this.handleEvent(frame);
             }
           }
-        } catch { if (!this.stopping) await new Promise((resolve) => setTimeout(resolve, 500)); }
+        } catch { /* reconnect; do not synthesize model input */ }
+        // SSE deltas have no resume offset. Keep the last contiguous text
+        // prefix when disconnected, then recover from the final snapshot.
+        for (const active of this.active.values()) active.streamInterrupted = true;
+        if (!this.stopping) await new Promise((resolve) => setTimeout(resolve, 500));
       }
     })();
   }
 
-  private handleEvent(frame: string) {
+  private handleEvent(frame: string, snapshot = false) {
     const data = frame.split(/\r?\n/u).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
     if (!data) return;
     let payload: unknown; try { payload = JSON.parse(data); } catch { return; }
     const routing = normalizeOpenCodeServeEvent("pending", payload, createOpenCodeServeEventState());
     const sessionId = routing.sessionId;
     if (!sessionId) return;
-    const sessionRuns = [...this.active.values()].filter((item) => item.sessionId === sessionId && !item.failed);
+    const sessionRuns = [...this.active.values()].filter((item) => item.sessionId === sessionId && !item.failed && !item.completed);
     if (routing.sessionStatus === "busy") {
-      for (const item of sessionRuns) { item.busySeen = true; item.activitySeen = true; }
+      for (const item of sessionRuns) { item.busySeen = true; item.activitySeen = true; item.idleSeen = false; }
     }
-    if (routing.sessionIdle) {
-      // Status belongs to a session rather than a single message. Resolve
-      // every submitted run for that session, which also keeps same-session
-      // concurrent prompts from waiting forever on one shared idle event.
-      for (const item of sessionRuns) {
-        if (!item.promptSubmitted || (!item.busySeen && !item.activitySeen)) continue;
-        if (item.assistantFinalMessageSeen) this.complete(item);
-        else if (item.lastAssistantFinish === "tool-calls") this.requestContinuation(item);
-      }
-    }
-    let active = routing.messageId ? sessionRuns.find((item) => item.messageIds.has(routing.messageId!)) : undefined;
-    if (!active && routing.messageRole === "assistant") active = sessionRuns.find((item) => item.messageIds.size === 0);
-    if (!active) active = sessionRuns.find((item) => item.messageIds.size === 0);
-    // Permission events can carry the tool message id rather than the
-    // assistant message id. When only one turn is active, route that event to
-    // the sole session run instead of dropping the approval request.
-    if (!active && sessionRuns.length === 1) active = sessionRuns[0];
+    if (routing.sessionIdle) for (const item of sessionRuns) item.idleSeen = true;
+    // Idle is a trigger for the poller's final snapshot, not permission to
+    // finish before any text missed during disconnection has been recovered.
+    const active = sessionRuns.length === 1 ? sessionRuns[0] : undefined;
     if (!active) return;
+    const raw = record(payload);
+    const properties = record(raw?.properties);
+    const info = record(properties?.info);
+    const questionEvent = typeof raw?.type === "string" && raw.type.startsWith("question.");
+    if (questionEvent) {
+      if (raw?.type === "question.asked") {
+        const requestId = stringValue(properties?.id);
+        if (active.questionIds.has(requestId)) return;
+        active.questionIds.add(requestId);
+      }
+      for (const event of normalizeOpenCodeServeEvent(active.runId, payload, active.serveEvents).events) active.sink(event);
+      return;
+    }
+    const part = record(properties?.part);
+    if (active.streamInterrupted && !snapshot && (part?.type === "text" || part?.type === "reasoning" || raw?.type === "message.part.delta")) return;
+    if (routing.messageRole === "user") {
+      if (routing.messageId && (routing.messageId === active.submittedMessageId || (routing.messageCreated !== undefined && routing.messageCreated >= active.turnStartedAt))) {
+        // OpenCode may create compaction/replay users within this exclusive
+        // session turn. They are native history, never extra desktop prompts.
+        if (!active.userMessageId) { active.userMessageId = routing.messageId; active.onAccepted?.(); }
+        if (!active.userMessageIds.has(routing.messageId)) active.assistantFinalMessageSeen = false;
+        active.userMessageIds.add(routing.messageId);
+      }
+      // Record user roles so echoed parts cannot become assistant text.
+      normalizeOpenCodeServeEvent(active.runId, payload, active.serveEvents);
+      return;
+    }
+    if (routing.messageRole === "assistant" && (info?.summary === true || !routing.parentId || !active.userMessageIds.has(routing.parentId))) {
+      if (routing.messageId) { active.ignoredMessageIds.add(routing.messageId); active.pendingFrames.delete(routing.messageId); }
+      return;
+    }
+    if (routing.messageRole === "assistant" && routing.messageId) active.ignoredMessageIds.delete(routing.messageId);
+    if (routing.messageId && active.ignoredMessageIds.has(routing.messageId)) return;
+    if (routing.messageId && !routing.messageRole && !active.messageIds.has(routing.messageId)) {
+      if (active.serveEvents.messageRoles.get(routing.messageId) === "user") return;
+      const queue = active.pendingFrames.get(routing.messageId) ?? [];
+      queue.push(frame);
+      active.pendingFrames.set(routing.messageId, queue);
+      return;
+    }
     const isNewAssistantMessage = routing.messageRole === "assistant" && Boolean(routing.messageId) && !active.messageIds.has(routing.messageId!);
+    if (isNewAssistantMessage) active.assistantFinalMessageSeen = false;
     // A single desktop run can contain several OpenCode assistant messages:
     // one reports a tool-call turn and a later one continues after the tool
     // result. The desktop transcript intentionally renders one Message for
     // the run, so preserve that message boundary as a Markdown paragraph
     // break instead of concatenating progress sentences into one paragraph.
-    if (isNewAssistantMessage && active.lastAssistantFinish === "tool-calls") {
+    if (isNewAssistantMessage && active.lastAssistantFinish === "tool-calls" && (!active.streamInterrupted || snapshot)) {
       active.sink({ event: "text_delta", delta: "\n\n", runId: active.runId });
     }
-    if (isNewAssistantMessage) active.continuationPending = false;
     if (routing.messageRole === "assistant") { active.assistantMessageSeen = true; active.activitySeen = true; }
     // Only message.updated events with an explicit role identify a message.
     // session.updated also exposes `info.id` (the session ID), which must not
@@ -534,6 +592,11 @@ export class OpenCodeServeClient {
       active.assistantFinalMessageSeen = true;
     }
     for (const runtimeEvent of normalized.events) active.sink(runtimeEvent);
+    if (routing.messageRole === "assistant" && routing.messageId) {
+      const queued = active.pendingFrames.get(routing.messageId) ?? [];
+      active.pendingFrames.delete(routing.messageId);
+      for (const pending of queued) this.handleEvent(pending);
+    }
     if (normalized.terminalError) {
       active.failed = normalized.terminalError.message;
       active.sink({ event: "runtime_error", ...normalized.terminalError, runId: active.runId });

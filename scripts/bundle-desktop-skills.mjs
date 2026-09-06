@@ -1,4 +1,4 @@
-import { access, cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, cp, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
@@ -12,12 +12,23 @@ const target = join(repoRoot, "apps", "desktop", "dist-runtime", "skills");
 const agentsSource = join(source, "agency-agents");
 const agentsTarget = join(repoRoot, "apps", "desktop", "dist-runtime", "agents");
 const execFileAsync = promisify(execFile);
-const pptMasterVersion = "6.2.0";
-const pptMasterCommit = "7e54ea9691ed6cb8ee1f19ca6c12eeccd7dc1576";
-const dashiPptVersion = "0.4.11";
-const dashiPptCommit = "7cb23347f91cda1a5519eafc8c040704e389535a";
+const offline = process.argv.includes("--offline");
+const directoryDigestAlgorithm = "sha256-tree-v1";
+const skillLock = JSON.parse(await readFile(join(repoRoot, "scripts", "desktop-skills.lock.json"), "utf8"));
+if (skillLock?.schemaVersion !== 1 || skillLock?.directoryDigestAlgorithm !== directoryDigestAlgorithm || !Array.isArray(skillLock?.skills)) {
+  throw new Error("desktop_skill_lock_invalid");
+}
+function lockedSkill(id) {
+  const skill = skillLock.skills.find((entry) => entry?.id === id);
+  if (!skill || !["repo", "version", "commit", "branch", "skillPath", "stagingName", "directoryDigest"].every((key) => typeof skill[key] === "string" && skill[key].trim())) {
+    throw new Error(`desktop_skill_lock_invalid:${id}`);
+  }
+  return skill;
+}
+const pptMaster = lockedSkill("ppt-master");
+const dashiPpt = lockedSkill("dashi-ppt");
 await mkdir(dirname(target), { recursive: true });
-await cp(source, target, { recursive: true, force: true });
+await syncDirectory(source, target, new Set(["ppt-master", "dashi-ppt"]));
 // Agency Agents are OpenCode agents, not SKILL.md packages. Keep their
 // runtime definitions in dist-runtime/agents so the skill scanner never
 // attempts to resolve an agency-* ID as a Skill.
@@ -61,10 +72,62 @@ async function exists(path) {
   try { await access(path, constants.F_OK); return true; } catch { return false; }
 }
 
-async function acquireGitSkill({ repo, commit, branch, skillPath, stagingName }) {
+// Preserve the directory itself for Tauri's concurrent resource scanner, while
+// removing files deleted upstream. Copy every upstream byte without patches.
+async function syncDirectory(sourceRoot, targetRoot, preservedNames = new Set()) {
+  await mkdir(targetRoot, { recursive: true });
+  const entries = await readdir(sourceRoot, { withFileTypes: true });
+  const names = new Set(entries.map((entry) => entry.name));
+  for (const entry of await readdir(targetRoot, { withFileTypes: true })) {
+    if (!names.has(entry.name) && !preservedNames.has(entry.name)) {
+      await rm(join(targetRoot, entry.name), { recursive: true, force: true });
+    }
+  }
+  for (const entry of entries) {
+    const from = join(sourceRoot, entry.name);
+    const to = join(targetRoot, entry.name);
+    if (!entry.isDirectory() && !entry.isFile()) throw new Error(`Unsupported skill entry: ${from}`);
+    const existing = await lstat(to).catch((error) => { if (error.code === "ENOENT") return null; throw error; });
+    if (existing && (existing.isSymbolicLink() || existing.isDirectory() !== entry.isDirectory())) {
+      await rm(to, { recursive: true, force: true });
+    }
+    if (entry.isDirectory()) await syncDirectory(from, to);
+    else await cp(from, to, { force: true });
+  }
+}
+
+async function digestDirectory(directory) {
+  const hash = createHash("sha256");
+  // sha256-tree-v1: sorted depth-first traversal; one UTF-8 JSON array + LF
+  // per entry: [slash-relative-path,"directory"] or [path,"file",fileSha256].
+  // Includes hidden files and empty directories; excludes timestamps/modes.
+  async function visit(root, prefix = "") {
+    const entries = await readdir(root, { withFileTypes: true });
+    entries.sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+    for (const entry of entries) {
+      const path = join(root, entry.name);
+      const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        hash.update(`${JSON.stringify([relativePath, "directory"])}\n`);
+        await visit(path, relativePath);
+      } else if (entry.isFile()) {
+        const digest = createHash("sha256").update(await readFile(path)).digest("hex");
+        hash.update(`${JSON.stringify([relativePath, "file", digest])}\n`);
+      } else { throw new Error(`Unsupported skill entry: ${path}`); }
+    }
+  }
+  await visit(directory);
+  return hash.digest("hex");
+}
+
+async function acquireGitSkill({ id, repo, commit, branch, skillPath, stagingName, directoryDigest }) {
   const staging = join(repoRoot, ".artifacts", `${stagingName}-${commit}`);
   const acquired = join(staging, skillPath);
-  if (await exists(join(acquired, "SKILL.md"))) return acquired;
+  if (await exists(join(acquired, "SKILL.md"))) {
+    if (await digestDirectory(acquired) !== directoryDigest) throw new Error(`skill_cache_integrity_failed:${id}`);
+    return acquired;
+  }
+  if (offline) throw new Error(`offline_skill_missing:${repo}@${commit}`);
   await rm(staging, { recursive: true, force: true });
   await mkdir(dirname(staging), { recursive: true });
   try {
@@ -72,31 +135,41 @@ async function acquireGitSkill({ repo, commit, branch, skillPath, stagingName })
     await execFileAsync("git", ["-C", staging, "checkout", "--detach", commit], { windowsHide: true, timeout: 60000, maxBuffer: 64 * 1024 });
   } catch (error) {
     await rm(staging, { recursive: true, force: true });
-    throw new Error(`Unable to acquire ${repo} ${commit}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Unable to acquire ${repo} ${commit}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   }
   if (!(await exists(join(acquired, "SKILL.md")))) throw new Error(`Acquired ${repo} repository has no ${skillPath}/SKILL.md`);
+  if (await digestDirectory(acquired) !== directoryDigest) {
+    await rm(staging, { recursive: true, force: true });
+    throw new Error(`skill_source_integrity_failed:${id}`);
+  }
   return acquired;
 }
 
-const pptSource = await acquireGitSkill({ repo: "hugohe3/ppt-master", commit: pptMasterCommit, branch: `v${pptMasterVersion}`, skillPath: "skills/ppt-master", stagingName: "ppt-master-acquire" });
+const pptSource = await acquireGitSkill(pptMaster);
 const pptTarget = join(target, "ppt-master");
 // Tauri scans bundled resource directories while `beforeDevCommand` is still
 // running. Keep the target directory present and overlay the pinned skill so
 // the resource scanner never observes a path that was listed and then removed.
-await cp(pptSource, pptTarget, { recursive: true, force: true });
-const dashiSource = await acquireGitSkill({ repo: "chuspeeism/dashi-ppt-skill", commit: dashiPptCommit, branch: "main", skillPath: "skills/dashi-ppt", stagingName: "dashi-ppt-acquire" });
+await syncDirectory(pptSource, pptTarget);
+const dashiSource = await acquireGitSkill(dashiPpt);
 const dashiTarget = join(target, "dashi-ppt");
-await cp(dashiSource, dashiTarget, { recursive: true, force: true });
+await syncDirectory(dashiSource, dashiTarget);
 const catalogOutput = join(repoRoot, "apps", "desktop", "dist-runtime", "skill-catalog.json");
 const catalog = JSON.parse(await readFile(catalogOutput, "utf8"));
 const pptDigest = createHash("sha256").update(await readFile(join(pptSource, "SKILL.md"))).digest("hex");
 const dashiDigest = createHash("sha256").update(await readFile(join(dashiSource, "SKILL.md"))).digest("hex");
 catalog.skills = [
   ...(Array.isArray(catalog.skills) ? catalog.skills : []).filter((skill) => !["ppt-master", "dashi-ppt"].includes(skill?.id)),
-  { id: "ppt-master", digest: pptDigest, relativePath: "ppt-master/SKILL.md", source: "hugohe3/ppt-master", version: pptMasterVersion, commit: pptMasterCommit },
-  { id: "dashi-ppt", digest: dashiDigest, relativePath: "dashi-ppt/SKILL.md", source: "chuspeeism/dashi-ppt-skill", version: dashiPptVersion, commit: dashiPptCommit },
+  { id: "ppt-master", digest: pptDigest, relativePath: "ppt-master/SKILL.md", source: pptMaster.repo, version: pptMaster.version, commit: pptMaster.commit },
+  { id: "dashi-ppt", digest: dashiDigest, relativePath: "dashi-ppt/SKILL.md", source: dashiPpt.repo, version: dashiPpt.version, commit: dashiPpt.commit },
 ];
+catalog.directoryDigestAlgorithm = directoryDigestAlgorithm;
+for (const skill of catalog.skills) {
+  skill.directoryDigest = await digestDirectory(dirname(join(target, skill.relativePath)));
+}
+const pptDirectoryDigest = catalog.skills.find((skill) => skill.id === "ppt-master").directoryDigest;
+const dashiDirectoryDigest = catalog.skills.find((skill) => skill.id === "dashi-ppt").directoryDigest;
 await writeFile(catalogOutput, `${JSON.stringify(catalog, null, 2)}\n`, "utf8");
-await writeFile(join(target, "ppt-master.manifest.json"), `${JSON.stringify({ schemaVersion: 1, source: "hugohe3/ppt-master", version: pptMasterVersion, commit: pptMasterCommit, skillPath: "ppt-master/SKILL.md", digest: pptDigest }, null, 2)}\n`, "utf8");
-await writeFile(join(target, "dashi-ppt.manifest.json"), `${JSON.stringify({ schemaVersion: 1, source: "chuspeeism/dashi-ppt-skill", version: dashiPptVersion, commit: dashiPptCommit, skillPath: "dashi-ppt/SKILL.md", digest: dashiDigest }, null, 2)}\n`, "utf8");
-console.log(`Bundled canonical skills, ppt-master ${pptMasterCommit}, and dashi-ppt ${dashiPptCommit} into ${target}`);
+await writeFile(join(target, "ppt-master.manifest.json"), `${JSON.stringify({ schemaVersion: 1, source: pptMaster.repo, version: pptMaster.version, commit: pptMaster.commit, skillPath: "ppt-master/SKILL.md", digest: pptDigest, directoryDigest: pptDirectoryDigest, directoryDigestAlgorithm }, null, 2)}\n`, "utf8");
+await writeFile(join(target, "dashi-ppt.manifest.json"), `${JSON.stringify({ schemaVersion: 1, source: dashiPpt.repo, version: dashiPpt.version, commit: dashiPpt.commit, skillPath: "dashi-ppt/SKILL.md", digest: dashiDigest, directoryDigest: dashiDirectoryDigest, directoryDigestAlgorithm }, null, 2)}\n`, "utf8");
+console.log(`Bundled canonical skills, ppt-master ${pptMaster.commit}, and dashi-ppt ${dashiPpt.commit} into ${target}`);

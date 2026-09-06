@@ -43,6 +43,8 @@ export function applyWorkbenchRunEventToParts(
 ): WorkbenchMessagePart[] {
   const base = { ...(event.sequence === undefined ? {} : { sequence: event.sequence }), ...(event.createdAt ? { createdAt: event.createdAt } : {}) };
   switch (event.type) {
+    case "question_request":
+    case "question_response": return [...parts];
     case "text": {
       const existing = parts.find((part): part is Extract<WorkbenchMessagePart, { type: "text" }> => part.type === "text" && part.id === "text:assistant");
       return mergeWorkbenchMessagePart(parts, { id: "text:assistant", type: "text", text: mergeStreamingText(existing?.text ?? "", event.delta), ...base });

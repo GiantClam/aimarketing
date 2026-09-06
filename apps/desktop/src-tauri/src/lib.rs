@@ -19,27 +19,8 @@ mod bootstrap;
 mod instance_lock;
 
 pub(crate) const PPT_PYTHON_PROBE: &str = r#"
-import os, tempfile, zipfile
-import pptx, xlsxwriter, pathops, uharfbuzz, fitz, mammoth, markdownify, ebooklib, nbconvert, openpyxl, PIL, numpy, requests, bs4, curl_cffi, edge_tts, flask, google.genai
-from pptx import Presentation
-from pptx.util import Inches
-presentation = Presentation()
-presentation.slide_width = Inches(13.333333)
-presentation.slide_height = Inches(7.5)
-slide = presentation.slides.add_slide(presentation.slide_layouts[6])
-shape = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(10), Inches(1.2))
-run = shape.text_frame.paragraphs[0].add_run()
-run.text = "CoworkAny 中文 PPT probe"
-run.font.name = "Microsoft YaHei"
-descriptor, output = tempfile.mkstemp(suffix=".pptx")
-os.close(descriptor)
-try:
-    presentation.save(output)
-    assert os.path.getsize(output) > 0
-    with zipfile.ZipFile(output) as package:
-        assert "ppt/slides/slide1.xml" in package.namelist()
-finally:
-    if os.path.exists(output): os.remove(output)
+import sys, venv, pip
+assert not sys.flags.isolated and not sys.flags.safe_path, "python_script_path_isolated"
 "#;
 
 /// Resolve Windows command shims to the executable they dispatch before a
@@ -85,16 +66,11 @@ fn runtime_probe(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let migrations = storage::migrations_ready_without_initialization(&database).unwrap_or(false);
     let configured_node = configured_runtime_executable(&data, "nodePath");
     let private_node = data.join("runtime").join("node").join("node.exe");
-    let configured_opencode = configured_runtime_executable(&data, "opencodePath");
-    let private_opencode = data.join("runtime").join("opencode").join("opencode.exe");
     let node_path = configured_node.filter(|path| executable_works(path, &["--version"])).or_else(|| if private_node.exists() && executable_works(&private_node, &["--version"]) { Some(private_node) } else { system_executable("node").filter(|path| executable_works(path, &["--version"])) }).and_then(canonical_path);
-    let opencode_path = configured_opencode.filter(|path| executable_works(path, &["--version"])).or_else(|| if private_opencode.exists() && executable_works(&private_opencode, &["--version"]) { Some(private_opencode) } else { system_executable("opencode").filter(|path| executable_works(path, &["--version"])) }).and_then(canonical_path);
+    let opencode_path = host::opencode_executable(&app)?.map(PathBuf::from).and_then(canonical_path);
     let node = node_path.is_some();
     let opencode = opencode_path.is_some();
-    let configured_python = configured_runtime_executable(&data, "pythonPath");
-    let private_python = data.join("runtime").join("python").join("python.exe");
-    let resource_python = resource.join("dist-runtime").join("runtime").join("python").join("python.exe");
-    let python_path = configured_python.filter(|path| python_capable(path)).or_else(|| [private_python, resource_python].into_iter().find(|path| python_capable(path))).or_else(system_python).and_then(canonical_path);
+    let python_path = host::python_executable(&app)?.map(PathBuf::from).and_then(canonical_path);
     let python = python_path.is_some();
     let development = std::env::current_dir().unwrap_or_default().join("apps").join("desktop").join("dist-runtime");
     let configured_host = configured_runtime_path(&data, "hostPath");
@@ -103,9 +79,7 @@ fn runtime_probe(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let configured_knowledge = configured_runtime_path(&data, "knowledgePath");
     let knowledge_path = configured_knowledge.filter(|path| path.is_file()).or_else(|| [resource.join("dist-runtime").join("knowledge.mjs"), resource.join("_up_").join("dist-runtime").join("knowledge.mjs"), development.join("knowledge.mjs")].into_iter().find(|path| path.is_file())).and_then(canonical_path);
     let knowledge = knowledge_path.is_some();
-    let skill_roots = [resource.join("dist-runtime").join("skills"), resource.join("_up_").join("dist-runtime").join("skills"), development.join("skills")];
-    let configured_skills = configured_runtime_path(&data, "skillsPath");
-    let skill_path = configured_skills.filter(|path| path.join("ppt-master").join("SKILL.md").exists() && path.join("ppt-master.manifest.json").exists()).or_else(|| skill_roots.iter().find(|path| path.join("ppt-master").join("SKILL.md").exists() && path.join("ppt-master.manifest.json").exists()).cloned()).and_then(canonical_path);
+    let skill_path = host::skills_directory(&app)?.and_then(canonical_path);
     let skills = skill_path.is_some();
     let configured_fonts = configured_runtime_path(&data, "fontsPath");
     let fonts_path = configured_fonts.filter(|path| bootstrap::font_asset_works(&path.join("msyh.ttc"))).or_else(|| [resource.join("dist-runtime").join("runtime").join("fonts"), resource.join("_up_").join("dist-runtime").join("runtime").join("fonts"), development.join("runtime").join("fonts")].into_iter().find(|path| bootstrap::font_asset_works(&path.join("msyh.ttc")))).and_then(canonical_path);
@@ -139,11 +113,14 @@ struct RuntimeProbeCache {
 
 fn runtime_probe_fingerprint(data: &Path, resource: &Path) -> String {
     [
+        ("native-runtime-v2", resource.join("dist-runtime/skill-catalog.json")),
+        ("up-skill-catalog", resource.join("_up_/dist-runtime/skill-catalog.json")),
         ("config", data.join("config.json")),
         ("database", data.join("app.db")),
         ("resource", resource.to_path_buf()),
         ("manifest", resource.join("runtime-manifest.json")),
         ("dist-manifest", resource.join("dist-runtime").join("runtime").join("runtime-manifest.json")),
+        ("up-dist-manifest", resource.join("_up_").join("dist-runtime").join("runtime").join("runtime-manifest.json")),
     ]
     .into_iter()
     .map(|(label, path)| format!("{label}={}:{}", path.to_string_lossy(), path_stamp(&path)))
@@ -236,22 +213,6 @@ fn persist_runtime_paths(data: &std::path::Path, updates: &[(&str, Option<&PathB
     }
     if changed { config::write(&path, &value)?; }
     Ok(())
-}
-
-fn python_capable(path: &std::path::Path) -> bool {
-    let mut command = Command::new(path);
-    #[cfg(windows)]
-    command.creation_flags(0x08000000);
-    command.args(["-c", PPT_PYTHON_PROBE]).output().map(|output| output.status.success()).unwrap_or(false)
-}
-
-fn system_python() -> Option<PathBuf> {
-    let mut command = Command::new("where.exe");
-    #[cfg(windows)]
-    command.creation_flags(0x08000000);
-    let output = command.arg("python").output().ok()?;
-    if !output.status.success() { return None; }
-    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| !line.is_empty()).map(PathBuf::from).flat_map(resolve_windows_command_shim).filter(|path| path.exists() && executable_works(path, &["--version"])).find_map(canonical_path)
 }
 
 fn system_executable(command: &str) -> Option<PathBuf> {

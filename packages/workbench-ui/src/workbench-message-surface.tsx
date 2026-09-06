@@ -66,6 +66,9 @@ export type WorkbenchMessageSurfaceProps = {
   readonly locale?: "zh" | "en";
   readonly pendingMessageId?: string;
   readonly onReachTop?: (viewport: HTMLDivElement) => void;
+  readonly onViewportScroll?: (viewport: HTMLDivElement) => void;
+  readonly scrollStateKey?: string;
+  readonly restoreScrollTop?: number;
   readonly className?: string;
   readonly onCopy?: (message: DesktopUIMessage) => void | Promise<void>;
   readonly onRetry?: (message: DesktopUIMessage) => void | Promise<void>;
@@ -91,6 +94,7 @@ export type WorkbenchArtifactSource = {
 
 const HANDLED_DATA_PARTS = new Set([
   "data-artifact",
+  "data-writerAsset",
   "data-attachment",
   "data-media",
   "data-report",
@@ -503,7 +507,7 @@ function MessageParts({ message, locale, streaming, onArtifactOpen, onArtifactDo
   </>;
 }
 
-export function WorkbenchMessageSurface({ messages, locale = "zh", pendingMessageId, className = "", onCopy, onRetry, renderAssistantActions, onArtifactOpen, onArtifactDownload, onMediaOpen, resolveMediaSource, resolveArtifactSource, onToolApproval, emptyState, onReachTop }: WorkbenchMessageSurfaceProps) {
+export function WorkbenchMessageSurface({ messages, locale = "zh", pendingMessageId, className = "", onCopy, onRetry, renderAssistantActions, onArtifactOpen, onArtifactDownload, onMediaOpen, resolveMediaSource, resolveArtifactSource, onToolApproval, emptyState, onReachTop, onViewportScroll, scrollStateKey, restoreScrollTop }: WorkbenchMessageSurfaceProps) {
   const orderedBaseMessages = orderMessagesForTimeline(messages);
   const latestMessage = orderedBaseMessages.at(-1);
   const pendingMessagePresent = Boolean(pendingMessageId && messages.some((message) => message.id === pendingMessageId));
@@ -558,7 +562,7 @@ export function WorkbenchMessageSurface({ messages, locale = "zh", pendingMessag
       {message.role === "user" ? <RoleAvatar role="user" locale={locale} /> : null}
     </div>;
   };
-  return <Conversation className={`wb-ai-message-surface ${className}`.trim()} data-uimessage-surface="true" scrollButtonLabel={locale === "zh" ? "滚动到最新消息" : "Scroll to latest"} scrollToBottomKey={orderedMessages.at(-1)?.id ?? null} onReachTop={onReachTop}>
+  return <Conversation className={`wb-ai-message-surface ${className}`.trim()} data-uimessage-surface="true" autoScroll={restoreScrollTop === undefined} scrollButtonLabel={locale === "zh" ? "滚动到最新消息" : "Scroll to latest"} scrollToBottomKey={orderedMessages.at(-1)?.id ?? null} onReachTop={onReachTop} onViewportScroll={onViewportScroll} restoreScrollTop={restoreScrollTop} scrollStateKey={scrollStateKey}>
     <ConversationContent>
       {!turns.length ? <ConversationEmptyState>{emptyState ?? (locale === "zh" ? "开始一段新的对话" : "Start a new conversation")}</ConversationEmptyState> : turns.map((turn, index) => <section className="ai-elements-message-turn wb-ai-message-turn" data-message-turn-id={turn.id} data-turn-index={index} key={turn.id}>
         {turn.user ? renderMessage(turn.user) : null}
