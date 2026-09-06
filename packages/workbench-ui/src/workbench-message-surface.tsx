@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useState, type ReactNode } from "react";
 import { Download } from "lucide-react";
 import { WorkbenchAttachments } from "./prompt-input";
