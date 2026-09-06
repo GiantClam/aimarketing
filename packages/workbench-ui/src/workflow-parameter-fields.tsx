@@ -6,6 +6,56 @@ import { resolveWorkbenchMediaFeature, type WorkbenchMediaField } from "./media"
 
 type WorkflowParameterValue = string | number | boolean;
 
+const workflowOptionLabels: Record<string, { zh: string; en: string }> = {
+  Markdown: { zh: "Markdown", en: "Markdown" },
+  Text: { zh: "文本", en: "Text" },
+  HTML: { zh: "HTML", en: "HTML" },
+  JSON: { zh: "JSON", en: "JSON" },
+  WeChat: { zh: "微信公众号", en: "WeChat" },
+  Generic: { zh: "通用", en: "Generic" },
+  Article: { zh: "文章", en: "Article" },
+  Social: { zh: "社交内容", en: "Social" },
+  Campaign: { zh: "营销活动", en: "Campaign" },
+  Auto: { zh: "自动", en: "Auto" },
+  Chinese: { zh: "中文", en: "Chinese" },
+  English: { zh: "英文", en: "English" },
+  "Image reference": { zh: "图片引用", en: "Image reference" },
+  Asset: { zh: "资产", en: "Asset" },
+  Continue: { zh: "继续", en: "Continue" },
+  "Fail fast": { zh: "快速失败", en: "Fail fast" },
+  "Input order": { zh: "输入顺序", en: "Input order" },
+  Low: { zh: "低", en: "Low" },
+  High: { zh: "高", en: "High" },
+  Transparent: { zh: "透明", en: "Transparent" },
+  Opaque: { zh: "不透明", en: "Opaque" },
+  "Text to video": { zh: "文生视频", en: "Text to video" },
+  "Image to video": { zh: "图生视频", en: "Image to video" },
+  "First and last frame": { zh: "首尾帧", en: "First and last frame" },
+  "Reference to video": { zh: "参考图生视频", en: "Reference to video" },
+  "Video edit": { zh: "视频编辑", en: "Video edit" },
+  Off: { zh: "关闭", en: "Off" },
+  On: { zh: "开启", en: "On" },
+  "Electronic pop": { zh: "电子流行", en: "Electronic pop" },
+  Cinematic: { zh: "电影感", en: "Cinematic" },
+  Uplifting: { zh: "振奋", en: "Uplifting" },
+  Calm: { zh: "舒缓", en: "Calm" },
+  Instrumental: { zh: "纯音乐", en: "Instrumental" },
+  Vocal: { zh: "人声", en: "Vocal" },
+  "AI generate": { zh: "AI 生成", en: "AI generate" },
+  Custom: { zh: "自定义", en: "Custom" },
+  "HTML PPT": { zh: "HTML 演示文稿", en: "HTML PPT" },
+  "Editable PPT": { zh: "可编辑演示文稿", en: "Editable PPT" },
+  "Marketing campaign": { zh: "营销活动", en: "Marketing campaign" },
+  "Business report": { zh: "业务报告", en: "Business report" },
+  General: { zh: "通用", en: "General" },
+  Brand: { zh: "品牌", en: "Brand" },
+  Product: { zh: "产品", en: "Product" },
+};
+
+function localizedWorkflowOptionLabel(label: string, locale: "zh" | "en") {
+  return workflowOptionLabels[label]?.[locale] ?? label;
+}
+
 export type WorkbenchWorkflowModelOption = {
   value: string;
   label: string;
@@ -37,7 +87,7 @@ function renderMediaField(field: WorkbenchMediaField, node: WorkflowDefinitionNo
     <span>{field.label}</span>
     {field.type === "select" && field.options?.length ? (
       <select aria-label={field.label} title={field.label} value={String(value)} onChange={(event) => onUpdate(field.id, event.target.value)}>
-        {field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        {field.options.map((option) => <option key={option.value} value={option.value}>{localizedWorkflowOptionLabel(option.label, locale)}</option>)}
       </select>
     ) : field.type === "textarea" ? (
       <textarea aria-label={field.label} value={String(value)} onChange={(event) => onUpdate(field.id, event.target.value)} placeholder={field.placeholder} />
@@ -91,7 +141,7 @@ export function WorkbenchWorkflowParameterFields({ locale, node, modelOptions = 
           </select>
         ) : field.rendererId === "select" && field.options?.length ? (
           <select aria-label={label} title={label} value={String(value)} onChange={(event) => onUpdate(field.id, event.target.value)}>
-            {field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            {field.options.map((option) => <option key={option.value} value={option.value}>{localizedWorkflowOptionLabel(option.label, locale)}</option>)}
           </select>
         ) : field.rendererId === "toggle" || field.valueType === "boolean" ? (
           <span className="workflow-toggle-field"><input aria-label={label} type="checkbox" checked={Boolean(value)} onChange={(event) => onUpdate(field.id, event.target.checked)} /><span>{value ? (locale === "zh" ? "已启用" : "Enabled") : (locale === "zh" ? "未启用" : "Disabled")}</span></span>

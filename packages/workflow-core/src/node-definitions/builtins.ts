@@ -4,11 +4,38 @@ const textPort = (id = "text", role?: WorkflowPortDefinition["role"]): WorkflowP
 const inputPort = (valueKind: WorkflowValueKind, id: string = valueKind, role?: WorkflowPortDefinition["role"], limits: Pick<WorkflowPortDefinition, "minItems" | "maxItems"> = {}): WorkflowPortDefinition => ({ id, valueKind, role, required: false, cardinality: "many", ...limits });
 const outputPort = (valueKind: WorkflowValueKind, id: string = valueKind): WorkflowPortDefinition => ({ id, valueKind, required: false, cardinality: "many" });
 const fields = (...items: WorkflowFieldDefinition[]) => items;
-const textField = (id: string, label: string, defaultValue = "", rendererId: WorkflowFieldDefinition["rendererId"] = "text"): WorkflowFieldDefinition => ({ id, label: { zh: label, en: label }, rendererId, valueType: "string", required: false, defaultValue });
-const selectField = (id: string, label: string, options: Array<{ label: string; value: string }>, defaultValue?: string): WorkflowFieldDefinition => ({ id, label: { zh: label, en: label }, rendererId: "select", valueType: "string", required: false, options, defaultValue });
-const assetField = (id: string, label: string, valueType: WorkflowFieldDefinition["valueType"] = "object"): WorkflowFieldDefinition => ({ id, label: { zh: label, en: label }, rendererId: "asset", valueType, required: false });
-const numberField = (id: string, label: string, defaultValue: number, min?: number, max?: number): WorkflowFieldDefinition => ({ id, label: { zh: label, en: label }, rendererId: "number", valueType: "number", required: false, defaultValue, min, max });
-const toggleField = (id: string, label: string, defaultValue: boolean): WorkflowFieldDefinition => ({ id, label: { zh: label, en: label }, rendererId: "toggle", valueType: "boolean", required: false, defaultValue });
+const builtinFieldLabels: Record<string, { zh: string; en: string }> = {
+  "上传文件": { zh: "上传文件", en: "Uploaded files" },
+  "引用资产": { zh: "引用资产", en: "Referenced assets" },
+  "文本": { zh: "文本", en: "Text" },
+  "文件名称": { zh: "文件名称", en: "File name" },
+  "File name": { zh: "文件名称", en: "File name" },
+  "文件格式": { zh: "文件格式", en: "File format" },
+  Provider: { zh: "提供商", en: "Provider" },
+  Model: { zh: "模型", en: "Model" },
+  Prompt: { zh: "提示词", en: "Prompt" },
+  Script: { zh: "脚本", en: "Script" },
+  Text: { zh: "文本", en: "Text" },
+  "Provider file ID": { zh: "提供商文件 ID", en: "Provider file ID" },
+  "Voice ID": { zh: "音色 ID", en: "Voice ID" },
+  "Preview text": { zh: "预览文本", en: "Preview text" },
+  Query: { zh: "查询", en: "Query" },
+  Title: { zh: "标题", en: "Title" },
+  "Collect 节点": { zh: "汇总节点", en: "Collect node" },
+  "输入集合": { zh: "输入集合", en: "Input collection" },
+  "失败策略": { zh: "失败策略", en: "Failure policy" },
+  "并发数": { zh: "并发数", en: "Concurrency" },
+  "最大轮数": { zh: "最大轮数", en: "Max iterations" },
+  "展示名称": { zh: "展示名称", en: "Display name" },
+  "允许空输出": { zh: "允许空输出", en: "Allow empty output" },
+  "要求全部成功": { zh: "要求全部成功", en: "Require all succeeded" },
+};
+const localizeBuiltinFieldLabel = (label: string) => builtinFieldLabels[label] ?? { zh: label, en: label };
+const textField = (id: string, label: string, defaultValue = "", rendererId: WorkflowFieldDefinition["rendererId"] = "text"): WorkflowFieldDefinition => ({ id, label: localizeBuiltinFieldLabel(label), rendererId, valueType: "string", required: false, defaultValue });
+const selectField = (id: string, label: string, options: Array<{ label: string; value: string }>, defaultValue?: string): WorkflowFieldDefinition => ({ id, label: localizeBuiltinFieldLabel(label), rendererId: "select", valueType: "string", required: false, options, defaultValue });
+const assetField = (id: string, label: string, valueType: WorkflowFieldDefinition["valueType"] = "object"): WorkflowFieldDefinition => ({ id, label: localizeBuiltinFieldLabel(label), rendererId: "asset", valueType, required: false });
+const numberField = (id: string, label: string, defaultValue: number, min?: number, max?: number): WorkflowFieldDefinition => ({ id, label: localizeBuiltinFieldLabel(label), rendererId: "number", valueType: "number", required: false, defaultValue, min, max });
+const toggleField = (id: string, label: string, defaultValue: boolean): WorkflowFieldDefinition => ({ id, label: localizeBuiltinFieldLabel(label), rendererId: "toggle", valueType: "boolean", required: false, defaultValue });
 const identityMigration = (config: Record<string, unknown>) => ({ ...config });
 const editorTextField = (id: string, zh: string, en: string, defaultValue = "", rendererId: WorkflowFieldDefinition["rendererId"] = "text"): WorkflowFieldDefinition => ({ id, label: { zh, en }, rendererId, valueType: "string", required: false, defaultValue });
 const editorSelectField = (id: string, zh: string, en: string, options: Array<{ label: string; value: string }>, defaultValue: string): WorkflowFieldDefinition => ({ id, label: { zh, en }, rendererId: "select", valueType: "string", required: false, options, defaultValue });
@@ -33,10 +60,10 @@ const definitions: BuiltinSpec[] = [
   { type: "ppt_generate", category: "media", title: { zh: "PPT 生成", en: "PPT Generate" }, icon: "presentation", colorToken: "violet", inputs: [textPort("text", "text.prompt"), inputPort("image", "images")], outputs: [outputPort("ppt")], configSchema: fields(textField("prompt", "Prompt")), defaultConfig: {}, executorId: "ppt_generate", sideEffect: "external" },
   { type: "knowledge_retrieve", category: "integration", title: { zh: "知识检索", en: "Knowledge Retrieve" }, icon: "link", colorToken: "sky", inputs: [textPort("text", "text.prompt"), inputPort("asset", "assets")], outputs: [outputPort("text")], configSchema: fields(textField("query", "Query")), defaultConfig: {}, executorId: "knowledge_retrieve", sideEffect: "external" },
   { type: "knowledge_write", category: "integration", title: { zh: "知识写入", en: "Knowledge Write" }, icon: "arrow-down", colorToken: "emerald", inputs: [textPort(), inputPort("asset"), inputPort("image"), inputPort("video"), inputPort("audio"), inputPort("ppt")], outputs: [outputPort("text"), outputPort("asset"), outputPort("image"), outputPort("video"), outputPort("audio"), outputPort("ppt")], configSchema: fields(textField("title", "Title")), defaultConfig: {}, executorId: "knowledge_write", sideEffect: "persistent" },
-  { type: "product_store", category: "output", title: { zh: "资产库存储", en: "Asset Library" }, icon: "archive", colorToken: "slate", inputs: [textPort(), inputPort("asset", "assets"), inputPort("image", "images"), inputPort("video", "videos"), inputPort("audio", "audios"), inputPort("ppt", "presentations")], outputs: [], configSchema: fields(textField("title", "Title"), textField("fileName", "File name", "workflow-output.md")), defaultConfig: { fileName: "workflow-output.md" }, executorId: "product_store", sideEffect: "persistent", legacyTitles: ["作品库存储", "素材库存储", "Work Library"] },
+  { type: "product_store", category: "output", title: { zh: "保存到资产库", en: "Save to Asset Library" }, icon: "archive", colorToken: "slate", inputs: [textPort(), inputPort("asset", "assets"), inputPort("image", "images"), inputPort("video", "videos"), inputPort("audio", "audios"), inputPort("ppt", "presentations")], outputs: [], configSchema: fields(textField("title", "Title"), textField("fileName", "File name", "workflow-output.md")), defaultConfig: { fileName: "workflow-output.md" }, executorId: "product_store", sideEffect: "persistent", legacyTitles: ["资产库存储", "作品库存储", "素材库存储", "Asset Library", "Work Library"] },
   { type: "foreach", category: "control", title: { zh: "逐项处理", en: "For Each" }, icon: "repeat", colorToken: "amber", inputs: [inputPort("asset", "items.asset"), inputPort("image", "items.image")], outputs: [outputPort("asset", "item.asset"), outputPort("image", "item.image")], configSchema: fields(selectField("inputPortId", "输入集合", [{ label: "Image reference", value: "image.reference" }, { label: "Asset", value: "asset" }], "image.reference"), selectField("failurePolicy", "失败策略", [{ label: "Continue", value: "continue" }, { label: "Fail fast", value: "fail_fast" }], "continue"), numberField("concurrency", "并发数", 3, 1, 6), numberField("maxIterations", "最大轮数", 20, 1, 100), textField("collectNodeKey", "Collect 节点")), defaultConfig: { inputPortId: "image.reference", failurePolicy: "continue", concurrency: 3, maxIterations: 20, collectNodeKey: "" }, executorId: "foreach", sideEffect: "none" },
   { type: "collect", category: "control", title: { zh: "汇总结果", en: "Collect" }, icon: "list", colorToken: "sky", inputs: [inputPort("asset", "items.asset"), inputPort("image", "items.image"), inputPort("video", "items.video"), inputPort("audio", "items.audio"), inputPort("ppt", "items.ppt"), textPort("items.text")], outputs: [outputPort("asset", "assets"), outputPort("image", "images"), outputPort("video", "videos"), outputPort("audio", "audios"), outputPort("ppt", "presentations"), outputPort("text")], configSchema: fields(editorSelectField("order", "排序", "Order", [{ label: "Input order", value: "input" }], "input"), editorToggleField("includeFailures", "包含失败项", "Include failures", false)), defaultConfig: { order: "input", includeFailures: false }, executorId: "collect", sideEffect: "none" },
-  { type: "output", category: "output", title: { zh: "工作流输出", en: "Output" }, icon: "check-circle", colorToken: "lime", inputs: [inputPort("asset", "assets"), inputPort("image", "images"), inputPort("video", "videos"), inputPort("audio", "audios"), inputPort("ppt", "presentations"), textPort()], outputs: [outputPort("asset", "assets"), outputPort("image", "images"), outputPort("video", "videos"), outputPort("audio", "audios"), outputPort("ppt", "presentations"), outputPort("text")], configSchema: fields(textField("displayName", "展示名称"), toggleField("allowEmpty", "允许空输出", false), toggleField("requireAllSucceeded", "要求全部成功", true)), defaultConfig: { displayName: "", allowEmpty: false, requireAllSucceeded: true }, executorId: "output", sideEffect: "none" },
+  { type: "output", category: "output", title: { zh: "结果预览", en: "Result Preview" }, icon: "check-circle", colorToken: "lime", inputs: [inputPort("asset", "assets"), inputPort("image", "images"), inputPort("video", "videos"), inputPort("audio", "audios"), inputPort("ppt", "presentations"), textPort()], outputs: [outputPort("asset", "assets"), outputPort("image", "images"), outputPort("video", "videos"), outputPort("audio", "audios"), outputPort("ppt", "presentations"), outputPort("text")], configSchema: fields(textField("displayName", "展示名称"), toggleField("allowEmpty", "允许空输出", false), toggleField("requireAllSucceeded", "要求全部成功", true)), defaultConfig: { displayName: "", allowEmpty: false, requireAllSucceeded: true }, executorId: "output", sideEffect: "none", legacyTitles: ["工作流输出", "Output"] },
 ];
 
 const editorFieldExtensions: Partial<Record<WorkflowNodeType, WorkflowFieldDefinition[]>> = {
@@ -46,7 +73,7 @@ const editorFieldExtensions: Partial<Record<WorkflowNodeType, WorkflowFieldDefin
     editorSelectField("language", "输出语言", "Output language", [{ label: "Auto", value: "auto" }, { label: "Chinese", value: "zh-CN" }, { label: "English", value: "en-US" }], "auto"),
   ],
   llm_generate: [editorTextField("systemPrompt", "系统提示词", "System prompt", "", "textarea")],
-  agent_execute: [editorTextField("agentId", "Agent", "Agent"), editorToggleField("webSearchEnabled", "启用 Web Search", "Enable web search", false)],
+  agent_execute: [editorTextField("agentId", "智能体", "Agent"), editorToggleField("webSearchEnabled", "启用网络搜索", "Enable web search", false)],
   image_generate: [
     editorTextField("workflowRef", "工作流引用", "Workflow reference"),
     editorSelectField("imageSize", "尺寸", "Size", [{ label: "1024x1024", value: "1024x1024" }, { label: "1536x1024", value: "1536x1024" }, { label: "1024x1536", value: "1024x1536" }], "1024x1024"),
@@ -66,7 +93,7 @@ const editorFieldExtensions: Partial<Record<WorkflowNodeType, WorkflowFieldDefin
   ],
   digital_human: [
     editorTextField("workflowRef", "工作流引用", "Workflow reference"), editorTextField("model", "模型", "Model"), editorTextField("avatarImageUrl", "人物图片 URL", "Avatar image URL"), editorTextField("audioUrl", "音频 URL", "Audio URL"),
-    editorTextField("scenePrompt", "场景提示词", "Scene prompt", "", "textarea"), editorNumberField("durationSeconds", "视频秒数", "Video seconds", 10, 1), editorNumberField("audioTrimStart", "音频起点", "Audio start", 0, 0), editorNumberField("audioTrimEnd", "音频终点", "Audio end", 0, 0), editorNumberField("seed", "Seed", "Seed", -1),
+    editorTextField("scenePrompt", "场景提示词", "Scene prompt", "", "textarea"), editorNumberField("durationSeconds", "视频秒数", "Video seconds", 10, 1), editorNumberField("audioTrimStart", "音频起点", "Audio start", 0, 0), editorNumberField("audioTrimEnd", "音频终点", "Audio end", 0, 0), editorNumberField("seed", "随机种子", "Seed", -1),
   ],
   music_generate: [editorTextField("model", "模型", "Model"), editorSelectField("genre", "类型", "Genre", [{ label: "Electronic pop", value: "electronic-pop" }, { label: "Cinematic", value: "cinematic" }], "electronic-pop"), editorSelectField("mood", "情绪", "Mood", [{ label: "Uplifting", value: "uplifting" }, { label: "Calm", value: "calm" }], "uplifting"), editorSelectField("vocals", "演唱", "Vocals", [{ label: "Instrumental", value: "instrumental" }, { label: "Vocal", value: "vocal" }], "instrumental"), editorSelectField("lyricsSource", "歌词", "Lyrics", [{ label: "AI generate", value: "ai_generate" }, { label: "Custom", value: "custom" }], "ai_generate")],
   audio_generate: [editorTextField("model", "模型", "Model"), editorSelectField("genre", "类型", "Genre", [{ label: "Electronic pop", value: "electronic-pop" }, { label: "Cinematic", value: "cinematic" }], "electronic-pop"), editorSelectField("mood", "情绪", "Mood", [{ label: "Uplifting", value: "uplifting" }, { label: "Calm", value: "calm" }], "uplifting"), editorSelectField("vocals", "演唱", "Vocals", [{ label: "Instrumental", value: "instrumental" }, { label: "Vocal", value: "vocal" }], "instrumental"), editorSelectField("lyricsSource", "歌词", "Lyrics", [{ label: "AI generate", value: "ai_generate" }, { label: "Custom", value: "custom" }], "ai_generate")],
@@ -74,7 +101,7 @@ const editorFieldExtensions: Partial<Record<WorkflowNodeType, WorkflowFieldDefin
   ppt_generate: [editorSelectField("previewRuntime", "PPT 类型", "PPT type", [{ label: "HTML PPT", value: "frontend-slides-agent" }, { label: "Editable PPT", value: "ppt-master-agent" }], "frontend-slides-agent"), editorTextField("model", "模型", "Model"), editorNumberField("pageCount", "页数", "Pages", 8, 1, 30), editorTextField("templateId", "模板", "Template"), editorSelectField("language", "语言", "Language", [{ label: "Chinese", value: "zh-CN" }, { label: "English", value: "en-US" }], "zh-CN"), editorSelectField("scenario", "场景", "Scenario", [{ label: "Marketing campaign", value: "marketing-campaign" }, { label: "Business report", value: "business-report" }], "marketing-campaign")],
   knowledge_retrieve: [editorTextField("prompt", "检索查询", "Retrieve query", "", "textarea"), editorNumberField("topK", "返回条数", "Top K", 4, 1, 10)],
   knowledge_write: [editorTextField("documentTitle", "知识标题", "Document title"), editorSelectField("knowledgeCategory", "知识分类", "Knowledge category", [{ label: "General", value: "general" }, { label: "Brand", value: "brand" }, { label: "Product", value: "product" }, { label: "Campaign", value: "campaign" }], "general")],
-  product_store: [editorTextField("storedFileName", "文件名称", "File name"), editorToggleField("persistToWorkLibrary", "同步到作品库", "Save to work library", true), editorToggleField("persistToKnowledgeBase", "加入知识入库队列", "Add to knowledge queue", false), editorTextField("knowledgeTargetType", "知识目标", "Knowledge target", "knowledge_base")],
+  product_store: [editorToggleField("persistToWorkLibrary", "同步到作品库", "Save to work library", true), editorToggleField("persistToKnowledgeBase", "加入知识入库队列", "Add to knowledge queue", false), editorTextField("knowledgeTargetType", "知识目标", "Knowledge target", "knowledge_base")],
 };
 
 export const WORKFLOW_BUILTIN_NODE_DEFINITIONS: readonly WorkflowNodeDefinitionV2[] = definitions.map((definition) => ({

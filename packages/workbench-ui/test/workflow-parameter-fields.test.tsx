@@ -53,6 +53,54 @@ test("renders select, number, and toggle controls from the shared node schema", 
   assert.match(markup, /type="checkbox"/);
 });
 
+test("keeps workflow parameter labels in the selected locale", () => {
+  const markup = renderToStaticMarkup(
+    <WorkbenchWorkflowParameterFields
+      locale="zh"
+      node={{
+        nodeKey: "agent-1",
+        type: "agent_execute",
+        nodeVersion: 1,
+        title: "智能体",
+        positionX: 0,
+        positionY: 0,
+        config: { prompt: "hello", selectedProviderId: "local", selectedModelId: "agent/model" },
+      }}
+      onUpdate={() => undefined}
+    />,
+  );
+
+  assert.match(markup, />提示词</u);
+  assert.match(markup, />提供商</u);
+  assert.match(markup, />模型</u);
+  assert.doesNotMatch(markup, />Prompt</u);
+  assert.doesNotMatch(markup, />Provider</u);
+  assert.doesNotMatch(markup, />Model</u);
+});
+
+test("localizes workflow select options without changing their persisted values", () => {
+  const markup = renderToStaticMarkup(
+    <WorkbenchWorkflowParameterFields
+      locale="zh"
+      node={{
+        nodeKey: "foreach-1",
+        type: "foreach",
+        nodeVersion: 1,
+        title: "逐项处理",
+        positionX: 0,
+        positionY: 0,
+        config: { inputPortId: "image.reference", failurePolicy: "continue" },
+      }}
+      onUpdate={() => undefined}
+    />,
+  );
+
+  assert.match(markup, />图片引用</u);
+  assert.match(markup, />继续</u);
+  assert.match(markup, /value="image\.reference"/u);
+  assert.match(markup, /value="continue"/u);
+});
+
 test("uses the configured model picker for media nodes with a standalone model field", () => {
   const markup = renderToStaticMarkup(
     <WorkbenchWorkflowParameterFields

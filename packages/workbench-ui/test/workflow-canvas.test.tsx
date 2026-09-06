@@ -36,8 +36,8 @@ test("workflow canvas summarizes exact port ids while exposing one visual endpoi
     ...baseNodes,
     { nodeKey: "knowledge", type: "knowledge_write", nodeVersion: 1, title: "Knowledge", positionX: 1224, positionY: 0, config: { title: "Brief" } },
   ]);
-  assert.match(markup, /Provider: local/);
-  assert.match(markup, /Model: writer\/model/);
+  assert.match(markup, /提供商: local/);
+  assert.match(markup, /模型: writer\/model/);
   assert.match(markup, /title="text"/);
   assert.match(markup, /data-agent-node="knowledge"/);
   assert.equal((markup.match(/shared-workflow-port input aggregate/g) ?? []).length, 3);
@@ -45,7 +45,7 @@ test("workflow canvas summarizes exact port ids while exposing one visual endpoi
   assert.doesNotMatch(markup, /shared-workflow-port-panel/);
 });
 
-test("workflow canvas keeps schema parameters visible when a host renders editable node controls", () => {
+test("workflow canvas does not duplicate compact parameters beside editable node controls", () => {
   const markup = renderToStaticMarkup(
     <WorkflowCanvas
       locale="zh"
@@ -59,11 +59,18 @@ test("workflow canvas keeps schema parameters visible when a host renders editab
 
   const inputCard = markup.match(/data-agent-node="input"[\s\S]*?<\/article>/u)?.[0] ?? "";
   const writerCard = markup.match(/data-agent-node="writer"[\s\S]*?<\/article>/u)?.[0] ?? "";
+  assert.doesNotMatch(inputCard, /data-node-parameters="true"/u);
+  assert.doesNotMatch(inputCard, /文本: hello/u);
+  assert.doesNotMatch(writerCard, /Provider: local/u);
+  assert.doesNotMatch(writerCard, /Model: writer\/model/u);
+  assert.match(writerCard, /data-node-editor="true"/u);
+});
+
+test("workflow canvas keeps compact parameters when no editor is supplied", () => {
+  const markup = renderCanvas();
+  const inputCard = markup.match(/data-agent-node="input"[\s\S]*?<\/article>/u)?.[0] ?? "";
   assert.match(inputCard, /data-node-parameters="true"/u);
   assert.match(inputCard, /文本: hello/u);
-  assert.match(writerCard, /Provider: local/u);
-  assert.match(writerCard, /Model: writer\/model/u);
-  assert.match(writerCard, /data-node-editor="true"/u);
 });
 
 test("workflow canvas does not expose destructive actions for fixed input and output nodes", () => {

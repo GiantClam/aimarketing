@@ -561,10 +561,10 @@ const workflowActions: Array<{ id: WorkflowAction; label: string; output: "text"
   { id: "audio_generate", label: "通用音频", output: "audio" },
   { id: "knowledge_retrieve", label: "Obsidian 知识检索", output: "text" },
   { id: "knowledge_write", label: "写入 Obsidian", output: "text" },
-  { id: "product_store", label: "资产库存储", output: "asset" },
+  { id: "product_store", label: "保存到资产库", output: "asset" },
   { id: "foreach", label: "逐项处理", output: "asset" },
   { id: "collect", label: "汇总结果", output: "text" },
-  { id: "output", label: "工作流输出", output: "text" },
+  { id: "output", label: "结果预览", output: "text" },
 ];
 const workflowActionsBase = workflowActions;
 
@@ -719,7 +719,7 @@ export function buildWorkflowDefinition(prompt: string, actionId: WorkflowAction
     nodes: [
       { nodeKey: "input", type: "text_input", nodeVersion: 1, title: locale === "en" ? "Input task" : "输入任务", positionX: 0, positionY: 0, config: buildDesktopWorkflowNodeConfig("text_input", prompt, provider.model ?? "", provider.id) },
       { nodeKey: "capability", type: actionId, nodeVersion: 1, title, positionX: 408, positionY: 0, config: capabilityConfig },
-      { nodeKey: "asset-library", type: "product_store", nodeVersion: 1, title: locale === "en" ? "Asset Library" : "资产库存储", positionX: 816, positionY: 0, config: buildDesktopWorkflowNodeConfig("product_store", prompt, provider.model ?? "", provider.id) },
+      { nodeKey: "asset-library", type: "product_store", nodeVersion: 1, title: locale === "en" ? "Save to Asset Library" : "保存到资产库", positionX: 816, positionY: 0, config: buildDesktopWorkflowNodeConfig("product_store", prompt, provider.model ?? "", provider.id) },
     ],
     edges: [
       { edgeKey: "input-capability", sourceNodeKey: "input", sourcePortId: "text", targetNodeKey: "capability", targetPortId: workflowNodeRegistry.get(actionId)?.inputs[0]?.id ?? "text" },
@@ -1496,6 +1496,7 @@ function DesktopWorkflowCanvas({
     onUndo={onUndo}
     onRedo={onRedo}
     renderNodeEditor={onUpdateNodeParameter ? (node) => {
+      if (node.nodeKey !== selectedNodeKey) return null;
       const nodeModelOptions = [
         ...modelOptions,
         ...[node.config.selectedModelId, node.config.model].flatMap((value) => typeof value === "string" && value.trim() ? [{ value, label: value }] : []),
@@ -1586,8 +1587,8 @@ function DesktopWorkflowBuilderSurface(props: WorkflowBuilderSurfaceProps) {
   const narrowCanvas = typeof window !== "undefined" && window.innerWidth < 1180;
   const canvasInitialViewport = narrowCanvas ? { x: 34, y: 78, scale: 0.54 } : { x: 100, y: 80, scale: 0.7 };
   const copy = locale === "zh"
-    ? { save: "保存流程", export: "导出 JSON", import: "导入 JSON", host: "本地运行环境", nodesMenu: "节点菜单", workflow: "工作流信息", workflowTitle: "工作流标题", workflowDescription: "工作流说明", workflowStatus: "状态", nodes: "节点", canvas: "本地工作流画布", edges: "条连线", runnable: "可运行", input: "输入节点", output: "输出节点", capability: "能力节点", delete: "删除节点", editable: "可编辑配置", task: "任务内容", artifact: "产物策略", localOutput: "写入当前项目目录", artifactHint: "登记到本地 artifacts，不上传云端", ability: "能力", upstream: "上游节点", none: "不连接", runtime: "运行时", run: "运行工作流", rerun: "重新运行", continue: "继续运行", close: "收起", open: "展开", parameters: "节点参数" }
-    : { save: "Save workflow", export: "Export JSON", import: "Import JSON", host: "Local runtime", nodesMenu: "Node menu", workflow: "Workflow info", workflowTitle: "Workflow title", workflowDescription: "Workflow description", workflowStatus: "Status", nodes: "nodes", canvas: "Local workflow canvas", edges: "edges", runnable: "ready", input: "Input node", output: "Output node", capability: "Capability node", delete: "Delete node", editable: "Editable config", task: "Task", artifact: "Artifact policy", localOutput: "Write to current project", artifactHint: "Registered in local artifacts; never uploaded", ability: "Capability", upstream: "Upstream", none: "No connection", runtime: "Runtime", run: "Run workflow", rerun: "Rerun", continue: "Continue", close: "Collapse", open: "Expand", parameters: "Node parameters" };
+    ? { save: "保存流程", export: "导出 JSON", import: "导入 JSON", host: "本地运行环境", nodesMenu: "节点菜单", workflow: "工作流信息", workflowTitle: "工作流标题", workflowDescription: "工作流说明", workflowStatus: "状态", nodes: "节点", canvas: "本地工作流画布", edges: "条连线", runnable: "可运行", input: "输入节点", output: "结果预览", capability: "能力节点", delete: "删除节点", editable: "可编辑配置", task: "任务内容", artifact: "产物策略", localOutput: "写入当前项目目录", artifactHint: "登记到本地 artifacts，不上传云端", ability: "能力", upstream: "上游节点", none: "不连接", runtime: "运行时", run: "运行工作流", rerun: "重新运行", continue: "继续运行", close: "收起", open: "展开", parameters: "节点参数" }
+    : { save: "Save workflow", export: "Export JSON", import: "Import JSON", host: "Local runtime", nodesMenu: "Node menu", workflow: "Workflow info", workflowTitle: "Workflow title", workflowDescription: "Workflow description", workflowStatus: "Status", nodes: "nodes", canvas: "Local workflow canvas", edges: "edges", runnable: "ready", input: "Input node", output: "Result preview", capability: "Capability node", delete: "Delete node", editable: "Editable config", task: "Task", artifact: "Artifact policy", localOutput: "Write to current project", artifactHint: "Registered in local artifacts; never uploaded", ability: "Capability", upstream: "Upstream", none: "No connection", runtime: "Runtime", run: "Run workflow", rerun: "Rerun", continue: "Continue", close: "Collapse", open: "Expand", parameters: "Node parameters" };
   const terminalRun = props.lastRunStatus ?? (!props.activeRunId
     ? /失败|failed/iu.test(props.runStatus) ? "failed" : /中断|取消|interrupted|cancelled/iu.test(props.runStatus) ? "cancelled" : /完成|succeeded/iu.test(props.runStatus) ? "succeeded" : ""
     : "");
@@ -1647,7 +1648,7 @@ function DesktopWorkflowWorkspace({ route, onBack, prompt: _prompt, onPromptChan
   const [rightPanelOpen, setRightPanelOpen] = useState(desktopCanvasFitsPanels);
   const [pendingConnectionSourceKey, setPendingConnectionSourceKey] = useState<string | null>(null);
   const workflowMetadata = initialWorkflowMetadata;
-  const [panelPosition, setPanelPosition] = useState({ left: { x: 18, y: 118 }, right: { x: 18, y: 118 } });
+  const [panelPosition, setPanelPosition] = useState({ left: { x: 18, y: 82 }, right: { x: 18, y: 82 } });
   const panelDragRef = useRef<{ panel: "left" | "right"; startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const suppressPanelClickRef = useRef(false);
   const workflowActions = workflowActionsBase.map((item) => ({ ...item, label: locale === "en" ? workflowActionEnglish[item.id] ?? item.label : item.label }));
@@ -1887,7 +1888,7 @@ function DesktopWorkflowWorkspace({ route, onBack, prompt: _prompt, onPromptChan
   const upstreamEdge = selectedNode ? localDefinition.edges.find((edge) => edge.targetNodeKey === selectedNode.nodeKey) : undefined;
   const upstreamOptions = selectedNode && selectedNode.nodeKey !== "input" && selectedNode.nodeKey !== "output" ? localDefinition.nodes.filter((node) => node.nodeKey !== selectedNode.nodeKey && node.nodeKey !== "output" && (workflowNodeRegistry.get(node.type)?.outputs.some((port) => port.valueKind === workflowNodeRegistry.get(selectedNode.type)?.inputs[0]?.valueKind))) : [];
   const actionLabel = (item: { id: string; label: string }) => locale === "en" ? workflowActionEnglish[item.id] ?? item.label : item.label;
-  const ui = locale === "zh" ? { save: "保存流程", export: "导出 JSON", import: "导入 JSON", host: "本地 OpenCode Host", abilities: "工作流能力", nodes: "节点", canvas: "本地工作流画布", edges: "条连线", runnable: "可运行", input: "输入节点", output: "输出节点", capability: "能力节点", delete: "删除节点", editable: "可编辑配置", task: "任务内容", artifact: "产物策略", localOutput: "写入当前项目目录", artifactHint: "登记到本地 artifacts，不上传云端", ability: "能力", upstream: "上游节点", none: "不连接", runtime: "运行时", run: "运行工作流", rerun: "重新运行", continue: "继续运行", close: "收起", open: "展开", parameters: "节点参数", placeholder: "描述这条工作流需要完成的任务……", providerRequired: "该媒体节点需要配置 Provider", providerHint: "请在模型配置中选择已配置模型并填写对应 Provider。", openSettings: "打开模型配置" } : { save: "Save workflow", export: "Export JSON", import: "Import JSON", host: "Local OpenCode Host", abilities: "Workflow abilities", nodes: "nodes", canvas: "Local workflow canvas", edges: "edges", runnable: "ready", input: "Input node", output: "Output node", capability: "Capability node", delete: "Delete node", editable: "Editable config", task: "Task", artifact: "Artifact policy", localOutput: "Write to current project", artifactHint: "Registered in local artifacts; never uploaded", ability: "Capability", upstream: "Upstream node", none: "No connection", runtime: "Runtime", run: "Run workflow", rerun: "Rerun", continue: "Continue", close: "Collapse", open: "Expand", parameters: "Node parameters", placeholder: "Describe the task this workflow should complete…", providerRequired: "This media node requires a configured Provider", providerHint: "Choose a configured model and enter its Provider settings in Model settings.", openSettings: "Open model settings" };
+  const ui = locale === "zh" ? { save: "保存流程", export: "导出 JSON", import: "导入 JSON", host: "本地 OpenCode Host", abilities: "工作流能力", nodes: "节点", canvas: "本地工作流画布", edges: "条连线", runnable: "可运行", input: "输入节点", output: "结果预览", capability: "能力节点", delete: "删除节点", editable: "可编辑配置", task: "任务内容", artifact: "产物策略", localOutput: "写入当前项目目录", artifactHint: "登记到本地 artifacts，不上传云端", ability: "能力", upstream: "上游节点", none: "不连接", runtime: "运行时", run: "运行工作流", rerun: "重新运行", continue: "继续运行", close: "收起", open: "展开", parameters: "节点参数", placeholder: "描述这条工作流需要完成的任务……", providerRequired: "该媒体节点需要配置 Provider", providerHint: "请在模型配置中选择已配置模型并填写对应 Provider。", openSettings: "打开模型配置" } : { save: "Save workflow", export: "Export JSON", import: "Import JSON", host: "Local OpenCode Host", abilities: "Workflow abilities", nodes: "nodes", canvas: "Local workflow canvas", edges: "edges", runnable: "ready", input: "Input node", output: "Result preview", capability: "Capability node", delete: "Delete node", editable: "Editable config", task: "Task", artifact: "Artifact policy", localOutput: "Write to current project", artifactHint: "Registered in local artifacts; never uploaded", ability: "Capability", upstream: "Upstream node", none: "No connection", runtime: "Runtime", run: "Run workflow", rerun: "Rerun", continue: "Continue", close: "Collapse", open: "Expand", parameters: "Node parameters", placeholder: "Describe the task this workflow should complete…", providerRequired: "This media node requires a configured Provider", providerHint: "Choose a configured model and enter its Provider settings in Model settings.", openSettings: "Open model settings" };
   const localizedNodeTitle = (node: WorkflowDefinitionNodeV2) => node.nodeKey === "input" ? ui.input : node.nodeKey === "output" ? ui.output : actionLabel({ id: node.type, label: node.title });
   const nodeParameters: Array<[string, string | number | boolean]> = selectedNode ? Object.entries(selectedNode.config).filter(([key, value]) => !/apiKey|token|secret|baseUrl|endpoint|queryEndpoint/iu.test(key) && value !== undefined && value !== null && (typeof value === "string" || typeof value === "number" || typeof value === "boolean")) as Array<[string, string | number | boolean]> : [];
   const updateNode = (nodeKey: string, patch: Partial<WorkflowDefinitionNodeV2>) => {
@@ -4160,7 +4161,7 @@ export function App() {
             setTaskCount((current) => current + 1);
             if (isVisibleEvent && activePathRef.current === "/dashboard/workflows") {
               const output = (workflowOutputsRef.current.get(event.runId) ?? "").trim();
-              setRunStatus(locale === "zh" ? `工作流已完成，本地结果已写入输出节点${output ? `：\n${output}` : ""}` : `Workflow completed; the local result is available in the output node${output ? `:\n${output}` : ""}`);
+              setRunStatus(locale === "zh" ? `工作流已完成，本地结果已写入结果预览${output ? `：\n${output}` : ""}` : `Workflow completed; the local result is available in the result preview${output ? `:\n${output}` : ""}`);
             }
             setRuns((current) => current.map((run) => run.id === event.runId ? { ...run, status: "succeeded", finished_at: new Date().toISOString() } : run));
             if (isVisibleEvent && !isWorkflowEvent) setRunStatus(locale === "zh" ? "媒体任务已完成" : "Media task completed");

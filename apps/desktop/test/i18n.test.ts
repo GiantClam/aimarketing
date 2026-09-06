@@ -197,8 +197,8 @@ test("new workflow definitions use the active locale for persisted node titles",
   const provider = { id: "local", model: "demo", baseUrl: "http://127.0.0.1:11434" };
   const english = buildWorkflowDefinition("draft", "writer", provider, {}, "en");
   const chinese = buildWorkflowDefinition("撰写", "writer", provider, {}, "zh");
-  assert.deepEqual(english.nodes.map((node) => node.title), ["Input task", "Content writing", "Asset Library"]);
-  assert.deepEqual(chinese.nodes.map((node) => node.title), ["输入任务", "内容写作", "资产库存储"]);
+  assert.deepEqual(english.nodes.map((node) => node.title), ["Input task", "Content writing", "Save to Asset Library"]);
+  assert.deepEqual(chinese.nodes.map((node) => node.title), ["输入任务", "内容写作", "保存到资产库"]);
   assert.deepEqual(english.nodes.map((node) => node.type), ["text_input", "writer", "product_store"]);
   assert.deepEqual(chinese.edges.at(-1), {
     edgeKey: "capability-asset-library",

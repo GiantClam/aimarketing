@@ -813,6 +813,7 @@ export function WorkflowCanvas({
               })
               .filter(([, value]) => typeof value !== "object")
               .slice(0, 3);
+            const nodeEditor = renderNodeEditor?.(node);
             return (
               <Node
                 bare
@@ -862,8 +863,8 @@ export function WorkflowCanvas({
                 <div className="shared-workflow-node-body">
                   {mediaSlots.length ? <div className="shared-workflow-media-slots" data-node-media-slots="true">{mediaSlots.map((port) => <span key={port.id} className={isConnectionSlotEnabled(node, port.id) ? "" : "unsupported"} title={isConnectionSlotEnabled(node, port.id) ? undefined : (locale === "zh" ? "当前 Provider 不支持该输入" : "The current Provider does not support this input")}>{mediaPortLabel(port, locale)}{mediaSlotCounts.get(port.id) ? ` ${mediaSlotCounts.get(port.id)}` : ""}</span>)}</div> : null}
                   {mediaReferences.length ? <div className="shared-workflow-media-references" aria-label={locale === "zh" ? "已连接媒体引用" : "Connected media references"}>{mediaReferences.map(({ edge, port, index, source }) => <div key={edge.edgeKey} className="shared-workflow-media-reference"><span>{mediaPortLabel(port, locale)} {index + 1}</span><strong title={source?.title ?? edge.sourceNodeKey}>{source ? (isWorkflowNodeType(source.type) ? resolveWorkflowNodeTitle(source.type, source.title, locale) : source.title) : edge.sourceNodeKey}</strong>{onDeleteEdge ? <button type="button" data-node-no-drag="true" title={locale === "zh" ? "移除此引用" : "Remove this reference"} aria-label={locale === "zh" ? "移除此引用" : "Remove this reference"} onClick={(event) => { event.stopPropagation(); onDeleteEdge(edge); }}><Trash2 size={12} /></button> : null}</div>)}</div> : null}
-                  {parameterEntries.length ? <div className="shared-workflow-params" data-node-parameters="true">{parameterEntries.map(([key, value]) => <span key={key} title={`${key}: ${formatParameterValue(value)}`}>{key}: {formatParameterValue(value).slice(0, 26)}</span>)}</div> : null}
-                  {renderNodeEditor ? renderNodeEditor(node) : !parameterEntries.length ? <small className="shared-workflow-empty-params">{locale === "zh" ? "无参数" : "No parameters"}</small> : null}
+                  {parameterEntries.length && !nodeEditor ? <div className="shared-workflow-params" data-node-parameters="true">{parameterEntries.map(([key, value]) => <span key={key} title={`${key}: ${formatParameterValue(value)}`}>{key}: {formatParameterValue(value).slice(0, 26)}</span>)}</div> : null}
+                  {nodeEditor ?? (!parameterEntries.length ? <small className="shared-workflow-empty-params">{locale === "zh" ? "无参数" : "No parameters"}</small> : null)}
                   {execution && renderNodeOutput ? renderNodeOutput(node, execution) : null}
                 </div>
                 {!providerConfiguredForNode(node.type) && requiresProviderForNode(node.type) ? <div className="shared-workflow-provider-warning">{locale === "zh" ? "需要配置 Provider" : "Configuration required"}</div> : null}

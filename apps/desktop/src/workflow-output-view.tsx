@@ -78,7 +78,7 @@ export function WorkflowOutputPreview({ node, snapshot, locale }: { node: Workfl
       fileName: item.fileName || item.label,
     });
   };
-  return <div className="workflow-output-preview" data-node-output="true" aria-label={locale === "zh" ? "工作流输出内容" : "Workflow output content"}>
+  return <div className="workflow-output-preview" data-node-output="true" aria-label={locale === "zh" ? "结果预览内容" : "Result preview content"}>
     <div className="workflow-output-heading"><strong>{locale === "zh" ? "输出内容" : "Output content"}</strong><small>{items.length} {locale === "zh" ? "项" : items.length === 1 ? "item" : "items"}</small></div>
     {items.map((item) => <article className="workflow-output-item" key={item.id}>
       <div className="workflow-output-item-meta"><span>{outputKindLabel(item, locale)}</span><button type="button" data-node-no-drag="true" onClick={(event) => { event.stopPropagation(); download(item); }}>{locale === "zh" ? "下载" : "Download"}</button></div>

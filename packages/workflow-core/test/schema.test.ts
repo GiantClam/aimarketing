@@ -16,6 +16,10 @@ test("resolves compatible text connections and rejects incompatible media ports"
 test("preserves localized default titles", () => {
   assert.equal(getDefaultWorkflowNodeTitle("ppt_generate", "zh"), "PPT 生成");
   assert.equal(getDefaultWorkflowNodeTitle("ppt_generate", "en"), "PPT Generate");
+  assert.equal(getDefaultWorkflowNodeTitle("output", "zh"), "结果预览");
+  assert.equal(getDefaultWorkflowNodeTitle("output", "en"), "Result Preview");
+  assert.equal(getDefaultWorkflowNodeTitle("product_store", "zh"), "保存到资产库");
+  assert.equal(getDefaultWorkflowNodeTitle("product_store", "en"), "Save to Asset Library");
 });
 
 test("v1 registry exposes voice cloning as a distinct media capability", () => {
@@ -57,6 +61,35 @@ test("shares the online editor parameter contract for desktop workflow nodes", (
   for (const id of ["imageSize", "imageQuality", "imageBackground", "imageOutputFormat", "imageModeration"]) assert.equal(fieldIds(image).has(id), true, id);
   for (const id of ["model", "mode", "duration", "ratio", "sound"]) assert.equal(fieldIds(video).has(id), true, id);
   for (const id of ["previewRuntime", "model", "pageCount", "templateId", "language", "scenario"]) assert.equal(fieldIds(ppt).has(id), true, id);
+});
+
+test("localizes builtin workflow parameter labels for both supported locales", () => {
+  const expectations = [
+    ["writer", "selectedProviderId", "提供商", "Provider"],
+    ["writer", "selectedModelId", "模型", "Model"],
+    ["agent_execute", "prompt", "提示词", "Prompt"],
+    ["image_generate", "prompt", "提示词", "Prompt"],
+    ["voice_synthesis", "text", "文本", "Text"],
+    ["knowledge_retrieve", "query", "查询", "Query"],
+    ["knowledge_write", "title", "标题", "Title"],
+  ] as const;
+
+  for (const [nodeType, fieldId, zh, en] of expectations) {
+    const field = workflowNodeRegistry.require(nodeType as never).configSchema.find((candidate) => candidate.id === fieldId);
+    assert.ok(field, `${nodeType}.${fieldId} should exist`);
+    assert.equal(field.label.zh, zh, `${nodeType}.${fieldId} zh label`);
+    assert.equal(field.label.en, en, `${nodeType}.${fieldId} en label`);
+  }
+});
+
+test("does not expose duplicate parameter labels in one workflow node", () => {
+  for (const definition of workflowNodeRegistry.list()) {
+    const labels = new Set<string>();
+    for (const field of definition.configSchema) {
+      assert.equal(labels.has(field.label.zh), false, `${definition.type} duplicates zh label ${field.label.zh}`);
+      labels.add(field.label.zh);
+    }
+  }
 });
 
 test("accepts generic assets for media inputs but not text-only nodes", () => {

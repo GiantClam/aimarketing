@@ -1060,7 +1060,7 @@ test("desktop workflow builder exposes completed output in the run status surfac
   const desktopStyles = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
   assert.match(appSource, /const workflowOutputsRef = useRef\(new Map<string, string>\(\)\)/);
   assert.match(appSource, /nodeKey === "output"/);
-  assert.match(appSource, /工作流已完成，本地结果已写入输出节点/);
+  assert.match(appSource, /工作流已完成，本地结果已写入结果预览/);
   assert.match(desktopStyles, /\.workflow-canvas \{ display: grid;/);
   assert.match(desktopStyles, /\.workflow-editor-panel \{ display: grid; grid-column: 2;/);
 });
@@ -1123,6 +1123,8 @@ test("desktop workflow builder keeps the Canvas full-screen with movable side pa
   assert.match(desktopStyles, /\[data-field-id="imageSize"\]/);
   assert.match(desktopStyles, /\.workflow-editor-field-toggle \.workflow-toggle-field \{ box-sizing: border-box; display: flex; width: 100%; min-height: 32px/);
   assert.match(desktopStyles, /\.workflow-floating-panel/);
+  assert.match(desktopStyles, /\.workflow-floating-panel \{[^}]*max-height: calc\(100% - 92px\); flex-direction: column; overflow: hidden/);
+  assert.match(desktopStyles, /\.workflow-floating-panel-left \.workflow-action-list \{[^}]*overflow-y: auto; overscroll-behavior: contain/);
   assert.match(desktopStyles, /\.workflow-floating-panel-tab[^\n]*cursor: grab/);
   assert.match(desktopStyles, /\.workflow-builder-toolbar p \{ display: none; \}/);
   assert.match(desktopStyles, /\.workflow-builder-toolbar \{[^}]*padding: 8px 16px 7px/);
