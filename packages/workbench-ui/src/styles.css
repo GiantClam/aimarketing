@@ -842,6 +842,12 @@
 .wb-ai-message-header span { margin-left: auto; }
 .wb-ai-process { overflow: hidden; border: 0; border-radius: 0; background: transparent; }
 .wb-ai-process + .wb-ai-process { margin-top: 0.5rem; }
+.wb-ai-task { border: 1px solid color-mix(in srgb, var(--ai-elements-border) 68%, transparent); border-radius: .5rem; }
+.wb-ai-task[data-status="queued"] { border-color: color-mix(in srgb, var(--ai-elements-border) 82%, transparent); background: color-mix(in srgb, var(--ai-elements-muted) 42%, transparent); }
+.wb-ai-task[data-status="running"] { border-color: color-mix(in srgb, var(--ai-elements-brand) 48%, var(--ai-elements-border)); background: color-mix(in srgb, var(--ai-elements-brand) 10%, transparent); }
+.wb-ai-task[data-status="waiting"], .wb-ai-task[data-status="blocked"] { border-color: color-mix(in srgb, #7c5ce0 42%, var(--ai-elements-border)); background: color-mix(in srgb, #7c5ce0 8%, transparent); }
+.wb-ai-task[data-status="completed"], .wb-ai-task[data-status="succeeded"] { border-color: color-mix(in srgb, #16803b 36%, var(--ai-elements-border)); background: color-mix(in srgb, #16803b 7%, transparent); }
+.wb-ai-task[data-status="failed"], .wb-ai-task[data-status="cancelled"], .wb-ai-task[data-status="denied"] { border-color: color-mix(in srgb, var(--wb-destructive, #b42318) 38%, var(--ai-elements-border)); background: color-mix(in srgb, var(--wb-destructive, #b42318) 7%, transparent); }
 .wb-ai-process > summary { display: flex; align-items: center; gap: 0.5rem; min-height: 2.25rem; cursor: pointer; list-style: none; padding: 0 0.7rem; }
 .wb-ai-process > button,
 .wb-ai-process .ai-elements-task-trigger-content { font: inherit; text-align: left; }
@@ -1302,6 +1308,11 @@
   background: transparent;
   box-shadow: none;
 }
+.wb-ai-message-surface .wb-ai-message-execution > .wb-ai-task[data-status="queued"] { border-color: color-mix(in srgb, var(--ai-elements-border) 82%, transparent); background: color-mix(in srgb, var(--ai-elements-muted) 42%, transparent); }
+.wb-ai-message-surface .wb-ai-message-execution > .wb-ai-task[data-status="running"] { border-color: color-mix(in srgb, var(--ai-elements-brand) 48%, var(--ai-elements-border)); background: color-mix(in srgb, var(--ai-elements-brand) 10%, transparent); }
+.wb-ai-message-surface .wb-ai-message-execution > .wb-ai-task[data-status="waiting"], .wb-ai-message-surface .wb-ai-message-execution > .wb-ai-task[data-status="blocked"] { border-color: color-mix(in srgb, #7c5ce0 42%, var(--ai-elements-border)); background: color-mix(in srgb, #7c5ce0 8%, transparent); }
+.wb-ai-message-surface .wb-ai-message-execution > .wb-ai-task[data-status="completed"], .wb-ai-message-surface .wb-ai-message-execution > .wb-ai-task[data-status="succeeded"] { border-color: color-mix(in srgb, #16803b 36%, var(--ai-elements-border)); background: color-mix(in srgb, #16803b 7%, transparent); }
+.wb-ai-message-surface .wb-ai-message-execution > .wb-ai-task[data-status="failed"], .wb-ai-message-surface .wb-ai-message-execution > .wb-ai-task[data-status="cancelled"], .wb-ai-message-surface .wb-ai-message-execution > .wb-ai-task[data-status="denied"] { border-color: color-mix(in srgb, var(--wb-destructive, #b42318) 38%, var(--ai-elements-border)); background: color-mix(in srgb, var(--wb-destructive, #b42318) 7%, transparent); }
 .wb-ai-message-surface .wb-ai-message-execution .wb-ai-process > summary,
 .wb-ai-message-surface .wb-ai-message-execution .ai-elements-reasoning-trigger,
 .wb-ai-message-surface .wb-ai-message-execution .ai-elements-task-trigger-content,

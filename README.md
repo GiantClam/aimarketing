@@ -1,185 +1,87 @@
-# 🤖 AI Marketing Platform - Autonomous Coding System
+# CoworkAny
 
-全自动编码系统，基于 **Aider CLI + Orchestrator + MiniMax M2.1**
+企业级 AI 工作台，提供 AI 对话、Agent 对话、写作、图片生成、PPT、工作流和本地运行能力。
 
-## 🏗️ 架构
+[English README](README_EN.md) · [0.1.0 发布说明](RELEASE_NOTES_0.1.0.md)
 
-```
-Orchestrator (Python)     Aider CLI (Node.js)       MiniMax M2.1
-     │                           │                        │
-     ├── 任务调度 ──────────────→│                        │
-     │                           ├── 代码生成 ───────────→│
-     │                           │                        │
-     │                           ←── 返回代码 ────────────┤
-     │←── 完成 ──────────────────┤                        │
-     │                           │                        │
-     ├── 质量检查 ─────────────────────────────────────────┤
-```
+## 主要能力
 
-**分层职责：**
-- **Orchestrator**: 任务调度、错误恢复、质量检查
-- **Aider**: 代码生成、编辑、测试、Git 提交
-- **MiniMax M2.1**: AI 模型（编程能力 74% SWE-bench）
+- AI 对话与 Agent 对话：按入口隔离会话，支持流式回复、工具调用和过程信息折叠展示。
+- 写作与多平台协作：使用 Markdown 正文渲染，并支持文章预览、复制和 artifact 展示。
+- PPT 与媒体任务：通过已配置的 Provider 执行生成任务，并在消息中展示结果 artifact。
+- 工作流：支持节点配置、运行状态、错误信息和任务结果的持久化。
+- 桌面端：基于 Tauri 的 Windows 应用，支持本地运行时和绿色便携模式。
 
-## 📋 快速开始
+## 快速开始
 
-### 1. 安装依赖
+### Web 开发环境
 
 ```bash
-# 安装 Aider
-pip3 install aider-chat
-
-# 验证安装
-aider --version
+pnpm install
+pnpm dev
 ```
 
-### 2. 配置环境
+默认开发地址为 `http://localhost:3000`。
+
+### 桌面端开发环境
 
 ```bash
-# 编辑 .env.local
-cat > .env.local << 'ENV'
-NVIDIA_API_KEY=nvapi-xxx
-ENV
-
-# 加载配置
-export $(cat .env.local | xargs)
+pnpm install
+pnpm tauri:dev
 ```
 
-### 3. 运行系统
+桌面端开发服务器使用本地 Tauri 壳，并复用工作台 UI、Provider 和 skill 运行时。
 
-#### 方式 A: Orchestrator 自动化（推荐）
-```bash
-# 单次运行
-python3 orchestrator.py
+## 构建 Windows 绿色版
 
-# 守护进程（7x24 自动运行）
-python3 orchestrator.py --daemon 60
-```
-
-#### 方式 B: 直接使用 Aider
-```bash
-# 手动触发单个任务
-aider --model openai/minimaxai/minimax-m2.1 \
-      --message "Create RBAC system with 6 roles"
-```
-
-## 📊 当前状态
-
-| 指标 | 数值 |
-|------|------|
-| 总任务 | 10 个 |
-| 已完成 | 2 个 (20%) |
-| 进行中 | 8 个 |
-
-**已完成功能：**
-- ✅ STORY-001: 认证系统 (JWT)
-- ✅ STORY-002: 内容生成
-
-**待完成任务：**
-- ⏳ STORY-003: RBAC 权限系统
-- ⏳ STORY-004: 线索管理
-- ⏳ STORY-005: 网站生成器
-- ⏳ STORY-006: 战略顾问
-- ⏳ STORY-007: 培训材料
-- ⏳ STORY-008: 集成测试
-- ⏳ STORY-009: 部署上线
-- ⏳ STORY-010: 桌面端 Office 产物预览（先关联 PPT/PPTX 的 HTML、SVG 或图片预览；后续补充 DOCX/XLSX 的只读预览或本地转换方案）
-
-## 📁 核心文件
-
-| 文件 | 说明 | 用途 |
-|------|------|------|
-| `orchestrator.py` | 自动化编排器 | 任务调度、错误恢复 |
-| `quality_check.sh` | 质量检查 | typecheck + lint + test |
-| `prd.json` | 任务清单 | 9 个用户故事 |
-| `ARCHITECTURE.md` | 架构文档 | 系统设计说明 |
-
-## 🔄 工作流程
-
-```
-1. Orchestrator 读取 prd.json
-2. 获取下一个待办任务
-3. 构建 Aider prompt
-4. 调用 Aider CLI 执行
-5. Aider 生成/编辑代码
-6. 运行质量检查
-7. 标记任务完成
-8. 循环到下一个任务
-```
-
-## 🛠️ 命令参考
-
-### Orchestrator
-```bash
-# 单次运行
-python3 orchestrator.py
-
-# 守护进程（每60秒检查一次）
-python3 orchestrator.py --daemon 60
-
-# 查看日志
-tail -f .auto-coder/orchestrator.log
-```
-
-### Aider
-```bash
-# 基本使用
-aider --model openai/minimaxai/minimax-m2.1 --message "Task"
-
-# 带测试
-aider --model <model> --message "Task" --test
-
-# 自动提交
-aider --model <model> --message "Task" --auto-commits
-```
-
-### 质量检查
-```bash
-# 手动运行
-./quality_check.sh
-
-# 自动修复格式
-npx prettier --write .
-```
-
-## 🔧 配置
-
-### Aider 配置 (~/.aider.conf.yml)
-```yaml
-model: openai/minimaxai/minimax-m2.1
-openai_api_key: ${NVIDIA_API_KEY}
-edit_format: diff
-auto_commits: true
-auto_test: true
-```
-
-### 环境变量 (.env.local)
-```bash
-NVIDIA_API_KEY=nvapi-xxx
-GITHUB_TOKEN=ghp-xxx      # 可选
-GITHUB_REPO=user/repo     # 可选
-```
-
-## 📝 下一步
-
-运行自动化系统开始开发：
+项目版本号为 `0.1.0`。执行以下命令构建桌面端并生成绿色便携压缩包：
 
 ```bash
-cd /Users/beihuang/Documents/github/aimarketing
-
-# 启动开发服务器（终端1）
-npm run dev
-
-# 启动自动化编排器（终端2）
-python3 orchestrator.py --daemon 60
-
-# 查看进度（终端3）
-tail -f .auto-coder/orchestrator.log
+pnpm tauri:build
+pnpm --filter @coworkany/desktop package:portable-zip
 ```
 
----
+产物位于：
 
-**文档:**
-- `ARCHITECTURE.md` - 系统架构说明
-- `web_test_flow.md` - Web 测试流程
-- `AUTONOMOUS_CODING.md` - 完整使用指南
+```text
+.artifacts/desktop-release/CoworkAny-Windows-x64-portable.zip
+```
+
+绿色版不会要求安装器注册系统组件；运行时数据保存在可执行文件旁的 `data` 目录中，适合复制到其他 Windows 设备使用。
+
+## 发布前校验
+
+```bash
+pnpm desktop:release:regression
+pnpm desktop:verify-bundle
+pnpm desktop:verify-network-boundary
+pnpm desktop:verify-packages
+pnpm desktop:verify-portable-copy
+pnpm desktop:verify-path-matrix
+pnpm desktop:release-audit
+```
+
+如果只需要验证工作台 UI：
+
+```bash
+pnpm --filter @coworkany/workbench-ui exec tsx --test test/workbench-message-surface.test.tsx
+pnpm --filter @coworkany/workbench-ui typecheck
+```
+
+## 配置 Provider
+
+Provider、模型和 API Key 应通过应用配置或环境变量提供。请勿把真实 API Key 写入仓库、README、测试文件或发布压缩包。
+
+## 项目结构
+
+| 路径 | 说明 |
+| --- | --- |
+| `app/`、`components/`、`lib/` | Web 应用与服务端逻辑 |
+| `apps/desktop/` | Tauri 桌面端与本地运行时 |
+| `packages/workbench-ui/` | Web 与桌面端共享的工作台 UI |
+| `content/skills/` | Agent 与功能入口使用的 skill |
+| `scripts/` | 构建、打包和发布校验脚本 |
+
+## 许可证
+
+当前仓库未声明公开许可证。使用、分发或修改前请确认项目所有者的授权范围。

@@ -237,6 +237,8 @@ test("keeps the chat surface and message article free of legacy card geometry", 
 test("keeps execution details visually subordinate to the answer", () => {
   assert.match(workbenchStyles, /\.wb-ai-message-surface \.wb-ai-message-execution > \.wb-ai-process\s*\{[\s\S]*background:\s*transparent;/);
   assert.match(workbenchStyles, /\.wb-ai-message-surface \.wb-ai-message-execution > \.wb-ai-process\s*\{[\s\S]*box-shadow:\s*none;/);
+  assert.match(workbenchStyles, /\.wb-ai-message-surface \.wb-ai-message-execution > \.wb-ai-task\[data-status="running"\]\s*\{[\s\S]*background:/);
+  assert.match(workbenchStyles, /\.wb-ai-message-surface \.wb-ai-message-execution > \.wb-ai-task\[data-status="failed"\][\s\S]*background:/);
   assert.match(workbenchStyles, /\.wb-ai-message-surface \.wb-ai-message-execution \.ai-elements-reasoning-content\s*\{[\s\S]*font-size:\s*\.72rem/);
 });
 

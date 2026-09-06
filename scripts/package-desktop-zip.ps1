@@ -78,7 +78,21 @@ try {
   $distRuntime = Join-Path $resources "dist-runtime"
   if (-not (Test-Path -LiteralPath $distRuntime -PathType Container)) { throw "Tauri runtime resources missing: $distRuntime" }
   New-Item -ItemType Directory -Force -Path (Join-Path $packageRoot "_up_") | Out-Null
-  Copy-Item -LiteralPath $distRuntime -Destination (Join-Path $packageRoot "_up_\dist-runtime") -Recurse -Force
+  $packageRuntime = Join-Path $packageRoot "_up_\dist-runtime"
+  New-Item -ItemType Directory -Force -Path $packageRuntime, (Join-Path $packageRuntime "runtime") | Out-Null
+  foreach ($name in @("host.mjs", "knowledge.mjs", "skill-catalog.json", "agency-agent-manifest.json", "install-desktop-runtime.ps1", "runtime-manifest-crypto.mjs")) {
+    $source = Join-Path $distRuntime $name
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Tauri runtime control resource missing: $source" }
+    Copy-Item -LiteralPath $source -Destination (Join-Path $packageRuntime $name) -Force
+  }
+  foreach ($directory in @("skills", "agents")) {
+    $source = Join-Path $distRuntime $directory
+    if (-not (Test-Path -LiteralPath $source -PathType Container)) { throw "Tauri runtime catalog missing: $source" }
+    Copy-Item -LiteralPath $source -Destination (Join-Path $packageRuntime $directory) -Recurse -Force
+  }
+  $manifest = Join-Path $distRuntime "runtime\runtime-manifest.json"
+  if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { throw "Tauri runtime manifest missing: $manifest" }
+  Copy-Item -LiteralPath $manifest -Destination (Join-Path $packageRuntime "runtime\runtime-manifest.json") -Force
   if ($Portable) { Set-Content -LiteralPath (Join-Path $packageRoot "portable.flag") -Value "" -Encoding utf8 }
   Set-Content -LiteralPath (Join-Path $packageRoot "README.txt") -Encoding utf8 -Value @"
 CoworkAny Windows green package
