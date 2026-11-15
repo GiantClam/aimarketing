@@ -11,13 +11,13 @@ test("lead tool metadata uses localized canonical URLs for hub, tool pages, and 
   const seoExampleMetadata = getLeadToolExampleMetadata("en", "press-release-generator", "press-release-examples")
 
   assert.deepEqual(hubMetadata.title, {
-    absolute: "AI 工具目录 | AI Marketing",
+    absolute: "AI 工具目录 | AIMarketingSite",
   })
   assert.equal(hubMetadata.alternates?.canonical?.toString(), "http://localhost:3000/zh/tools")
   assert.equal(hubMetadata.alternates?.languages?.en?.toString(), "http://localhost:3000/en/tools")
 
   assert.deepEqual(toolMetadata.title, {
-    absolute: "AI PPT 生成器 | AI Marketing",
+    absolute: "AI PPT 生成器 | AIMarketingSite",
   })
   assert.equal(toolMetadata.alternates?.canonical?.toString(), "http://localhost:3000/zh/tools/ai-ppt-preview")
   assert.equal(toolMetadata.alternates?.languages?.en?.toString(), "http://localhost:3000/en/tools/ai-ppt-preview")
@@ -32,7 +32,7 @@ test("lead tool metadata uses localized canonical URLs for hub, tool pages, and 
   )
 
   assert.deepEqual(seoToolMetadata.title, {
-    absolute: "Content Brief Generator | AI Marketing",
+    absolute: "Content Brief Generator | AIMarketingSite",
   })
   assert.equal(seoToolMetadata.alternates?.canonical?.toString(), "http://localhost:3000/en/tools/content-brief-generator")
   assert.equal(

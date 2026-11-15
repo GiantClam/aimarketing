@@ -66,7 +66,7 @@ test("seo remediation lead tools are exposed as live public pages with workflow 
   assert.equal(paths.includes("/tools/seo-title-generator"), true)
 
   assert.equal(briefTool?.status, "live")
-  assert.equal(briefTool?.primaryCta?.href, "/tools/ai-seo-meta-generator")
+  assert.equal(briefTool?.primaryCta?.href, "/tools/ai-seo-meta-generator?source=content-brief")
   assert.equal(briefTool?.relatedLinks?.some((link) => link.href === "/agents/seo-article-agent"), true)
   assert.equal(descriptionTool?.secondaryCta?.href, "/tools/product-description-generator/examples/product-description-examples")
 })

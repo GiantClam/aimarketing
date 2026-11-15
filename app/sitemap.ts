@@ -10,7 +10,7 @@ import { getPublicSeoPaths } from "@/lib/seo/pages"
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = getAppBaseUrl()
   const now = new Date()
-  const staticPaths = ["/", "/pricing", "/resources", "/tools", "/resources/ai-subscription-cost-calculator"]
+  const staticPaths = ["/pricing", "/resources", "/tools", "/resources/ai-subscription-cost-calculator"]
   const paths = [
     ...staticPaths,
     ...getPublicSeoPaths(),
@@ -23,6 +23,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       ? [localizePublicPath(path, "en"), localizePublicPath(path, "zh")]
       : [path]
   )))]
+    .filter((path) => /^\/(?:en|zh)(?:\/|$)/.test(path))
 
   return localizedPaths.map((path) => ({
     url: new URL(path, baseUrl).toString(),

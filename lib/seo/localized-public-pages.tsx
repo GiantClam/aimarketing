@@ -16,9 +16,10 @@ import type { AppLocale } from "@/lib/i18n/config"
 import { buildLocalizedPublicUrl, getLocalizedPublicAlternates, isLocalizedPublicPath, localizePublicPath } from "@/lib/i18n/routing"
 import { listPlatformCapabilityExecutionStates } from "@/lib/platform/execution"
 import { listPlatformRegistryEntryExecutionStates } from "@/lib/platform/registry-entry-execution"
+import { getPublicProofPoints, getPublicRegistryEntryLabel } from "@/lib/platform/public-status"
 import { buildPlatformRegistryDefaultEntries } from "@/lib/platform/control-plane"
 import { getAiCostPageCopy, localizeSeoPage } from "@/lib/seo/i18n"
-import { metadataForSeoPage } from "@/lib/seo/metadata"
+import { metadataForSeoPage, normalizePublicTitle } from "@/lib/seo/metadata"
 import {
   getSeoPage,
   getSeoPagesByGroup,
@@ -170,8 +171,8 @@ function getPlatformDirectoryHeadingCopy(locale: AppLocale, page: PlatformDirect
       return {
         title: isZh ? "营销智能体广场" : "Marketing Agent Square",
         description: isZh
-          ? "把可复用的营销角色、企业协作 Agent 和 deferred 入口统一整理进同一前台广场。"
-          : "Bring reusable marketing roles, enterprise collaboration agents, and deferred entry points into one shared public square.",
+          ? "把可复用的营销角色、企业协作 Agent 和即将开放的入口统一整理进同一前台广场。"
+          : "Bring reusable marketing roles, enterprise collaboration agents, and upcoming entries into one shared public square.",
       }
     case "capabilities":
       return {
@@ -198,8 +199,8 @@ function getPlatformDirectoryHeadingCopy(locale: AppLocale, page: PlatformDirect
       return {
         title: isZh ? "工作流模板中心" : "Workflow Template Center",
         description: isZh
-          ? "把营销 brief、内容复用、视觉广告流程和 deferred 企业流程沉淀成统一模板。"
-          : "Turn marketing briefs, content repurposing, visual ad pipelines, and deferred enterprise flows into shared templates.",
+          ? "把营销 brief、内容复用和视觉广告流程沉淀成统一模板，并标明当前可用范围。"
+          : "Turn marketing briefs, content repurposing, and visual ad pipelines into shared templates with clear availability.",
       }
   }
 }
@@ -209,39 +210,7 @@ function getCapabilityExecutionLabel(
   runtimeStatus: "ready" | "deferred" | "runtime_disabled",
   accessState: "public" | "public_then_login" | "login_required" | "authorized" | "permission_required" | "admin_required",
 ) {
-  const runtimeLabel =
-    locale === "zh"
-      ? {
-          ready: "运行中",
-          deferred: "后续实现",
-          runtime_disabled: "运行时关闭",
-        }[runtimeStatus]
-      : {
-          ready: "Runtime ready",
-          deferred: "Deferred",
-          runtime_disabled: "Runtime disabled",
-        }[runtimeStatus]
-
-  const accessLabel =
-    locale === "zh"
-      ? {
-          public: "公开可见",
-          public_then_login: "先公开后登录",
-          login_required: "需登录",
-          authorized: "已授权",
-          permission_required: "需企业权限",
-          admin_required: "需管理员",
-        }[accessState]
-      : {
-          public: "Public",
-          public_then_login: "Public then login",
-          login_required: "Login required",
-          authorized: "Authorized",
-          permission_required: "Permission required",
-          admin_required: "Admin required",
-        }[accessState]
-
-  return `${runtimeLabel} · ${accessLabel}`
+  return getPublicRegistryEntryLabel(locale, runtimeStatus, accessState)
 }
 
 function getLocalizedSeoStaticParams(group: LocalizedSeoGroup) {
@@ -267,18 +236,19 @@ export function getHomeMetadata(locale: AppLocale): Metadata {
   const canonical = buildLocalizedPublicUrl("/", locale)
   const title =
     locale === "zh"
-      ? "一个工作台，接入多个 AI 模型 | AIMarketingSite"
-      : "Multi-Model AI Workspace for Marketing Teams | AIMarketingSite"
+      ? "面向营销团队的 AI 工作台 | AIMarketingSite"
+      : "AI Workspace for Marketing Teams | AIMarketingSite"
+  const normalizedTitle = normalizePublicTitle(title)
 
   return {
-    title,
+    title: { absolute: normalizedTitle },
     description: copy.home.description,
     alternates: {
       canonical,
       languages: getLocalizedPublicAlternates("/"),
     },
     openGraph: {
-      title,
+      title: normalizedTitle,
       description: copy.home.description,
       url: canonical,
       siteName: "AIMarketingSite",
@@ -286,7 +256,7 @@ export function getHomeMetadata(locale: AppLocale): Metadata {
     },
     twitter: {
       card: "summary_large_image",
-      title,
+      title: normalizedTitle,
       description: copy.home.description,
     },
   }
@@ -307,16 +277,17 @@ export function getPricingMetadata(locale: AppLocale): Metadata {
     locale === "zh"
       ? "面向营销团队的 AI 工作台价格 | AIMarketingSite"
       : "AI Workspace Pricing for Marketing Teams | AIMarketingSite"
+  const normalizedTitle = normalizePublicTitle(title)
 
   return {
-    title,
+    title: { absolute: normalizedTitle },
     description: copy.pricingPage.description,
     alternates: {
       canonical,
       languages: getLocalizedPublicAlternates("/pricing"),
     },
     openGraph: {
-      title,
+      title: normalizedTitle,
       description: copy.pricingPage.description,
       url: canonical,
       siteName: "AIMarketingSite",
@@ -324,7 +295,7 @@ export function getPricingMetadata(locale: AppLocale): Metadata {
     },
     twitter: {
       card: "summary_large_image",
-      title,
+      title: normalizedTitle,
       description: copy.pricingPage.description,
     },
   }
@@ -339,16 +310,17 @@ export function getResourcesMetadata(locale: AppLocale): Metadata {
   const copy = getResourcesPageCopy(locale)
   const canonical = buildLocalizedPublicUrl("/resources", locale)
   const title = locale === "zh" ? "营销 AI 资源目录 | AIMarketingSite" : "Marketing AI Resource Directory | AIMarketingSite"
+  const normalizedTitle = normalizePublicTitle(title)
 
   return {
-    title,
+    title: { absolute: normalizedTitle },
     description: copy.description,
     alternates: {
       canonical,
       languages: getLocalizedPublicAlternates("/resources"),
     },
     openGraph: {
-      title,
+      title: normalizedTitle,
       description: copy.description,
       url: canonical,
       siteName: "AIMarketingSite",
@@ -356,7 +328,7 @@ export function getResourcesMetadata(locale: AppLocale): Metadata {
     },
     twitter: {
       card: "summary_large_image",
-      title,
+      title: normalizedTitle,
       description: copy.description,
     },
   }
@@ -475,8 +447,8 @@ async function getPlatformDirectoryCopy(locale: AppLocale, page: PlatformDirecto
           ...item,
           launchItemType: "agent" as const,
           detailHref: `/agents/${item.slug}`,
-          extraLabel: item.label,
-          proofPoints: item.notes.slice(0, 4),
+          extraLabel: getPublicRegistryEntryLabel(locale, item.runtimeStatus, item.accessState),
+          proofPoints: getPublicProofPoints(locale, item.notes),
         })),
       }
     case "capabilities":
@@ -492,14 +464,14 @@ async function getPlatformDirectoryCopy(locale: AppLocale, page: PlatformDirecto
           ...item,
           launchItemType: "capability" as const,
           detailHref: `/capabilities/${item.slug}`,
-          proofPoints: item.notes.slice(0, 4),
+          proofPoints: getPublicProofPoints(locale, item.notes),
           extraLabel: capabilityExecutionMap.has(item.slug)
             ? getCapabilityExecutionLabel(
                 locale,
                 capabilityExecutionMap.get(item.slug)!.runtimeStatus,
                 capabilityExecutionMap.get(item.slug)!.accessState,
               )
-            : item.bindingTarget.toUpperCase(),
+            : getPublicRegistryEntryLabel(locale, item.runtimeStatus, item.accessState),
         })),
       }
     case "plugins":
@@ -515,8 +487,8 @@ async function getPlatformDirectoryCopy(locale: AppLocale, page: PlatformDirecto
           ...item,
           launchItemType: "plugin" as const,
           detailHref: `/plugins/${item.slug}`,
-          extraLabel: item.label,
-          proofPoints: item.notes.slice(0, 4),
+          extraLabel: getPublicRegistryEntryLabel(locale, item.runtimeStatus, item.accessState),
+          proofPoints: getPublicProofPoints(locale, item.notes),
         })),
       }
     case "mcp-services":
@@ -532,8 +504,8 @@ async function getPlatformDirectoryCopy(locale: AppLocale, page: PlatformDirecto
           ...item,
           launchItemType: "mcp_service" as const,
           detailHref: `/mcp-services/${item.slug}`,
-          extraLabel: item.label,
-          proofPoints: item.notes.slice(0, 4),
+          extraLabel: getPublicRegistryEntryLabel(locale, item.runtimeStatus, item.accessState),
+          proofPoints: getPublicProofPoints(locale, item.notes),
         })),
       }
     case "workflows":
@@ -549,8 +521,8 @@ async function getPlatformDirectoryCopy(locale: AppLocale, page: PlatformDirecto
           ...item,
           launchItemType: "workflow" as const,
           detailHref: `/workflows/${item.slug}`,
-          extraLabel: item.label,
-          proofPoints: item.notes.slice(0, 4),
+          extraLabel: getPublicRegistryEntryLabel(locale, item.runtimeStatus, item.accessState),
+          proofPoints: getPublicProofPoints(locale, item.notes),
         })),
       }
   }
@@ -559,16 +531,17 @@ async function getPlatformDirectoryCopy(locale: AppLocale, page: PlatformDirecto
 export function getPlatformDirectoryMetadata(locale: AppLocale, page: PlatformDirectoryPage): Metadata {
   const copy = getPlatformDirectoryHeadingCopy(locale, page)
   const canonical = buildLocalizedPublicUrl(`/${page}`, locale)
+  const title = normalizePublicTitle(copy.title)
 
   return {
-    title: copy.title,
+    title: { absolute: title },
     description: copy.description,
     alternates: {
       canonical,
       languages: getLocalizedPublicAlternates(`/${page}`),
     },
     openGraph: {
-      title: copy.title,
+      title,
       description: copy.description,
       url: canonical,
       siteName: "AIMarketingSite",
@@ -576,7 +549,7 @@ export function getPlatformDirectoryMetadata(locale: AppLocale, page: PlatformDi
     },
     twitter: {
       card: "summary_large_image",
-      title: copy.title,
+      title,
       description: copy.description,
     },
   }
@@ -677,16 +650,17 @@ export function getAiCostMetadata(locale: AppLocale): Metadata {
   const copy = getAiCostPageCopy(locale)
   const canonical = buildLocalizedPublicUrl("/resources/ai-subscription-cost-calculator", locale)
   const title = locale === "zh" ? "对比营销团队的 AI 工具成本" : "Compare AI Tool Costs for Marketing Teams"
+  const normalizedTitle = normalizePublicTitle(title)
 
   return {
-    title,
+    title: { absolute: normalizedTitle },
     description: copy.description,
     alternates: {
       canonical,
       languages: getLocalizedPublicAlternates("/resources/ai-subscription-cost-calculator"),
     },
     openGraph: {
-      title,
+      title: normalizedTitle,
       description: copy.description,
       url: canonical,
       siteName: "AIMarketingSite",
@@ -694,7 +668,7 @@ export function getAiCostMetadata(locale: AppLocale): Metadata {
     },
     twitter: {
       card: "summary_large_image",
-      title,
+      title: normalizedTitle,
       description: copy.description,
     },
   }

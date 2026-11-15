@@ -6,45 +6,14 @@ import { getRequestLocale } from "@/lib/i18n/request-locale"
 import { getLocalizedPlatformDirectoryEntryBySlug } from "@/lib/platform/directory-registry"
 import { listPlatformCapabilityExecutionStates } from "@/lib/platform/execution"
 import { listVisiblePlatformRegistryEntries } from "@/lib/platform/directory-resolver"
+import { getPublicProofPoints, getPublicRegistryEntryLabel } from "@/lib/platform/public-status"
 
 function getCapabilityExecutionLabel(
   locale: "zh" | "en",
   runtimeStatus: "ready" | "deferred" | "runtime_disabled",
   accessState: "public" | "public_then_login" | "login_required" | "authorized" | "permission_required" | "admin_required",
 ) {
-  const runtimeLabel =
-    locale === "zh"
-      ? {
-          ready: "运行中",
-          deferred: "后续实现",
-          runtime_disabled: "运行时关闭",
-        }[runtimeStatus]
-      : {
-          ready: "Runtime ready",
-          deferred: "Deferred",
-          runtime_disabled: "Runtime disabled",
-        }[runtimeStatus]
-
-  const accessLabel =
-    locale === "zh"
-      ? {
-          public: "公开可见",
-          public_then_login: "先公开后登录",
-          login_required: "需登录",
-          authorized: "已授权",
-          permission_required: "需企业权限",
-          admin_required: "需管理员",
-        }[accessState]
-      : {
-          public: "Public",
-          public_then_login: "Public then login",
-          login_required: "Login required",
-          authorized: "Authorized",
-          permission_required: "Permission required",
-          admin_required: "Admin required",
-        }[accessState]
-
-  return `${runtimeLabel} · ${accessLabel}`
+  return getPublicRegistryEntryLabel(locale, runtimeStatus, accessState)
 }
 
 export default async function CapabilitiesPage() {
@@ -64,13 +33,14 @@ export default async function CapabilitiesPage() {
     availability: getLocalizedPlatformDirectoryEntryBySlug(locale, "capability", item.slug)?.availability,
     launchItemType: "capability" as const,
     detailHref: `/capabilities/${item.slug}`,
+    proofPoints: getPublicProofPoints(displayLocale, executionMap.get(item.slug)?.notes, item.proofPoints),
     extraLabel: executionMap.has(item.slug)
       ? getCapabilityExecutionLabel(
           displayLocale,
           executionMap.get(item.slug)!.runtimeStatus,
           executionMap.get(item.slug)!.accessState,
         )
-      : item.config.bindingTarget.toUpperCase(),
+      : getPublicRegistryEntryLabel(displayLocale, null, null),
   }))
 
   const copy =

@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { consumeSSEBuffer, flushSSEBuffer } from "@/lib/dify/sse.js"
 import type { AppLocale } from "@/lib/i18n/config"
+import { getPublicRegistryEntryLabel } from "@/lib/platform/public-status"
 
 type PublicChatToolWorkbenchProps = {
   locale: AppLocale
@@ -54,12 +55,11 @@ export function PublicChatToolWorkbench({
         login: "登录后继续",
         workspace: "打开对话工作台",
         response: "当前回答",
-        runtime: "运行时",
-        access: "访问门槛",
+        availability: "可用范围",
         promptRequired: "先输入一个问题。",
         authRequired: "这个对话工作台当前需要登录后执行。",
-        deferred: "当前 runtime 还处于 deferred 状态，暂时不能执行真实对话。",
-        disabled: "当前 text runtime 还没准备好，暂时不能执行真实对话。",
+        deferred: "当前入口还未开放，暂时不能执行真实对话。",
+        disabled: "当前入口还没准备好，暂时不能执行真实对话。",
       }
     : {
         title: "Public AI chat workbench",
@@ -69,12 +69,11 @@ export function PublicChatToolWorkbench({
         login: "Log in to continue",
         workspace: "Open AI workspace",
         response: "Current response",
-        runtime: "Runtime",
-        access: "Access",
+        availability: "Availability",
         promptRequired: "Enter a question first.",
         authRequired: "This chat workbench currently requires login before execution.",
-        deferred: "This runtime is still deferred, so real chat execution is not available yet.",
-        disabled: "This text runtime is not ready yet, so real chat execution is not available.",
+        deferred: "This entry is not available yet, so real chat execution is not enabled.",
+        disabled: "This entry is not ready yet, so real chat execution is not enabled.",
       }
 
   const [prompt, setPrompt] = useState("")
@@ -246,10 +245,7 @@ export function PublicChatToolWorkbench({
 
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline" className="border-primary/20 bg-primary/5 text-zinc-200">
-                {copy.runtime}: {runtimeStatus}
-              </Badge>
-              <Badge variant="outline" className="border-primary/20 bg-primary/5 text-zinc-200">
-                {copy.access}: {accessState}
+                {copy.availability}: {getPublicRegistryEntryLabel(locale, runtimeStatus, accessState)}
               </Badge>
             </div>
 

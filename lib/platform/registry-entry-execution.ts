@@ -111,6 +111,7 @@ function getAccessLabel(locale: AppLocale, accessState: PlatformCapabilityExecut
   }[accessState]
 }
 
+
 function getDeferredBindingLabel(locale: AppLocale, bindingTarget: string) {
   const suffix = bindingTarget.toUpperCase()
   return locale === "zh" ? `后续实现 · ${suffix}` : `Deferred · ${suffix}`

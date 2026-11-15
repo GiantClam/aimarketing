@@ -357,11 +357,11 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
     ],
     primaryCta: {
       label: "Generate meta from your brief",
-      href: "/tools/ai-seo-meta-generator",
+      href: "/tools/ai-seo-meta-generator?source=content-brief",
     },
     secondaryCta: {
       label: "Open the SEO workflow",
-      href: "/use-cases/ai-workspace-for-seo-teams",
+      href: "/use-cases/ai-workspace-for-seo-teams?source=content-brief",
     },
   },
   {
@@ -653,7 +653,7 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
     },
     secondaryCta: {
       label: "Plan the content brief first",
-      href: "/tools/content-brief-generator",
+      href: "/tools/content-brief-generator?source=seo-title-report",
     },
   },
   {

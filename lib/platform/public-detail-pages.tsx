@@ -26,7 +26,9 @@ import {
 } from "@/lib/platform/catalog"
 import { getLocalizedPlatformDirectoryEntryBySlug } from "@/lib/platform/directory-registry"
 import { getPlatformRegistryEntryExecutionState } from "@/lib/platform/registry-entry-execution"
+import { getPublicProofPoints, getPublicRegistryEntryLabel } from "@/lib/platform/public-status"
 import { getPlatformCapabilityExecutionState } from "@/lib/platform/execution"
+import { normalizePublicTitle } from "@/lib/seo/metadata"
 
 type PlatformEntryKind = "capability" | "plugin" | "mcp_service" | "workflow" | "agent"
 
@@ -41,46 +43,6 @@ function getStatusLabel(locale: AppLocale, status: "live" | "beta" | "planned") 
   return "Planned"
 }
 
-function getCapabilityExecutionLabel(
-  locale: AppLocale,
-  runtimeStatus: "ready" | "deferred" | "runtime_disabled",
-  accessState: "public" | "public_then_login" | "login_required" | "authorized" | "permission_required" | "admin_required",
-) {
-  const runtimeLabel =
-    locale === "zh"
-      ? {
-          ready: "运行中",
-          deferred: "后续实现",
-          runtime_disabled: "运行时关闭",
-        }[runtimeStatus]
-      : {
-          ready: "Runtime ready",
-          deferred: "Deferred",
-          runtime_disabled: "Runtime disabled",
-        }[runtimeStatus]
-
-  const accessLabel =
-    locale === "zh"
-      ? {
-          public: "公开可见",
-          public_then_login: "先公开后登录",
-          login_required: "需登录",
-          authorized: "已授权",
-          permission_required: "需企业权限",
-          admin_required: "需管理员",
-        }[accessState]
-      : {
-          public: "Public",
-          public_then_login: "Public then login",
-          login_required: "Login required",
-          authorized: "Authorized",
-          permission_required: "Permission required",
-          admin_required: "Admin required",
-        }[accessState]
-
-  return `${runtimeLabel} · ${accessLabel}`
-}
-
 function metadataForPlatformEntry(
   locale: AppLocale,
   path: string,
@@ -88,27 +50,76 @@ function metadataForPlatformEntry(
   description: string,
 ): Metadata {
   const canonical = buildLocalizedPublicUrl(path, locale)
+  const normalizedTitle = normalizePublicTitle(title)
 
   return {
-    title: { absolute: `${title} | AI Marketing` },
+    title: { absolute: normalizedTitle },
     description,
     alternates: {
       canonical,
       languages: getLocalizedPublicAlternates(path),
     },
     openGraph: {
-      title,
+      title: normalizedTitle,
       description,
       url: canonical,
-      siteName: "AI Marketing",
+      siteName: "AIMarketingSite",
       type: "website",
     },
     twitter: {
       card: "summary_large_image",
-      title,
+      title: normalizedTitle,
       description,
     },
   }
+}
+
+function WorkflowUsageBoundary({ locale }: { locale: AppLocale }) {
+  const copy = locale === "zh"
+    ? {
+        title: "使用前先看清输入、产出和保存边界",
+        input: "需要什么输入",
+        inputBody: "准备 brief、受众、目标、品牌规则和必要的参考资料。输入越具体，后续产出越容易复核。",
+        output: "会得到什么",
+        outputBody: "根据模板得到结构化步骤、文案方向、视觉任务或可继续编辑的预览。页面会以当前模板实际支持的结果为准。",
+        next: "下一步做什么",
+        nextBody: "先检查预览，再打开入口继续执行；只有点击保存或明确完成保存动作后，结果才会进入可复用的工作流记录。",
+        preview: "预览是检查用的临时结果",
+        saved: "保存后才可复用",
+      }
+    : {
+        title: "Know the input, output, and save boundary first",
+        input: "What you provide",
+        inputBody: "Prepare the brief, audience, goal, brand rules, and any references the workflow needs. Specific inputs make review easier.",
+        output: "What you get",
+        outputBody: "The template produces structured steps, copy directions, visual tasks, or an editable preview according to what this workflow currently supports.",
+        next: "What to do next",
+        nextBody: "Review the preview first, then open the entry to continue. The result becomes reusable workflow history only after the explicit save action completes.",
+        preview: "Preview is for checking",
+        saved: "Saved output is reusable",
+      }
+
+  return (
+    <section className="public-panel rounded-[12px] border border-border bg-card/80 p-6">
+      <h2 className="font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">{copy.title}</h2>
+      <div className="mt-5 grid gap-4 md:grid-cols-3">
+        {[
+          { title: copy.input, body: copy.inputBody },
+          { title: copy.output, body: copy.outputBody },
+          { title: copy.next, body: copy.nextBody },
+        ].map((item) => (
+          <article key={item.title} className="rounded-[8px] border border-border bg-background p-4">
+            <h3 className="font-semibold text-foreground">{item.title}</h3>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.body}</p>
+          </article>
+        ))}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
+        <span className="rounded-full border border-border px-3 py-1">{copy.preview}</span>
+        <span className="rounded-full border border-border px-3 py-1">{copy.saved}</span>
+      </div>
+    </section>
+  )
 }
 
 export function getPlatformCapabilityStaticParams() {
@@ -179,16 +190,12 @@ async function buildCapabilityDetail(locale: AppLocale, slug: string) {
       value: getStatusLabel(locale, capability.status),
     },
     {
-      label: locale === "zh" ? "运行时" : "Runtime",
-      value: `${execution.task.runtimeId || "—"} · ${execution.runtimeStatus}`,
+      label: locale === "zh" ? "使用方式" : "How it works",
+      value: getPublicRegistryEntryLabel(locale, execution.runtimeStatus, execution.accessState),
     },
     {
-      label: locale === "zh" ? "访问门槛" : "Access",
-      value: execution.accessState,
-    },
-    {
-      label: locale === "zh" ? "Provider" : "Providers",
-      value: execution.activeProviderIds.join(", ") || "—",
+      label: locale === "zh" ? "下一步" : "Next step",
+      value: execution.accessState === "public" ? (locale === "zh" ? "直接开始" : "Start here") : (locale === "zh" ? "查看使用要求" : "Review access requirements"),
     },
   ]
 
@@ -204,9 +211,9 @@ async function buildCapabilityDetail(locale: AppLocale, slug: string) {
     title: capability.title,
     summary: capability.summary,
     status: capability.status,
-    extraLabel: getCapabilityExecutionLabel(locale, execution.runtimeStatus, execution.accessState),
+    extraLabel: getPublicRegistryEntryLabel(locale, execution.runtimeStatus, execution.accessState),
     detailLines,
-    proofPoints: execution.notes.length > 0 ? execution.notes : capability.proofPoints,
+    proofPoints: getPublicProofPoints(locale, execution.notes, capability.proofPoints),
     publicHref: capability.publicHref,
     workspaceHref: capability.workspaceHref,
   }
@@ -248,39 +255,10 @@ async function buildRegistryDetail(
       value: getStatusLabel(locale, entry.status),
     },
     {
-      label: locale === "zh" ? "展示面" : "Surface",
-      value: entry.surface,
-    },
-    {
-      label: locale === "zh" ? "绑定模式" : "Binding mode",
-      value: execution.bindingMode,
-    },
-    {
-      label: locale === "zh" ? "绑定目标" : "Binding target",
-      value: execution.bindingTarget || "—",
+      label: locale === "zh" ? "使用方式" : "How it works",
+      value: getPublicRegistryEntryLabel(locale, execution.runtimeStatus, execution.accessState),
     },
   ]
-
-  if (execution.mappedCapabilitySlug) {
-    detailLines.push({
-      label: locale === "zh" ? "映射目标" : "Mapped target",
-      value: execution.mappedCapabilitySlug,
-    })
-  }
-
-  if (execution.runtimeStatus) {
-    detailLines.push({
-      label: locale === "zh" ? "运行时状态" : "Runtime status",
-      value: execution.runtimeStatus,
-    })
-  }
-
-  if (execution.accessState) {
-    detailLines.push({
-      label: locale === "zh" ? "访问门槛" : "Access",
-      value: execution.accessState,
-    })
-  }
 
   if ("integratesWith" in entry) {
     detailLines.push({
@@ -322,9 +300,9 @@ async function buildRegistryDetail(
     title: entry.title,
     summary: entry.summary,
     status: entry.status,
-    extraLabel: execution.label,
+    extraLabel: getPublicRegistryEntryLabel(locale, execution.runtimeStatus, execution.accessState),
     detailLines,
-    proofPoints: execution.notes.length > 0 ? execution.notes : entry.proofPoints,
+    proofPoints: getPublicProofPoints(locale, execution.notes, entry.proofPoints),
     publicHref: execution.publicHref || entry.publicHref,
     workspaceHref: execution.workspaceHref || entry.workspaceHref,
   }
@@ -476,6 +454,7 @@ export async function renderPlatformWorkflowPage(locale: AppLocale, slug: string
         launchItemType={detail.itemType}
         launchSlug={detail.slug}
       >
+        <WorkflowUsageBoundary locale={displayLocale} />
         <RegistryExecutionPanel
           locale={displayLocale}
           surface="public"

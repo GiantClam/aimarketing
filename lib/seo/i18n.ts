@@ -73,8 +73,8 @@ const aiCostPageCopy: Record<AppLocale, AiCostPageCopy> = {
     calculatorInputDescription: "Enter the number of active users for each tool type.",
     teamSize: "Team size",
     estimatePerUser: (low, high) => `Estimate: ${low}-${high} per user / month`,
-    byokTitle: "We need BYOK or heavier model usage",
-    byokDescription: "Select this when your team wants to connect its own API keys or expects high-frequency model usage.",
+    byokTitle: "Account for additional provider costs",
+    byokDescription: "Select this when your team expects usage beyond the included workspace credits or needs a separate provider cost review.",
     estimatedCost: "Estimated cost",
     monthlyCost: "Monthly AI software cost",
     annualCost: "Annual AI software cost",
@@ -102,8 +102,8 @@ const aiCostPageCopy: Record<AppLocale, AiCostPageCopy> = {
     calculatorInputDescription: "输入每类工具当前活跃使用者的人数。",
     teamSize: "团队人数",
     estimatePerUser: (low, high) => `估算：每位用户每月 ${low}-${high}`,
-    byokTitle: "我们需要 BYOK 或更高频的模型使用",
-    byokDescription: "如果你的团队希望接入自有 API Key，或预计会有高频模型调用，请勾选这一项。",
+    byokTitle: "计入额外的供应商成本",
+    byokDescription: "如果团队预计会超出工作台包含的积分，或需要单独核对供应商成本，请勾选这一项。",
     estimatedCost: "成本估算",
     monthlyCost: "每月 AI 软件成本",
     annualCost: "每年 AI 软件成本",
@@ -142,14 +142,16 @@ const aiToolLabels: Record<AppLocale, Record<AiToolKey, string>> = {
 
 const recommendedPlanLabels = {
   en: {
-    "byok-workspace": "BYOK workspace",
-    "team-pro": "Team Pro",
-    "lifetime-basic-or-team-pro": "Lifetime Basic or Team Pro",
+    starter: "Starter plan",
+    creator: "Creator plan",
+    studio: "Studio plan",
+    "provider-costs": "Workspace pricing plus provider costs",
   },
   zh: {
-    "byok-workspace": "BYOK 工作台",
-    "team-pro": "Team Pro",
-    "lifetime-basic-or-team-pro": "Lifetime Basic 或 Team Pro",
+    starter: "Starter 套餐",
+    creator: "Creator 套餐",
+    studio: "Studio 套餐",
+    "provider-costs": "工作台价格 + 供应商成本",
   },
 } as const
 
@@ -168,6 +170,20 @@ const zhSeoPageTranslations: Record<string, SeoPageTranslation> = {
       "同一份 brief 可以在调研、文案、视觉和复核之间持续复用。",
       "适合希望减少工具切换、但又不想被单一模型绑死的营销团队。",
       "重点不是更多聊天窗口，而是围绕真实营销交付建立共享工作流。",
+    ],
+    evidence: [
+      {
+        src: "/seo-evidence/workflow-builder.png",
+        alt: "已核验的工作流画布截图，显示文本输入节点和图片生成节点",
+        description: "已核验的工作流证据：团队可以先提供文本输入，再继续进入图片生成节点，并在保存前检查流程。",
+        checkedAt: "2026-11-16",
+      },
+      {
+        src: "/seo-evidence/generated-workspace-artifact.png",
+        alt: "已核验的工作台产出截图，显示生成的 PPT 成品、预览、保存和导出操作",
+        description: "已核验的工作台产出：任务完成后可以预览、保存并导出生成的营销资产。",
+        checkedAt: "2026-11-16",
+      },
     ],
     sections: [
       {
@@ -341,6 +357,11 @@ const zhSeoPageTranslations: Record<string, SeoPageTranslation> = {
           dimension: "购买逻辑",
           first: "当团队主要想要 OpenAI 官方产品体验时更合适。",
           second: "当团队更想减少工具分裂，并保留可复用营销上下文时更合适。",
+        },
+        {
+          dimension: "价格与使用模式",
+          first: "OpenAI 目前将原 ChatGPT Team 工作区称为 ChatGPT Business：Standard 座席按年付费为每位用户每月 20 美元、按月付费为 25 美元；Premium 座席按年付费为 100 美元、按月付费为 125 美元。包含的使用量按座席和模型变化，符合条件的额外使用可以消耗工作区积分。",
+          second: "AI Marketing 当前提供 Starter、Creator 和 Studio 套餐，下面的套餐卡会显示实时读取的价格、积分和限制。实际使用仍受套餐限制与任务成本影响。",
         },
       ],
     },

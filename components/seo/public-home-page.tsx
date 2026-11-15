@@ -88,22 +88,22 @@ function getHomepageNarrative(locale: "zh" | "en") {
   const isZh = locale === "zh"
 
   return {
-    heroTitle: isZh ? "一份 brief，跑完整个 AI 营销流程" : "One brief. Every AI workflow.",
+    heroTitle: isZh ? "一份营销 brief，串起完整创作流程" : "One marketing brief. Every campaign output.",
     heroDescription: isZh
-      ? "把策划、调研、文案、图片、视频和复核放进同一个营销工作台。"
-      : "Plan, research, write, create visuals, and review work from one shared marketing workspace.",
-    watchDemo: isZh ? "看 90 秒演示" : "Watch demo",
+      ? "从同一份营销 brief 出发，完成调研、文案、图片和视频创作，减少跨工具搬运与重复解释。"
+      : "Start from one marketing brief, then move through research, copy, images, and video in one workspace without repeating the context.",
+    watchDemo: isZh ? "查看完整工作流" : "View full workflow",
     proofTitle: isZh ? "不再反复重建同一份 brief" : "Stop rebuilding the same brief.",
     proofDescription: isZh
       ? "把活动上下文、产出资产和团队复核留在同一个空间。"
       : "Keep campaign context, outputs, and reviews in one shared workspace.",
     beforeLabel: isZh ? "之前" : "Before",
     afterLabel: isZh ? "之后" : "After",
-    capabilityTitle: isZh ? "营销工作，不是又一个聊天窗口" : "Marketing work, not another chat tab.",
+    capabilityTitle: isZh ? "一个工作台，承接整条营销流程" : "One workspace for the marketing workflow.",
     capabilityDescription: isZh
       ? "让同一份活动上下文贯穿内容、调研、视觉和团队复核。"
       : "One campaign context travels across content, research, visuals, and team review.",
-    workflowTitle: isZh ? "从 brief 到上线资产" : "From brief to launch asset.",
+    workflowTitle: isZh ? "从 brief 到可复核的营销产出" : "From brief to reviewable marketing output.",
     workflowDescription: isZh
       ? "用视频化流程展示上下文如何穿过调研、文案、视觉和审批。"
       : "A video-style flow shows the same context moving through research, copy, visuals, and approval.",

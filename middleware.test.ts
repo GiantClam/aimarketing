@@ -28,3 +28,43 @@ test("does not discard a requested dashboard target when a stale session reaches
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("location"), null)
 })
+
+test("canonicalizes the bare production host and root in one permanent redirect", () => {
+  const response = middleware(new NextRequest("https://aimarketingsite.com/?utm_source=search"))
+
+  assert.equal(response.status, 301)
+  assert.equal(response.headers.get("location"), "https://www.aimarketingsite.com/en?utm_source=search")
+})
+
+test("root always uses the English x-default entry even with a Chinese locale cookie", () => {
+  const response = middleware(
+    new NextRequest("https://www.aimarketingsite.com/", {
+      headers: { cookie: "aimarketing_locale=zh" },
+    }),
+  )
+
+  assert.equal(response.status, 301)
+  assert.equal(response.headers.get("location"), "https://www.aimarketingsite.com/en")
+})
+
+test("localizes an unprefixed public path once and preserves its query string", () => {
+  const response = middleware(
+    new NextRequest("https://www.aimarketingsite.com/pricing?plan=creator", {
+      headers: { cookie: "aimarketing_locale=zh" },
+    }),
+  )
+
+  assert.equal(response.status, 301)
+  assert.equal(response.headers.get("location"), "https://www.aimarketingsite.com/zh/pricing?plan=creator")
+})
+
+test("explicit locale paths do not redirect or change language because of a cookie", () => {
+  const response = middleware(
+    new NextRequest("https://www.aimarketingsite.com/en/pricing", {
+      headers: { cookie: "aimarketing_locale=zh" },
+    }),
+  )
+
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get("location"), null)
+})

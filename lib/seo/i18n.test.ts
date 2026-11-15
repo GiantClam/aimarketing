@@ -48,7 +48,7 @@ test("AI cost page copy and plan labels switch between locales", () => {
   assert.equal(en.title, "Compare how much your marketing team spends on separate AI tools")
   assert.equal(zh.title, "对比你的营销团队在分散 AI 工具上的花费")
   assert.equal(getAiToolLabel("zh", "search"), "搜索工具用户数")
-  assert.equal(getRecommendedPlanLabel("zh", "byok-workspace"), "BYOK 工作台")
+  assert.equal(getRecommendedPlanLabel("zh", "provider-costs"), "工作台价格 + 供应商成本")
 })
 
 test("AI cost estimate returns a locale-agnostic plan key", () => {
@@ -56,7 +56,7 @@ test("AI cost estimate returns a locale-agnostic plan key", () => {
   const byok = calculateAiCostEstimate({ ...defaultAiCostInput, needsByok: true })
   const largerTeam = calculateAiCostEstimate({ ...defaultAiCostInput, teamSize: 12 })
 
-  assert.equal(standard.recommendedPlanKey, "lifetime-basic-or-team-pro")
-  assert.equal(byok.recommendedPlanKey, "byok-workspace")
-  assert.equal(largerTeam.recommendedPlanKey, "team-pro")
+  assert.equal(standard.recommendedPlanKey, "creator")
+  assert.equal(byok.recommendedPlanKey, "provider-costs")
+  assert.equal(largerTeam.recommendedPlanKey, "studio")
 })

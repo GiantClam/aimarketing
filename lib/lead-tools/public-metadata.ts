@@ -4,6 +4,7 @@ import type { AppLocale } from "@/lib/i18n/config"
 import { buildLocalizedPublicUrl, getLocalizedPublicAlternates } from "@/lib/i18n/routing"
 import { getLocalizedLeadToolBySlug } from "@/lib/lead-tools/catalog"
 import { getLeadToolExample } from "@/lib/lead-tools/examples"
+import { normalizePublicTitle } from "@/lib/seo/metadata"
 
 function metadataForLeadToolPage(
   locale: AppLocale,
@@ -12,24 +13,25 @@ function metadataForLeadToolPage(
   description: string,
 ): Metadata {
   const canonical = buildLocalizedPublicUrl(path, locale)
+  const normalizedTitle = normalizePublicTitle(title)
 
   return {
-    title: { absolute: `${title} | AI Marketing` },
+    title: { absolute: normalizedTitle },
     description,
     alternates: {
       canonical,
       languages: getLocalizedPublicAlternates(path),
     },
     openGraph: {
-      title,
+      title: normalizedTitle,
       description,
       url: canonical,
-      siteName: "AI Marketing",
+      siteName: "AIMarketingSite",
       type: "website",
     },
     twitter: {
       card: "summary_large_image",
-      title,
+      title: normalizedTitle,
       description,
     },
   }

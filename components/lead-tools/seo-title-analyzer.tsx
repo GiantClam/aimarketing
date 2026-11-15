@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import { getLocalizedPaidSeoCapabilities, type SeoTitleCandidate, type SeoTitleInput, type SeoTitleReport } from "@/lib/seo-tools/title-report"
 import type { AppLocale } from "@/lib/i18n/config"
+import { localizePublicPath } from "@/lib/i18n/routing"
 
 type SeoTitleAnalyzerProps = {
   locale?: AppLocale
@@ -178,6 +179,9 @@ export function SeoTitleAnalyzer({
         completedTitles: "条候选标题已完成",
         timeout: "本次生成超过 47 秒仍未完成，请重试。",
         incomplete: "生成连接已结束，但未收到完整报告，请重试。",
+        nextStepTitle: "用这份结果继续做内容简报",
+        nextStepDescription: "保留当前关键词，继续补齐受众、搜索意图、章节和 CTA，再进入营销文案流程。",
+        nextStepCta: "继续生成内容简报",
       }
     : {
         eyebrow: "FREE SEO TITLE ANALYZER",
@@ -226,6 +230,9 @@ export function SeoTitleAnalyzer({
         completedTitles: "title candidates completed",
         timeout: "This generation did not finish within 47 seconds. Please try again.",
         incomplete: "The generation stream ended before a complete report was received. Please try again.",
+        nextStepTitle: "Continue from this report",
+        nextStepDescription: "Keep the keyword and turn it into a fuller brief with audience, intent, sections, and CTA direction before drafting copy.",
+        nextStepCta: "Build a content brief",
       }
 
   const recommended = useMemo(
@@ -364,6 +371,27 @@ export function SeoTitleAnalyzer({
 
               <div className="grid gap-4 sm:grid-cols-2"><div className="rounded-xl border border-border/70 p-4"><p className="font-medium">{copy.abTests}</p><div className="mt-3 space-y-3">{report.abTests.map((test) => <div key={test.name} className="text-sm"><p className="font-medium">{test.name}</p><p className="mt-1 text-muted-foreground">A: {test.variantA}</p><p className="text-muted-foreground">B: {test.variantB}</p><p className="mt-2 leading-6 text-muted-foreground">{test.hypothesis}</p></div>)}</div></div><div className="rounded-xl border border-border/70 p-4"><p className="font-medium">{copy.risks}</p><ul className="mt-3 space-y-2 text-sm leading-6 text-muted-foreground">{report.risks.map((risk) => <li key={risk}>• {risk}</li>)}</ul></div></div>
             </div> : null}
+
+            {report ? (
+              <Card className="mt-6 border-primary/25 bg-primary/5">
+                <CardHeader>
+                  <CardTitle className="text-lg">{copy.nextStepTitle}</CardTitle>
+                  <CardDescription>{copy.nextStepDescription}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button asChild>
+                    <a
+                      href={localizePublicPath(
+                        `/tools/content-brief-generator?source=seo-title-report&topic=${encodeURIComponent(report.keyword)}`,
+                        locale,
+                      )}
+                    >
+                      {copy.nextStepCta}
+                    </a>
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : null}
           </section>
         </CardContent>
       </Card>

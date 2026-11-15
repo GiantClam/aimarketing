@@ -58,6 +58,7 @@ export type LeadToolRouteSearchParams = {
 export async function renderToolsHubPage(locale: AppLocale) {
   const entries = getLocalizedPublicToolsCenterEntries(locale)
   const platformLinks = getLocalizedPlatformHubLinks(locale).filter((item) => item.slug !== "agents")
+  const publicEntries = entries.map(({ sourceRefs: _sourceRefs, ...entry }) => entry)
 
   const pageCopy =
     locale === "zh"
@@ -103,7 +104,7 @@ export async function renderToolsHubPage(locale: AppLocale) {
           </div>
 
           <ToolCardGrid
-            entries={entries.map((entry) => ({ ...entry, href: localizePublicPath(entry.href, locale) }))}
+            entries={publicEntries.map((entry) => ({ ...entry, href: localizePublicPath(entry.href, locale) }))}
             locale={locale === "zh" ? "zh" : "en"}
             title={pageCopy.gridTitle}
             description={pageCopy.gridDescription}

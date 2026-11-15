@@ -3,6 +3,8 @@ import test from "node:test"
 
 import robots from "@/app/robots"
 import sitemap from "@/app/sitemap"
+import { metadata as dashboardMetadata } from "@/app/dashboard/layout"
+import { metadata as loginMetadata } from "@/app/login/layout"
 import { buildAppUrl, getAppBaseUrl } from "@/lib/app-url"
 import { getLeadToolExampleMetadata, getLeadToolMetadata, getToolsHubMetadata } from "@/lib/lead-tools/public-metadata"
 import { metadataForSeoPage } from "@/lib/seo/metadata"
@@ -74,7 +76,7 @@ test("seo metadata uses the normalized canonical host and preserves the intended
       const metadata = metadataForSeoPage(page, "en")
 
       assert.deepEqual(metadata.title, {
-        absolute: "Video Script Prompts | AI Marketing",
+        absolute: "Video Script Prompts | AIMarketingSite",
       })
       assert.equal(metadata.alternates?.canonical, "https://www.aimarketingsite.com/en/prompts/video-script-prompts")
       assert.equal(metadata.openGraph?.url, "https://www.aimarketingsite.com/en/prompts/video-script-prompts")
@@ -194,11 +196,11 @@ test("CTR priority tool metadata matches search intent", () => {
       const imageMetadata = getLeadToolMetadata("en", "ai-image")
 
       assert.deepEqual(titleMetadata.title, {
-        absolute: "Free SEO Title Generator: Create SEO Titles from Any Keyword | AI Marketing",
+        absolute: "Free SEO Title Generator: Create SEO Titles from Any Keyword | AIMarketingSite",
       })
       assert.equal(titleMetadata.alternates?.canonical, "https://www.aimarketingsite.com/en/tools/seo-title-generator")
       assert.deepEqual(imageMetadata.title, {
-        absolute: "AI Image Tool for Branding Teams | AI Marketing",
+        absolute: "AI Image Tool for Branding Teams | AIMarketingSite",
       })
     },
   )
@@ -231,6 +233,8 @@ test("robots and sitemap share the same www canonical host", () => {
     () => {
       const robotsMetadata = robots()
       const sitemapEntries = sitemap()
+      const loginRobots = typeof loginMetadata.robots === "object" && loginMetadata.robots ? loginMetadata.robots : {}
+      const dashboardRobots = typeof dashboardMetadata.robots === "object" && dashboardMetadata.robots ? dashboardMetadata.robots : {}
       const promptEntry = sitemapEntries.find((entry) => entry.url.endsWith("/en/prompts/video-script-prompts"))
       const localizedCostEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/compare\/compare-ai-tool-costs$/.test(entry.url))
       const localizedAlternativeEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/alternatives\/chatgpt-team-alternative$/.test(entry.url))
@@ -249,6 +253,12 @@ test("robots and sitemap share the same www canonical host", () => {
       const toolsHubEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/tools$/.test(entry.url))
 
       assert.equal(robotsMetadata.sitemap, "https://www.aimarketingsite.com/sitemap.xml")
+      assert.equal(loginRobots.index, false)
+      assert.equal(loginRobots.follow, false)
+      assert.equal(dashboardRobots.index, false)
+      assert.equal(dashboardRobots.follow, false)
+      assert.equal(sitemapEntries.every((entry) => /^https:\/\/www\.aimarketingsite\.com\/(en|zh)(\/|$)/.test(entry.url)), true)
+      assert.equal(sitemapEntries.some((entry) => /\/(dashboard|login|register)(\/|$)/.test(entry.url)), false)
       assert.equal(promptEntry?.url, "https://www.aimarketingsite.com/en/prompts/video-script-prompts")
       assert.equal(localizedCostEntries.length, 2)
       assert.equal(localizedAlternativeEntries.length, 2)

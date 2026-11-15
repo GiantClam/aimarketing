@@ -6,13 +6,25 @@ import { buildLocalizedPublicUrl, getLocalizedPublicAlternates } from "@/lib/i18
 import type { SeoPage } from "@/lib/seo/pages"
 import { seoPathForPage } from "@/lib/seo/pages"
 
+const PUBLIC_BRAND = "AIMarketingSite"
+
+export function normalizePublicTitle(title: string) {
+  const withoutLegacySuffix = title
+    .trim()
+    .replace(/\s*\|\s*(?:AI Marketing|AIMarketingSite)\s*$/i, "")
+    .trim()
+
+  return withoutLegacySuffix ? `${withoutLegacySuffix} | ${PUBLIC_BRAND}` : PUBLIC_BRAND
+}
+
 export function metadataForSeoPage(page: SeoPage, locale: AppLocale): Metadata {
   const path = seoPathForPage(page)
   const canonical = buildLocalizedPublicUrl(path, locale)
+  const title = normalizePublicTitle(page.title)
 
   return {
     title: {
-      absolute: page.title,
+      absolute: title,
     },
     description: page.description,
     alternates: {
@@ -20,15 +32,15 @@ export function metadataForSeoPage(page: SeoPage, locale: AppLocale): Metadata {
       languages: getLocalizedPublicAlternates(path),
     },
     openGraph: {
-      title: page.title,
+      title,
       description: page.description,
       url: canonical,
-      siteName: "AI Marketing",
+      siteName: PUBLIC_BRAND,
       type: "website",
     },
     twitter: {
       card: "summary_large_image",
-      title: page.title,
+      title,
       description: page.description,
     },
   }

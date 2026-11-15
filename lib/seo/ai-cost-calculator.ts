@@ -1,3 +1,5 @@
+import { getBillingPlan } from "@/lib/billing/plans"
+
 export type AiToolKey = "chatgpt" | "claude" | "gemini" | "image" | "writing" | "search"
 
 export type AiToolPrice = {
@@ -19,7 +21,7 @@ export type AiCostEstimate = {
   annualHigh: number
   savingsLow: number
   savingsHigh: number
-  recommendedPlanKey: "byok-workspace" | "team-pro" | "lifetime-basic-or-team-pro"
+  recommendedPlanKey: "starter" | "creator" | "studio" | "provider-costs"
 }
 
 export const aiToolPrices: AiToolPrice[] = [
@@ -43,10 +45,15 @@ export const defaultAiCostInput: AiCostInput = {
 }
 
 export function calculateAiCostEstimate(input: AiCostInput): AiCostEstimate {
+  const workspacePrices = {
+    starter: (getBillingPlan("starter")?.priceUsdCents || 0) / 100,
+    creator: (getBillingPlan("creator")?.priceUsdCents || 0) / 100,
+    studio: (getBillingPlan("studio")?.priceUsdCents || 0) / 100,
+  }
   const monthlyLow = aiToolPrices.reduce((sum, tool) => sum + input[tool.key] * tool.monthlyLow, 0)
   const monthlyHigh = aiToolPrices.reduce((sum, tool) => sum + input[tool.key] * tool.monthlyHigh, 0)
-  const estimatedWorkspaceLow = input.needsByok ? 39 : 29
-  const estimatedWorkspaceHigh = input.teamSize > 10 ? 199 : 99
+  const estimatedWorkspaceLow = workspacePrices.starter
+  const estimatedWorkspaceHigh = input.teamSize > 8 ? workspacePrices.studio : workspacePrices.creator
   const savingsLow = Math.max(0, monthlyLow - estimatedWorkspaceHigh)
   const savingsHigh = Math.max(0, monthlyHigh - estimatedWorkspaceLow)
 
@@ -58,9 +65,11 @@ export function calculateAiCostEstimate(input: AiCostInput): AiCostEstimate {
     savingsLow,
     savingsHigh,
     recommendedPlanKey: input.needsByok
-      ? "byok-workspace"
+      ? "provider-costs"
       : input.teamSize > 8
-        ? "team-pro"
-        : "lifetime-basic-or-team-pro",
+        ? "studio"
+        : input.teamSize > 4
+          ? "creator"
+          : "starter",
   }
 }

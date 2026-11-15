@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import type { AppLocale } from "@/lib/i18n/config"
+import { getPublicRegistryEntryLabel } from "@/lib/platform/public-status"
 
 type PublicMediaToolWorkbenchProps = {
   capabilitySlug: "ai-image" | "ai-video"
@@ -81,8 +82,8 @@ export function PublicMediaToolWorkbench({
             workspace: "打开工作台",
             promptRequired: "先输入一个任务描述。",
             authRequired: "这个媒体工作台当前需要登录后执行。",
-            deferred: "当前 runtime 仍处于 deferred 状态，暂时不能执行真实任务。",
-            disabled: "当前 runtime 还没准备好，暂时不能执行真实任务。",
+            deferred: "当前入口还未开放，暂时不能执行真实任务。",
+            disabled: "当前入口还没准备好，暂时不能执行真实任务。",
             currentTask: "当前任务",
             taskQueued: "任务已提交，平台会继续轮询状态。",
             taskFailed: "媒体任务执行失败。",
@@ -90,8 +91,7 @@ export function PublicMediaToolWorkbench({
             provider: "Provider",
             results: "任务结果",
             noResults: "任务还没有返回可展示的结果。",
-            runtime: "运行时",
-            access: "访问门槛",
+            availability: "可用范围",
           }
         : {
             title: capabilitySlug === "ai-image" ? "Public media workbench" : "Public video workbench",
@@ -109,8 +109,8 @@ export function PublicMediaToolWorkbench({
             workspace: "Open workspace",
             promptRequired: "Enter a task prompt first.",
             authRequired: "This media workbench currently requires login before execution.",
-            deferred: "This runtime is still deferred, so real execution is not available yet.",
-            disabled: "This runtime is not ready yet, so real execution is not available.",
+            deferred: "This entry is not available yet, so execution is not enabled.",
+            disabled: "This entry is not ready yet, so execution is not enabled.",
             currentTask: "Current task",
             taskQueued: "Task submitted. The platform will continue polling for updates.",
             taskFailed: "The media task failed.",
@@ -118,8 +118,7 @@ export function PublicMediaToolWorkbench({
             provider: "Provider",
             results: "Results",
             noResults: "The task has not returned displayable results yet.",
-            runtime: "Runtime",
-            access: "Access",
+            availability: "Availability",
           },
     [capabilitySlug, isZh],
   )
@@ -247,10 +246,7 @@ export function PublicMediaToolWorkbench({
 
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline" className="border-primary/20 bg-primary/5 text-zinc-200">
-                {copy.runtime}: {runtimeStatus}
-              </Badge>
-              <Badge variant="outline" className="border-primary/20 bg-primary/5 text-zinc-200">
-                {copy.access}: {accessState}
+                {copy.availability}: {getPublicRegistryEntryLabel(locale, runtimeStatus, accessState)}
               </Badge>
             </div>
 

@@ -1,38 +1,11 @@
-import type { Metadata } from "next"
-
 import { AiCostCalculator } from "@/components/seo/ai-cost-calculator"
 import { PublicSiteFooter } from "@/components/seo/public-site-footer"
 import { PublicSiteHeader } from "@/components/seo/public-site-header"
-import { buildLocalizedPublicUrl, getLocalizedPublicAlternates } from "@/lib/i18n/routing"
 import { getRequestLocale } from "@/lib/i18n/request-locale"
 import { getAiCostPageCopy } from "@/lib/seo/i18n"
+import { getAiCostMetadata } from "@/lib/seo/localized-public-pages"
 
-export async function generateMetadata(): Promise<Metadata> {
-  const locale = await getRequestLocale()
-  const copy = getAiCostPageCopy(locale)
-  const canonical = buildLocalizedPublicUrl("/resources/ai-subscription-cost-calculator", locale)
-
-  return {
-    title: locale === "zh" ? "对比营销团队的 AI 工具成本" : "Compare AI Tool Costs for Marketing Teams",
-    description: copy.description,
-    alternates: {
-      canonical,
-      languages: getLocalizedPublicAlternates("/resources/ai-subscription-cost-calculator"),
-    },
-    openGraph: {
-      title: locale === "zh" ? "对比营销团队的 AI 工具成本" : "Compare AI Tool Costs for Marketing Teams",
-      description: copy.description,
-      url: canonical,
-      siteName: "AIMarketingSite",
-      type: "website",
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: locale === "zh" ? "对比营销团队的 AI 工具成本" : "Compare AI Tool Costs for Marketing Teams",
-      description: copy.description,
-    },
-  }
-}
+export const metadata = getAiCostMetadata("en")
 
 export default async function AiSubscriptionCostCalculatorPage() {
   const locale = await getRequestLocale()

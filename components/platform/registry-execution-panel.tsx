@@ -168,27 +168,27 @@ export function RegistryExecutionPanel({
   const copy =
     locale === "zh"
       ? {
-          title: compact ? "快速执行" : "统一执行入口",
-          body: "直接通过平台注册表的 execute 路由触发当前绑定目标，不需要绕回单独的 legacy URL。",
+          title: compact ? "快速开始" : "开始使用",
+          body: "从这里提交任务，结果会回到当前工作台或对应的工作流页面。",
           promptRequired: "先输入一个执行说明。",
           authRequired: "当前需要登录后执行。",
           restricted: "当前条目需要更高的企业权限后才能执行。",
-          deferred: "当前绑定目标仍处于 deferred 状态，暂时不能真实执行。",
-          disabled: "当前 runtime 还没准备好，暂时不能真实执行。",
-          unsupported: "这个条目当前只有目录和绑定位，还没有可执行动作。",
-          run: compact ? "执行" : "运行绑定目标",
+          deferred: "当前入口还未开放，暂时不能执行。",
+          disabled: "当前入口还未准备好，暂时不能执行。",
+          unsupported: "当前入口只能查看说明，暂时没有可执行动作。",
+          run: compact ? "开始" : "开始任务",
           login: "登录后继续",
         }
       : {
-          title: compact ? "Quick run" : "Unified execution entry",
-          body: "Trigger the current binding target directly through the platform registry execute route instead of bouncing back to a separate legacy URL.",
+          title: compact ? "Quick start" : "Start here",
+          body: "Submit the task here and continue with the result in the current workspace or related workflow.",
           promptRequired: "Enter an execution prompt first.",
           authRequired: "Login is currently required before execution.",
           restricted: "This item currently requires elevated enterprise access before execution.",
-          deferred: "This binding target is still deferred, so real execution is not available yet.",
-          disabled: "This runtime is not ready yet, so real execution is not available.",
-          unsupported: "This item currently exposes directory and binding state only, without an executable action yet.",
-          run: compact ? "Run" : "Run binding target",
+          deferred: "This entry is not available yet, so execution is not enabled.",
+          disabled: "This entry is not ready yet, so execution is not enabled.",
+          unsupported: "This entry currently provides information only and has no executable action.",
+          run: compact ? "Start" : "Start task",
           login: "Log in to continue",
         }
 
@@ -198,9 +198,6 @@ export function RegistryExecutionPanel({
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline" className="border-primary/20 bg-primary/5 text-zinc-200">
             {getDeferredAvailabilityLabel(locale, availability)}
-          </Badge>
-          <Badge variant="outline" className="border-primary/20 bg-primary/5 text-zinc-200">
-            {bindingTarget ? bindingTarget.toUpperCase() : slug.toUpperCase()}
           </Badge>
         </div>
         <div>

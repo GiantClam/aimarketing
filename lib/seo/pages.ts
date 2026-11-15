@@ -32,6 +32,13 @@ export type SeoRelatedLink = {
   description: string
 }
 
+export type SeoEvidence = {
+  src: string
+  alt: string
+  description: string
+  checkedAt?: string
+}
+
 export type SeoPage = {
   slug: string
   group: SeoGroup
@@ -47,6 +54,12 @@ export type SeoPage = {
   faqs: SeoFaq[]
   cta: SeoCta
   relatedLinks: SeoRelatedLink[]
+  evidence?: SeoEvidence[]
+  factCheckDate?: string
+  factCheckSource?: {
+    label: string
+    url: string
+  }
   comparison?: {
     firstLabel: string
     secondLabel: string
@@ -374,6 +387,8 @@ function alternativePage(input: {
   primaryKeyword: string
   switchSignals: string[]
   migrationSteps: string[]
+  factCheckDate?: string
+  factCheckSource?: SeoPage["factCheckSource"]
   customSections?: SeoSection[]
   customFaqs?: SeoFaq[]
 }) : SeoPage {
@@ -423,6 +438,15 @@ function alternativePage(input: {
           first: `Choose ${input.product} when the team mainly wants the native ${input.product} experience.`,
           second: "Choose AI Marketing when the team wants lower tool sprawl and reusable marketing context.",
         },
+        ...(input.product === "ChatGPT Team"
+          ? [
+              {
+                dimension: "Price and usage model",
+                first: "ChatGPT Business lists Standard seats at $20 per user/month with annual billing or $25 with monthly billing, and Premium seats at $100 annually or $125 monthly. Included usage varies by seat and model; eligible additional usage can use workspace credits.",
+                second: "AI Marketing shows the current Starter, Creator, and Studio plans with included credits below. Usage remains subject to the plan's limits and actual task cost.",
+              },
+            ]
+          : []),
       ],
     },
     sections: [
@@ -508,6 +532,8 @@ function alternativePage(input: {
       makeRelatedLink("/use-cases/chatgpt-claude-gemini-in-one-workspace", "See how teams keep multiple models in one workspace."),
       makeRelatedLink("/resources/ai-subscription-cost-calculator", "Estimate whether replacing stacked subscriptions changes the economics."),
     ],
+    factCheckDate: input.factCheckDate,
+    factCheckSource: input.factCheckSource,
   }
 }
 
@@ -733,6 +759,7 @@ function makeUseCasePage(input: {
   primaryKeyword: string
   hiddenCosts: string[]
   successSignals: string[]
+  evidence?: SeoEvidence[]
   customSections?: SeoSection[]
   customFaqs?: SeoFaq[]
 }) : SeoPage {
@@ -822,6 +849,7 @@ function makeUseCasePage(input: {
       makeRelatedLink("/use-cases/ai-workspace-for-marketing-teams", "See how the shared workspace fits recurring marketing-team delivery."),
       makeRelatedLink("/compare/best-ai-workspace-for-marketing-teams", "Compare workspace options instead of only model vendors."),
     ].filter((link) => link.href !== currentPath),
+    evidence: input.evidence,
   }
 }
 
@@ -1068,9 +1096,14 @@ const rawSeoPages: SeoPage[] = [
     slug: "chatgpt-team-alternative",
     product: "ChatGPT Team",
     audience: "Small marketing teams that like ChatGPT but also need Claude, Gemini, image generation, marketing agents, and shared company context.",
-    competitorStrength: "ChatGPT Team is often better when your team wants the official OpenAI workspace, direct access to OpenAI-native features, and a general-purpose assistant for many departments.",
+    competitorStrength: "OpenAI now presents the former ChatGPT Team workspace as ChatGPT Business. It is often better when your team wants the official OpenAI workspace, direct access to OpenAI-native features, and a general-purpose assistant for many departments.",
     aiMarketingFit: "AI Marketing is better when the buying reason is marketing execution: strategy, copy, SEO content, images, website copy, video scripts, shared context, and lower tool sprawl.",
     primaryKeyword: "ChatGPT Team alternative",
+    factCheckDate: "2026-11-16",
+    factCheckSource: {
+      label: "OpenAI Business pricing and limits",
+      url: "https://openai.com/business/pricing/",
+    },
     switchSignals: [
       "You keep ChatGPT for drafting but still pay other tools for images, website copy, or campaign handoffs.",
       "Team members need Claude or Gemini for review, but the winning brief lives in ChatGPT threads only.",
@@ -1367,6 +1400,20 @@ const rawSeoPages: SeoPage[] = [
       "Marketing output becomes easier to reuse because the team can see what context and decisions produced the final asset.",
       "Internal links, pricing, and use-case pages tell one product story instead of separate cost or prompt stories.",
       "The team reduces tool switching without forcing every task into one model.",
+    ],
+    evidence: [
+      {
+        src: "/seo-evidence/workflow-builder.png",
+        alt: "Verified workflow builder screenshot showing text input and image generation nodes on a marketing workflow canvas",
+        description: "Verified workflow builder evidence: the team supplies text inputs and can continue into a visual generation node before saving the workflow.",
+        checkedAt: "2026-11-16",
+      },
+      {
+        src: "/seo-evidence/generated-workspace-artifact.png",
+        alt: "Verified workspace screenshot showing a generated PPT artifact with preview, saved work, and export actions",
+        description: "Verified workspace output evidence: a generated marketing artifact is available for preview, saving, and export after the task completes.",
+        checkedAt: "2026-11-16",
+      },
     ],
   }),
   makeUseCasePage({
@@ -2033,7 +2080,7 @@ const rawSeoPages: SeoPage[] = [
   comparePage({
     slug: "best-ai-workspace-for-marketing-teams",
     title: "Best AI Workspace for Marketing Teams",
-    first: "Generic AI workspace",
+    first: "General-purpose team workspace",
     second: "AI Marketing workspace",
     primaryKeyword: "best AI workspace for marketing teams",
     firstWinsWhen: [
@@ -2058,7 +2105,7 @@ const rawSeoPages: SeoPage[] = [
   comparePage({
     slug: "best-ai-workspace-for-small-teams",
     title: "Best AI Workspace for Small Teams",
-    first: "Generic AI workspace",
+    first: "General-purpose team workspace",
     second: "AI Marketing workspace",
     primaryKeyword: "best AI workspace for small teams",
     firstWinsWhen: [

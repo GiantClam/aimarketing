@@ -25,6 +25,7 @@ import { getLocalizedToolDirectoryEntryBySlug } from "@/lib/platform/directory-r
 import { getPlatformCapabilityExecutionState } from "@/lib/platform/execution"
 import { buildPlatformLaunchPath } from "@/lib/platform/launch-path"
 import { getPlatformRuntimeSnapshot } from "@/lib/platform/runtime"
+import { getPublicProofPoints, getPublicRegistryEntryLabel } from "@/lib/platform/public-status"
 
 type ToolMarketingPageProps = {
   tool: LeadToolDefinition
@@ -47,7 +48,7 @@ export function MissingLeadToolPage({ locale = "en" }: { locale?: AppLocale }) {
         </Link>
         <h1 className="mt-6 text-3xl font-semibold text-foreground">This tool is not live yet</h1>
         <p className="mt-4 max-w-2xl text-muted-foreground">
-          AI PPT Generator is the current live reference tool. Other SEO-oriented lead-gen tools will reuse the same runtime, preview pattern, and conversion flow.
+          AI PPT Generator is the current live reference tool. Other SEO-oriented tools will reuse the same preview pattern and conversion flow.
         </p>
         <div className="mt-8">
           <Button asChild>
@@ -64,39 +65,7 @@ function getExecutionStatusLabel(
   runtimeStatus: "ready" | "deferred" | "runtime_disabled",
   accessState: "public" | "public_then_login" | "login_required" | "authorized" | "permission_required" | "admin_required",
 ) {
-  const runtimeLabel =
-    locale === "zh"
-      ? {
-          ready: "运行中",
-          deferred: "后续实现",
-          runtime_disabled: "运行时关闭",
-        }[runtimeStatus]
-      : {
-          ready: "Runtime ready",
-          deferred: "Deferred",
-          runtime_disabled: "Runtime disabled",
-        }[runtimeStatus]
-
-  const accessLabel =
-    locale === "zh"
-      ? {
-          public: "公开可见",
-          public_then_login: "先公开后登录",
-          login_required: "需登录",
-          authorized: "已授权",
-          permission_required: "需企业权限",
-          admin_required: "需管理员",
-        }[accessState]
-      : {
-          public: "Public",
-          public_then_login: "Public then login",
-          login_required: "Login required",
-          authorized: "Authorized",
-          permission_required: "Permission required",
-          admin_required: "Admin required",
-        }[accessState]
-
-  return `${runtimeLabel} · ${accessLabel}`
+  return getPublicRegistryEntryLabel(locale, runtimeStatus, accessState)
 }
 
 export async function ToolMarketingPage({
@@ -174,7 +143,7 @@ export async function ToolMarketingPage({
           multiAngleTitle: "为什么要多方向",
           multiAngleBody: "同一关键词在转化、覆盖和专业可信三个角度上都可能有不同最佳写法，多版本更利于测试和扩展。",
           proofTitle: "这证明了什么",
-          proofBody: "这说明 lead-tools runtime 已经不只适合 PPT 预览，也能承载不同结果形态的 SEO 工具。",
+          proofBody: "这说明当前工具底座不只适合 PPT 预览，也能承载不同结果形态的 SEO 工具。",
           examplesTitle: "可索引示例页",
           examplesBody: "这些页面用固定示例词把工具能力讲清楚，再把用户导回主工具页，是后续程序化 SEO 的标准样板。",
           openExample: "查看示例页",
@@ -185,19 +154,19 @@ export async function ToolMarketingPage({
           workflowContentTitle: "用现有工作流完成这个任务",
           workflowContentBody: "这些页面先承接搜索意图，再把用户导向已经上线的 AI Chat、SEO Meta 或 Agent 工作流。",
           notOpenTitle: "该工具暂未开放",
-          notOpenBody: "当前只落地了 PPT 预览样板页，其余工具已经在 catalog 中占位，后续会复用同一套 Lead Tool Runtime 快速上线。",
+          notOpenBody: "当前只落地了 PPT 预览样板页，其余工具已经在目录中占位，后续会沿用同一套预览和转化方式上线。",
           entryTitle: "从公共入口进入正式工作台",
-          entryBody: "这个页面不是另起一套 runtime，而是把现有工作台能力包装成 public toolsite 能理解、能转化的入口。",
+          entryBody: "这个页面把现有工作台能力包装成 public toolsite 能理解、能转化的入口。",
           loginAction: "登录后进入工作台",
           workspaceAction: "直接打开工作台",
           directoryAction: "查看能力中心",
-          runtimeStrategyTitle: "运行时策略",
-          runtimeStrategyBody: "公开入口负责定位、说明和转化，真实任务仍进入现有 workspace runtime 处理。",
+          runtimeStrategyTitle: "工作方式",
+          runtimeStrategyBody: "公开入口负责说明和转化，任务会继续进入现有工作台处理。",
           executionFlowTitle: "进入路径",
           executionFlowBody: "先理解能力，再登录进入正式工作台，避免普通用户从企业导航里迷路。",
-          providerBindingsTitle: "当前能力绑定位",
-          deferredNoticeTitle: "Deferred 边界",
-          deferredNoticeBody: "相关 deferred 能力仍会保留平台位置，但不会伪装成已经可用的正式功能。",
+          providerBindingsTitle: "当前可以做什么",
+          deferredNoticeTitle: "可用范围",
+          deferredNoticeBody: "页面会清楚标明当前可用范围，不把尚未开放的能力写成已经可用。",
           faqTitle: "常见问题",
           faqDescription: "这部分内容也会作为工具页的 SEO 长文结构的一部分。",
         }
@@ -213,7 +182,7 @@ export async function ToolMarketingPage({
           multiAngleTitle: "Why multiple directions matter",
           multiAngleBody: "The same keyword may need different framings for conversion, coverage, and credibility, so multiple variants are better for testing and expansion.",
           proofTitle: "What this proves",
-          proofBody: "It shows that the lead-tools runtime can support more than PPT preview and can carry SEO-oriented tools with very different output shapes.",
+          proofBody: "It shows that the current tool foundation can support more than PPT preview and can carry SEO-oriented tools with different output shapes.",
           examplesTitle: "Indexable example pages",
           examplesBody: "These pages explain the tool clearly with fixed example keywords, then route users back to the main tool page. That becomes the standard template for programmatic SEO later.",
           openExample: "Open example page",
@@ -224,22 +193,22 @@ export async function ToolMarketingPage({
           workflowContentTitle: "Use the current workflow stack for this job",
           workflowContentBody: "These pages capture search intent first, then send users into the shipped AI Chat, SEO Meta, or agent workflows that can actually continue the work.",
           notOpenTitle: "This tool is not open yet",
-          notOpenBody: "Only the PPT preview reference page is fully live right now. The remaining tools are already cataloged and will reuse the same Lead Tool Runtime when they launch.",
-          deferredEntryTitle: "Deferred module with a real platform entry",
+          notOpenBody: "Only the PPT preview reference page is fully live right now. The remaining tools are already cataloged and will reuse the same preview and conversion pattern when they launch.",
+          deferredEntryTitle: "A listed module that is not open yet",
           deferredEntryBody:
-            "This module intentionally ships as an entry, explanation, and workspace path before the production runtime is ready. That keeps the platform information architecture honest without faking finished capability.",
+            "This module ships as an entry, explanation, and workspace path before execution is available. That keeps the product information architecture honest without presenting unfinished capability as live.",
           entryTitle: "Use one public entry to reach the real workspace",
-          entryBody: "This page does not introduce a second runtime. It packages the existing workspace capability into a public-facing entry that can convert and educate new users.",
+          entryBody: "This page packages an existing workspace capability into a public-facing entry that can convert and educate new users.",
           loginAction: "Log in to workspace",
           workspaceAction: "Open workspace",
           directoryAction: "View capabilities",
-          runtimeStrategyTitle: "Runtime strategy",
-          runtimeStrategyBody: "The public entry handles positioning, explanation, and conversion while the real task execution stays in the existing workspace runtime.",
+          runtimeStrategyTitle: "How it works",
+          runtimeStrategyBody: "The public entry explains the job and the next action, while tasks continue in the existing workspace.",
           executionFlowTitle: "Entry flow",
           executionFlowBody: "Help users understand the capability first, then log in and continue in the formal workspace instead of dropping them into enterprise navigation cold.",
-          providerBindingsTitle: "Current capability bindings",
-          deferredNoticeTitle: "Deferred boundary",
-          deferredNoticeBody: "Related deferred modules keep a visible platform position, but they are not presented as already-finished production features.",
+          providerBindingsTitle: "What you can do now",
+          deferredNoticeTitle: "Availability",
+          deferredNoticeBody: "The page clearly marks what is available now and does not present unopened capabilities as finished features.",
           faqTitle: "FAQ",
           faqDescription: "This section also serves as long-form SEO support content for the tool page.",
         }
@@ -572,9 +541,9 @@ export async function ToolMarketingPage({
             </div>
 
             <div className="mt-6 flex flex-wrap gap-2">
-              {workspaceCapability.bindings.map((binding) => (
-                <Badge key={`${workspaceCapability.slug}-${binding.provider}`} variant="outline" className="border-primary/20 bg-primary/5 text-zinc-200">
-                  {binding.provider} · {binding.status}
+              {getPublicProofPoints(locale, workspaceCapability.proofPoints).slice(0, 3).map((point) => (
+                <Badge key={point} variant="outline" className="border-primary/20 bg-primary/5 text-zinc-200">
+                  {point}
                 </Badge>
               ))}
               {workspaceExecution ? (
@@ -592,7 +561,7 @@ export async function ToolMarketingPage({
             </div>
 
             <div className="mt-6 grid gap-4 md:grid-cols-3">
-              {(workspaceExecution?.notes || workspaceCapability.proofPoints).map((point) => (
+              {getPublicProofPoints(locale, workspaceExecution?.notes, workspaceCapability.proofPoints).map((point) => (
                 <div key={point} className="rounded-2xl border border-border/70 bg-background/75 p-4 text-sm leading-6 text-muted-foreground">
                   {point}
                 </div>

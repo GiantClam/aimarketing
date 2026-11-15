@@ -5,6 +5,7 @@ import { getServerSessionUser } from "@/lib/auth/server-session"
 import { getRequestLocale } from "@/lib/i18n/request-locale"
 import { getLocalizedPlatformDirectoryEntryBySlug } from "@/lib/platform/directory-registry"
 import { listPlatformRegistryEntryExecutionStates } from "@/lib/platform/registry-entry-execution"
+import { getPublicProofPoints, getPublicRegistryEntryLabel } from "@/lib/platform/public-status"
 
 export default async function McpServicesPage() {
   const locale = await getRequestLocale()
@@ -21,8 +22,8 @@ export default async function McpServicesPage() {
     availability: getLocalizedPlatformDirectoryEntryBySlug(locale, "mcp_service", item.slug)?.availability,
     launchItemType: "mcp_service" as const,
     detailHref: `/mcp-services/${item.slug}`,
-    extraLabel: item.label,
-    proofPoints: item.notes.slice(0, 4),
+    extraLabel: getPublicRegistryEntryLabel(locale, item.runtimeStatus, item.accessState),
+    proofPoints: getPublicProofPoints(locale, item.notes),
   }))
 
   const copy =

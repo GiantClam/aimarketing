@@ -1,4 +1,5 @@
 import Link from "next/link"
+import NextImage from "next/image"
 import { CheckCircle2 } from "lucide-react"
 
 import type { SeoPage } from "@/lib/seo/pages"
@@ -7,6 +8,7 @@ import { SeoFaqList } from "@/components/seo/seo-faq"
 import { PublicSiteFooter } from "@/components/seo/public-site-footer"
 import { PublicSiteHeader } from "@/components/seo/public-site-header"
 import { SeoPageHeroCta } from "@/components/seo/seo-page-hero-cta"
+import { PublicPricingGrid } from "@/components/seo/public-pricing-grid"
 import { TrackedSeoCtaBlock } from "@/components/seo/tracked-seo-cta-block"
 import type { AppLocale } from "@/lib/i18n/config"
 import { localizePublicPath } from "@/lib/i18n/routing"
@@ -110,6 +112,54 @@ export function SeoLandingPage({
         </div>
       </section>
 
+      {page.factCheckDate ? (
+        <section className="public-page-bottom-shell mx-auto max-w-7xl pb-0">
+          <p className="text-sm leading-6 text-muted-foreground">
+            {locale === "zh" ? `竞品价格与使用限制核对日期：${page.factCheckDate}。` : `Competitor pricing and usage facts checked on ${page.factCheckDate}.`}{" "}
+            {page.factCheckSource ? (
+              <a
+                href={page.factCheckSource.url}
+                target="_blank"
+                rel="noreferrer"
+                className="underline underline-offset-4 hover:text-foreground"
+              >
+                {locale === "zh" ? "查看官方来源" : page.factCheckSource.label}
+              </a>
+            ) : null}
+          </p>
+        </section>
+      ) : null}
+
+      {page.evidence?.length ? (
+        <section className="public-page-hero-shell mx-auto max-w-7xl">
+          <div className="public-panel rounded-[12px] p-6 sm:p-8">
+            <p className="public-kicker text-muted-foreground">{locale === "zh" ? "验证证据" : "Verified evidence"}</p>
+            <h2 className="mt-3 font-display text-3xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+              {locale === "zh" ? "输入、产出与下一步" : "Inputs, outputs, and the next step"}
+            </h2>
+            <div className="mt-6 grid gap-6 lg:grid-cols-2">
+              {page.evidence.map((evidence) => (
+                <figure key={evidence.src} className="overflow-hidden rounded-[10px] border border-border bg-background">
+                  <div className="relative aspect-[16/10] bg-muted/30">
+                    <NextImage
+                      src={evidence.src}
+                      alt={evidence.alt}
+                      fill
+                      sizes="(min-width: 1024px) 50vw, 100vw"
+                      className="object-contain"
+                    />
+                  </div>
+                  <figcaption className="space-y-2 p-4 text-sm leading-6 text-muted-foreground">
+                    <p>{evidence.description}</p>
+                    {evidence.checkedAt ? <p className="text-xs text-muted-foreground/80">{locale === "zh" ? `核验日期：${evidence.checkedAt}` : `Checked: ${evidence.checkedAt}`}</p> : null}
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <section className="public-page-hero-shell mx-auto max-w-7xl">
         <div className="grid gap-6">
           {page.sections.map((section) => (
@@ -146,6 +196,22 @@ export function SeoLandingPage({
           </div>
         ) : null}
       </section>
+
+      {page.group === "alternatives" && page.slug === "chatgpt-team-alternative" ? (
+        <section className="public-page-bottom-shell mx-auto max-w-7xl">
+          <div className="public-panel rounded-[12px] p-6 sm:p-8">
+            <p className="public-kicker text-muted-foreground">{locale === "zh" ? "当前 AI Marketing 价格" : "Current AI Marketing pricing"}</p>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground">
+              {locale === "zh"
+                ? "下面的套餐、价格、积分和权益直接读取当前定价目录，用来和上面的 ChatGPT Business 座席与使用模式作同一层面的比较。"
+                : "The plan cards below read the current pricing catalog, so the comparison uses current AI Marketing prices, credits, and limits alongside ChatGPT Business seat and usage rules."}
+            </p>
+            <div className="mt-6">
+              <PublicPricingGrid compact />
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {page.relatedLinks.length > 0 ? (
         <section className="public-page-bottom-shell mx-auto max-w-7xl">

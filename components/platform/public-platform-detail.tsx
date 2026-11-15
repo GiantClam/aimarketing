@@ -52,8 +52,8 @@ export function PublicPlatformDetail({
           planned: "规划中",
           openEntry: "打开入口",
           workspace: "企业工作台",
-          proof: "运行与落地线索",
-          details: "平台详情",
+          proof: "你会得到什么",
+          details: "使用说明",
         }
       : {
           live: "Live",
@@ -61,8 +61,8 @@ export function PublicPlatformDetail({
           planned: "Planned",
           openEntry: "Open Entry",
           workspace: "Workspace",
-          proof: "Runtime and rollout signals",
-          details: "Platform detail",
+          proof: "What to expect",
+          details: "How it works",
         }
 
   const deferred = isDeferredAvailability(availability)

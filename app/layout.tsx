@@ -14,23 +14,21 @@ import "./globals.css"
 export const metadata: Metadata = {
   metadataBase: new URL(getAppBaseUrl()),
   title: {
-    default: "Multi-Model AI Workspace for Marketing Teams | AIMarketingSite",
+    default: "AI Workspace for Marketing Teams | AIMarketingSite",
     template: "%s | AIMarketingSite",
   },
   description:
-    "Use multiple AI models in one workspace for marketing content, research, visuals, and workflows. Built for teams, creators, and indie operators.",
+    "Start from one marketing brief and move through research, copy, visuals, and review in one AI workspace for marketing teams.",
   openGraph: {
-    title: "Multi-Model AI Workspace for Marketing Teams | AIMarketingSite",
-    description:
-      "Use multiple AI models in one workspace for marketing content, research, visuals, and workflows. Built for teams, creators, and indie operators.",
+    title: "AI Workspace for Marketing Teams | AIMarketingSite",
+    description: "Start from one marketing brief and move through research, copy, visuals, and review in one AI workspace for marketing teams.",
     siteName: "AIMarketingSite",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Multi-Model AI Workspace for Marketing Teams | AIMarketingSite",
-    description:
-      "Use multiple AI models in one workspace for marketing content, research, visuals, and workflows. Built for teams, creators, and indie operators.",
+    title: "AI Workspace for Marketing Teams | AIMarketingSite",
+    description: "Start from one marketing brief and move through research, copy, visuals, and review in one AI workspace for marketing teams.",
   },
 }
 

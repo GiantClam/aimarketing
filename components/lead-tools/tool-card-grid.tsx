@@ -37,13 +37,14 @@ const iconMap = {
 } as const
 
 type FilterValue = "all" | PublicToolsCenterEntry["media"]
+type PublicToolCardEntry = Omit<PublicToolsCenterEntry, "sourceRefs">
 
 type SceneFilterValue =
   | "all"
   | PublicToolsCenterEntry["scenes"][number]
 
 type ToolCardGridProps = {
-  entries: PublicToolsCenterEntry[]
+  entries: PublicToolCardEntry[]
   className?: string
   title?: string
   description?: string
@@ -133,7 +134,7 @@ function getSceneLabel(value: SceneFilterValue, locale: "zh" | "en") {
   return labels[value]
 }
 
-function getEntryKindLabel(entry: PublicToolsCenterEntry, locale: "zh" | "en") {
+function getEntryKindLabel(entry: PublicToolCardEntry, locale: "zh" | "en") {
   if (entry.kind === "directory") {
     return locale === "zh" ? "平台入口" : "Platform entry"
   }

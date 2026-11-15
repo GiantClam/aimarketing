@@ -5,6 +5,7 @@ import { getServerSessionUser } from "@/lib/auth/server-session"
 import { getRequestLocale } from "@/lib/i18n/request-locale"
 import { getLocalizedPlatformDirectoryEntryBySlug } from "@/lib/platform/directory-registry"
 import { listPlatformRegistryEntryExecutionStates } from "@/lib/platform/registry-entry-execution"
+import { getPublicProofPoints, getPublicRegistryEntryLabel } from "@/lib/platform/public-status"
 
 export default async function PluginsPage() {
   const locale = await getRequestLocale()
@@ -21,8 +22,8 @@ export default async function PluginsPage() {
     availability: getLocalizedPlatformDirectoryEntryBySlug(locale, "plugin", item.slug)?.availability,
     launchItemType: "plugin" as const,
     detailHref: `/plugins/${item.slug}`,
-    extraLabel: item.label,
-    proofPoints: item.notes.slice(0, 4),
+    extraLabel: getPublicRegistryEntryLabel(locale, item.runtimeStatus, item.accessState),
+    proofPoints: getPublicProofPoints(locale, item.notes),
   }))
 
   const copy =

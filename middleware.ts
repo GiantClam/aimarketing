@@ -11,6 +11,8 @@ import {
 const PUBLIC_PATHS = new Set(["/login", "/register"])
 const SESSION_COOKIE_NAME = "aimarketing_session"
 const DEMO_SESSION_COOKIE_NAME = "aimarketing_demo_session"
+const PUBLIC_BARE_HOST = "aimarketingsite.com"
+const PUBLIC_CANONICAL_HOST = "www.aimarketingsite.com"
 
 function applySecurityHeaders(response: NextResponse) {
   response.headers.set("X-Frame-Options", "DENY")
@@ -41,10 +43,26 @@ export function middleware(request: NextRequest) {
   const hasDemoSession = Boolean(demoSessionToken)
   const isAuthenticated = hasUserSession || hasDemoSession
 
-  if (!pathLocale && isLocalizedPublicPath(normalizedPathname)) {
+  const isBareProductionHost = request.nextUrl.hostname.toLowerCase() === PUBLIC_BARE_HOST
+  const isPublicPath = isLocalizedPublicPath(normalizedPathname)
+  if (isBareProductionHost || (!pathLocale && isPublicPath)) {
     const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = localizePublicPath(normalizedPathname, locale)
-    return applySecurityHeaders(applyLocaleCookie(NextResponse.redirect(redirectUrl), locale))
+    let redirect = false
+
+    if (isBareProductionHost) {
+      redirectUrl.hostname = PUBLIC_CANONICAL_HOST
+      redirect = true
+    }
+
+    if (!pathLocale && isPublicPath) {
+      redirectUrl.pathname = normalizedPathname === "/" ? "/en" : localizePublicPath(normalizedPathname, locale)
+      redirect = true
+    }
+
+    if (redirect) {
+      const redirectLocale = normalizedPathname === "/" ? "en" : locale
+      return applySecurityHeaders(applyLocaleCookie(NextResponse.redirect(redirectUrl, 301), redirectLocale))
+    }
   }
 
   if (normalizedPathname.startsWith("/dashboard")) {
