@@ -17,6 +17,7 @@
 - [x] 3.2 Rewrite public workflow directory/detail language around inputs, outputs, next steps, preview, and save boundaries; remove internal runtime and entitlement tokens.
 - [x] 3.3 Rewrite the marketing-team use-case page around one brief flowing through research, copy, visuals, and team review with verifiable evidence.
 - [x] 3.4 Rewrite the ChatGPT Team alternative page with dated factual comparison, audience fit, model/workflow coverage, pricing/usage boundaries, and fair-fit cases.
+- [x] 3.5 Restrict homepage client props to public capability fields; omit internal registry configuration, provider notes, and implementation copy from serialized HTML.
 
 ## 4. Pricing and free-tool continuation
 
@@ -30,3 +31,4 @@
 - [x] 5.1 Run focused SEO, routing, pricing, and lead-tool tests.
 - [x] 5.2 Run lint and the production build.
 - [x] 5.3 Run representative local HTTP/page checks for `/`, `/en/`, `/zh/`, pricing, marketing-team, ChatGPT Team alternative, workflow, and tool pages; record any evidence or remaining limitations.
+- [ ] 5.4 Verify the homepage serialization regression, deploy the fix, and scan canonical production pages including RSC payloads for internal terminology.

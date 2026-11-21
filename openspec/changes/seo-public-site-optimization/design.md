@@ -47,6 +47,8 @@ Reuse the existing billing plan reader in the public pricing and calculator pres
 
 Rewrite localized copy and SEO page records in their current data structures, keeping rendering components generic. Add a small public evidence block for the marketing-team page that references repository screenshots only when they are traceable to current product verification; use meaningful alt text and describe the evidence date or context. Comparison content will carry a visible checked date supplied by the page data. Internal platform enums remain available to admin and runtime screens but are translated or omitted from public surfaces.
 
+Homepage client props use an explicit public capability projection (slug, title, customer-facing summary, kind, and public link). Full registry records, provider notes, and configuration objects stay outside the client boundary because Next.js serializes client props into the HTML/RSC payload even when they are not visibly rendered. Acceptance scans include that payload.
+
 ### Tool handoffs use existing routes and query context
 
 Add next actions to lead-tool definitions and their result/related-link rendering. Handoffs will use existing localized paths and, where useful, a source or context query parameter that the destination already understands or can safely ignore. A tool without a verified receiving route will not receive a new promise.

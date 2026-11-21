@@ -17,7 +17,7 @@ import { buildLocalizedPublicUrl, getLocalizedPublicAlternates, isLocalizedPubli
 import { listPlatformCapabilityExecutionStates } from "@/lib/platform/execution"
 import { listPlatformRegistryEntryExecutionStates } from "@/lib/platform/registry-entry-execution"
 import { getPublicProofPoints, getPublicRegistryEntryLabel } from "@/lib/platform/public-status"
-import { buildPlatformRegistryDefaultEntries } from "@/lib/platform/control-plane"
+import { getPublicHomeCapabilities } from "@/lib/seo/home-capabilities"
 import { getAiCostPageCopy, localizeSeoPage } from "@/lib/seo/i18n"
 import { metadataForSeoPage, normalizePublicTitle } from "@/lib/seo/metadata"
 import {
@@ -263,9 +263,7 @@ export function getHomeMetadata(locale: AppLocale): Metadata {
 }
 
 export async function renderHomePage(locale: AppLocale) {
-  const platformCapabilities = buildPlatformRegistryDefaultEntries(locale, "capability").filter((item) =>
-    ["ai-chat", "ai-ppt", "ai-image", "ai-video", "agent-platform"].includes(item.slug),
-  )
+  const platformCapabilities = getPublicHomeCapabilities(locale)
 
   return <PublicHomePageContent platformCapabilities={platformCapabilities} />
 }

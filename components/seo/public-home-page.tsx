@@ -25,9 +25,9 @@ import { Button } from "@/components/ui/button"
 import { shouldShowDemoEntry } from "@/lib/auth/demo-entry-visibility"
 import { getPublicCopy } from "@/lib/i18n/public-copy"
 import { localizePublicPath } from "@/lib/i18n/routing"
-import type { PlatformRegistryControlEntry } from "@/lib/platform/control-plane"
 import { buildPlatformLaunchPath } from "@/lib/platform/launch-path"
 import { SEO_EVENT } from "@/lib/seo/analytics"
+import type { PublicHomeCapability } from "@/lib/seo/home-capabilities"
 
 const capabilityIcons = [Bot, Sparkles, Users2] as const
 const resourceIcons = [Bot, Calculator, PenTool, PlayCircle, ImageIcon, LockKeyhole, Sparkles] as const
@@ -77,12 +77,6 @@ const homepageVisuals = {
     alt: "Final call to action concept for moving one campaign into one workspace",
   },
 } as const
-
-function getProviderStatusLabel(status: "active" | "fallback" | "planned", locale: "zh" | "en") {
-  if (status === "active") return locale === "zh" ? "已接入" : "Active"
-  if (status === "fallback") return locale === "zh" ? "兼容链路" : "Fallback"
-  return locale === "zh" ? "规划中" : "Planned"
-}
 
 function getHomepageNarrative(locale: "zh" | "en") {
   const isZh = locale === "zh"
@@ -180,7 +174,7 @@ function ProductDemoVisual() {
 export function PublicHomePageContent({
   platformCapabilities,
 }: {
-  platformCapabilities: PlatformRegistryControlEntry[]
+  platformCapabilities: PublicHomeCapability[]
 }) {
   const { anonymousLogin } = useAuth()
   const { locale } = useI18n()
@@ -398,13 +392,6 @@ export function PublicHomePageContent({
                       </div>
                     </div>
                     <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted-foreground">{item.summary}</p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {(item.bindings ?? []).slice(0, 2).map((binding) => (
-                        <span key={`${item.slug}-${binding.provider}`} className="public-system-chip rounded-[4px] px-2.5 py-1.5 text-[11px] leading-5 text-muted-foreground">
-                          {binding.provider} · {getProviderStatusLabel(binding.status, locale)}
-                        </span>
-                      ))}
-                    </div>
                     {item.publicHref ? (
                       <Link
                         href={buildPlatformLaunchPath({

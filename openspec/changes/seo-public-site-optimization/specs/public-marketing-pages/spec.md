@@ -24,6 +24,10 @@ Indexable public pages MUST NOT expose internal implementation terms such as `ex
 - **WHEN** a visitor opens a public capability, plugin, MCP, agent, or workflow directory
 - **THEN** the page contains user-facing status language and does not display internal enum names or administration terminology
 
+#### Scenario: Homepage client data is serialized
+- **WHEN** either localized homepage serializes its client props into HTML or an RSC payload
+- **THEN** capability cards contain only public display fields and entry links, with no registry configuration, provider notes, internal enums, or unused implementation descriptions
+
 ### Requirement: Workflow pages explain input, output, and next action
 
 Public workflow pages MUST explain what input a visitor supplies, what result the workflow produces, and what the visitor can do next. If a workflow exposes a preview before persistence, the page MUST distinguish preview from saved output and MUST identify the action that saves or continues the result.
