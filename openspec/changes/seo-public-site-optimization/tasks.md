@@ -31,4 +31,4 @@
 - [x] 5.1 Run focused SEO, routing, pricing, and lead-tool tests.
 - [x] 5.2 Run lint and the production build.
 - [x] 5.3 Run representative local HTTP/page checks for `/`, `/en/`, `/zh/`, pricing, marketing-team, ChatGPT Team alternative, workflow, and tool pages; record any evidence or remaining limitations.
-- [ ] 5.4 Verify the homepage serialization regression, deploy the fix, and scan canonical production pages including RSC payloads for internal terminology.
+- [x] 5.4 Verify the homepage serialization regression, deploy the fix, and scan canonical production pages including RSC payloads for internal terminology. See `verification.md` for production evidence and remaining independent dependency alerts.
